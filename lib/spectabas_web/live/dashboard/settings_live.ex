@@ -58,6 +58,31 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
     {:noreply, assign(socket, :copied, true)}
   end
 
+  def handle_event("verify_dns", _params, socket) do
+    site = socket.assigns.site
+
+    case Spectabas.Sites.DNSVerifier.verify_site(site) do
+      {:ok, :verified} ->
+        site = Sites.get_site!(site.id)
+
+        {:noreply,
+         socket
+         |> assign(:site, site)
+         |> put_flash(:info, "DNS verified for #{site.domain}")}
+
+      {:ok, :unverified} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "DNS not verified. Add a CNAME record pointing #{site.domain} to www.spectabas.com"
+         )}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "DNS check failed: #{inspect(reason)}")}
+    end
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -72,6 +97,19 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
         <h1 class="text-2xl font-bold text-gray-900 mt-2">Site Settings</h1>
       </div>
 
+      <p
+        :if={msg = Phoenix.Flash.get(@flash, :info)}
+        class="rounded-lg bg-blue-50 p-3 text-sm text-blue-700 mb-6"
+      >
+        {msg}
+      </p>
+      <p
+        :if={msg = Phoenix.Flash.get(@flash, :error)}
+        class="rounded-lg bg-red-50 p-3 text-sm text-red-700 mb-6"
+      >
+        {msg}
+      </p>
+
       <%!-- DNS Status --%>
       <div class={[
         "rounded-lg p-4 mb-8",
@@ -80,13 +118,27 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
           else: "bg-yellow-50 border border-yellow-200"
         )
       ]}>
-        <div class="flex items-center gap-2">
-          <span :if={@site.dns_verified} class="text-green-700 font-medium">DNS Verified</span>
-          <span :if={!@site.dns_verified} class="text-yellow-700 font-medium">DNS Not Verified</span>
-          <span :if={@site.dns_verified_at} class="text-sm text-gray-500">
-            (verified {Calendar.strftime(@site.dns_verified_at, "%Y-%m-%d %H:%M")})
-          </span>
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span :if={@site.dns_verified} class="text-green-700 font-medium">DNS Verified</span>
+            <span :if={!@site.dns_verified} class="text-yellow-700 font-medium">
+              DNS Not Verified
+            </span>
+            <span :if={@site.dns_verified_at} class="text-sm text-gray-500">
+              (verified {Calendar.strftime(@site.dns_verified_at, "%Y-%m-%d %H:%M")})
+            </span>
+          </div>
+          <button
+            phx-click="verify_dns"
+            class="text-sm px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+          >
+            Verify DNS
+          </button>
         </div>
+        <p :if={!@site.dns_verified} class="mt-2 text-sm text-yellow-700">
+          Add a CNAME record: <code class="bg-yellow-100 px-1 rounded">{@site.domain}</code>
+          &rarr; <code class="bg-yellow-100 px-1 rounded">www.spectabas.com</code>
+        </p>
       </div>
 
       <%!-- Tracking Snippet --%>
@@ -101,8 +153,8 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
           <button
             phx-click="copy_snippet"
             id="copy-snippet-btn"
-            phx-hook="CopyToClipboard"
             data-text={@snippet}
+            onclick="navigator.clipboard.writeText(this.dataset.text)"
             class="absolute top-2 right-2 px-3 py-1 bg-gray-700 text-white rounded text-xs hover:bg-gray-600"
           >
             {if @copied, do: "Copied!", else: "Copy"}

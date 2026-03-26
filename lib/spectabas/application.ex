@@ -17,7 +17,8 @@ defmodule Spectabas.Application do
         Spectabas.GeoIP,
         Spectabas.IPEnricher.ASNBlocklist,
         Spectabas.IPEnricher.IPCache,
-        Spectabas.Sites.DomainCache
+        Spectabas.Sites.DomainCache,
+        Spectabas.Sites.DNSVerifier
       ] ++
         clickhouse_children() ++
         [SpectabasWeb.Endpoint]
