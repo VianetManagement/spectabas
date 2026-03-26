@@ -8,64 +8,131 @@ defmodule SpectabasWeb.UserLive.Settings do
   @impl true
   def render(assigns) do
     ~H"""
-    <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <div class="text-center">
-        <.header>
-          Account Settings
-          <:subtitle>Manage your account email address and password settings</:subtitle>
-        </.header>
+    <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div class="mb-8">
+        <.link navigate={~p"/dashboard"} class="text-sm text-indigo-600 hover:text-indigo-800">
+          &larr; Dashboard
+        </.link>
+        <h1 class="text-2xl font-bold text-gray-900 mt-2">Account Settings</h1>
+        <p class="text-sm text-gray-500 mt-1">Manage your email and password</p>
       </div>
 
-      <.form for={@email_form} id="email_form" phx-submit="update_email" phx-change="validate_email">
-        <.input
-          field={@email_form[:email]}
-          type="email"
-          label="Email"
-          autocomplete="username"
-          spellcheck="false"
-          required
-        />
-        <.button variant="primary" phx-disable-with="Changing...">Change Email</.button>
-      </.form>
-
-      <div class="divider" />
-
-      <.form
-        for={@password_form}
-        id="password_form"
-        action={~p"/users/update-password"}
-        method="post"
-        phx-change="validate_password"
-        phx-submit="update_password"
-        phx-trigger-action={@trigger_submit}
+      <p
+        :if={msg = Phoenix.Flash.get(@flash, :info)}
+        class="rounded-lg bg-blue-50 p-3 text-sm text-blue-700 mb-6"
       >
-        <input
-          name={@password_form[:email].name}
-          type="hidden"
-          id="hidden_user_email"
-          spellcheck="false"
-          value={@current_email}
-        />
-        <.input
-          field={@password_form[:password]}
-          type="password"
-          label="New password"
-          autocomplete="new-password"
-          spellcheck="false"
-          required
-        />
-        <.input
-          field={@password_form[:password_confirmation]}
-          type="password"
-          label="Confirm new password"
-          autocomplete="new-password"
-          spellcheck="false"
-        />
-        <.button variant="primary" phx-disable-with="Saving...">
-          Save Password
-        </.button>
-      </.form>
-    </Layouts.app>
+        {msg}
+      </p>
+      <p
+        :if={msg = Phoenix.Flash.get(@flash, :error)}
+        class="rounded-lg bg-red-50 p-3 text-sm text-red-700 mb-6"
+      >
+        {msg}
+      </p>
+
+      <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Change Email</h2>
+        <.form
+          for={@email_form}
+          id="email_form"
+          phx-submit="update_email"
+          phx-change="validate_email"
+          class="space-y-4"
+        >
+          <div>
+            <label for="email_form_email" class="block text-sm font-medium text-gray-700">
+              Email
+            </label>
+            <input
+              id="email_form_email"
+              name={@email_form[:email].name}
+              type="email"
+              value={@email_form[:email].value}
+              autocomplete="username"
+              required
+              class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
+            />
+            <p :if={@email_form[:email].errors != []} class="mt-1 text-sm text-red-600">
+              {SpectabasWeb.CoreComponents.translate_error(hd(@email_form[:email].errors))}
+            </p>
+          </div>
+          <button
+            type="submit"
+            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 transition"
+          >
+            Change Email
+          </button>
+        </.form>
+      </div>
+
+      <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Change Password</h2>
+        <.form
+          for={@password_form}
+          id="password_form"
+          action={~p"/users/update-password"}
+          method="post"
+          phx-change="validate_password"
+          phx-submit="update_password"
+          phx-trigger-action={@trigger_submit}
+          class="space-y-4"
+        >
+          <input
+            name={@password_form[:email].name}
+            type="hidden"
+            id="hidden_user_email"
+            value={@current_email}
+          />
+          <div>
+            <label for="password_form_password" class="block text-sm font-medium text-gray-700">
+              New password
+            </label>
+            <input
+              id="password_form_password"
+              name={@password_form[:password].name}
+              type="password"
+              value={@password_form[:password].value}
+              autocomplete="new-password"
+              required
+              class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
+            />
+            <p :if={@password_form[:password].errors != []} class="mt-1 text-sm text-red-600">
+              {SpectabasWeb.CoreComponents.translate_error(hd(@password_form[:password].errors))}
+            </p>
+          </div>
+          <div>
+            <label
+              for="password_form_password_confirmation"
+              class="block text-sm font-medium text-gray-700"
+            >
+              Confirm new password
+            </label>
+            <input
+              id="password_form_password_confirmation"
+              name={@password_form[:password_confirmation].name}
+              type="password"
+              value={@password_form[:password_confirmation].value}
+              autocomplete="new-password"
+              class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
+            />
+            <p
+              :if={@password_form[:password_confirmation].errors != []}
+              class="mt-1 text-sm text-red-600"
+            >
+              {SpectabasWeb.CoreComponents.translate_error(
+                hd(@password_form[:password_confirmation].errors)
+              )}
+            </p>
+          </div>
+          <button
+            type="submit"
+            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 transition"
+          >
+            Save Password
+          </button>
+        </.form>
+      </div>
+    </div>
     """
   end
 
@@ -90,6 +157,7 @@ defmodule SpectabasWeb.UserLive.Settings do
 
     socket =
       socket
+      |> assign(:page_title, "Account Settings")
       |> assign(:current_email, user.email)
       |> assign(:email_form, to_form(email_changeset))
       |> assign(:password_form, to_form(password_changeset))
