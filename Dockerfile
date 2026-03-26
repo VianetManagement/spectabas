@@ -23,6 +23,9 @@ COPY priv priv
 COPY lib lib
 COPY rel rel
 
+# Compile first (needed for asset build)
+RUN mix compile
+
 # Install esbuild and tailwind, then build assets
 RUN mix esbuild.install --if-missing
 RUN mix tailwind.install --if-missing
@@ -30,8 +33,7 @@ RUN mix esbuild spectabas --minify
 RUN mix tailwind spectabas --minify
 RUN mix phx.digest
 
-# Compile and build release
-RUN mix compile
+# Build release
 RUN mix release
 
 # Runtime stage

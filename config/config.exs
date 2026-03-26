@@ -69,19 +69,22 @@ config :spectabas, :xdomain_token_ttl_seconds, 30
 config :spectabas, :totp_required_roles, [:superadmin]
 
 config :esbuild,
-  version: "0.17.11",
+  version: "0.25.4",
   spectabas: [
-    args: ~w(js/app.js --bundle --target=es2017 --outdir=../priv/static/assets),
+    args:
+      ~w(js/app.js --bundle --target=es2022 --outdir=../priv/static/assets/js --external:/fonts/* --external:/images/*),
     cd: Path.expand("../assets", __DIR__),
     env: %{"NODE_PATH" => Path.expand("../deps", __DIR__)}
   ]
 
 config :tailwind,
-  version: "3.4.3",
+  version: "4.1.12",
   spectabas: [
-    args:
-      ~w(--config=tailwind.config.js --input=css/app.css --output=../priv/static/assets/app.css),
-    cd: Path.expand("../assets", __DIR__)
+    args: ~w(
+      --input=assets/css/app.css
+      --output=priv/static/assets/css/app.css
+    ),
+    cd: Path.expand("..", __DIR__)
   ]
 
 config :logger, :console,
