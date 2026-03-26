@@ -25,7 +25,9 @@ defmodule SpectabasWeb.Endpoint do
     from: :spectabas,
     gzip: not code_reloading?,
     only: SpectabasWeb.static_paths(),
-    raise_on_missing_only: code_reloading?
+    raise_on_missing_only: code_reloading?,
+    cache_control_for_etags: "public, max-age=31536000, immutable",
+    headers: %{"access-control-allow-origin" => "*"}
 
   # Code reloading can be explicitly enabled under the
   # :code_reloader configuration of your endpoint.
