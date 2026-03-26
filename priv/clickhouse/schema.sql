@@ -4,8 +4,8 @@
 CREATE DATABASE IF NOT EXISTS spectabas;
 
 -- Users (change passwords before production!)
-CREATE USER IF NOT EXISTS spectabas_writer IDENTIFIED WITH sha256_password BY 'CHANGE_ME_WRITER';
-CREATE USER IF NOT EXISTS spectabas_reader IDENTIFIED WITH sha256_password BY 'CHANGE_ME_READER';
+CREATE USER IF NOT EXISTS spectabas_writer IDENTIFIED WITH sha256_password BY 'sLxYNBveooSJNs6jQ4dZp0un9txj1uoy';
+CREATE USER IF NOT EXISTS spectabas_reader IDENTIFIED WITH sha256_password BY 'RK69HdY5FxdzeHcAzTajdOtEZHigSeTx';
 
 -- Main events table
 CREATE TABLE IF NOT EXISTS spectabas.events

@@ -1,10 +1,10 @@
 services:
   - type: web
     name: spectabas
-    env: elixir
-    buildCommand: "mix deps.get && mix assets.build && mix phx.digest"
-    startCommand: "mix eval 'Spectabas.Release.migrate()' && mix phx.server"
+    runtime: docker
+    dockerfilePath: ./Dockerfile
     healthCheckPath: /health
+    plan: starter
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -14,34 +14,27 @@ services:
         generateValue: true
       - key: PHX_HOST
         value: www.spectabas.com
+      - key: PHX_SERVER
+        value: "true"
+      - key: PORT
+        value: "4000"
       - key: CLICKHOUSE_URL
-        fromService:
-          name: spectabas-clickhouse
-          type: pserv
-          property: hostport
+        sync: false
       - key: CLICKHOUSE_DB
         value: spectabas
       - key: CLICKHOUSE_WRITER_USER
-        sync: false
+        value: spectabas_writer
       - key: CLICKHOUSE_WRITER_PASSWORD
         sync: false
       - key: CLICKHOUSE_READER_USER
-        sync: false
+        value: spectabas_reader
       - key: CLICKHOUSE_READER_PASSWORD
         sync: false
       - key: RESEND_API_KEY
         sync: false
 
-  - type: pserv
-    name: spectabas-clickhouse
-    env: docker
-    dockerfilePath: ./clickhouse/Dockerfile
-    disk:
-      name: clickhouse-data
-      mountPath: /var/lib/clickhouse
-      sizeGB: 20
-
 databases:
   - name: spectabas-db
     databaseName: spectabas
     user: spectabas
+    plan: starter
