@@ -5,59 +5,46 @@ RUN apt-get update -y && apt-get install -y build-essential git curl \
     && apt-get clean && rm -f /var/lib/apt/lists/*_*
 
 WORKDIR /app
-
 RUN mix local.hex --force && mix local.rebar --force
-
 ENV MIX_ENV=prod
 
-# Install deps
+# --- Deps layer (cached unless mix.exs/mix.lock change) ---
 COPY mix.exs mix.lock ./
 RUN mix deps.get --only $MIX_ENV
-RUN mkdir config
+
 COPY config/config.exs config/prod.exs config/runtime.exs config/
 RUN mix deps.compile
 
-# Copy application code
+# Pre-install esbuild + tailwind binaries (cached with deps)
+RUN mix esbuild.install --if-missing && mix tailwind.install --if-missing
+
+# --- App layer (changes on every code push) ---
+COPY lib lib
 COPY assets assets
 COPY priv priv
-COPY lib lib
 COPY rel rel
 
-# Compile first (needed for asset build)
-RUN mix compile
+RUN mix compile && \
+    mix esbuild spectabas --minify && \
+    mix tailwind spectabas --minify && \
+    mix phx.digest && \
+    mix release
 
-# Install esbuild and tailwind, then build assets
-RUN mix esbuild.install --if-missing
-RUN mix tailwind.install --if-missing
-RUN mix esbuild spectabas --minify
-RUN mix tailwind spectabas --minify
-RUN mix phx.digest
-
-# Build release
-RUN mix release
-
-# Runtime stage
+# Runtime stage — minimal image
 FROM ubuntu:jammy AS app
 
-RUN apt-get update -y && apt-get install -y libstdc++6 openssl libncurses5 locales ca-certificates curl \
-    && apt-get clean && rm -f /var/lib/apt/lists/*_*
+RUN apt-get update -y && \
+    apt-get install -y libstdc++6 openssl libncurses5 locales ca-certificates && \
+    apt-get clean && rm -f /var/lib/apt/lists/*_* && \
+    sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
 
-RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
-
-ENV LANG=en_US.UTF-8
-ENV LANGUAGE=en_US:en
-ENV LC_ALL=en_US.UTF-8
+ENV LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8
+ENV MIX_ENV=prod PHX_SERVER=true
 
 WORKDIR /app
 RUN chown nobody /app
-
-ENV MIX_ENV=prod
-ENV PHX_SERVER=true
-
 COPY --from=build --chown=nobody:root /app/_build/prod/rel/spectabas ./
-
 USER nobody
 
-EXPOSE 4000
-
+EXPOSE 10000
 CMD ["/app/bin/start"]
