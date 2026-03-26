@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<clickhouse>
+    <http_port>10000</http_port>
+</clickhouse>
