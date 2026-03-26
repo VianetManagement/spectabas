@@ -39,11 +39,6 @@ if config_env() == :prod do
       "https://spectabas.com",
       "https://spectabas.onrender.com"
     ],
-    force_ssl: [
-      hsts: true,
-      hsts_opts: [max_age: 63_072_000, include_subdomains: false],
-      rewrite_on: [:x_forwarded_proto]
-    ],
     session_options: [
       store: :cookie,
       key: "_spectabas_session",
