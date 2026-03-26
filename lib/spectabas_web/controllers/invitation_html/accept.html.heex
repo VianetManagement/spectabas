@@ -1,0 +1,86 @@
+<div class="mx-auto max-w-sm py-24">
+  <div class="text-center">
+    <h1 class="text-2xl font-bold tracking-tight text-gray-900">
+      Accept Your Invitation
+    </h1>
+    <p class="mt-2 text-sm text-gray-600">
+      You've been invited to join Spectabas as a <strong><%= @invitation.role %></strong>.
+      Create your account below.
+    </p>
+  </div>
+
+  <.form
+    :let={_f}
+    for={%{}}
+    action={~p"/invitations/#{@token}"}
+    method="post"
+    class="mt-10 space-y-6"
+  >
+    <div>
+      <label for="user_email" class="block text-sm font-medium leading-6 text-gray-900">
+        Email
+      </label>
+      <div class="mt-2">
+        <input
+          type="email"
+          id="user_email"
+          name="user[email]"
+          value={@invitation.email}
+          readonly
+          class="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 bg-gray-50 sm:text-sm sm:leading-6"
+        />
+      </div>
+    </div>
+
+    <div>
+      <label for="user_password" class="block text-sm font-medium leading-6 text-gray-900">
+        Password
+      </label>
+      <div class="mt-2">
+        <input
+          type="password"
+          id="user_password"
+          name="user[password]"
+          required
+          minlength="12"
+          class="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+        />
+      </div>
+      <p class="mt-1 text-xs text-gray-500">Must be at least 12 characters.</p>
+    </div>
+
+    <div>
+      <label for="user_display_name" class="block text-sm font-medium leading-6 text-gray-900">
+        Display Name
+      </label>
+      <div class="mt-2">
+        <input
+          type="text"
+          id="user_display_name"
+          name="user[display_name]"
+          maxlength="100"
+          class="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+        />
+      </div>
+    </div>
+
+    <div>
+      <button
+        type="submit"
+        class="flex w-full justify-center rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+      >
+        Create Account
+      </button>
+    </div>
+  </.form>
+
+  <p class="mt-10 text-center text-sm text-gray-500">
+    Already have an account?
+    <a
+      href={~p"/users/log-in"}
+      class="font-semibold leading-6 text-indigo-600 hover:text-indigo-500"
+    >
+      Log in
+    </a>
+  </p>
+</div>

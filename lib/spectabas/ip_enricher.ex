@@ -1,0 +1,336 @@
+defmodule Spectabas.IPEnricher do
+  @moduledoc """
+  IP address enrichment: geolocation, ASN data, and datacenter/VPN/Tor detection.
+  In GDPR-on mode, anonymizes the IP before lookup (last octet IPv4, last 80 bits IPv6).
+  """
+
+  alias Spectabas.IPEnricher.{IPCache, ASNBlocklist}
+
+  @doc """
+  Enrich an IP address string with geolocation and network data.
+  Returns a map with all enrichment fields.
+  """
+  def enrich(ip_string, gdpr_mode) when is_binary(ip_string) do
+    gdpr_on? = gdpr_mode in ["on", :on]
+    lookup_ip = if gdpr_on?, do: anonymize(ip_string), else: ip_string
+
+    case IPCache.get(lookup_ip) do
+      {:ok, cached} ->
+        cached
+
+      :miss ->
+        result = do_enrich(ip_string, lookup_ip, gdpr_on?)
+        IPCache.put(lookup_ip, result)
+        result
+    end
+  end
+
+  def enrich(_, _), do: empty_result()
+
+  defp do_enrich(original_ip, lookup_ip, gdpr_on?) do
+    city_result = Geolix.lookup(parse_ip(lookup_ip), where: :city)
+    asn_result = Geolix.lookup(parse_ip(lookup_ip), where: :asn)
+
+    asn_number = get_in_safe(asn_result, [:autonomous_system_number])
+    asn_org = get_in_safe(asn_result, [:autonomous_system_organization]) || ""
+
+    %{
+      ip_address: if(gdpr_on?, do: lookup_ip, else: original_ip),
+      ip_country: get_in_safe(city_result, [:country, :iso_code]) || "",
+      ip_country_name: get_localized_name(get_in_safe(city_result, [:country, :names])),
+      ip_continent: get_in_safe(city_result, [:continent, :code]) || "",
+      ip_continent_name: get_localized_name(get_in_safe(city_result, [:continent, :names])),
+      ip_region_code: get_first_subdivision_iso(city_result),
+      ip_region_name: get_first_subdivision_name(city_result),
+      ip_city: get_localized_name(get_in_safe(city_result, [:city, :names])),
+      ip_postal_code: get_in_safe(city_result, [:postal, :code]) || "",
+      ip_lat: get_in_safe(city_result, [:location, :latitude]) || 0.0,
+      ip_lon: get_in_safe(city_result, [:location, :longitude]) || 0.0,
+      ip_accuracy_radius: get_in_safe(city_result, [:location, :accuracy_radius]) || 0,
+      ip_timezone: get_in_safe(city_result, [:location, :time_zone]) || "",
+      ip_asn: asn_number || 0,
+      ip_asn_org: asn_org,
+      ip_org: format_org(asn_number, asn_org),
+      ip_is_datacenter: if(asn_number && ASNBlocklist.datacenter?(asn_number), do: 1, else: 0),
+      ip_is_vpn: if(asn_number && ASNBlocklist.vpn?(asn_number), do: 1, else: 0),
+      ip_is_tor: if(asn_number && ASNBlocklist.tor?(asn_number), do: 1, else: 0),
+      ip_is_bot: 0,
+      ip_gdpr_anonymized: if(gdpr_on?, do: 1, else: 0)
+    }
+  end
+
+  @doc """
+  Anonymize an IP address for GDPR compliance.
+  IPv4: zeroes the last octet. IPv6: zeroes the last 80 bits.
+  """
+  def anonymize(ip_string) when is_binary(ip_string) do
+    case :inet.parse_address(String.to_charlist(ip_string)) do
+      {:ok, {a, b, c, _d}} ->
+        "#{a}.#{b}.#{c}.0"
+
+      {:ok, {a, b, c, _d, _e, _f, _g, _h}} ->
+        parts = [a, b, c, 0, 0, 0, 0, 0]
+
+        parts
+        |> Enum.map(&Integer.to_string(&1, 16))
+        |> Enum.join(":")
+
+      {:error, _} ->
+        ip_string
+    end
+  end
+
+  defp parse_ip(ip_string) do
+    case :inet.parse_address(String.to_charlist(ip_string)) do
+      {:ok, ip} -> ip
+      {:error, _} -> {0, 0, 0, 0}
+    end
+  end
+
+  defp get_in_safe(nil, _keys), do: nil
+  defp get_in_safe(map, []), do: map
+
+  defp get_in_safe(map, [key | rest]) when is_map(map) do
+    get_in_safe(Map.get(map, key), rest)
+  end
+
+  defp get_in_safe(_, _), do: nil
+
+  defp get_localized_name(nil), do: ""
+  defp get_localized_name(names) when is_map(names), do: Map.get(names, "en", "") || ""
+  defp get_localized_name(_), do: ""
+
+  defp get_first_subdivision_iso(nil), do: ""
+
+  defp get_first_subdivision_iso(result) do
+    case get_in_safe(result, [:subdivisions]) do
+      [first | _] -> Map.get(first, :iso_code, "") || ""
+      _ -> ""
+    end
+  end
+
+  defp get_first_subdivision_name(nil), do: ""
+
+  defp get_first_subdivision_name(result) do
+    case get_in_safe(result, [:subdivisions]) do
+      [first | _] -> get_localized_name(Map.get(first, :names))
+      _ -> ""
+    end
+  end
+
+  defp format_org(nil, _), do: ""
+  defp format_org(asn, org), do: "AS#{asn} #{org}"
+
+  defp empty_result do
+    %{
+      ip_address: "",
+      ip_country: "",
+      ip_country_name: "",
+      ip_continent: "",
+      ip_continent_name: "",
+      ip_region_code: "",
+      ip_region_name: "",
+      ip_city: "",
+      ip_postal_code: "",
+      ip_lat: 0.0,
+      ip_lon: 0.0,
+      ip_accuracy_radius: 0,
+      ip_timezone: "",
+      ip_asn: 0,
+      ip_asn_org: "",
+      ip_org: "",
+      ip_is_datacenter: 0,
+      ip_is_vpn: 0,
+      ip_is_tor: 0,
+      ip_is_bot: 0,
+      ip_gdpr_anonymized: 0
+    }
+  end
+end
+
+defmodule Spectabas.IPEnricher.IPCache do
+  @moduledoc """
+  ETS-backed IP enrichment cache with 1-hour TTL and 50,000 entry limit.
+  """
+
+  use GenServer
+
+  @table :spectabas_ip_cache
+  @ttl_ms :timer.hours(1)
+  @max_entries 50_000
+  @sweep_interval_ms :timer.minutes(5)
+
+  # Client API
+
+  def start_link(opts \\ []) do
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+  end
+
+  @doc """
+  Get a cached enrichment result for an IP.
+  Returns `{:ok, result}` or `:miss`.
+  """
+  def get(ip) when is_binary(ip) do
+    now = System.monotonic_time(:millisecond)
+
+    case :ets.lookup(@table, ip) do
+      [{^ip, result, expires_at}] when expires_at > now -> {:ok, result}
+      _ -> :miss
+    end
+  end
+
+  @doc """
+  Cache an enrichment result for an IP.
+  """
+  def put(ip, result) when is_binary(ip) and is_map(result) do
+    expires_at = System.monotonic_time(:millisecond) + @ttl_ms
+    :ets.insert(@table, {ip, result, expires_at})
+    :ok
+  end
+
+  @doc """
+  Clear all entries from the cache.
+  """
+  def clear do
+    :ets.delete_all_objects(@table)
+    :ok
+  end
+
+  # Server callbacks
+
+  @impl true
+  def init(_opts) do
+    table = :ets.new(@table, [:named_table, :set, :public, read_concurrency: true])
+    schedule_sweep()
+    {:ok, %{table: table}}
+  end
+
+  @impl true
+  def handle_info(:sweep, state) do
+    sweep()
+    schedule_sweep()
+    {:noreply, state}
+  end
+
+  defp schedule_sweep do
+    Process.send_after(self(), :sweep, @sweep_interval_ms)
+  end
+
+  defp sweep do
+    now = System.monotonic_time(:millisecond)
+
+    # Delete expired entries
+    :ets.select_delete(@table, [
+      {{:_, :_, :"$1"}, [{:<, :"$1", now}], [true]}
+    ])
+
+    # Trim to max size if needed
+    size = :ets.info(@table, :size)
+
+    if size > @max_entries do
+      # Delete oldest entries (those with earliest expiry)
+      entries =
+        :ets.tab2list(@table)
+        |> Enum.sort_by(fn {_ip, _result, expires_at} -> expires_at end)
+
+      to_delete = Enum.take(entries, size - @max_entries)
+
+      Enum.each(to_delete, fn {ip, _result, _expires_at} ->
+        :ets.delete(@table, ip)
+      end)
+    end
+  end
+end
+
+defmodule Spectabas.IPEnricher.ASNBlocklist do
+  @moduledoc """
+  Loads ASN blocklists for datacenter, VPN, and Tor detection from text files.
+  Reloads every 24 hours.
+  """
+
+  use GenServer
+  require Logger
+
+  @dc_table :spectabas_asn_dc
+  @vpn_table :spectabas_asn_vpn
+  @tor_table :spectabas_asn_tor
+  @reload_interval_ms :timer.hours(24)
+
+  # Client API
+
+  def start_link(opts \\ []) do
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+  end
+
+  @doc "Check if an ASN is a known datacenter."
+  def datacenter?(asn), do: :ets.member(@dc_table, normalize_asn(asn))
+
+  @doc "Check if an ASN is a known VPN provider."
+  def vpn?(asn), do: :ets.member(@vpn_table, normalize_asn(asn))
+
+  @doc "Check if an ASN is a known Tor exit."
+  def tor?(asn), do: :ets.member(@tor_table, normalize_asn(asn))
+
+  # Server callbacks
+
+  @impl true
+  def init(_opts) do
+    :ets.new(@dc_table, [:named_table, :set, :public, read_concurrency: true])
+    :ets.new(@vpn_table, [:named_table, :set, :public, read_concurrency: true])
+    :ets.new(@tor_table, [:named_table, :set, :public, read_concurrency: true])
+
+    load_all()
+    schedule_reload()
+    {:ok, %{}}
+  end
+
+  @impl true
+  def handle_info(:reload, state) do
+    load_all()
+    schedule_reload()
+    {:noreply, state}
+  end
+
+  defp schedule_reload do
+    Process.send_after(self(), :reload, @reload_interval_ms)
+  end
+
+  defp load_all do
+    load_file(@dc_table, asn_file("asn_datacenter.txt"))
+    load_file(@vpn_table, asn_file("asn_vpn.txt"))
+    load_file(@tor_table, asn_file("asn_tor.txt"))
+  end
+
+  defp load_file(table, path) do
+    :ets.delete_all_objects(table)
+
+    if File.exists?(path) do
+      path
+      |> File.stream!()
+      |> Stream.map(&String.trim/1)
+      |> Stream.reject(fn line -> line == "" or String.starts_with?(line, "#") end)
+      |> Stream.each(fn line ->
+        case Integer.parse(line) do
+          {asn, _} -> :ets.insert(table, {asn, true})
+          :error -> :ok
+        end
+      end)
+      |> Stream.run()
+    else
+      Logger.debug("[ASNBlocklist] File not found: #{path}")
+    end
+  end
+
+  defp asn_file(filename) do
+    Path.join(:code.priv_dir(:spectabas), "asn_lists/#{filename}")
+  end
+
+  defp normalize_asn(asn) when is_integer(asn), do: asn
+
+  defp normalize_asn(asn) when is_binary(asn) do
+    case Integer.parse(asn) do
+      {n, _} -> n
+      :error -> 0
+    end
+  end
+end

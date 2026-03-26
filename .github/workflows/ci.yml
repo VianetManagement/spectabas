@@ -1,0 +1,61 @@
+name: CI
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+env:
+  MIX_ENV: test
+  ELIXIR_VERSION: "1.17"
+  OTP_VERSION: "27"
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: spectabas_test
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      clickhouse:
+        image: clickhouse/clickhouse-server:24.3-alpine
+        ports: ["8123:8123"]
+        options: --health-cmd "wget -qO- http://localhost:8123/ping" --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: deps
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+      - run: mix deps.get
+      - run: mix format --check-formatted
+      - run: mix compile --warnings-as-errors
+      - run: mix test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost/spectabas_test
+          CLICKHOUSE_URL: http://localhost:8123
+          CLICKHOUSE_DB: spectabas_test
+          CLICKHOUSE_WRITER_USER: default
+          CLICKHOUSE_WRITER_PASSWORD: ""
+          CLICKHOUSE_READER_USER: default
+          CLICKHOUSE_READER_PASSWORD: ""
+          SECRET_KEY_BASE: "test_secret_key_base_64_chars_minimum_for_testing_only_xxxxxxxxx"
+          PHX_HOST: localhost
+      - run: mix deps.audit
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+      - run: mix deps.get
+      - run: mix deps.audit

@@ -1,0 +1,15 @@
+AS9009 # M247, GB (NordVPN)
+AS20448 # VPNtranet, LLC.
+AS209854 # Surfshark
+AS136787 # NordVPN (TEFINCOM S.A.)
+AS32751 # Octovpn / xbox VPN
+AS212238 # Datacamp VPN?
+AS50525 # Privado VPN
+AS207137 # Packethub (NordVPN)
+AS60729 # Tor Servers (Tor exit nodes)
+AS398391 # Checkpoint VPN
+AS401401 # Unredacted
+AS401720 # Unredacted
+AS200373 # 3xktech
+AS198571 # 3xktech
+AS208172 # ProtonVPN (https://github.com/X4BNet/lists_vpn/issues/248)

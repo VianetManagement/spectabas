@@ -1,0 +1,18 @@
+# Tor relay and exit node ASNs
+# Sources: X4BNet/lists_vpn, X4BNet/lists_torexit, and well-known Tor hosting providers
+# Updated: 2026-03-26
+AS60729 # Tor Servers (Tor exit nodes)
+AS63128 # RBLHST-TOR - Strong Technology, LLC., US
+AS51167 # Contabo GmbH (common Tor relay host)
+AS24940 # Hetzner Online GmbH (common Tor relay host)
+AS16276 # OVH SAS (common Tor relay host)
+AS12876 # SCALEWAY S.A.S. (common Tor relay host)
+AS197540 # netcup GmbH (common Tor relay host)
+AS47147 # DMITRIY-NET Dmitriy Ponomarev (Tor relays)
+AS200052 # Flokinet Ltd (Tor-friendly hosting)
+AS35913 # DediPath (common Tor relay host)
+AS398493 # Quintex Alliance Consulting (Tor exit operator)
+AS18978 # Enzuinc (common Tor relay host)
+AS30823 # Combahton GmbH (common Tor relay host)
+AS205100 # F3 Netze e.V. (Tor relay operator)
+AS213035 # Gcore Labs (common Tor relay host)

@@ -1,0 +1,119 @@
+defmodule Spectabas.Events.IngestBuffer do
+  @moduledoc """
+  GenServer that buffers incoming events and flushes them to ClickHouse
+  in batches. Flush triggers on timer (configurable, default 500ms) or
+  when batch size is reached (configurable, default 200).
+
+  On ClickHouse failure, events are sent to DeadLetter.
+  On success, broadcasts to PubSub "site:{id}" topics grouped by site_id.
+  """
+
+  use GenServer
+  require Logger
+
+  alias Spectabas.ClickHouse
+  alias Spectabas.Events.{EventSchema, DeadLetter}
+
+  @default_flush_interval_ms 500
+  @default_max_batch_size 200
+
+  # --- Public API ---
+
+  def start_link(opts \\ []) do
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+  end
+
+  @doc "Push an enriched event map into the buffer."
+  def push(event) when is_map(event) do
+    GenServer.cast(__MODULE__, {:push, event})
+  end
+
+  @doc "Force an immediate flush of the buffer."
+  def flush do
+    GenServer.call(__MODULE__, :flush)
+  end
+
+  # --- Callbacks ---
+
+  @impl true
+  def init(_opts) do
+    cfg = Application.get_env(:spectabas, __MODULE__, [])
+    flush_interval = cfg[:flush_interval_ms] || @default_flush_interval_ms
+    max_batch = cfg[:max_batch_size] || @default_max_batch_size
+
+    schedule_flush(flush_interval)
+
+    {:ok,
+     %{
+       buffer: [],
+       size: 0,
+       flush_interval: flush_interval,
+       max_batch: max_batch
+     }}
+  end
+
+  @impl true
+  def handle_cast({:push, event}, state) do
+    new_buffer = [event | state.buffer]
+    new_size = state.size + 1
+
+    if new_size >= state.max_batch do
+      do_flush(new_buffer)
+      {:noreply, %{state | buffer: [], size: 0}}
+    else
+      {:noreply, %{state | buffer: new_buffer, size: new_size}}
+    end
+  end
+
+  @impl true
+  def handle_call(:flush, _from, state) do
+    do_flush(state.buffer)
+    {:reply, :ok, %{state | buffer: [], size: 0}}
+  end
+
+  @impl true
+  def handle_info(:tick, state) do
+    if state.size > 0 do
+      do_flush(state.buffer)
+      schedule_flush(state.flush_interval)
+      {:noreply, %{state | buffer: [], size: 0}}
+    else
+      schedule_flush(state.flush_interval)
+      {:noreply, state}
+    end
+  end
+
+  # --- Private ---
+
+  defp schedule_flush(interval) do
+    Process.send_after(self(), :tick, interval)
+  end
+
+  defp do_flush([]), do: :ok
+
+  defp do_flush(events) do
+    rows = Enum.map(events, &EventSchema.to_row/1)
+
+    case ClickHouse.insert("events", rows) do
+      :ok ->
+        broadcast_events(events)
+        Logger.debug("[IngestBuffer] Flushed #{length(rows)} events to ClickHouse")
+
+      {:error, reason} ->
+        Logger.error("[IngestBuffer] ClickHouse insert failed: #{inspect(reason)}")
+        DeadLetter.enqueue(rows, reason)
+    end
+  end
+
+  defp broadcast_events(events) do
+    events
+    |> Enum.group_by(& &1[:site_id])
+    |> Enum.each(fn {site_id, site_events} ->
+      Phoenix.PubSub.broadcast(
+        Spectabas.PubSub,
+        "site:#{site_id}",
+        {:new_events, site_events}
+      )
+    end)
+  end
+end
