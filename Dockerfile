@@ -17,12 +17,18 @@ RUN mkdir config
 COPY config/config.exs config/prod.exs config/runtime.exs config/
 RUN mix deps.compile
 
-# Build assets
+# Copy application code
 COPY assets assets
 COPY priv priv
 COPY lib lib
+COPY rel rel
 
-RUN mix assets.deploy
+# Install esbuild and tailwind, then build assets
+RUN mix esbuild.install --if-missing
+RUN mix tailwind.install --if-missing
+RUN mix esbuild spectabas --minify
+RUN mix tailwind spectabas --minify
+RUN mix phx.digest
 
 # Compile and build release
 RUN mix compile
@@ -48,10 +54,8 @@ ENV PHX_SERVER=true
 
 COPY --from=build --chown=nobody:root /app/_build/prod/rel/spectabas ./
 
-# Copy GeoIP and ASN data
-COPY --from=build --chown=nobody:root /app/priv/asn_lists ./priv/asn_lists
-# Note: mmdb files must be added at deploy time or via volume mount
-
 USER nobody
+
+EXPOSE 4000
 
 CMD ["/app/bin/server"]
