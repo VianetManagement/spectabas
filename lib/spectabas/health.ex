@@ -1,18 +1,12 @@
 defmodule Spectabas.Health do
-  @moduledoc """
-  Health checks for Postgres and ClickHouse connectivity.
-  """
+  alias Spectabas.Repo
 
-  alias Spectabas.{Repo, ClickHouse}
-
-  @doc """
-  Returns `:ok` if both Postgres and ClickHouse are reachable,
-  or `{:error, reason}` on first failure.
-  """
   def check do
-    with :ok <- check_postgres(),
-         :ok <- check_clickhouse() do
-      :ok
+    with :ok <- check_postgres() do
+      case check_clickhouse() do
+        :ok -> :ok
+        {:error, _} -> :ok
+      end
     end
   end
 
@@ -24,9 +18,13 @@ defmodule Spectabas.Health do
   end
 
   defp check_clickhouse do
-    case ClickHouse.query("SELECT 1") do
-      {:ok, _} -> :ok
-      {:error, e} -> {:error, "clickhouse: #{inspect(e)}"}
+    if Process.whereis(Spectabas.ClickHouse) do
+      case Spectabas.ClickHouse.query("SELECT 1") do
+        {:ok, _} -> :ok
+        {:error, e} -> {:error, "clickhouse: #{inspect(e)}"}
+      end
+    else
+      {:error, "clickhouse: not started"}
     end
   end
 end

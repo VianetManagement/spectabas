@@ -31,7 +31,7 @@ if config_env() == :prod do
 
   config :spectabas, SpectabasWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
-    http: [ip: {0, 0, 0, 0}, port: port, max_header_length: 8_192, max_headers: 100],
+    http: [ip: {0, 0, 0, 0}, port: port],
     secret_key_base: secret_key_base,
     check_origin: [
       "https://#{host}",

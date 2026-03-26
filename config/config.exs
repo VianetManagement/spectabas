@@ -36,7 +36,7 @@ config :spectabas, Spectabas.Events.IngestBuffer,
   max_batch_size: 200
 
 config :hammer,
-  backend: {Hammer.Backend.ETS, [expiry_ms: 60_000 * 60, cleanup_interval_ms: 60_000 * 10]}
+  backend: {Hammer.Backend.ETS, [expiry_ms: 60_000 * 60 * 4, cleanup_interval_ms: 60_000 * 10]}
 
 config :spectabas, :rate_limits,
   collect: {300, 60_000},
@@ -49,15 +49,7 @@ config :spectabas, :rate_limits,
 config :spectabas, Oban,
   repo: Spectabas.Repo,
   queues: [default: 10, mailer: 5, reports: 3, exports: 2, maintenance: 2],
-  plugins: [
-    Oban.Plugins.Pruner,
-    {Oban.Plugins.Cron,
-     crontab: [
-       {"0 1 * * *", Spectabas.Workers.SessionCleanup},
-       {"0 * * * *", Spectabas.Workers.AnomalyDetection},
-       {"0 6 1 * *", Spectabas.Workers.GeoIPRefresh}
-     ]}
-  ]
+  plugins: [Oban.Plugins.Pruner]
 
 config :spectabas, Spectabas.Mailer, adapter: Swoosh.Adapters.Local
 

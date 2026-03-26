@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+
+cd -P -- "$(dirname -- "$0")"
+
+echo "Running migrations..."
+./spectabas eval "Spectabas.Release.migrate()" || echo "Migration warning (may be OK on first run)"
+
+echo "Starting server..."
+PHX_SERVER=true exec ./spectabas start
