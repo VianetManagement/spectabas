@@ -11,8 +11,13 @@ defmodule Spectabas.Analytics do
   @doc """
   Overview stats: pageviews, unique_visitors, sessions, bounce_rate, avg_duration.
   """
-  def overview_stats(%Site{} = site, %User{} = user, date_range) do
-    with :ok <- authorize(site, user) do
+  def overview_stats(%Site{} = site, %User{} = user, date_range) when is_atom(date_range) do
+    overview_stats(site, user, period_to_date_range(date_range))
+  end
+
+  def overview_stats(%Site{} = site, %User{} = user, date_range) when is_map(date_range) do
+    with :ok <- authorize(site, user),
+         :ok <- check_clickhouse() do
       sql = """
       SELECT
         sum(pageviews) AS pageviews,
@@ -168,17 +173,19 @@ defmodule Spectabas.Analytics do
   Distinct visitors in the last 5 minutes (realtime).
   """
   def realtime_visitors(%Site{} = site) do
-    sql = """
-    SELECT uniq(visitor_id) AS active_visitors
-    FROM events
-    WHERE site_id = #{ClickHouse.param(site.id)}
-      AND timestamp >= now() - INTERVAL 5 MINUTE
-    """
+    with :ok <- check_clickhouse() do
+      sql = """
+      SELECT uniq(visitor_id) AS active_visitors
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= now() - INTERVAL 5 MINUTE
+      """
 
-    case ClickHouse.query(sql) do
-      {:ok, [row]} -> {:ok, Map.get(row, "active_visitors", 0)}
-      {:ok, []} -> {:ok, 0}
-      {:error, reason} -> {:error, reason}
+      case ClickHouse.query(sql) do
+        {:ok, [row]} -> {:ok, Map.get(row, "active_visitors", 0)}
+        {:ok, []} -> {:ok, 0}
+        {:error, reason} -> {:error, reason}
+      end
     end
   end
 
@@ -313,6 +320,14 @@ defmodule Spectabas.Analytics do
 
   # --- Private helpers ---
 
+  defp check_clickhouse do
+    if Process.whereis(Spectabas.ClickHouse) do
+      :ok
+    else
+      {:error, :clickhouse_unavailable}
+    end
+  end
+
   defp authorize(site, user) do
     if Accounts.can_access_site?(user, site) do
       :ok
@@ -378,18 +393,20 @@ defmodule Spectabas.Analytics do
   Used by the admin dashboard.
   """
   def total_events_today do
-    today = Date.utc_today() |> Date.to_iso8601()
+    with :ok <- check_clickhouse() do
+      today = Date.utc_today() |> Date.to_iso8601()
 
-    sql = """
-    SELECT count() AS total
-    FROM events
-    WHERE toDate(timestamp) = #{ClickHouse.param(today)}
-    """
+      sql = """
+      SELECT count() AS total
+      FROM events
+      WHERE toDate(timestamp) = #{ClickHouse.param(today)}
+      """
 
-    case ClickHouse.query(sql) do
-      {:ok, [%{"total" => count}]} -> {:ok, count}
-      {:ok, []} -> {:ok, 0}
-      {:error, reason} -> {:error, reason}
+      case ClickHouse.query(sql) do
+        {:ok, [%{"total" => count}]} -> {:ok, count}
+        {:ok, []} -> {:ok, 0}
+        {:error, reason} -> {:error, reason}
+      end
     end
   end
 

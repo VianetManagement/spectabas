@@ -45,10 +45,38 @@ defmodule Spectabas.Sites do
       {:ok, site} ->
         DomainCache.put(site)
         Audit.log("site.created", %{site_id: site.id, domain: site.domain})
+        register_render_domain(site.domain)
         {:ok, site}
 
       error ->
         error
+    end
+  end
+
+  defp register_render_domain(domain) do
+    api_key = System.get_env("RENDER_API_KEY")
+    service_id = System.get_env("RENDER_SERVICE_ID")
+
+    if api_key && service_id do
+      Task.start(fn ->
+        Req.post("https://api.render.com/v1/services/#{service_id}/custom-domains",
+          headers: [{"authorization", "Bearer #{api_key}"}],
+          json: %{name: domain}
+        )
+        |> case do
+          {:ok, %{status: s}} when s in [200, 201] ->
+            require Logger
+            Logger.info("[Sites] Registered custom domain on Render: #{domain}")
+
+          {:ok, %{status: 409}} ->
+            require Logger
+            Logger.info("[Sites] Domain already registered on Render: #{domain}")
+
+          other ->
+            require Logger
+            Logger.warning("[Sites] Failed to register domain on Render: #{inspect(other)}")
+        end
+      end)
     end
   end
 

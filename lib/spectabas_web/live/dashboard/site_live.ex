@@ -65,8 +65,17 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
 
     stats =
       case Analytics.overview_stats(site, user, range_to_atom(range)) do
-        {:ok, stats} -> stats
-        _ -> %{pageviews: 0, unique_visitors: 0, sessions: 0, bounce_rate: 0.0, avg_duration: 0}
+        {:ok, s} ->
+          %{
+            pageviews: s["pageviews"] || 0,
+            unique_visitors: s["unique_visitors"] || 0,
+            sessions: s["sessions"] || 0,
+            bounce_rate: s["bounce_rate"] || 0.0,
+            avg_duration: s["avg_duration"] || 0
+          }
+
+        _ ->
+          %{pageviews: 0, unique_visitors: 0, sessions: 0, bounce_rate: 0.0, avg_duration: 0}
       end
 
     live_visitors =
