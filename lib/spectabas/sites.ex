@@ -85,6 +85,7 @@ defmodule Spectabas.Sites do
   """
   def update_site(%Site{} = site, attrs) do
     old_domain = site.domain
+    attrs = parse_text_fields(attrs)
 
     site
     |> Site.changeset(attrs)
@@ -165,6 +166,30 @@ defmodule Spectabas.Sites do
 
   def ip_blocked?(_, _), do: false
 
+  defp parse_text_fields(attrs) when is_map(attrs) do
+    attrs
+    |> maybe_parse_list("cross_domain_sites_text", "cross_domain_sites")
+    |> maybe_parse_list("ip_allowlist_text", "ip_allowlist")
+    |> maybe_parse_list("ip_blocklist_text", "ip_blocklist")
+    |> Map.drop(["cross_domain_sites_text", "ip_allowlist_text", "ip_blocklist_text"])
+  end
+
+  defp maybe_parse_list(attrs, text_key, list_key) do
+    case Map.get(attrs, text_key) do
+      nil ->
+        attrs
+
+      text ->
+        list =
+          text
+          |> String.split(~r/[,\n]/)
+          |> Enum.map(&String.trim/1)
+          |> Enum.reject(&(&1 == ""))
+
+        Map.put(attrs, list_key, list)
+    end
+  end
+
   @doc """
   Returns the HTML snippet for embedding the Spectabas tracker on a site.
   """
@@ -179,7 +204,7 @@ defmodule Spectabas.Sites do
       end
 
     """
-    <script defer data-site="#{site.public_key}"#{gdpr_attr}#{xd_attr} src="https://www.spectabas.com/s.js"></script>
+    <script defer data-site="#{site.domain}"#{gdpr_attr}#{xd_attr} src="https://#{site.domain}/s.js"></script>
     """
     |> String.trim()
   end
