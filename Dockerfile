@@ -60,4 +60,4 @@ USER nobody
 
 EXPOSE 4000
 
-CMD ["/app/bin/server"]
+CMD /app/bin/spectabas eval "Spectabas.Release.migrate()" && /app/bin/server
