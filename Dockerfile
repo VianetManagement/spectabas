@@ -1,5 +1,5 @@
 # Build stage
-FROM hexpm/elixir:1.17.3-erlang-27.2-debian-bookworm-20241016-slim AS build
+FROM hexpm/elixir:1.17.3-erlang-27.2-ubuntu-jammy-20260217 AS build
 
 RUN apt-get update -y && apt-get install -y build-essential git curl \
     && apt-get clean && rm -f /var/lib/apt/lists/*_*
@@ -35,7 +35,7 @@ RUN mix compile
 RUN mix release
 
 # Runtime stage
-FROM debian:bookworm-slim AS app
+FROM ubuntu:jammy AS app
 
 RUN apt-get update -y && apt-get install -y libstdc++6 openssl libncurses5 locales ca-certificates curl \
     && apt-get clean && rm -f /var/lib/apt/lists/*_*
