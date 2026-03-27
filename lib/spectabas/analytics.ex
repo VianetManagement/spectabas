@@ -20,23 +20,16 @@ defmodule Spectabas.Analytics do
          :ok <- check_clickhouse() do
       sql = """
       SELECT
-        sum(pageviews) AS pageviews,
+        countIf(event_type = 'pageview') AS pageviews,
         uniqExact(visitor_id) AS unique_visitors,
-        count() AS total_sessions,
-        round(countIf(pageviews = 1 AND total_duration = 0) / greatest(count(), 1) * 100, 1) AS bounce_rate,
-        round(avgIf(total_duration, total_duration > 0), 0) AS avg_duration
-      FROM (
-        SELECT
-          session_id,
-          any(visitor_id) AS visitor_id,
-          countIf(event_type = 'pageview') AS pageviews,
-          maxIf(duration_s, event_type = 'duration') AS total_duration
-        FROM events
-        WHERE site_id = #{ClickHouse.param(site.id)}
-          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-        GROUP BY session_id
-      )
+        uniqExact(session_id) AS total_sessions,
+        round(sumIf(is_bounce, event_type = 'pageview')
+          / greatest(countIf(event_type = 'pageview'), 1) * 100, 1) AS bounce_rate,
+        round(avgIf(duration_s, event_type = 'duration' AND duration_s > 0), 0) AS avg_duration
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
       """
 
       case ClickHouse.query(sql) do
@@ -410,23 +403,16 @@ defmodule Spectabas.Analytics do
 
     sql = """
     SELECT
-      sum(pageviews) AS pageviews,
+      countIf(event_type = 'pageview') AS pageviews,
       uniqExact(visitor_id) AS unique_visitors,
-      count() AS total_sessions,
-      round(countIf(pageviews = 1 AND total_duration = 0) / greatest(count(), 1) * 100, 1) AS bounce_rate,
-      round(avgIf(total_duration, total_duration > 0), 0) AS avg_duration
-    FROM (
-      SELECT
-        session_id,
-        any(visitor_id) AS visitor_id,
-        countIf(event_type = 'pageview') AS pageviews,
-        maxIf(duration_s, event_type = 'duration') AS total_duration
-      FROM events
-      WHERE site_id = #{ClickHouse.param(site.id)}
-        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-      GROUP BY session_id
-    )
+      uniqExact(session_id) AS total_sessions,
+      round(sumIf(is_bounce, event_type = 'pageview')
+        / greatest(countIf(event_type = 'pageview'), 1) * 100, 1) AS bounce_rate,
+      round(avgIf(duration_s, event_type = 'duration' AND duration_s > 0), 0) AS avg_duration
+    FROM events
+    WHERE site_id = #{ClickHouse.param(site.id)}
+      AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+      AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
     """
 
     case ClickHouse.query(sql) do

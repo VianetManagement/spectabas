@@ -25,6 +25,7 @@ COPY priv priv
 COPY rel rel
 
 RUN mix compile && \
+    mix ua_inspector.download --force && \
     mix esbuild spectabas --minify && \
     mix tailwind spectabas --minify && \
     mix phx.digest && \

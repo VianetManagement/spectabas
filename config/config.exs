@@ -85,18 +85,4 @@ config :logger, :console,
 
 config :phoenix, :json_library, Jason
 
-config :geolix,
-  databases: [
-    %{
-      id: :city,
-      adapter: Geolix.Adapter.MMDB2,
-      source: Path.expand("../priv/geoip/dbip-city-lite.mmdb", __DIR__)
-    },
-    %{
-      id: :asn,
-      adapter: Geolix.Adapter.MMDB2,
-      source: Path.expand("../priv/geoip/dbip-asn-lite.mmdb", __DIR__)
-    }
-  ]
-
 import_config "#{config_env()}.exs"

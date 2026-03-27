@@ -1,10 +1,12 @@
 defmodule Spectabas.GeoIP do
   @moduledoc """
   Manages GeoIP database loading via Geolix.
-  Only starts if mmdb files are present.
+  Resolves database paths at runtime via :code.priv_dir so it works
+  in both dev and releases.
   """
 
   use GenServer
+  require Logger
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -12,17 +14,28 @@ defmodule Spectabas.GeoIP do
 
   @impl true
   def init(_opts) do
-    databases = Application.get_env(:geolix, :databases, [])
+    priv_dir = :code.priv_dir(:spectabas) |> to_string()
 
-    # Only load databases if files exist
-    valid_databases =
-      Enum.filter(databases, fn db ->
-        source = db[:source]
-        is_binary(source) && File.exists?(source)
-      end)
+    databases = [
+      %{
+        id: :city,
+        adapter: Geolix.Adapter.MMDB2,
+        source: Path.join([priv_dir, "geoip", "dbip-city-lite.mmdb"])
+      },
+      %{
+        id: :asn,
+        adapter: Geolix.Adapter.MMDB2,
+        source: Path.join([priv_dir, "geoip", "dbip-asn-lite.mmdb"])
+      }
+    ]
 
-    Enum.each(valid_databases, fn db ->
-      Geolix.load_database(db)
+    Enum.each(databases, fn db ->
+      if File.exists?(db.source) do
+        Geolix.load_database(db)
+        Logger.info("[GeoIP] Loaded #{db.id} from #{db.source}")
+      else
+        Logger.warning("[GeoIP] Database not found: #{db.source}")
+      end
     end)
 
     {:ok, %{}}
