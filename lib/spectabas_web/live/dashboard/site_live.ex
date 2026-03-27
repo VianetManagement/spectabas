@@ -109,6 +109,8 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   defp schedule_refresh, do: Process.send_after(self(), :refresh, @refresh_interval_ms)
 
   defp load_stats(socket) do
+    require Logger
+
     %{site: site, user: user, date_from: from, date_to: to, compare: compare, preset: preset} =
       socket.assigns
 

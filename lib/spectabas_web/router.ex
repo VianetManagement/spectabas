@@ -35,6 +35,7 @@ defmodule SpectabasWeb.Router do
     get "/health", HealthController, :show
     get "/health/diag", HealthController, :diag
     get "/health/backfill-geo", HealthController, :backfill_geo
+    get "/health/dashboard-test", HealthController, :test_dashboard
   end
 
   # Collect endpoint — CORS, rate-limited, no CSRF

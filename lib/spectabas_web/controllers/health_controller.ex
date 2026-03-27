@@ -294,6 +294,43 @@ defmodule SpectabasWeb.HealthController do
     json(conn, %{status: "done", ips_found: length(ips), results: results})
   end
 
+  def test_dashboard(conn, _params) do
+    alias Spectabas.{Sites, Analytics, Accounts}
+
+    site = Spectabas.Repo.get!(Sites.Site, 1)
+    user = Spectabas.Repo.one!(Accounts.User)
+
+    today = Date.utc_today()
+    from = Date.add(today, -7)
+
+    date_range = %{
+      from: DateTime.new!(from, ~T[00:00:00]),
+      to: DateTime.new!(today, ~T[23:59:59])
+    }
+
+    results = %{
+      overview: safe_test(fn -> Analytics.overview_stats(site, user, date_range) end),
+      timeseries: safe_test(fn -> Analytics.timeseries(site, user, date_range, :week) end),
+      top_pages: safe_test(fn -> Analytics.top_pages(site, user, date_range) end),
+      top_sources: safe_test(fn -> Analytics.top_sources(site, user, date_range) end),
+      top_regions: safe_test(fn -> Analytics.top_regions(site, user, date_range) end),
+      top_devices: safe_test(fn -> Analytics.top_devices(site, user, date_range) end),
+      entry_pages: safe_test(fn -> Analytics.entry_pages(site, user, date_range) end)
+    }
+
+    json(conn, results)
+  end
+
+  defp safe_test(fun) do
+    case fun.() do
+      {:ok, data} -> %{status: "ok", rows: length(List.wrap(data))}
+      {:error, e} -> %{status: "error", reason: inspect(e) |> String.slice(0, 300)}
+      other -> %{status: "unexpected", value: inspect(other) |> String.slice(0, 300)}
+    end
+  rescue
+    e -> %{status: "crash", error: Exception.message(e) |> String.slice(0, 300)}
+  end
+
   defp test_geoip do
     priv_dir = :code.priv_dir(:spectabas) |> to_string()
     city_path = Path.join([priv_dir, "geoip", "dbip-city-lite.mmdb"])

@@ -48,7 +48,7 @@ defmodule Spectabas.Analytics do
     timeseries(site, user, period_to_date_range(date_range), date_range)
   end
 
-  def timeseries(%Site{} = site, %User{} = user, %{from: _, to: _} = date_range, period \\ :week) do
+  def timeseries(%Site{} = site, %User{} = user, %{from: _, to: _} = date_range, period) do
     with :ok <- authorize(site, user) do
       # Pick bucket size: hourly for day, daily for week/month, weekly for custom >60d
       {trunc_fn, _fmt} =
