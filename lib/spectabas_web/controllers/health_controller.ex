@@ -166,6 +166,16 @@ defmodule SpectabasWeb.HealthController do
     end
   end
 
+  def backfill_geo(conn, _params) do
+    case Oban.insert(Spectabas.Workers.BackfillGeo.new(%{})) do
+      {:ok, job} ->
+        json(conn, %{status: "enqueued", job_id: job.id})
+
+      {:error, reason} ->
+        conn |> put_status(500) |> json(%{status: "error", reason: inspect(reason)})
+    end
+  end
+
   defp test_geoip do
     priv_dir = :code.priv_dir(:spectabas) |> to_string()
     city_path = Path.join([priv_dir, "geoip", "dbip-city-lite.mmdb"])
