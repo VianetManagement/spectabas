@@ -238,7 +238,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                 type="text"
                 name="site[name]"
                 value={@form[:name].value}
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
               />
             </div>
             <div>
@@ -247,17 +247,26 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                 type="text"
                 name="site[domain]"
                 value={@form[:domain].value}
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
               />
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700">Timezone</label>
-              <input
-                type="text"
+              <select
                 name="site[timezone]"
-                value={@form[:timezone].value}
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              />
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
+              >
+                <option
+                  :for={
+                    tz <-
+                      ~w(UTC US/Eastern US/Central US/Mountain US/Pacific Europe/London Europe/Paris Europe/Berlin Asia/Tokyo Asia/Shanghai Australia/Sydney Pacific/Auckland America/New_York America/Chicago America/Denver America/Los_Angeles America/Toronto America/Sao_Paulo)
+                  }
+                  value={tz}
+                  selected={@form[:timezone].value == tz}
+                >
+                  {tz}
+                </option>
+              </select>
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700">Retention Days</label>
@@ -267,7 +276,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                 value={@form[:retention_days].value}
                 min="30"
                 max="3650"
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
               />
             </div>
           </div>
@@ -295,7 +304,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                   name="site[cookie_domain]"
                   value={@form[:cookie_domain].value}
                   placeholder=".example.com"
-                  class="mt-1 block w-full md:w-1/2 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  class="mt-1 block w-full md:w-1/2 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
                 />
               </div>
             </div>
@@ -326,7 +335,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                   type="text"
                   name="site[cross_domain_sites_text]"
                   value={Enum.join(@site.cross_domain_sites, ", ")}
-                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
                   placeholder="other-site.com, app.example.com"
                 />
               </div>
@@ -343,7 +352,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                 <textarea
                   name="site[ip_allowlist_text]"
                   rows="3"
-                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm font-mono text-xs"
+                  class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5 font-mono text-xs"
                   placeholder="1.2.3.4&#10;5.6.7.0/24"
                 ><%= Enum.join(@site.ip_allowlist, "\n") %></textarea>
               </div>
@@ -354,7 +363,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                 <textarea
                   name="site[ip_blocklist_text]"
                   rows="3"
-                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm font-mono text-xs"
+                  class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5 font-mono text-xs"
                   placeholder="10.0.0.1&#10;192.168.0.0/16"
                 ><%= Enum.join(@site.ip_blocklist, "\n") %></textarea>
               </div>
@@ -385,7 +394,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
               <label class="block text-sm font-medium text-gray-700">Currency</label>
               <select
                 name="site[currency]"
-                class="mt-1 block w-full md:w-48 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                class="mt-1 block w-full md:w-48 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
               >
                 <option
                   :for={c <- ["USD", "EUR", "GBP", "CAD", "AUD", "JPY"]}

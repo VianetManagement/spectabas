@@ -1,10 +1,24 @@
-# Build stage — uses pre-built base with deps compiled (~30s for code-only changes)
-# Base image rebuilds via GitHub Actions when mix.exs/mix.lock/config change
-FROM ghcr.io/vianetmanagement/spectabas-base:latest AS build
+# Build stage
+FROM hexpm/elixir:1.17.3-erlang-27.2-ubuntu-jammy-20260217 AS build
+
+RUN apt-get update -y && apt-get install -y build-essential git curl \
+    && apt-get clean && rm -f /var/lib/apt/lists/*_*
 
 WORKDIR /app
+RUN mix local.hex --force && mix local.rebar --force
 ENV MIX_ENV=prod
 
+# --- Deps layer (cached unless mix.exs/mix.lock change) ---
+COPY mix.exs mix.lock ./
+RUN mix deps.get --only $MIX_ENV
+
+COPY config/config.exs config/prod.exs config/runtime.exs config/
+RUN mix deps.compile
+
+# Pre-install esbuild + tailwind binaries (cached with deps)
+RUN mix esbuild.install --if-missing && mix tailwind.install --if-missing
+
+# --- App layer (changes on every code push) ---
 COPY lib lib
 COPY assets assets
 COPY priv priv

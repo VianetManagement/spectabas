@@ -129,7 +129,7 @@ defmodule SpectabasWeb.Admin.SitesLive do
                 type="text"
                 name="site[name]"
                 value={@form[:name].value}
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
                 required
               />
             </div>
@@ -139,25 +139,34 @@ defmodule SpectabasWeb.Admin.SitesLive do
                 type="text"
                 name="site[domain]"
                 value={@form[:domain].value}
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
                 placeholder="example.com"
                 required
               />
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700">Timezone</label>
-              <input
-                type="text"
+              <select
                 name="site[timezone]"
-                value={@form[:timezone].value || "UTC"}
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              />
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
+              >
+                <option
+                  :for={
+                    tz <-
+                      ~w(UTC US/Eastern US/Central US/Mountain US/Pacific Europe/London Europe/Paris Europe/Berlin Asia/Tokyo Asia/Shanghai Australia/Sydney Pacific/Auckland America/New_York America/Chicago America/Denver America/Los_Angeles America/Toronto America/Sao_Paulo)
+                  }
+                  value={tz}
+                  selected={(@form[:timezone].value || "UTC") == tz}
+                >
+                  {tz}
+                </option>
+              </select>
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700">GDPR Mode</label>
               <select
                 name="site[gdpr_mode]"
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
               >
                 <option value="on" selected={@form[:gdpr_mode].value == "on"}>On (cookieless)</option>
                 <option value="off" selected={@form[:gdpr_mode].value == "off"}>Off</option>
