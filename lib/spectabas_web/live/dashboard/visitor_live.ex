@@ -150,7 +150,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
               </span>
             </div>
             <div class="flex items-center gap-4 text-xs text-gray-500">
-              <span :if={country = Map.get(event, "country")}>{country}</span>
+              <span :if={country = Map.get(event, "ip_country")}>{country}</span>
               <span :if={browser = Map.get(event, "browser")}>{browser}</span>
               <span :if={org = Map.get(event, "ip_org")}>{org}</span>
               <span>{Map.get(event, "timestamp", "")}</span>

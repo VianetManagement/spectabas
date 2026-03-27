@@ -37,8 +37,32 @@ defmodule SpectabasWeb.Dashboard.NetworkLive do
 
     network =
       case Analytics.network_stats(site, user, range_to_atom(range)) do
-        {:ok, data} -> data
-        _ -> %{asns: [], datacenter_pct: 0.0, vpn_pct: 0.0, tor_pct: 0.0, bot_pct: 0.0}
+        {:ok, rows} when is_list(rows) ->
+          total_hits = Enum.reduce(rows, 0, fn r, acc -> acc + (r["hits"] || 0) end)
+
+          avg_pct = fn key ->
+            if total_hits > 0 do
+              weighted =
+                Enum.reduce(rows, 0.0, fn r, acc ->
+                  acc + (r[key] || 0.0) * (r["hits"] || 0)
+                end)
+
+              Float.round(weighted / total_hits, 1)
+            else
+              0.0
+            end
+          end
+
+          %{
+            asns: rows,
+            datacenter_pct: avg_pct.("datacenter_pct"),
+            vpn_pct: avg_pct.("vpn_pct"),
+            tor_pct: avg_pct.("tor_pct"),
+            bot_pct: avg_pct.("bot_pct")
+          }
+
+        _ ->
+          %{asns: [], datacenter_pct: 0.0, vpn_pct: 0.0, tor_pct: 0.0, bot_pct: 0.0}
       end
 
     assign(socket, :network, network)
@@ -129,29 +153,29 @@ defmodule SpectabasWeb.Dashboard.NetworkLive do
             </tr>
             <tr :for={asn <- Map.get(@network, :asns, [])} class="hover:bg-gray-50">
               <td class="px-6 py-4 text-sm text-gray-900 font-mono">
-                AS{Map.get(asn, "asn", "")}
+                AS{Map.get(asn, "ip_asn", "")}
               </td>
               <td class="px-6 py-4 text-sm text-gray-900">
-                {Map.get(asn, "org", "Unknown")}
+                {Map.get(asn, "ip_org", "Unknown")}
               </td>
               <td class="px-6 py-4 text-sm text-gray-900 text-right">
-                {Map.get(asn, "visitors", 0)}
+                {Map.get(asn, "hits", 0)}
               </td>
               <td class="px-6 py-4 text-center">
                 <span
-                  :if={Map.get(asn, "is_datacenter") == 1}
+                  :if={Map.get(asn, "datacenter_pct", 0) > 50}
                   class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800"
                 >
                   DC
                 </span>
                 <span
-                  :if={Map.get(asn, "is_vpn") == 1}
+                  :if={Map.get(asn, "vpn_pct", 0) > 50}
                   class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800"
                 >
                   VPN
                 </span>
                 <span
-                  :if={Map.get(asn, "is_tor") == 1}
+                  :if={Map.get(asn, "tor_pct", 0) > 50}
                   class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800"
                 >
                   Tor

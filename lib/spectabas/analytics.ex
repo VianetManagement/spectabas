@@ -51,7 +51,7 @@ defmodule Spectabas.Analytics do
         url_path,
         count() AS pageviews,
         uniq(visitor_id) AS unique_visitors,
-        round(avg(duration), 0) AS avg_duration
+        round(avg(duration_s), 0) AS avg_duration
       FROM events
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND event_type = 'pageview'
@@ -103,17 +103,17 @@ defmodule Spectabas.Analytics do
     with :ok <- authorize(site, user) do
       sql = """
       SELECT
-        country,
-        region,
-        city,
+        ip_country,
+        ip_region_name,
+        ip_city,
         count() AS pageviews,
         uniq(visitor_id) AS unique_visitors
       FROM events
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-        AND country != ''
-      GROUP BY country, region, city
+        AND ip_country != ''
+      GROUP BY ip_country, ip_region_name, ip_city
       ORDER BY pageviews DESC
       LIMIT 100
       """
@@ -208,7 +208,7 @@ defmodule Spectabas.Analytics do
       event_type,
       url_path,
       referrer_domain,
-      country,
+      ip_country,
       device_type,
       browser,
       visitor_id,

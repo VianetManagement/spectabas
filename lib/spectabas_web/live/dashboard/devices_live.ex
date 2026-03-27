@@ -117,7 +117,7 @@ defmodule SpectabasWeb.Dashboard.DevicesLive do
                 Visitors
               </th>
               <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Percentage
+                Pageviews
               </th>
             </tr>
           </thead>
@@ -132,10 +132,10 @@ defmodule SpectabasWeb.Dashboard.DevicesLive do
                 {Map.get(device, @tab, "Unknown")}
               </td>
               <td class="px-6 py-4 text-sm text-gray-900 text-right">
-                {Map.get(device, "visitors", 0)}
+                {Map.get(device, "unique_visitors", 0)}
               </td>
               <td class="px-6 py-4 text-sm text-gray-900 text-right">
-                {Map.get(device, "percentage", 0)}%
+                {Map.get(device, "pageviews", 0)}
               </td>
             </tr>
           </tbody>

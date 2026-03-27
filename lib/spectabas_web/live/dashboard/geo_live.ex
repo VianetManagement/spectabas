@@ -154,21 +154,21 @@ defmodule SpectabasWeb.Dashboard.GeoLive do
                 <button
                   :if={!@drill_country}
                   phx-click="drill_country"
-                  phx-value-country={Map.get(row, "country", "")}
+                  phx-value-country={Map.get(row, "ip_country", "")}
                   class="text-indigo-600 hover:text-indigo-800"
                 >
-                  {Map.get(row, "country", "Unknown")}
+                  {Map.get(row, "ip_country", "Unknown")}
                 </button>
                 <button
                   :if={@drill_country && !@drill_region}
                   phx-click="drill_region"
-                  phx-value-region={Map.get(row, "region", "")}
+                  phx-value-region={Map.get(row, "ip_region_name", "")}
                   class="text-indigo-600 hover:text-indigo-800"
                 >
-                  {Map.get(row, "region", "Unknown")}
+                  {Map.get(row, "ip_region_name", "Unknown")}
                 </button>
                 <span :if={@drill_region}>
-                  {Map.get(row, "city", "Unknown")}
+                  {Map.get(row, "ip_city", "Unknown")}
                 </span>
               </td>
               <td class="px-6 py-4 text-sm text-gray-900 text-right">
