@@ -13,7 +13,7 @@ defmodule SpectabasWeb.Plugs.TrackingSubdomain do
   def init(opts), do: opts
 
   def call(conn, _opts) do
-    if conn.host in @app_hosts or allowed_path?(conn.request_path) do
+    if conn.host in @app_hosts or allowed_path?(conn.request_path) or conn.method == "OPTIONS" do
       conn
     else
       conn
