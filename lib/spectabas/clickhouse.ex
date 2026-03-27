@@ -12,9 +12,178 @@ defmodule Spectabas.ClickHouse do
 
   def start_link(_opts) do
     cfg = Application.get_env(:spectabas, __MODULE__)
+    ensure_schema!(cfg)
     write_req = build_req(cfg[:url], cfg[:username], cfg[:password], cfg[:database])
     read_req = build_req(cfg[:url], cfg[:read_username], cfg[:read_password], cfg[:database])
     Agent.start_link(fn -> %{write: write_req, read: read_req} end, name: __MODULE__)
+  end
+
+  defp ensure_schema!(cfg) do
+    # Use default user to create database and tables if they don't exist
+    admin_req =
+      Req.new(
+        base_url: cfg[:url],
+        auth: {:basic, "default:"},
+        headers: [{"content-type", "application/x-www-form-urlencoded"}]
+      )
+      |> Req.merge(@default_opts)
+
+    db = cfg[:database] || "spectabas"
+
+    statements = [
+      "CREATE DATABASE IF NOT EXISTS #{db}",
+      """
+      CREATE TABLE IF NOT EXISTS #{db}.events (
+        event_id UUID DEFAULT generateUUIDv4(),
+        site_id UInt64,
+        visitor_id String,
+        session_id String,
+        event_type LowCardinality(String) DEFAULT 'pageview',
+        event_name String DEFAULT '',
+        url_path String DEFAULT '',
+        url_host String DEFAULT '',
+        referrer_domain String DEFAULT '',
+        referrer_url String DEFAULT '',
+        utm_source String DEFAULT '',
+        utm_medium String DEFAULT '',
+        utm_campaign String DEFAULT '',
+        utm_term String DEFAULT '',
+        utm_content String DEFAULT '',
+        device_type LowCardinality(String) DEFAULT '',
+        browser LowCardinality(String) DEFAULT '',
+        browser_version String DEFAULT '',
+        os LowCardinality(String) DEFAULT '',
+        os_version String DEFAULT '',
+        screen_width UInt16 DEFAULT 0,
+        screen_height UInt16 DEFAULT 0,
+        ip_address String DEFAULT '',
+        ip_country LowCardinality(String) DEFAULT '',
+        ip_country_name String DEFAULT '',
+        ip_continent LowCardinality(String) DEFAULT '',
+        ip_continent_name String DEFAULT '',
+        ip_region_code String DEFAULT '',
+        ip_region_name String DEFAULT '',
+        ip_city String DEFAULT '',
+        ip_postal_code String DEFAULT '',
+        ip_lat Float64 DEFAULT 0,
+        ip_lon Float64 DEFAULT 0,
+        ip_accuracy_radius UInt16 DEFAULT 0,
+        ip_timezone String DEFAULT '',
+        ip_asn UInt32 DEFAULT 0,
+        ip_asn_org String DEFAULT '',
+        ip_org String DEFAULT '',
+        ip_is_datacenter UInt8 DEFAULT 0,
+        ip_is_vpn UInt8 DEFAULT 0,
+        ip_is_tor UInt8 DEFAULT 0,
+        ip_is_bot UInt8 DEFAULT 0,
+        ip_gdpr_anonymized UInt8 DEFAULT 0,
+        duration_s UInt32 DEFAULT 0,
+        properties String DEFAULT '{}',
+        is_bounce UInt8 DEFAULT 1,
+        timestamp DateTime DEFAULT now(),
+        sign Int8 DEFAULT 1
+      ) ENGINE = MergeTree()
+      PARTITION BY toYYYYMM(timestamp)
+      ORDER BY (site_id, timestamp, visitor_id)
+      SETTINGS index_granularity = 8192
+      """,
+      """
+      CREATE TABLE IF NOT EXISTS #{db}.ecommerce_events (
+        site_id UInt64,
+        visitor_id String,
+        session_id String,
+        order_id String,
+        revenue Decimal(12, 2) DEFAULT 0,
+        subtotal Decimal(12, 2) DEFAULT 0,
+        tax Decimal(12, 2) DEFAULT 0,
+        shipping Decimal(12, 2) DEFAULT 0,
+        discount Decimal(12, 2) DEFAULT 0,
+        currency LowCardinality(String) DEFAULT 'USD',
+        items String DEFAULT '[]',
+        timestamp DateTime DEFAULT now()
+      ) ENGINE = MergeTree()
+      PARTITION BY toYYYYMM(timestamp)
+      ORDER BY (site_id, timestamp, order_id)
+      SETTINGS index_granularity = 8192
+      """,
+      """
+      CREATE MATERIALIZED VIEW IF NOT EXISTS #{db}.daily_stats
+      ENGINE = SummingMergeTree()
+      PARTITION BY toYYYYMM(date)
+      ORDER BY (site_id, date)
+      AS SELECT
+        site_id, toDate(timestamp) AS date,
+        countIf(event_type = 'pageview') AS pageviews,
+        uniqExact(visitor_id) AS visitors,
+        uniqExact(session_id) AS sessions,
+        sumIf(is_bounce, event_type = 'pageview') AS bounces,
+        sumIf(duration_s, event_type = 'duration') AS total_duration
+      FROM #{db}.events GROUP BY site_id, date
+      """,
+      """
+      CREATE MATERIALIZED VIEW IF NOT EXISTS #{db}.source_stats
+      ENGINE = SummingMergeTree()
+      PARTITION BY toYYYYMM(date)
+      ORDER BY (site_id, date, referrer_domain, utm_source, utm_medium)
+      AS SELECT
+        site_id, toDate(timestamp) AS date, referrer_domain, utm_source, utm_medium,
+        countIf(event_type = 'pageview') AS pageviews,
+        uniqExact(session_id) AS sessions
+      FROM #{db}.events GROUP BY site_id, date, referrer_domain, utm_source, utm_medium
+      """,
+      """
+      CREATE MATERIALIZED VIEW IF NOT EXISTS #{db}.country_stats
+      ENGINE = SummingMergeTree()
+      PARTITION BY toYYYYMM(date)
+      ORDER BY (site_id, date, ip_country, ip_region_name, ip_city)
+      AS SELECT
+        site_id, toDate(timestamp) AS date, ip_country, ip_region_name, ip_city,
+        countIf(event_type = 'pageview') AS pageviews,
+        uniqExact(visitor_id) AS unique_visitors
+      FROM #{db}.events GROUP BY site_id, date, ip_country, ip_region_name, ip_city
+      """,
+      """
+      CREATE MATERIALIZED VIEW IF NOT EXISTS #{db}.device_stats
+      ENGINE = SummingMergeTree()
+      PARTITION BY toYYYYMM(date)
+      ORDER BY (site_id, date, device_type, browser, os)
+      AS SELECT
+        site_id, toDate(timestamp) AS date, device_type, browser, os,
+        countIf(event_type = 'pageview') AS pageviews,
+        uniqExact(visitor_id) AS unique_visitors
+      FROM #{db}.events GROUP BY site_id, date, device_type, browser, os
+      """,
+      """
+      CREATE MATERIALIZED VIEW IF NOT EXISTS #{db}.network_stats
+      ENGINE = SummingMergeTree()
+      PARTITION BY toYYYYMM(date)
+      ORDER BY (site_id, date, ip_asn, ip_asn_org)
+      AS SELECT
+        site_id, toDate(timestamp) AS date, ip_asn, ip_asn_org, ip_org,
+        count() AS events,
+        uniqExact(visitor_id) AS unique_visitors,
+        sumIf(1, ip_is_datacenter = 1) AS datacenter_count,
+        sumIf(1, ip_is_vpn = 1) AS vpn_count,
+        sumIf(1, ip_is_tor = 1) AS tor_count,
+        sumIf(1, ip_is_bot = 1) AS bot_count
+      FROM #{db}.events GROUP BY site_id, date, ip_asn, ip_asn_org, ip_org
+      """
+    ]
+
+    Enum.each(statements, fn sql ->
+      case Req.post(admin_req, params: [query: String.trim(sql)]) do
+        {:ok, %{status: 200}} ->
+          :ok
+
+        {:ok, %{status: s, body: b}} ->
+          Logger.warning("[CH:init] #{s}: #{inspect(String.slice(to_string(b), 0, 200))}")
+
+        {:error, r} ->
+          Logger.warning("[CH:init] #{inspect(r)}")
+      end
+    end)
+
+    Logger.info("[CH:init] Schema ensured for database #{db}")
   end
 
   defp build_req(url, user, pass, db) do
