@@ -200,9 +200,9 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           </div>
         </.data_card>
 
-        <%!-- Top Regions --%>
+        <%!-- Top States --%>
         <.data_card
-          title="Top Regions"
+          title="Top States"
           period={range_label(@date_range)}
           link={~p"/dashboard/sites/#{@site.id}/geo"}
           empty={@top_regions == []}
