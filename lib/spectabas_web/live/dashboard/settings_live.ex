@@ -128,68 +128,6 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
         {msg}
       </p>
 
-      <%!-- DNS Status --%>
-      <div class={[
-        "rounded-lg p-4 mb-8",
-        if(@site.dns_verified,
-          do: "bg-green-50 border border-green-200",
-          else: "bg-yellow-50 border border-yellow-200"
-        )
-      ]}>
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <span :if={@site.dns_verified} class="text-green-700 font-medium">DNS Verified</span>
-            <span :if={!@site.dns_verified} class="text-yellow-700 font-medium">
-              DNS Not Verified
-            </span>
-            <span :if={@site.dns_verified_at} class="text-sm text-gray-500">
-              (verified {Calendar.strftime(@site.dns_verified_at, "%Y-%m-%d %H:%M")})
-            </span>
-          </div>
-          <button
-            phx-click="verify_dns"
-            class="text-sm px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-          >
-            Verify DNS
-          </button>
-        </div>
-        <p :if={!@site.dns_verified} class="mt-2 text-sm text-yellow-700">
-          Add a CNAME record: <code class="bg-yellow-100 px-1 rounded">{@site.domain}</code>
-          &rarr; <code class="bg-yellow-100 px-1 rounded">www.spectabas.com</code>
-        </p>
-      </div>
-
-      <%!-- Render Domain Status --%>
-      <div class={[
-        "rounded-lg p-4 mb-8",
-        case @render_domain_status do
-          :active -> "bg-green-50 border border-green-200"
-          :not_found -> "bg-yellow-50 border border-yellow-200"
-          _ -> "bg-gray-50 border border-gray-200"
-        end
-      ]}>
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <span :if={@render_domain_status == :active} class="text-green-700 font-medium">
-              Render Domain Active
-            </span>
-            <span :if={@render_domain_status == :not_found} class="text-yellow-700 font-medium">
-              Render Domain Not Registered
-            </span>
-            <span :if={@render_domain_status == :unknown} class="text-gray-600 font-medium">
-              Render Domain Status Unknown
-            </span>
-          </div>
-          <button
-            :if={@render_domain_status != :active}
-            phx-click="register_render_domain"
-            class="text-sm px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-          >
-            Register on Render
-          </button>
-        </div>
-      </div>
-
       <%!-- Tracking Snippet --%>
       <div class="bg-white rounded-lg shadow p-6 mb-8">
         <h2 class="text-lg font-semibold text-gray-900 mb-4">Tracking Snippet</h2>
@@ -246,6 +184,50 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                 value={@form[:domain].value}
                 class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
               />
+              <div class="mt-2 flex flex-wrap items-center gap-2">
+                <span class={[
+                  "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium",
+                  if(@site.dns_verified,
+                    do: "bg-green-100 text-green-700",
+                    else: "bg-yellow-100 text-yellow-700"
+                  )
+                ]}>
+                  <span class={"w-1.5 h-1.5 rounded-full " <> if(@site.dns_verified, do: "bg-green-500", else: "bg-yellow-500")} />
+                  {if @site.dns_verified, do: "DNS Verified", else: "DNS Pending"}
+                </span>
+                <button phx-click="verify_dns" class="text-xs text-indigo-600 hover:text-indigo-800">
+                  Check
+                </button>
+                <span class={[
+                  "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium",
+                  case @render_domain_status do
+                    :active -> "bg-green-100 text-green-700"
+                    :not_found -> "bg-yellow-100 text-yellow-700"
+                    _ -> "bg-gray-100 text-gray-600"
+                  end
+                ]}>
+                  <span class={"w-1.5 h-1.5 rounded-full " <> case @render_domain_status do
+                    :active -> "bg-green-500"
+                    :not_found -> "bg-yellow-500"
+                    _ -> "bg-gray-400"
+                  end} />
+                  {case @render_domain_status do
+                    :active -> "Render Active"
+                    :not_found -> "Render Pending"
+                    _ -> "Render Unknown"
+                  end}
+                </span>
+                <button
+                  :if={@render_domain_status != :active}
+                  phx-click="register_render_domain"
+                  class="text-xs text-indigo-600 hover:text-indigo-800"
+                >
+                  Register
+                </button>
+              </div>
+              <p :if={!@site.dns_verified} class="mt-1 text-xs text-yellow-600">
+                CNAME {@site.domain} &rarr; www.spectabas.com
+              </p>
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700">Timezone</label>
