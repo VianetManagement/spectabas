@@ -22,7 +22,7 @@ defmodule Spectabas.Analytics do
       SELECT
         sum(pageviews) AS pageviews,
         sum(visitors) AS unique_visitors,
-        sum(sessions) AS sessions,
+        sum(sessions) AS total_sessions,
         if(sum(sessions) > 0, round(toFloat64(sum(bounces)) / toFloat64(sum(sessions)) * 100, 1), 0) AS bounce_rate,
         if(sum(sessions) > 0, round(toFloat64(sum(total_duration)) / toFloat64(sum(sessions)), 0), 0) AS avg_duration
       FROM daily_stats

@@ -69,7 +69,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           %{
             pageviews: s["pageviews"] || 0,
             unique_visitors: s["unique_visitors"] || 0,
-            sessions: s["sessions"] || 0,
+            sessions: s["total_sessions"] || 0,
             bounce_rate: s["bounce_rate"] || 0.0,
             avg_duration: s["avg_duration"] || 0
           }
