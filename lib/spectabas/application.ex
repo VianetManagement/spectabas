@@ -17,6 +17,7 @@ defmodule Spectabas.Application do
         Spectabas.GeoIP,
         Spectabas.IPEnricher.ASNBlocklist,
         Spectabas.IPEnricher.IPCache,
+        Spectabas.Sessions.SessionCache,
         Spectabas.Sites.DomainCache,
         Spectabas.Sites.DNSVerifier
       ] ++
