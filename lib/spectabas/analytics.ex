@@ -114,6 +114,33 @@ defmodule Spectabas.Analytics do
   end
 
   @doc """
+  Top countries grouped at country level only (for dashboard summary).
+  """
+  def top_countries_summary(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        ip_country,
+        ip_country_name,
+        count() AS pageviews,
+        uniq(visitor_id) AS unique_visitors
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_country != ''
+      GROUP BY ip_country, ip_country_name
+      ORDER BY unique_visitors DESC
+      LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
   Top countries with region and city drill-down.
   """
   def top_countries(%Site{} = site, %User{} = user, date_range) do

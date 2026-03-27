@@ -62,9 +62,10 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
 
   defp load_stats(socket) do
     %{site: site, user: user, date_range: range} = socket.assigns
+    period = range_to_atom(range)
 
     stats =
-      case Analytics.overview_stats(site, user, range_to_atom(range)) do
+      case Analytics.overview_stats(site, user, period) do
         {:ok, s} ->
           %{
             pageviews: s["pageviews"] || 0,
@@ -78,6 +79,11 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           %{pageviews: 0, unique_visitors: 0, sessions: 0, bounce_rate: 0.0, avg_duration: 0}
       end
 
+    top_pages = safe_query(fn -> Analytics.top_pages(site, user, period) end, 5)
+    top_sources = safe_query(fn -> Analytics.top_sources(site, user, period) end, 5)
+    top_countries = safe_query(fn -> Analytics.top_countries_summary(site, user, period) end, 5)
+    top_devices = safe_query(fn -> Analytics.top_devices(site, user, period) end, 5)
+
     live_visitors =
       case Analytics.realtime_visitors(site) do
         {:ok, count} -> count
@@ -87,12 +93,28 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     socket
     |> assign(:stats, stats)
     |> assign(:live_visitors, live_visitors)
+    |> assign(:top_pages, top_pages)
+    |> assign(:top_sources, top_sources)
+    |> assign(:top_countries, top_countries)
+    |> assign(:top_devices, top_devices)
+  end
+
+  defp safe_query(fun, limit) do
+    case fun.() do
+      {:ok, rows} when is_list(rows) -> Enum.take(rows, limit)
+      _ -> []
+    end
   end
 
   defp range_to_atom("24h"), do: :day
   defp range_to_atom("7d"), do: :week
   defp range_to_atom("30d"), do: :month
   defp range_to_atom(_), do: :week
+
+  defp range_label("24h"), do: "Today"
+  defp range_label("7d"), do: "Last 7 days"
+  defp range_label("30d"), do: "Last 30 days"
+  defp range_label(_), do: "Last 7 days"
 
   @impl true
   def render(assigns) do
@@ -136,56 +158,111 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
       </div>
 
       <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-        <.stat_card label="Pageviews" value={@stats.pageviews} />
-        <.stat_card label="Unique Visitors" value={@stats.unique_visitors} />
-        <.stat_card label="Sessions" value={@stats.sessions} />
+        <.stat_card label="Pageviews" value={format_number(@stats.pageviews)} />
+        <.stat_card label="Unique Visitors" value={format_number(@stats.unique_visitors)} />
+        <.stat_card label="Sessions" value={format_number(@stats.sessions)} />
         <.stat_card label="Bounce Rate" value={"#{@stats.bounce_rate}%"} />
         <.stat_card label="Avg Duration" value={format_duration(@stats.avg_duration)} />
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <.link
-          navigate={~p"/dashboard/sites/#{@site.id}/pages"}
-          class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <%!-- Top Pages --%>
+        <.data_card
+          title="Top Pages"
+          period={range_label(@date_range)}
+          link={~p"/dashboard/sites/#{@site.id}/pages"}
+          empty={@top_pages == []}
         >
-          <h3 class="font-semibold text-gray-900 mb-2">Top Pages</h3>
-          <p class="text-sm text-gray-500">View page analytics</p>
-        </.link>
-        <.link
-          navigate={~p"/dashboard/sites/#{@site.id}/sources"}
-          class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+          <div :for={row <- @top_pages} class="flex items-center justify-between py-2">
+            <span class="text-sm text-gray-800 truncate mr-4" title={row["url_path"]}>
+              {row["url_path"]}
+            </span>
+            <span class="text-sm font-medium text-gray-600 tabular-nums whitespace-nowrap">
+              {format_number(row["pageviews"])}
+            </span>
+          </div>
+        </.data_card>
+
+        <%!-- Top Sources --%>
+        <.data_card
+          title="Top Sources"
+          period={range_label(@date_range)}
+          link={~p"/dashboard/sites/#{@site.id}/sources"}
+          empty={@top_sources == []}
         >
-          <h3 class="font-semibold text-gray-900 mb-2">Sources</h3>
-          <p class="text-sm text-gray-500">Where visitors come from</p>
-        </.link>
-        <.link
-          navigate={~p"/dashboard/sites/#{@site.id}/geo"}
-          class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+          <div :for={row <- @top_sources} class="flex items-center justify-between py-2">
+            <span class="text-sm text-gray-800 truncate mr-4">
+              {row["referrer_domain"] || "Direct"}
+            </span>
+            <span class="text-sm font-medium text-gray-600 tabular-nums whitespace-nowrap">
+              {format_number(row["pageviews"])}
+            </span>
+          </div>
+        </.data_card>
+
+        <%!-- Top Countries --%>
+        <.data_card
+          title="Top Countries"
+          period={range_label(@date_range)}
+          link={~p"/dashboard/sites/#{@site.id}/geo"}
+          empty={@top_countries == []}
         >
-          <h3 class="font-semibold text-gray-900 mb-2">Geography</h3>
-          <p class="text-sm text-gray-500">Visitor locations</p>
-        </.link>
-        <.link
-          navigate={~p"/dashboard/sites/#{@site.id}/devices"}
-          class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+          <div :for={row <- @top_countries} class="flex items-center justify-between py-2">
+            <span class="text-sm text-gray-800 truncate mr-4">
+              {country_display(row)}
+            </span>
+            <span class="text-sm font-medium text-gray-600 tabular-nums whitespace-nowrap">
+              {format_number(row["unique_visitors"])}
+            </span>
+          </div>
+        </.data_card>
+
+        <%!-- Top Devices --%>
+        <.data_card
+          title="Top Devices"
+          period={range_label(@date_range)}
+          link={~p"/dashboard/sites/#{@site.id}/devices"}
+          empty={@top_devices == []}
         >
-          <h3 class="font-semibold text-gray-900 mb-2">Devices</h3>
-          <p class="text-sm text-gray-500">Browsers, OS, device types</p>
-        </.link>
-        <.link
-          navigate={~p"/dashboard/sites/#{@site.id}/realtime"}
-          class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+          <div :for={row <- @top_devices} class="flex items-center justify-between py-2">
+            <span class="text-sm text-gray-800 truncate mr-4">
+              {device_display(row)}
+            </span>
+            <span class="text-sm font-medium text-gray-600 tabular-nums whitespace-nowrap">
+              {format_number(row["pageviews"])}
+            </span>
+          </div>
+        </.data_card>
+
+        <%!-- Realtime --%>
+        <.data_card
+          title="Realtime"
+          period="Last 5 minutes"
+          link={~p"/dashboard/sites/#{@site.id}/realtime"}
+          empty={false}
         >
-          <h3 class="font-semibold text-gray-900 mb-2">Realtime</h3>
-          <p class="text-sm text-gray-500">Live visitor feed</p>
-        </.link>
-        <.link
-          navigate={~p"/dashboard/sites/#{@site.id}/settings"}
-          class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+          <div class="flex flex-col items-center justify-center py-4">
+            <div class="text-4xl font-bold text-gray-900">{@live_visitors}</div>
+            <div class="text-sm text-gray-500 mt-1">active visitors</div>
+          </div>
+        </.data_card>
+
+        <%!-- Entry Pages (top pages by unique visitors, different angle) --%>
+        <.data_card
+          title="Top Pages by Visitors"
+          period={range_label(@date_range)}
+          link={~p"/dashboard/sites/#{@site.id}/pages"}
+          empty={@top_pages == []}
         >
-          <h3 class="font-semibold text-gray-900 mb-2">Settings</h3>
-          <p class="text-sm text-gray-500">Configure site tracking</p>
-        </.link>
+          <div :for={row <- @top_pages} class="flex items-center justify-between py-2">
+            <span class="text-sm text-gray-800 truncate mr-4" title={row["url_path"]}>
+              {row["url_path"]}
+            </span>
+            <span class="text-sm font-medium text-gray-600 tabular-nums whitespace-nowrap">
+              {format_number(row["unique_visitors"])} visitors
+            </span>
+          </div>
+        </.data_card>
       </div>
     </div>
     """
@@ -200,6 +277,28 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     """
   end
 
+  defp data_card(assigns) do
+    ~H"""
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div>
+          <h3 class="font-semibold text-gray-900">{@title}</h3>
+          <p class="text-xs text-gray-400 mt-0.5">{@period}</p>
+        </div>
+        <.link navigate={@link} class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">
+          View all &rarr;
+        </.link>
+      </div>
+      <div class="px-5 py-2 divide-y divide-gray-50">
+        <div :if={@empty} class="py-6 text-center text-sm text-gray-400">
+          No data yet
+        </div>
+        {render_slot(@inner_block)}
+      </div>
+    </div>
+    """
+  end
+
   defp format_duration(seconds) when is_number(seconds) do
     minutes = div(trunc(seconds), 60)
     secs = rem(trunc(seconds), 60)
@@ -207,4 +306,32 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   end
 
   defp format_duration(_), do: "0m 0s"
+
+  defp format_number(n) when is_integer(n) and n >= 1_000_000 do
+    "#{Float.round(n / 1_000_000, 1)}M"
+  end
+
+  defp format_number(n) when is_integer(n) and n >= 10_000 do
+    "#{Float.round(n / 1_000, 1)}k"
+  end
+
+  defp format_number(n) when is_integer(n), do: Integer.to_string(n)
+  defp format_number(n) when is_float(n), do: format_number(trunc(n))
+  defp format_number(n) when is_binary(n), do: n
+  defp format_number(_), do: "0"
+
+  defp country_display(row) do
+    name = row["ip_country_name"] || ""
+    code = row["ip_country"] || ""
+    if name != "", do: name, else: if(code != "", do: code, else: "Unknown")
+  end
+
+  defp device_display(row) do
+    browser = row["browser"] || ""
+    os = row["os"] || ""
+    device = row["device_type"] || ""
+
+    parts = [browser, os, device] |> Enum.reject(&(&1 == "")) |> Enum.take(2)
+    if parts == [], do: "Unknown", else: Enum.join(parts, " / ")
+  end
 end
