@@ -32,7 +32,9 @@ defmodule Spectabas.Events.Ingest do
     client_ip = extract_client_ip(conn)
     ua_string = get_user_agent(conn)
     ua_data = parse_user_agent(ua_string)
-    ip_data = enrich_ip(client_ip, gdpr_mode)
+    client_bot_hint = payload._bot == 1
+    is_bot = detect_bot(ua_string) || client_bot_hint
+    ip_data = enrich_ip(client_ip, gdpr_mode, is_bot)
 
     visitor_id = resolve_visitor(site, payload, gdpr_mode, client_ip, ua_string)
     session = resolve_session(site.id, visitor_id, payload, ua_data, ip_data)
@@ -144,14 +146,26 @@ defmodule Spectabas.Events.Ingest do
     end
   end
 
-  defp enrich_ip(client_ip, gdpr_mode) do
+  defp detect_bot(ua_string) do
+    case UAInspector.parse(ua_string) do
+      %UAInspector.Result.Bot{} -> true
+      _ -> UAInspector.bot?(ua_string)
+    end
+  end
+
+  defp enrich_ip(client_ip, gdpr_mode, is_bot) do
     if Code.ensure_loaded?(Spectabas.IPEnricher) do
       case Spectabas.IPEnricher.enrich(client_ip, gdpr_mode) do
-        data when is_map(data) -> data
-        _ -> default_ip_data()
+        data when is_map(data) ->
+          # Mark as bot if UA detection or datacenter IP
+          bot_flag = if is_bot || data[:ip_is_datacenter] == 1, do: 1, else: 0
+          Map.put(data, :ip_is_bot, bot_flag)
+
+        _ ->
+          default_ip_data() |> Map.put(:ip_is_bot, if(is_bot, do: 1, else: 0))
       end
     else
-      default_ip_data()
+      default_ip_data() |> Map.put(:ip_is_bot, if(is_bot, do: 1, else: 0))
     end
   end
 

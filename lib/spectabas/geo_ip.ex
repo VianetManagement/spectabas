@@ -21,9 +21,9 @@ defmodule Spectabas.GeoIP do
         is_binary(source) && File.exists?(source)
       end)
 
-    if valid_databases != [] do
-      Geolix.load_database(valid_databases)
-    end
+    Enum.each(valid_databases, fn db ->
+      Geolix.load_database(db)
+    end)
 
     {:ok, %{}}
   end

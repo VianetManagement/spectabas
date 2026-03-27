@@ -20,15 +20,23 @@ defmodule Spectabas.Analytics do
          :ok <- check_clickhouse() do
       sql = """
       SELECT
-        countIf(event_type = 'pageview') AS pageviews,
+        sum(pageviews) AS pageviews,
         uniqExact(visitor_id) AS unique_visitors,
-        uniqExact(session_id) AS total_sessions,
-        0 AS bounce_rate,
-        0 AS avg_duration
-      FROM events
-      WHERE site_id = #{ClickHouse.param(site.id)}
-        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        count() AS total_sessions,
+        round(countIf(pageviews = 1 AND total_duration = 0) / greatest(count(), 1) * 100, 1) AS bounce_rate,
+        round(avgIf(total_duration, total_duration > 0), 0) AS avg_duration
+      FROM (
+        SELECT
+          session_id,
+          any(visitor_id) AS visitor_id,
+          countIf(event_type = 'pageview') AS pageviews,
+          maxIf(duration_s, event_type = 'duration') AS total_duration
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY session_id
+      )
       """
 
       case ClickHouse.query(sql) do
@@ -73,6 +81,16 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
+      excluded = self_referrer_domains(site)
+
+      exclude_clause =
+        if excluded == [] do
+          ""
+        else
+          domains = Enum.map_join(excluded, ", ", &ClickHouse.param/1)
+          "AND referrer_domain NOT IN (#{domains})"
+        end
+
       sql = """
       SELECT
         referrer_domain,
@@ -85,6 +103,7 @@ defmodule Spectabas.Analytics do
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
         AND referrer_domain != ''
+        #{exclude_clause}
       GROUP BY referrer_domain, utm_source, utm_medium
       ORDER BY pageviews DESC
       LIMIT 100
@@ -364,15 +383,23 @@ defmodule Spectabas.Analytics do
 
     sql = """
     SELECT
-      countIf(event_type = 'pageview') AS pageviews,
+      sum(pageviews) AS pageviews,
       uniqExact(visitor_id) AS unique_visitors,
-      uniqExact(session_id) AS total_sessions,
-      0 AS bounce_rate,
-      0 AS avg_duration
-    FROM events
-    WHERE site_id = #{ClickHouse.param(site.id)}
-      AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-      AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      count() AS total_sessions,
+      round(countIf(pageviews = 1 AND total_duration = 0) / greatest(count(), 1) * 100, 1) AS bounce_rate,
+      round(avgIf(total_duration, total_duration > 0), 0) AS avg_duration
+    FROM (
+      SELECT
+        session_id,
+        any(visitor_id) AS visitor_id,
+        countIf(event_type = 'pageview') AS pageviews,
+        maxIf(duration_s, event_type = 'duration') AS total_duration
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      GROUP BY session_id
+    )
     """
 
     case ClickHouse.query(sql) do
@@ -430,6 +457,21 @@ defmodule Spectabas.Analytics do
       "avg_duration" => 0
     }
   end
+
+  defp self_referrer_domains(%Site{domain: domain}) when is_binary(domain) and domain != "" do
+    # The site's analytics subdomain (e.g. b.example.com) and its parent domain
+    parent =
+      case String.split(domain, ".", parts: 2) do
+        [_sub, parent] -> parent
+        _ -> nil
+      end
+
+    [domain, "www.spectabas.com", "spectabas.com"]
+    |> then(fn list -> if parent, do: [parent, "www.#{parent}" | list], else: list end)
+    |> Enum.uniq()
+  end
+
+  defp self_referrer_domains(_), do: ["www.spectabas.com", "spectabas.com"]
 
   defp count_goal_completions(site, goal, date_range) do
     condition =

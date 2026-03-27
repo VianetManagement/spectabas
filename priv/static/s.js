@@ -17,6 +17,19 @@
   var vid = null;
   var sid = null;
   var pageStart = Date.now();
+  var hadInteraction = false;
+
+  // Track human interaction signals
+  var interactionEvents = ["mousedown", "touchstart", "scroll", "keydown"];
+  function markInteraction() {
+    hadInteraction = true;
+    interactionEvents.forEach(function (e) {
+      document.removeEventListener(e, markInteraction);
+    });
+  }
+  interactionEvents.forEach(function (e) {
+    document.addEventListener(e, markInteraction, { once: false, passive: true });
+  });
 
   // GDPR-off: use cookies
   if (gdpr === "off") {
@@ -106,6 +119,12 @@
   };
 
   function sendEvent(type, extra) {
+    var botHints =
+      !!(navigator.webdriver) ||
+      (window.screen.width === 0 && window.screen.height === 0) ||
+      !("onmouseover" in document) ||
+      /headless/i.test(navigator.userAgent);
+
     var payload = {
       t: type,
       u: window.location.href,
@@ -116,6 +135,8 @@
       sh: window.screen.height || 0,
       d: 0,
       p: {},
+      _bot: botHints ? 1 : 0,
+      _hi: hadInteraction ? 1 : 0,
     };
 
     if (extra) {

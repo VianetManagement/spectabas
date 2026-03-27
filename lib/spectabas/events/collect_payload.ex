@@ -22,6 +22,8 @@ defmodule Spectabas.Events.CollectPayload do
     field :sw, :integer, default: 0
     field :sh, :integer, default: 0
     field :p, :map, default: %{}
+    field :_bot, :integer, default: 0
+    field :_hi, :integer, default: 0
   end
 
   @doc """
@@ -29,7 +31,7 @@ defmodule Spectabas.Events.CollectPayload do
   """
   def validate(params) when is_map(params) do
     %__MODULE__{}
-    |> cast(params, [:t, :n, :u, :r, :vid, :sid, :d, :sw, :sh, :p])
+    |> cast(params, [:t, :n, :u, :r, :vid, :sid, :d, :sw, :sh, :p, :_bot, :_hi])
     |> validate_inclusion(:t, @valid_types)
     |> validate_length(:n, max: 256)
     |> validate_length(:u, max: 2048)
