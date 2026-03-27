@@ -19,14 +19,28 @@ defmodule Spectabas.ClickHouse do
   end
 
   defp ensure_schema!(cfg) do
-    # Use default user to create database and tables if they don't exist
+    # Use default user (no password) to create database and tables
     admin_req =
       Req.new(
         base_url: cfg[:url],
-        auth: {:basic, "default:"},
+        params: [user: "default", password: ""],
         headers: [{"content-type", "application/x-www-form-urlencoded"}]
       )
       |> Req.merge(@default_opts)
+
+    # Test connection first
+    case Req.post(admin_req, params: [query: "SELECT 1"]) do
+      {:ok, %{status: 200}} ->
+        Logger.info("[CH:init] Connected to ClickHouse")
+
+      {:ok, %{status: s, body: b}} ->
+        Logger.error("[CH:init] Connection failed: #{s} #{inspect(b)}")
+        :ok
+
+      {:error, r} ->
+        Logger.error("[CH:init] Connection failed: #{inspect(r)}")
+        :ok
+    end
 
     db = cfg[:database] || "spectabas"
 
@@ -189,8 +203,7 @@ defmodule Spectabas.ClickHouse do
   defp build_req(url, user, pass, db) do
     Req.new(
       base_url: url,
-      auth: {:basic, "#{user}:#{pass}"},
-      params: [database: db],
+      params: [database: db, user: user, password: pass],
       headers: [{"content-type", "application/x-www-form-urlencoded"}]
     )
     |> Req.merge(@default_opts)

@@ -49,7 +49,7 @@ defmodule SpectabasWeb.Router do
 
   # Script serving
   scope "/", SpectabasWeb do
-    get "/s.js", ScriptController, :show
+    get "/assets/v1.js", ScriptController, :show
   end
 
   # Public pages
