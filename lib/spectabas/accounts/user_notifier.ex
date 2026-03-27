@@ -9,7 +9,7 @@ defmodule Spectabas.Accounts.UserNotifier do
     email =
       new()
       |> to(recipient)
-      |> from({"Spectabas", "contact@example.com"})
+      |> from({"Spectabas", "noreply@spectabas.com"})
       |> subject(subject)
       |> text_body(body)
 
