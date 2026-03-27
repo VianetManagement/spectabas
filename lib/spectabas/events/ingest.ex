@@ -84,17 +84,17 @@ defmodule Spectabas.Events.Ingest do
   Extract client IP from x-forwarded-for header or conn.remote_ip.
   """
   def extract_client_ip(conn) do
-    case Plug.Conn.get_req_header(conn, "x-forwarded-for") do
-      [forwarded | _] ->
-        forwarded
-        |> String.split(",")
-        |> List.first()
-        |> String.trim()
+    cond do
+      # Cloudflare proxy: CF-Connecting-IP is the true client IP
+      (cf = Plug.Conn.get_req_header(conn, "cf-connecting-ip")) != [] ->
+        cf |> List.first() |> String.trim()
 
-      [] ->
-        conn.remote_ip
-        |> :inet.ntoa()
-        |> to_string()
+      # Standard proxy: x-forwarded-for (first IP in chain)
+      (xff = Plug.Conn.get_req_header(conn, "x-forwarded-for")) != [] ->
+        xff |> List.first() |> String.split(",") |> List.first() |> String.trim()
+
+      true ->
+        conn.remote_ip |> :inet.ntoa() |> to_string()
     end
   end
 

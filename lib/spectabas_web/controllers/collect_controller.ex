@@ -182,14 +182,14 @@ defmodule SpectabasWeb.CollectController do
   end
 
   defp client_ip(conn) do
-    case Plug.Conn.get_req_header(conn, "x-forwarded-for") do
-      [forwarded | _] ->
-        forwarded
-        |> String.split(",")
-        |> List.first()
-        |> String.trim()
+    cond do
+      (cf = Plug.Conn.get_req_header(conn, "cf-connecting-ip")) != [] ->
+        cf |> List.first() |> String.trim()
 
-      _ ->
+      (xff = Plug.Conn.get_req_header(conn, "x-forwarded-for")) != [] ->
+        xff |> List.first() |> String.split(",") |> List.first() |> String.trim()
+
+      true ->
         conn.remote_ip |> :inet.ntoa() |> to_string()
     end
   end
