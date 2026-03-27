@@ -81,7 +81,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
 
     top_pages = safe_query(fn -> Analytics.top_pages(site, user, period) end, 5)
     top_sources = safe_query(fn -> Analytics.top_sources(site, user, period) end, 5)
-    top_countries = safe_query(fn -> Analytics.top_countries_summary(site, user, period) end, 5)
+    top_regions = safe_query(fn -> Analytics.top_regions(site, user, period) end, 5)
     top_devices = safe_query(fn -> Analytics.top_devices(site, user, period) end, 5)
 
     live_visitors =
@@ -95,7 +95,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     |> assign(:live_visitors, live_visitors)
     |> assign(:top_pages, top_pages)
     |> assign(:top_sources, top_sources)
-    |> assign(:top_countries, top_countries)
+    |> assign(:top_regions, top_regions)
     |> assign(:top_devices, top_devices)
   end
 
@@ -200,16 +200,16 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           </div>
         </.data_card>
 
-        <%!-- Top Countries --%>
+        <%!-- Top Regions --%>
         <.data_card
-          title="Top Countries"
+          title="Top Regions"
           period={range_label(@date_range)}
           link={~p"/dashboard/sites/#{@site.id}/geo"}
-          empty={@top_countries == []}
+          empty={@top_regions == []}
         >
-          <div :for={row <- @top_countries} class="flex items-center justify-between py-2">
+          <div :for={row <- @top_regions} class="flex items-center justify-between py-2">
             <span class="text-sm text-gray-800 truncate mr-4">
-              {country_display(row)}
+              {region_display(row)}
             </span>
             <span class="text-sm font-medium text-gray-600 tabular-nums whitespace-nowrap">
               {format_number(row["unique_visitors"])}
@@ -320,10 +320,14 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   defp format_number(n) when is_binary(n), do: n
   defp format_number(_), do: "0"
 
-  defp country_display(row) do
-    name = row["ip_country_name"] || ""
-    code = row["ip_country"] || ""
-    if name != "", do: name, else: if(code != "", do: code, else: "Unknown")
+  defp region_display(row) do
+    region = row["ip_region_name"] || ""
+    country = row["ip_country"] || ""
+    cond do
+      region != "" && country != "" -> "#{region}, #{country}"
+      region != "" -> region
+      true -> "Unknown"
+    end
   end
 
   defp device_display(row) do
