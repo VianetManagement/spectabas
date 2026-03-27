@@ -50,14 +50,7 @@ defmodule Spectabas.Analytics do
 
   def timeseries(%Site{} = site, %User{} = user, %{from: _, to: _} = date_range, period) do
     with :ok <- authorize(site, user) do
-      # Pick bucket size: hourly for day, daily for week/month, weekly for custom >60d
-      {trunc_fn, _fmt} =
-        case period do
-          :day -> {"toStartOfHour", "%Y-%m-%d %H:00"}
-          :week -> {"toDate", "%Y-%m-%d"}
-          :month -> {"toDate", "%Y-%m-%d"}
-          _ -> {"toDate", "%Y-%m-%d"}
-        end
+      trunc_fn = if period == :day, do: "toStartOfHour", else: "toDate"
 
       sql = """
       SELECT
@@ -74,42 +67,66 @@ defmodule Spectabas.Analytics do
 
       case ClickHouse.query(sql) do
         {:ok, rows} ->
-          rows =
-            Enum.map(rows, fn row ->
-              bucket = row["bucket"] || ""
-
-              label =
-                case period do
-                  :day ->
-                    # Extract hour from "2026-03-27 14:00:00"
-                    case String.split(bucket, " ") do
-                      [_, time] -> String.slice(time, 0, 5)
-                      _ -> bucket
-                    end
-
-                  _ ->
-                    # Extract month-day from "2026-03-27"
-                    case String.split(bucket, "-") do
-                      [_, m, d] -> "#{m}/#{d}"
-                      _ -> bucket
-                    end
-                end
-
-              %{
-                "bucket" => bucket,
-                "label" => label,
-                "pageviews" => row["pageviews"] || 0,
-                "visitors" => row["visitors"] || 0
-              }
+          data_map =
+            Map.new(rows, fn row ->
+              {row["bucket"] || "", {to_int(row["pageviews"]), to_int(row["visitors"])}}
             end)
 
-          {:ok, rows}
+          all_buckets = generate_buckets(date_range.from, date_range.to, period)
+
+          filled =
+            Enum.map(all_buckets, fn {bucket_key, label} ->
+              {pv, v} = Map.get(data_map, bucket_key, {0, 0})
+              %{"bucket" => bucket_key, "label" => label, "pageviews" => pv, "visitors" => v}
+            end)
+
+          {:ok, filled}
 
         {:error, reason} ->
           {:error, reason}
       end
     end
   end
+
+  defp generate_buckets(from, _to, :day) do
+    # Hourly buckets
+    from_date = DateTime.to_date(from)
+
+    0..23
+    |> Enum.map(fn h ->
+      hour_str = String.pad_leading("#{h}", 2, "0")
+      bucket = "#{Date.to_iso8601(from_date)} #{hour_str}:00:00"
+      label = "#{hour_str}:00"
+      {bucket, label}
+    end)
+  end
+
+  defp generate_buckets(from, to, _period) do
+    # Daily buckets
+    from_date = DateTime.to_date(from)
+    to_date = DateTime.to_date(to)
+    days = Date.diff(to_date, from_date)
+
+    0..days
+    |> Enum.map(fn d ->
+      date = Date.add(from_date, d)
+      bucket = Date.to_iso8601(date)
+      [_, m, dd] = String.split(bucket, "-")
+      label = "#{m}/#{dd}"
+      {bucket, label}
+    end)
+  end
+
+  defp to_int(n) when is_integer(n), do: n
+
+  defp to_int(n) when is_binary(n) do
+    case Integer.parse(n) do
+      {i, _} -> i
+      :error -> 0
+    end
+  end
+
+  defp to_int(_), do: 0
 
   @doc """
   Entry pages: first pageview URL per session.

@@ -311,6 +311,10 @@ defmodule SpectabasWeb.HealthController do
     results = %{
       overview: safe_test(fn -> Analytics.overview_stats(site, user, date_range) end),
       timeseries: safe_test(fn -> Analytics.timeseries(site, user, date_range, :week) end),
+      timeseries_raw: case Analytics.timeseries(site, user, date_range, :week) do
+        {:ok, rows} -> Enum.take(rows, 5)
+        other -> inspect(other) |> String.slice(0, 300)
+      end,
       top_pages: safe_test(fn -> Analytics.top_pages(site, user, date_range) end),
       top_sources: safe_test(fn -> Analytics.top_sources(site, user, date_range) end),
       top_regions: safe_test(fn -> Analytics.top_regions(site, user, date_range) end),
