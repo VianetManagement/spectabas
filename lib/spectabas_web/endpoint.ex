@@ -53,5 +53,6 @@ defmodule SpectabasWeb.Endpoint do
   plug Plug.MethodOverride
   plug Plug.Head
   plug Plug.Session, @session_options
+  plug SpectabasWeb.Plugs.TrackingSubdomain
   plug SpectabasWeb.Router
 end

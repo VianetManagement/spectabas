@@ -1,4 +1,4 @@
-FROM clickhouse/clickhouse-server:24.3-alpine
+FROM clickhouse/clickhouse-server:24.3
 
 COPY schema.sql /docker-entrypoint-initdb.d/01_schema.sql
 COPY clickhouse-users.xml /etc/clickhouse-server/users.d/spectabas.xml
