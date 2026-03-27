@@ -9,7 +9,7 @@
 
   var gdpr = script.getAttribute("data-gdpr") || "on";
   var xdSites = (script.getAttribute("data-xd") || "").split(",").filter(Boolean);
-  var endpoint = script.src.replace(/\/s\.js.*$/, "");
+  var endpoint = script.src.replace(/\/assets\/v1\.js.*$/, "");
 
   // Check opt-out
   if (getCookie("_sab_optout")) return;
