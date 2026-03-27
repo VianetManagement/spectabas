@@ -1,0 +1,19 @@
+# Base image with all deps pre-compiled. Rebuild only when mix.exs/mix.lock change.
+# Build with: docker build -f Dockerfile.base -t ghcr.io/vianetmanagement/spectabas-base:latest .
+# Push with:  docker push ghcr.io/vianetmanagement/spectabas-base:latest
+FROM hexpm/elixir:1.17.3-erlang-27.2-ubuntu-jammy-20260217
+
+RUN apt-get update -y && apt-get install -y build-essential git curl \
+    && apt-get clean && rm -f /var/lib/apt/lists/*_*
+
+WORKDIR /app
+RUN mix local.hex --force && mix local.rebar --force
+ENV MIX_ENV=prod
+
+COPY mix.exs mix.lock ./
+RUN mix deps.get --only $MIX_ENV
+
+COPY config/config.exs config/prod.exs config/runtime.exs config/
+RUN mix deps.compile
+
+RUN mix esbuild.install --if-missing && mix tailwind.install --if-missing
