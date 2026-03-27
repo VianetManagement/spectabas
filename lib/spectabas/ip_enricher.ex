@@ -1,7 +1,8 @@
 defmodule Spectabas.IPEnricher do
   @moduledoc """
   IP address enrichment: geolocation, ASN data, and datacenter/VPN/Tor detection.
-  In GDPR-on mode, anonymizes the IP before lookup (last octet IPv4, last 80 bits IPv6).
+  Always uses the full IP for geo lookup (region/city accuracy requires it).
+  In GDPR-on mode, anonymizes the IP for storage only.
   """
 
   alias Spectabas.IPEnricher.{IPCache, ASNBlocklist}
@@ -12,30 +13,30 @@ defmodule Spectabas.IPEnricher do
   """
   def enrich(ip_string, gdpr_mode) when is_binary(ip_string) do
     gdpr_on? = gdpr_mode in ["on", :on]
-    lookup_ip = if gdpr_on?, do: anonymize(ip_string), else: ip_string
 
-    case IPCache.get(lookup_ip) do
+    case IPCache.get(ip_string) do
       {:ok, cached} ->
         cached
 
       :miss ->
-        result = do_enrich(ip_string, lookup_ip, gdpr_on?)
-        IPCache.put(lookup_ip, result)
+        result = do_enrich(ip_string, gdpr_on?)
+        IPCache.put(ip_string, result)
         result
     end
   end
 
   def enrich(_, _), do: empty_result()
 
-  defp do_enrich(original_ip, lookup_ip, gdpr_on?) do
-    city_result = Geolix.lookup(parse_ip(lookup_ip), where: :city)
-    asn_result = Geolix.lookup(parse_ip(lookup_ip), where: :asn)
+  defp do_enrich(original_ip, gdpr_on?) do
+    # Always look up the full IP for maximum geo accuracy
+    city_result = Geolix.lookup(parse_ip(original_ip), where: :city)
+    asn_result = Geolix.lookup(parse_ip(original_ip), where: :asn)
 
     asn_number = get_in_safe(asn_result, [:autonomous_system_number])
     asn_org = get_in_safe(asn_result, [:autonomous_system_organization]) || ""
 
     %{
-      ip_address: if(gdpr_on?, do: lookup_ip, else: original_ip),
+      ip_address: if(gdpr_on?, do: anonymize(original_ip), else: original_ip),
       ip_country: get_in_safe(city_result, [:country, :iso_code]) || "",
       ip_country_name: get_localized_name(get_in_safe(city_result, [:country, :names])),
       ip_continent: get_in_safe(city_result, [:continent, :code]) || "",

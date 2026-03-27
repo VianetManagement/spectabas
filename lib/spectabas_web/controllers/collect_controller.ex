@@ -16,7 +16,8 @@ defmodule SpectabasWeb.CollectController do
          {:ok, site} <- resolve_site(conn, params),
          :ok <- check_origin(conn, site),
          false <- Sites.ip_blocked?(site, client_ip(conn)) do
-      conn = assign(conn, :site, site)
+      gdpr_mode = if site.gdpr_mode == "off", do: :off, else: :on
+      conn = conn |> assign(:site, site) |> assign(:gdpr_mode, gdpr_mode)
 
       try do
         {:ok, event} = Ingest.process(payload, conn)
@@ -132,6 +133,9 @@ defmodule SpectabasWeb.CollectController do
       end
 
     if site && !Sites.ip_blocked?(site, client_ip(conn)) do
+      gdpr_mode = if site.gdpr_mode == "off", do: :off, else: :on
+      conn = conn |> assign(:site, site) |> assign(:gdpr_mode, gdpr_mode)
+
       payload_params = %{
         "t" => "pageview",
         "u" => params["u"] || get_req_header(conn, "referer") |> List.first() || "",
