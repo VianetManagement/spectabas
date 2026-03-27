@@ -482,11 +482,30 @@ defmodule Spectabas.Accounts do
           role: to_string(role)
         })
 
+        Spectabas.Accounts.UserNotifier.deliver_invitation(%{
+          email: email,
+          token: invitation.token,
+          role: to_string(role)
+        })
+
         {:ok, invitation}
 
       error ->
         error
     end
+  end
+
+  @doc """
+  List all pending (not yet accepted) invitations.
+  """
+  def list_pending_invitations do
+    import Ecto.Query
+
+    from(i in Invitation,
+      where: is_nil(i.accepted_at),
+      order_by: [desc: i.inserted_at]
+    )
+    |> Repo.all()
   end
 
   @doc """

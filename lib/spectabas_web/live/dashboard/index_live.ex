@@ -38,6 +38,13 @@ defmodule SpectabasWeb.Dashboard.IndexLive do
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div class="flex items-center justify-between mb-8">
         <h1 class="text-2xl font-bold text-gray-900">Your Sites</h1>
+        <.link
+          :if={@current_scope.user.role in [:superadmin, :admin]}
+          navigate={~p"/admin/sites"}
+          class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
+        >
+          + Add Site
+        </.link>
       </div>
 
       <div :if={@sites == []} class="text-center py-16 text-gray-500">

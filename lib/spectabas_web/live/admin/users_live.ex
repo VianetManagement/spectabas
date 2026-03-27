@@ -8,11 +8,13 @@ defmodule SpectabasWeb.Admin.UsersLive do
   @impl true
   def mount(_params, _session, socket) do
     users = Accounts.list_users()
+    pending = Accounts.list_pending_invitations()
 
     {:ok,
      socket
      |> assign(:page_title, "Manage Users")
      |> assign(:users, users)
+     |> assign(:pending_invitations, pending)
      |> assign(:roles, @roles)
      |> assign(:show_invite, false)
      |> assign(:invite_email, "")
@@ -48,7 +50,8 @@ defmodule SpectabasWeb.Admin.UsersLive do
          |> assign(:show_invite, false)
          |> assign(:invite_email, "")
          |> assign(:invite_role, "analyst")
-         |> assign(:invite_error, nil)}
+         |> assign(:invite_error, nil)
+         |> assign(:pending_invitations, Accounts.list_pending_invitations())}
 
       {:error, reason} ->
         {:noreply, assign(socket, :invite_error, inspect(reason))}
@@ -219,6 +222,45 @@ defmodule SpectabasWeb.Admin.UsersLive do
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <%!-- Pending Invitations --%>
+      <div :if={@pending_invitations != []} class="mt-8">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Pending Invitations</h2>
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-yellow-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Invited
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Status
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              <tr :for={inv <- @pending_invitations} class="hover:bg-gray-50">
+                <td class="px-6 py-4 text-sm text-gray-900">{inv.email}</td>
+                <td class="px-6 py-4">
+                  <span class={"text-xs font-medium rounded-lg px-2 py-1 #{role_color(to_string(inv.role))}"}>
+                    {String.capitalize(to_string(inv.role))}
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-500">
+                  {Calendar.strftime(inv.inserted_at, "%Y-%m-%d %H:%M")}
+                </td>
+                <td class="px-6 py-4">
+                  <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                    Invited
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
     """
