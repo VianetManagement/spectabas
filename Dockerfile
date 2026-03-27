@@ -24,6 +24,13 @@ COPY assets assets
 COPY priv priv
 COPY rel rel
 
+# Download GeoIP databases (DB-IP free, updated monthly)
+RUN mkdir -p priv/geoip && \
+    YEAR=$(date +%Y) && MONTH=$(date +%m) && \
+    curl -fsSL "https://download.db-ip.com/free/dbip-city-lite-${YEAR}-${MONTH}.mmdb.gz" | gunzip > priv/geoip/dbip-city-lite.mmdb && \
+    curl -fsSL "https://download.db-ip.com/free/dbip-asn-lite-${YEAR}-${MONTH}.mmdb.gz" | gunzip > priv/geoip/dbip-asn-lite.mmdb && \
+    echo "GeoIP databases downloaded: $(ls -lh priv/geoip/)"
+
 RUN mix compile && \
     mix ua_inspector.download --force && \
     mix esbuild spectabas --minify && \
