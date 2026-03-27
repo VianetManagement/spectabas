@@ -182,7 +182,7 @@ defmodule Spectabas.ClickHouse do
       # Users and grants
       "CREATE USER IF NOT EXISTS #{cfg[:username]} IDENTIFIED WITH plaintext_password BY '#{cfg[:password]}'",
       "CREATE USER IF NOT EXISTS #{cfg[:read_username]} IDENTIFIED WITH plaintext_password BY '#{cfg[:read_password]}'",
-      "GRANT INSERT, SELECT ON #{db}.* TO #{cfg[:username]}",
+      "GRANT INSERT, SELECT, ALTER UPDATE ON #{db}.* TO #{cfg[:username]}",
       "GRANT SELECT ON #{db}.* TO #{cfg[:read_username]}"
     ]
 
