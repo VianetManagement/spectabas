@@ -353,7 +353,32 @@ defmodule SpectabasWeb.HealthController do
       city_file_exists: File.exists?(city_path),
       asn_file_exists: File.exists?(asn_path),
       city_file_size: if(File.exists?(city_path), do: File.stat!(city_path).size, else: 0),
-      test_lookup_8888: country
+      test_lookup_8888: country,
+      test_lookup_174: test_full_lookup("174.252.144.194")
+    }
+  end
+
+  defp test_full_lookup(ip_str) do
+    {:ok, ip} = :inet.parse_address(String.to_charlist(ip_str))
+    city_result = Geolix.lookup(ip, where: :city)
+
+    %{
+      country: case city_result do
+        %{country: %{iso_code: c}} -> c
+        _ -> "none"
+      end,
+      region: case city_result do
+        %{subdivisions: [%{names: %{"en" => r}} | _]} -> r
+        _ -> "none"
+      end,
+      city: case city_result do
+        %{city: %{names: %{"en" => c}}} -> c
+        _ -> "none"
+      end,
+      enricher_result: case Spectabas.IPEnricher.enrich(ip_str, :off) do
+        %{ip_region_name: r, ip_city: c, ip_country: co} -> %{country: co, region: r, city: c}
+        other -> inspect(other) |> String.slice(0, 200)
+      end
     }
   end
 
