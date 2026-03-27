@@ -248,7 +248,7 @@ defmodule Spectabas.Sites do
   """
   def snippet_code(%Site{} = site) do
     """
-    <script defer data-site="#{site.domain}" src="https://#{site.domain}/assets/v1.js"></script>
+    <script defer data-id="#{site.public_key}" src="https://#{site.domain}/assets/v1.js"></script>
     <noscript><img src="https://#{site.domain}/c/p?s=#{site.public_key}" alt="" style="position:absolute;width:0;height:0" /></noscript>\
     """
     |> String.trim()

@@ -4,7 +4,7 @@
   var script = document.currentScript;
   if (!script) return;
 
-  var site = script.getAttribute("data-site");
+  var site = script.getAttribute("data-id");
   if (!site) return;
 
   var gdpr = script.getAttribute("data-gdpr") || "on";

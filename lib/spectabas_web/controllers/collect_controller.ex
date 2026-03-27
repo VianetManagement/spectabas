@@ -189,10 +189,25 @@ defmodule SpectabasWeb.CollectController do
   end
 
   defp resolve_site(conn, params) do
-    domain = params["s"] || params["site"] || conn.host
+    key = params["s"] || params["site"]
 
-    case Spectabas.Sites.get_site_by_domain(domain) do
-      %Spectabas.Sites.Site{} = site -> {:ok, site}
+    site =
+      cond do
+        # Try public key lookup first (opaque ID)
+        key && !String.contains?(key, ".") ->
+          Spectabas.Repo.get_by(Spectabas.Sites.Site, public_key: key)
+
+        # Domain-based lookup
+        key ->
+          Spectabas.Sites.get_site_by_domain(key)
+
+        # Fallback to host header
+        true ->
+          Spectabas.Sites.get_site_by_domain(conn.host)
+      end
+
+    case site do
+      %Spectabas.Sites.Site{} = s -> {:ok, s}
       nil -> {:error, :site_not_found}
     end
   end

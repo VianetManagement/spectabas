@@ -178,7 +178,13 @@ defmodule Spectabas.ClickHouse do
         sumIf(1, ip_is_tor = 1) AS tor_count,
         sumIf(1, ip_is_bot = 1) AS bot_count
       FROM #{db}.events GROUP BY site_id, date, ip_asn, ip_asn_org, ip_org
-      """
+      """,
+      # Users and grants
+      "CREATE USER IF NOT EXISTS #{cfg[:username]} IDENTIFIED WITH plaintext_password BY '#{cfg[:password]}'",
+      "CREATE USER IF NOT EXISTS #{cfg[:read_username]} IDENTIFIED WITH plaintext_password BY '#{cfg[:read_password]}'",
+      "GRANT INSERT ON #{db}.events TO #{cfg[:username]}",
+      "GRANT INSERT ON #{db}.ecommerce_events TO #{cfg[:username]}",
+      "GRANT SELECT ON #{db}.* TO #{cfg[:read_username]}"
     ]
 
     if connected do
