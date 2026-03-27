@@ -172,7 +172,9 @@ defmodule SpectabasWeb.HealthController do
 
     # Step 1: Find IPs needing enrichment
     {:ok, rows} =
-      ClickHouse.query("SELECT DISTINCT ip_address FROM events WHERE ip_country = '' AND ip_address != ''")
+      ClickHouse.query(
+        "SELECT DISTINCT ip_address FROM events WHERE ip_country = '' AND ip_address != ''"
+      )
 
     ips = Enum.map(rows, & &1["ip_address"])
 
@@ -183,56 +185,78 @@ defmodule SpectabasWeb.HealthController do
         city = Geolix.lookup(parsed, where: :city)
         asn = Geolix.lookup(parsed, where: :asn)
 
-        country = case city do
-          %{country: %{iso_code: c}} -> c
-          _ -> nil
-        end
+        country =
+          case city do
+            %{country: %{iso_code: c}} -> c
+            _ -> nil
+          end
 
         if country do
-          country_name = case city do
-            %{country: %{names: %{"en" => n}}} -> n
-            _ -> ""
-          end
-          continent = case city do
-            %{continent: %{code: c}} -> c
-            _ -> ""
-          end
-          continent_name = case city do
-            %{continent: %{names: %{"en" => n}}} -> n
-            _ -> ""
-          end
-          region_code = case city do
-            %{subdivisions: [%{iso_code: c} | _]} -> c || ""
-            _ -> ""
-          end
-          region_name = case city do
-            %{subdivisions: [%{names: %{"en" => n}} | _]} -> n
-            _ -> ""
-          end
-          city_name = case city do
-            %{city: %{names: %{"en" => n}}} -> n
-            _ -> ""
-          end
-          lat = case city do
-            %{location: %{latitude: l}} -> l
-            _ -> 0.0
-          end
-          lon = case city do
-            %{location: %{longitude: l}} -> l
-            _ -> 0.0
-          end
-          tz = case city do
-            %{location: %{time_zone: t}} -> t || ""
-            _ -> ""
-          end
-          asn_num = case asn do
-            %{autonomous_system_number: n} -> n || 0
-            _ -> 0
-          end
-          asn_org = case asn do
-            %{autonomous_system_organization: o} -> o || ""
-            _ -> ""
-          end
+          country_name =
+            case city do
+              %{country: %{names: %{"en" => n}}} -> n
+              _ -> ""
+            end
+
+          continent =
+            case city do
+              %{continent: %{code: c}} -> c
+              _ -> ""
+            end
+
+          continent_name =
+            case city do
+              %{continent: %{names: %{"en" => n}}} -> n
+              _ -> ""
+            end
+
+          region_code =
+            case city do
+              %{subdivisions: [%{iso_code: c} | _]} -> c || ""
+              _ -> ""
+            end
+
+          region_name =
+            case city do
+              %{subdivisions: [%{names: %{"en" => n}} | _]} -> n
+              _ -> ""
+            end
+
+          city_name =
+            case city do
+              %{city: %{names: %{"en" => n}}} -> n
+              _ -> ""
+            end
+
+          lat =
+            case city do
+              %{location: %{latitude: l}} -> l
+              _ -> 0.0
+            end
+
+          lon =
+            case city do
+              %{location: %{longitude: l}} -> l
+              _ -> 0.0
+            end
+
+          tz =
+            case city do
+              %{location: %{time_zone: t}} -> t || ""
+              _ -> ""
+            end
+
+          asn_num =
+            case asn do
+              %{autonomous_system_number: n} -> n || 0
+              _ -> 0
+            end
+
+          asn_org =
+            case asn do
+              %{autonomous_system_organization: o} -> o || ""
+              _ -> ""
+            end
 
           sql = """
           ALTER TABLE events UPDATE
@@ -254,7 +278,14 @@ defmodule SpectabasWeb.HealthController do
           """
 
           result = ClickHouse.execute(sql)
-          %{ip: ip_str, country: country, region: region_name, city: city_name, result: inspect(result)}
+
+          %{
+            ip: ip_str,
+            country: country,
+            region: region_name,
+            city: city_name,
+            result: inspect(result)
+          }
         else
           %{ip: ip_str, country: nil, result: "no_geoip_match"}
         end
@@ -269,10 +300,12 @@ defmodule SpectabasWeb.HealthController do
     asn_path = Path.join([priv_dir, "geoip", "dbip-asn-lite.mmdb"])
 
     city_lookup = Geolix.lookup({8, 8, 8, 8}, where: :city)
-    country = case city_lookup do
-      %{country: %{iso_code: code}} -> code
-      _ -> "no_result"
-    end
+
+    country =
+      case city_lookup do
+        %{country: %{iso_code: code}} -> code
+        _ -> "no_result"
+      end
 
     %{
       priv_dir: priv_dir,

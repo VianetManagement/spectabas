@@ -41,6 +41,143 @@ defmodule Spectabas.Analytics do
   end
 
   @doc """
+  Time-series data: pageviews and visitors bucketed by time interval.
+  Returns a list of %{"bucket" => ..., "pageviews" => ..., "visitors" => ...}.
+  """
+  def timeseries(%Site{} = site, %User{} = user, date_range) when is_atom(date_range) do
+    timeseries(site, user, period_to_date_range(date_range), date_range)
+  end
+
+  def timeseries(%Site{} = site, %User{} = user, %{from: _, to: _} = date_range, period \\ :week) do
+    with :ok <- authorize(site, user) do
+      # Pick bucket size: hourly for day, daily for week/month, weekly for custom >60d
+      {trunc_fn, _fmt} =
+        case period do
+          :day -> {"toStartOfHour", "%Y-%m-%d %H:00"}
+          :week -> {"toDate", "%Y-%m-%d"}
+          :month -> {"toDate", "%Y-%m-%d"}
+          _ -> {"toDate", "%Y-%m-%d"}
+        end
+
+      sql = """
+      SELECT
+        #{trunc_fn}(timestamp) AS bucket,
+        countIf(event_type = 'pageview') AS pageviews,
+        uniq(visitor_id) AS visitors
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      GROUP BY bucket
+      ORDER BY bucket ASC
+      """
+
+      case ClickHouse.query(sql) do
+        {:ok, rows} ->
+          rows =
+            Enum.map(rows, fn row ->
+              bucket = row["bucket"] || ""
+
+              label =
+                case period do
+                  :day ->
+                    # Extract hour from "2026-03-27 14:00:00"
+                    case String.split(bucket, " ") do
+                      [_, time] -> String.slice(time, 0, 5)
+                      _ -> bucket
+                    end
+
+                  _ ->
+                    # Extract month-day from "2026-03-27"
+                    case String.split(bucket, "-") do
+                      [_, m, d] -> "#{m}/#{d}"
+                      _ -> bucket
+                    end
+                end
+
+              %{
+                "bucket" => bucket,
+                "label" => label,
+                "pageviews" => row["pageviews"] || 0,
+                "visitors" => row["visitors"] || 0
+              }
+            end)
+
+          {:ok, rows}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
+  end
+
+  @doc """
+  Entry pages: first pageview URL per session.
+  """
+  def entry_pages(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        url_path,
+        count() AS entries,
+        uniq(visitor_id) AS unique_visitors
+      FROM (
+        SELECT
+          session_id,
+          any(visitor_id) AS visitor_id,
+          argMin(url_path, timestamp) AS url_path
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND event_type = 'pageview'
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY session_id
+      )
+      GROUP BY url_path
+      ORDER BY entries DESC
+      LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
+  Exit pages: last pageview URL per session.
+  """
+  def exit_pages(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        url_path,
+        count() AS exits,
+        uniq(visitor_id) AS unique_visitors
+      FROM (
+        SELECT
+          session_id,
+          any(visitor_id) AS visitor_id,
+          argMax(url_path, timestamp) AS url_path
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND event_type = 'pageview'
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY session_id
+      )
+      GROUP BY url_path
+      ORDER BY exits DESC
+      LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
   Top pages by pageviews from events table.
   """
   def top_pages(%Site{} = site, %User{} = user, date_range) do

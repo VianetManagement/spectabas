@@ -62,7 +62,9 @@ defmodule Mix.Tasks.BackfillGeo do
 
           case Spectabas.ClickHouse.execute(update_sql) do
             :ok ->
-              Logger.info("[BackfillGeo] Updated #{ip} → #{geo.country} / #{geo.region_name} / #{geo.city}")
+              Logger.info(
+                "[BackfillGeo] Updated #{ip} → #{geo.country} / #{geo.region_name} / #{geo.city}"
+              )
 
             {:error, e} ->
               Logger.error("[BackfillGeo] Failed to update #{ip}: #{inspect(e)}")
