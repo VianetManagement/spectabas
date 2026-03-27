@@ -189,7 +189,7 @@ defmodule SpectabasWeb.CollectController do
   end
 
   defp resolve_site(conn, params) do
-    domain = params["site"] || conn.host
+    domain = params["s"] || params["site"] || conn.host
 
     case Spectabas.Sites.get_site_by_domain(domain) do
       %Spectabas.Sites.Site{} = site -> {:ok, site}

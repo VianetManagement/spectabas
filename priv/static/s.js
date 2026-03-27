@@ -140,7 +140,7 @@
       } catch (e) {}
     }
 
-    send(endpoint + "/c/e?site=" + encodeURIComponent(site), payload);
+    send(endpoint + "/c/e?s=" + encodeURIComponent(site), payload);
   }
 
   function sendDuration() {
@@ -159,7 +159,7 @@
     };
 
     send(
-      endpoint + "/c/e?site=" + encodeURIComponent(site),
+      endpoint + "/c/e?s=" + encodeURIComponent(site),
       payload
     );
   }
