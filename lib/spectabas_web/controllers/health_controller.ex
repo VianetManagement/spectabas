@@ -26,7 +26,9 @@ defmodule SpectabasWeb.HealthController do
       clickhouse_sample_event: test_sample_event(),
       top_pages_query: test_top_pages(),
       sites: test_sites(),
-      write_test: test_write()
+      write_test: test_write(),
+      geoip_status: test_geoip(),
+      geo_sample: test_geo_sample()
     }
 
     json(conn, results)
@@ -158,6 +160,39 @@ defmodule SpectabasWeb.HealthController do
       case Spectabas.ClickHouse.insert("events", [row]) do
         :ok -> "ok"
         {:error, e} -> "error: #{String.slice(to_string(e), 0, 300)}"
+      end
+    else
+      "not_started"
+    end
+  end
+
+  defp test_geoip do
+    priv_dir = :code.priv_dir(:spectabas) |> to_string()
+    city_path = Path.join([priv_dir, "geoip", "dbip-city-lite.mmdb"])
+    asn_path = Path.join([priv_dir, "geoip", "dbip-asn-lite.mmdb"])
+
+    city_lookup = Geolix.lookup({8, 8, 8, 8}, where: :city)
+    country = case city_lookup do
+      %{country: %{iso_code: code}} -> code
+      _ -> "no_result"
+    end
+
+    %{
+      priv_dir: priv_dir,
+      city_file_exists: File.exists?(city_path),
+      asn_file_exists: File.exists?(asn_path),
+      city_file_size: if(File.exists?(city_path), do: File.stat!(city_path).size, else: 0),
+      test_lookup_8888: country
+    }
+  end
+
+  defp test_geo_sample do
+    if Process.whereis(Spectabas.ClickHouse) do
+      case Spectabas.ClickHouse.query(
+             "SELECT ip_country, ip_city, ip_address, count() AS c FROM events WHERE site_id = 1 GROUP BY ip_country, ip_city, ip_address ORDER BY c DESC LIMIT 5"
+           ) do
+        {:ok, rows} -> rows
+        {:error, e} -> "error: #{String.slice(to_string(e), 0, 200)}"
       end
     else
       "not_started"
