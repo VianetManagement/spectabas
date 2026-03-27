@@ -12,17 +12,23 @@
     </script>
   </head>
   <body class="bg-white antialiased">
-    <nav class="bg-white border-b border-gray-200">
+    <nav class="bg-white border-b border-gray-200 relative z-50">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between h-16">
           <div class="flex items-center gap-6">
             <a href="/" class="text-xl font-bold text-indigo-600">Spectabas</a>
             <%= if assigns[:current_scope] && @current_scope.user do %>
-              <a href="/dashboard" class="text-sm text-gray-700 hover:text-indigo-600 font-medium">
+              <a
+                href="/dashboard"
+                class="text-sm text-gray-700 hover:text-indigo-600 font-medium"
+              >
                 Dashboard
               </a>
               <%= if @current_scope.user.role in [:superadmin, :admin] do %>
-                <a href="/admin" class="text-sm text-gray-700 hover:text-indigo-600 font-medium">
+                <a
+                  href="/admin"
+                  class="text-sm text-gray-700 hover:text-indigo-600 font-medium"
+                >
                   Admin
                 </a>
               <% end %>
@@ -31,17 +37,14 @@
           <div class="flex items-center gap-4 text-sm">
             <%= if assigns[:current_scope] && @current_scope.user do %>
               <span class="text-gray-500">{@current_scope.user.email}</span>
-              <a href="/users/settings" class="text-gray-600 hover:text-indigo-600">
-                Account
-              </a>
-              <a
-                href="/users/log-out"
-                data-method="delete"
-                data-csrf={get_csrf_token()}
+              <a href="/users/settings" class="text-gray-600 hover:text-indigo-600">Account</a>
+              <.link
+                href={~p"/users/log-out"}
+                method="delete"
                 class="text-gray-600 hover:text-indigo-600"
               >
                 Log out
-              </a>
+              </.link>
             <% else %>
               <a
                 href="/users/log-in"
