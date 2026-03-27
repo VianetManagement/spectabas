@@ -296,28 +296,58 @@ export function drawWorldMap(ctx, area, opts = {}) {
     const countryFill = highlight[country.n] || fillColor
 
     for (const ring of country.p) {
-      ctx.beginPath()
-      const [x0, y0] = lonLatToXY(ring[0][0], ring[0][1], area)
-      ctx.moveTo(x0, y0)
+      // Check if ring crosses the antimeridian
+      let crossesAM = false
       for (let k = 1; k < ring.length; k++) {
-        // Skip segments that cross the antimeridian (huge lon jump)
-        const lonDiff = Math.abs(ring[k][0] - ring[k - 1][0])
-        const [x, y] = lonLatToXY(ring[k][0], ring[k][1], area)
-        if (lonDiff > 180) {
-          ctx.moveTo(x, y)
-        } else {
-          ctx.lineTo(x, y)
+        if (Math.abs(ring[k][0] - ring[k - 1][0]) > 100) {
+          crossesAM = true
+          break
         }
       }
-      ctx.closePath()
 
-      ctx.fillStyle = countryFill
-      ctx.fill()
+      if (crossesAM) {
+        // Split into segments at antimeridian crossings, draw each separately
+        let segStart = 0
+        for (let k = 1; k <= ring.length; k++) {
+          const crosses =
+            k < ring.length && Math.abs(ring[k][0] - ring[k - 1][0]) > 100
+          if (crosses || k === ring.length) {
+            // Draw segment from segStart to k-1
+            ctx.beginPath()
+            const [sx, sy] = lonLatToXY(ring[segStart][0], ring[segStart][1], area)
+            ctx.moveTo(sx, sy)
+            for (let j = segStart + 1; j < k; j++) {
+              const [jx, jy] = lonLatToXY(ring[j][0], ring[j][1], area)
+              ctx.lineTo(jx, jy)
+            }
+            ctx.fillStyle = countryFill
+            ctx.fill()
+            if (lineWidth > 0) {
+              ctx.strokeStyle = strokeColor
+              ctx.lineWidth = lineWidth
+              ctx.stroke()
+            }
+            segStart = k
+          }
+        }
+      } else {
+        ctx.beginPath()
+        const [x0, y0] = lonLatToXY(ring[0][0], ring[0][1], area)
+        ctx.moveTo(x0, y0)
+        for (let k = 1; k < ring.length; k++) {
+          const [x, y] = lonLatToXY(ring[k][0], ring[k][1], area)
+          ctx.lineTo(x, y)
+        }
+        ctx.closePath()
 
-      if (lineWidth > 0) {
-        ctx.strokeStyle = strokeColor
-        ctx.lineWidth = lineWidth
-        ctx.stroke()
+        ctx.fillStyle = countryFill
+        ctx.fill()
+
+        if (lineWidth > 0) {
+          ctx.strokeStyle = strokeColor
+          ctx.lineWidth = lineWidth
+          ctx.stroke()
+        }
       }
     }
   }
