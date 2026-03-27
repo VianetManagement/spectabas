@@ -122,7 +122,10 @@ defmodule Mix.Tasks.BackfillGeo do
   defp get_in_safe(_, _), do: nil
 
   defp get_localized(nil), do: ""
-  defp get_localized(names) when is_map(names), do: Map.get(names, "en", "") || ""
+
+  defp get_localized(names) when is_map(names),
+    do: Map.get(names, "en") || Map.get(names, :en) || ""
+
   defp get_localized(_), do: ""
 
   defp get_subdivision_iso(result) do

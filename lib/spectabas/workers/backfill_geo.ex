@@ -131,7 +131,7 @@ defmodule Spectabas.Workers.BackfillGeo do
   defp safe_nested(_, _), do: nil
 
   defp localized(nil), do: ""
-  defp localized(names) when is_map(names), do: Map.get(names, "en", "") || ""
+  defp localized(names) when is_map(names), do: Map.get(names, "en") || Map.get(names, :en) || ""
   defp localized(_), do: ""
 
   defp subdivision_iso(result) do

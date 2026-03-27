@@ -192,23 +192,9 @@ defmodule SpectabasWeb.HealthController do
           end
 
         if country do
-          country_name =
-            case city do
-              %{country: %{names: %{"en" => n}}} -> n
-              _ -> ""
-            end
-
-          continent =
-            case city do
-              %{continent: %{code: c}} -> c
-              _ -> ""
-            end
-
-          continent_name =
-            case city do
-              %{continent: %{names: %{"en" => n}}} -> n
-              _ -> ""
-            end
+          country_name = geo_name(city, [:country, :names])
+          continent = get_in(city, [:continent, :code]) || ""
+          continent_name = geo_name(city, [:continent, :names])
 
           region_code =
             case city do
@@ -218,15 +204,14 @@ defmodule SpectabasWeb.HealthController do
 
           region_name =
             case city do
-              %{subdivisions: [%{names: %{"en" => n}} | _]} -> n
-              _ -> ""
+              %{subdivisions: [%{names: names} | _]} ->
+                Map.get(names, "en") || Map.get(names, :en) || ""
+
+              _ ->
+                ""
             end
 
-          city_name =
-            case city do
-              %{city: %{names: %{"en" => n}}} -> n
-              _ -> ""
-            end
+          city_name = geo_name(city, [:city, :names])
 
           lat =
             case city do
@@ -311,10 +296,11 @@ defmodule SpectabasWeb.HealthController do
     results = %{
       overview: safe_test(fn -> Analytics.overview_stats(site, user, date_range) end),
       timeseries: safe_test(fn -> Analytics.timeseries(site, user, date_range, :week) end),
-      timeseries_raw: case Analytics.timeseries(site, user, date_range, :week) do
-        {:ok, rows} -> Enum.take(rows, 5)
-        other -> inspect(other) |> String.slice(0, 300)
-      end,
+      timeseries_raw:
+        case Analytics.timeseries(site, user, date_range, :week) do
+          {:ok, rows} -> Enum.take(rows, 5)
+          other -> inspect(other) |> String.slice(0, 300)
+        end,
       top_pages: safe_test(fn -> Analytics.top_pages(site, user, date_range) end),
       top_sources: safe_test(fn -> Analytics.top_sources(site, user, date_range) end),
       top_regions: safe_test(fn -> Analytics.top_regions(site, user, date_range) end),
@@ -333,6 +319,11 @@ defmodule SpectabasWeb.HealthController do
     end
   rescue
     e -> %{status: "crash", error: Exception.message(e) |> String.slice(0, 300)}
+  end
+
+  defp geo_name(map, keys) do
+    names = get_in(map, keys)
+    if is_map(names), do: Map.get(names, "en") || Map.get(names, :en) || "", else: ""
   end
 
   defp test_geoip do
@@ -362,22 +353,33 @@ defmodule SpectabasWeb.HealthController do
     {:ok, ip} = :inet.parse_address(String.to_charlist(ip_str))
     city_result = Geolix.lookup(ip, where: :city)
 
-    raw_keys = if is_map(city_result), do: Map.keys(city_result) |> Enum.map(&to_string/1), else: ["not_a_map"]
-    raw_city = if is_map(city_result), do: inspect(city_result[:city]) |> String.slice(0, 200), else: "nil"
-    raw_subs = if is_map(city_result), do: inspect(city_result[:subdivisions]) |> String.slice(0, 200), else: "nil"
+    raw_keys =
+      if is_map(city_result),
+        do: Map.keys(city_result) |> Enum.map(&to_string/1),
+        else: ["not_a_map"]
+
+    raw_city =
+      if is_map(city_result), do: inspect(city_result[:city]) |> String.slice(0, 200), else: "nil"
+
+    raw_subs =
+      if is_map(city_result),
+        do: inspect(city_result[:subdivisions]) |> String.slice(0, 200),
+        else: "nil"
 
     %{
       raw_keys: raw_keys,
       raw_city: raw_city,
       raw_subdivisions: raw_subs,
-      country: case city_result do
-        %{country: %{iso_code: c}} -> c
-        _ -> "none"
-      end,
-      enricher_result: case Spectabas.IPEnricher.enrich(ip_str, :off) do
-        %{ip_region_name: r, ip_city: c, ip_country: co} -> %{country: co, region: r, city: c}
-        other -> inspect(other) |> String.slice(0, 200)
-      end
+      country:
+        case city_result do
+          %{country: %{iso_code: c}} -> c
+          _ -> "none"
+        end,
+      enricher_result:
+        case Spectabas.IPEnricher.enrich(ip_str, :off) do
+          %{ip_region_name: r, ip_city: c, ip_country: co} -> %{country: co, region: r, city: c}
+          other -> inspect(other) |> String.slice(0, 200)
+        end
     }
   end
 

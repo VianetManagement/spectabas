@@ -98,7 +98,12 @@ defmodule Spectabas.IPEnricher do
   defp get_in_safe(_, _), do: nil
 
   defp get_localized_name(nil), do: ""
-  defp get_localized_name(names) when is_map(names), do: Map.get(names, "en", "") || ""
+
+  defp get_localized_name(names) when is_map(names) do
+    # DB-IP via Geolix uses atom keys (:en), MaxMind uses string keys ("en")
+    Map.get(names, "en") || Map.get(names, :en) || ""
+  end
+
   defp get_localized_name(_), do: ""
 
   defp get_first_subdivision_iso(nil), do: ""

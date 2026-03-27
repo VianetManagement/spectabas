@@ -512,7 +512,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
 
     w = 800
     h = 160
-    pad_x = 0
+    pad_x = 30
     pad_y = 5
 
     assigns =
@@ -533,7 +533,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
       :if={@timeseries != []}
       viewBox={"0 0 #{@w} #{@h + 24}"}
       class="w-full h-44"
-      preserveAspectRatio="none"
+      preserveAspectRatio="xMidYMid meet"
     >
       <%!-- Pageviews area --%>
       <path d={@pv_area} fill="rgb(99 102 241 / 0.1)" />
