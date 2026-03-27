@@ -87,7 +87,7 @@
       sendEvent("custom", { n: name, p: props || {} });
     },
     identify: function (traits) {
-      send(endpoint + "/collect/identify", {
+      send(endpoint + "/c/identify", {
         vid: vid,
         traits: traits,
       });
@@ -140,7 +140,7 @@
       } catch (e) {}
     }
 
-    send(endpoint + "/collect/event?site=" + encodeURIComponent(site), payload);
+    send(endpoint + "/c/event?site=" + encodeURIComponent(site), payload);
   }
 
   function sendDuration() {
@@ -159,7 +159,7 @@
     };
 
     send(
-      endpoint + "/collect/event?site=" + encodeURIComponent(site),
+      endpoint + "/c/event?site=" + encodeURIComponent(site),
       payload
     );
   }
@@ -237,7 +237,7 @@
 
         if (xdSites.indexOf(domain) !== -1) {
           // Request cross-domain token
-          fetch(endpoint + "/collect/xdomain", {
+          fetch(endpoint + "/c/xdomain", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({

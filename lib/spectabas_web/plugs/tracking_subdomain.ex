@@ -8,7 +8,7 @@ defmodule SpectabasWeb.Plugs.TrackingSubdomain do
   import Plug.Conn
 
   @app_hosts ~w(www.spectabas.com spectabas.com localhost 127.0.0.1 www.example.com)
-  @allowed_prefixes ["/collect", "/s.js", "/health"]
+  @allowed_prefixes ["/c", "/s.js", "/health"]
 
   def init(opts), do: opts
 

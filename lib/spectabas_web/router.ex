@@ -36,7 +36,7 @@ defmodule SpectabasWeb.Router do
   end
 
   # Collect endpoint — CORS, rate-limited, no CSRF
-  scope "/collect", SpectabasWeb do
+  scope "/c", SpectabasWeb do
     pipe_through :collect
 
     post "/event", CollectController, :create
