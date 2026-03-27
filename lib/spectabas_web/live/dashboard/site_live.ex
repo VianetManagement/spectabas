@@ -373,19 +373,15 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
       </div>
 
       <%!-- Time-series Chart --%>
-      <div class="bg-white rounded-lg shadow p-5 mb-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-sm font-medium text-gray-500">Pageviews & Visitors</h3>
-          <div class="flex items-center gap-4 text-xs">
-            <span class="flex items-center gap-1">
-              <span class="w-3 h-0.5 bg-indigo-500 inline-block"></span> Pageviews
-            </span>
-            <span class="flex items-center gap-1">
-              <span class="w-3 h-0.5 bg-emerald-500 inline-block"></span> Visitors
-            </span>
-          </div>
+      <div
+        class="bg-white rounded-lg shadow p-5 mb-6"
+        id="timeseries-hook"
+        phx-hook="TimeseriesChart"
+        data-chart-data={timeseries_json(@timeseries)}
+      >
+        <div style="height: 280px; position: relative;">
+          <canvas></canvas>
         </div>
-        <.chart timeseries={@timeseries} />
       </div>
 
       <%!-- Data Cards Grid --%>
@@ -493,44 +489,46 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
       </div>
 
       <%!-- Visitor Map --%>
-      <div class="bg-white rounded-lg shadow p-5 mt-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-sm font-medium text-gray-500">Visitor Map</h3>
-          <.link
-            navigate={~p"/dashboard/sites/#{@site.id}/map"}
-            class="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+        <div class="bg-white rounded-lg shadow p-5">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-medium text-gray-500">Visitor Map</h3>
+            <.link
+              navigate={~p"/dashboard/sites/#{@site.id}/map"}
+              class="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+            >
+              View details &rarr;
+            </.link>
+          </div>
+          <div
+            id="map-hook"
+            phx-hook="BubbleMap"
+            data-chart-data={locations_json(@locations)}
           >
-            View details &rarr;
-          </.link>
+            <div style="height: 300px; position: relative;">
+              <canvas></canvas>
+            </div>
+          </div>
         </div>
-        <.mini_map locations={@locations} />
-      </div>
 
-      <%!-- Timezone Distribution --%>
-      <div :if={@timezones != []} class="bg-white rounded-lg shadow p-5 mt-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-sm font-medium text-gray-500">Top Timezones</h3>
-          <.link
-            navigate={~p"/dashboard/sites/#{@site.id}/map"}
-            class="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+        <%!-- Timezone Distribution --%>
+        <div class="bg-white rounded-lg shadow p-5">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-medium text-gray-500">Top Timezones</h3>
+            <.link
+              navigate={~p"/dashboard/sites/#{@site.id}/map"}
+              class="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+            >
+              View all &rarr;
+            </.link>
+          </div>
+          <div
+            id="tz-hook"
+            phx-hook="BarChart"
+            data-chart-data={timezones_json(@timezones)}
           >
-            View all &rarr;
-          </.link>
-        </div>
-        <div class="space-y-2">
-          <div :for={tz <- @timezones} class="flex items-center gap-3">
-            <span class="text-xs text-gray-600 w-32 truncate text-right" title={tz["timezone"]}>
-              {short_tz(tz["timezone"])}
-            </span>
-            <div class="flex-1 bg-gray-100 rounded-full h-5 overflow-hidden">
-              <% max_v =
-                @timezones |> Enum.map(&to_num(&1["visitors"])) |> Enum.max(fn -> 1 end) |> max(1) %>
-              <div
-                class="bg-indigo-500 h-5 rounded-full flex items-center justify-end pr-2"
-                style={"width: #{max(to_num(tz["visitors"]) / max_v * 100, 4)}%"}
-              >
-                <span class="text-xs text-white font-medium">{tz["visitors"]}</span>
-              </div>
+            <div style={"height: #{max(length(@timezones) * 32, 100)}px; position: relative;"}>
+              <canvas></canvas>
             </div>
           </div>
         </div>
@@ -567,113 +565,6 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     </div>
     """
   end
-
-  defp chart(assigns) do
-    points = assigns.timeseries
-    max_pv = points |> Enum.map(&to_num(&1["pageviews"])) |> Enum.max(fn -> 1 end) |> max(1)
-    max_v = points |> Enum.map(&to_num(&1["visitors"])) |> Enum.max(fn -> 1 end) |> max(1)
-    max_val = max(max_pv, max_v)
-    count = length(points)
-
-    w = 800
-    h = 160
-    pad_x = 30
-    pad_y = 5
-
-    assigns =
-      assigns
-      |> Map.put(:w, w)
-      |> Map.put(:h, h)
-      |> Map.put(:pv_path, build_path(points, "pageviews", max_val, w, h, pad_x, pad_y, count))
-      |> Map.put(:v_path, build_path(points, "visitors", max_val, w, h, pad_x, pad_y, count))
-      |> Map.put(:pv_area, build_area(points, "pageviews", max_val, w, h, pad_x, pad_y, count))
-      |> Map.put(:v_area, build_area(points, "visitors", max_val, w, h, pad_x, pad_y, count))
-      |> Map.put(:labels, build_labels(points, w, pad_x, count))
-
-    ~H"""
-    <div :if={@timeseries == []} class="h-40 flex items-center justify-center text-sm text-gray-400">
-      No data for this period
-    </div>
-    <svg
-      :if={@timeseries != []}
-      viewBox={"0 0 #{@w} #{@h + 24}"}
-      class="w-full h-44"
-      preserveAspectRatio="none"
-      id={"chart-#{length(@timeseries)}-#{@timeseries |> Enum.map(& &1["pageviews"]) |> Enum.sum()}"}
-    >
-      <%!-- Pageviews area --%>
-      <path d={@pv_area} fill="rgb(99 102 241 / 0.1)" />
-      <%!-- Visitors area --%>
-      <path d={@v_area} fill="rgb(16 185 129 / 0.1)" />
-      <%!-- Pageviews line --%>
-      <path
-        d={@pv_path}
-        fill="none"
-        stroke="#6366f1"
-        stroke-width="2"
-        vector-effect="non-scaling-stroke"
-      />
-      <%!-- Visitors line --%>
-      <path
-        d={@v_path}
-        fill="none"
-        stroke="#10b981"
-        stroke-width="2"
-        vector-effect="non-scaling-stroke"
-      />
-      <%!-- X-axis labels --%>
-      <text
-        :for={{label, x} <- @labels}
-        x={x}
-        y={@h + 18}
-        text-anchor="middle"
-        class="fill-gray-400"
-        style="font-size: 10px;"
-      >
-        {label}
-      </text>
-    </svg>
-    """
-  end
-
-  defp build_path([], _, _, _, _, _, _, _), do: ""
-
-  defp build_path(points, key, max_val, w, h, pad_x, pad_y, count) do
-    step = if count > 1, do: (w - pad_x * 2) / (count - 1), else: 0
-
-    points
-    |> Enum.with_index()
-    |> Enum.map(fn {pt, i} ->
-      x = pad_x + i * step
-      val = to_num(pt[key])
-      y = pad_y + (h - pad_y * 2) * (1 - val / max_val)
-      if i == 0, do: "M#{x},#{y}", else: "L#{x},#{y}"
-    end)
-    |> Enum.join(" ")
-  end
-
-  defp build_area([], _, _, _, _, _, _, _), do: ""
-
-  defp build_area(points, key, max_val, w, h, pad_x, pad_y, count) do
-    line = build_path(points, key, max_val, w, h, pad_x, pad_y, count)
-    step = if count > 1, do: (w - pad_x * 2) / (count - 1), else: 0
-    last_x = pad_x + (count - 1) * step
-    first_x = pad_x
-    "#{line} L#{last_x},#{h - pad_y} L#{first_x},#{h - pad_y} Z"
-  end
-
-  defp build_labels(points, w, pad_x, count) when count > 0 do
-    step = if count > 1, do: (w - pad_x * 2) / (count - 1), else: 0
-    # Show ~6-8 labels max
-    skip = max(div(count, 7), 1)
-
-    points
-    |> Enum.with_index()
-    |> Enum.filter(fn {_, i} -> rem(i, skip) == 0 end)
-    |> Enum.map(fn {pt, i} -> {pt["label"], pad_x + i * step} end)
-  end
-
-  defp build_labels(_, _, _, _), do: []
 
   defp data_card(assigns) do
     ~H"""
@@ -763,75 +654,6 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   defp format_number(n) when is_binary(n), do: n
   defp format_number(_), do: "0"
 
-  defp mini_map(assigns) do
-    locations = assigns.locations
-    max_v = locations |> Enum.map(&to_num(&1["visitors"])) |> Enum.max(fn -> 1 end) |> max(1)
-    w = 900
-    h = 400
-
-    points =
-      Enum.map(locations, fn loc ->
-        lat = to_float(loc["ip_lat"])
-        lon = to_float(loc["ip_lon"])
-        visitors = to_num(loc["visitors"])
-        x = (lon + 180) / 360 * w
-        y = (90 - lat) / 180 * h
-        r = 3 + 7 * :math.sqrt(visitors / max_v)
-        opacity = 0.3 + 0.5 * (visitors / max_v)
-
-        %{
-          x: Float.round(x, 1),
-          y: Float.round(y, 1),
-          r: Float.round(r, 1),
-          opacity: Float.round(opacity, 2)
-        }
-      end)
-
-    assigns = assigns |> Map.put(:points, points) |> Map.put(:w, w) |> Map.put(:h, h)
-
-    ~H"""
-    <div :if={@locations == []} class="h-40 flex items-center justify-center text-sm text-gray-400">
-      No location data yet
-    </div>
-    <svg
-      :if={@locations != []}
-      viewBox={"0 0 #{@w} #{@h}"}
-      class="w-full rounded-lg"
-      style="background: #f0f4f8;"
-    >
-      <line
-        :for={lon <- [-120, -60, 0, 60, 120]}
-        x1={(lon + 180) / 360 * @w}
-        y1="0"
-        x2={(lon + 180) / 360 * @w}
-        y2={@h}
-        stroke="#dde3ea"
-        stroke-width="0.5"
-      />
-      <line
-        :for={lat <- [-60, -30, 0, 30, 60]}
-        x1="0"
-        y1={(90 - lat) / 180 * @h}
-        x2={@w}
-        y2={(90 - lat) / 180 * @h}
-        stroke="#dde3ea"
-        stroke-width="0.5"
-      />
-      <circle
-        :for={pt <- @points}
-        cx={pt.x}
-        cy={pt.y}
-        r={pt.r}
-        fill="#6366f1"
-        fill-opacity={pt.opacity}
-        stroke="#4f46e5"
-        stroke-width="0.5"
-        stroke-opacity={pt.opacity}
-      />
-    </svg>
-    """
-  end
-
   defp short_tz(tz) when is_binary(tz) do
     case String.split(tz, "/") do
       [_, city | _] -> String.replace(city, "_", " ")
@@ -840,6 +662,42 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   end
 
   defp short_tz(_), do: "Unknown"
+
+  defp timeseries_json(timeseries) do
+    Jason.encode!(%{
+      labels: Enum.map(timeseries, & &1["label"]),
+      pageviews: Enum.map(timeseries, &to_num(&1["pageviews"])),
+      visitors: Enum.map(timeseries, &to_num(&1["visitors"]))
+    })
+  end
+
+  defp locations_json(locations) do
+    points =
+      Enum.map(locations, fn loc ->
+        %{
+          lat: to_float(loc["ip_lat"]),
+          lon: to_float(loc["ip_lon"]),
+          visitors: to_num(loc["visitors"]),
+          label: location_label(loc)
+        }
+      end)
+
+    Jason.encode!(%{points: points})
+  end
+
+  defp timezones_json(timezones) do
+    Jason.encode!(%{
+      labels: Enum.map(timezones, &short_tz(&1["timezone"])),
+      values: Enum.map(timezones, &to_num(&1["visitors"]))
+    })
+  end
+
+  defp location_label(loc) do
+    city = loc["ip_city"] || ""
+    region = loc["ip_region_name"] || ""
+    country = loc["ip_country"] || ""
+    [city, region, country] |> Enum.reject(&(&1 == "")) |> Enum.join(", ")
+  end
 
   defp region_display(row) do
     region = row["ip_region_name"] || ""

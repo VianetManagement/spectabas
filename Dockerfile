@@ -24,6 +24,9 @@ COPY assets assets
 COPY priv priv
 COPY rel rel
 
+# Install JS dependencies (Chart.js etc)
+RUN cd assets && npm install --production
+
 # Download GeoIP databases (DB-IP free, updated monthly)
 # Cache bust: 2026-03-27b
 RUN mkdir -p priv/geoip && \
