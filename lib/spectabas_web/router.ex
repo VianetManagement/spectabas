@@ -33,6 +33,7 @@ defmodule SpectabasWeb.Router do
   # Health check — no auth
   scope "/", SpectabasWeb do
     get "/health", HealthController, :show
+    get "/health/diag", HealthController, :diag
   end
 
   # Collect endpoint — CORS, rate-limited, no CSRF

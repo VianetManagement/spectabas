@@ -248,16 +248,23 @@ defmodule SpectabasWeb.CollectController do
   end
 
   defp allowed_domains(site) do
-    base = [site.domain]
+    # Always allow: the analytics subdomain itself + its parent domain
+    parent = parent_domain(site.domain)
+    base = [site.domain | if(parent, do: [parent, "www.#{parent}"], else: [])]
 
-    cross =
-      if site.cross_domain_tracking do
-        site.cross_domain_sites || []
-      else
-        []
-      end
+    cross = site.cross_domain_sites || []
 
     base ++ cross
+  end
+
+  defp parent_domain(domain) do
+    parts = String.split(domain, ".")
+
+    if length(parts) > 2 do
+      parts |> Enum.drop(1) |> Enum.join(".")
+    else
+      nil
+    end
   end
 
   defp extract_host(url) when is_binary(url) and url != "" do
