@@ -359,8 +359,8 @@ defmodule Spectabas.Analytics do
       sum(pageviews) AS pageviews,
       sum(visitors) AS unique_visitors,
       sum(sessions) AS sessions,
-      if(sum(sessions) > 0, round(sum(bounces) / sum(sessions) * 100, 1), 0) AS bounce_rate,
-      if(sum(sessions) > 0, round(sum(total_duration) / sum(sessions), 0), 0) AS avg_duration
+      if(sum(sessions) > 0, round(toFloat64(sum(bounces)) / toFloat64(sum(sessions)) * 100, 1), 0) AS bounce_rate,
+      if(sum(sessions) > 0, round(toFloat64(sum(total_duration)) / toFloat64(sum(sessions)), 0), 0) AS avg_duration
     FROM daily_stats
     WHERE site_id = #{ClickHouse.param(site.id)}
       AND date >= #{ClickHouse.param(format_date(date_range.from))}
