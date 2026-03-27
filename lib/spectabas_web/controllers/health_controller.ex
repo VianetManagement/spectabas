@@ -22,7 +22,8 @@ defmodule SpectabasWeb.HealthController do
       clickhouse_ping: test_clickhouse_ping(),
       clickhouse_tables: test_clickhouse_tables(),
       clickhouse_events_count: test_clickhouse_count(),
-      sites: test_sites()
+      sites: test_sites(),
+      write_test: test_write()
     }
 
     json(conn, results)
@@ -56,6 +57,64 @@ defmodule SpectabasWeb.HealthController do
         {:ok, [%{"c" => c}]} -> c
         {:ok, _} -> 0
         {:error, e} -> "error: #{inspect(e) |> String.slice(0, 200)}"
+      end
+    else
+      "not_started"
+    end
+  end
+
+  defp test_write do
+    if Process.whereis(Spectabas.ClickHouse) do
+      row = %{
+        "site_id" => 0,
+        "visitor_id" => "diag_test",
+        "session_id" => "diag_test",
+        "event_type" => "diag",
+        "event_name" => "",
+        "url_path" => "/diag",
+        "url_host" => "test",
+        "referrer_domain" => "",
+        "referrer_url" => "",
+        "utm_source" => "",
+        "utm_medium" => "",
+        "utm_campaign" => "",
+        "utm_term" => "",
+        "utm_content" => "",
+        "device_type" => "",
+        "browser" => "",
+        "browser_version" => "",
+        "os" => "",
+        "os_version" => "",
+        "screen_width" => 0,
+        "screen_height" => 0,
+        "duration_s" => 0,
+        "ip_address" => "",
+        "ip_country" => "",
+        "ip_country_name" => "",
+        "ip_continent" => "",
+        "ip_continent_name" => "",
+        "ip_region_code" => "",
+        "ip_region_name" => "",
+        "ip_city" => "",
+        "ip_postal_code" => "",
+        "ip_lat" => 0,
+        "ip_lon" => 0,
+        "ip_accuracy_radius" => 0,
+        "ip_timezone" => "",
+        "ip_asn" => 0,
+        "ip_asn_org" => "",
+        "ip_org" => "",
+        "ip_is_datacenter" => 0,
+        "ip_is_vpn" => 0,
+        "ip_is_tor" => 0,
+        "ip_is_bot" => 0,
+        "ip_gdpr_anonymized" => 0,
+        "properties" => "{}"
+      }
+
+      case Spectabas.ClickHouse.insert("events", [row]) do
+        :ok -> "ok"
+        {:error, e} -> "error: #{String.slice(to_string(e), 0, 300)}"
       end
     else
       "not_started"
