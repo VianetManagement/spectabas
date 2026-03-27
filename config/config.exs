@@ -49,7 +49,14 @@ config :spectabas, :rate_limits,
 config :spectabas, Oban,
   repo: Spectabas.Repo,
   queues: [default: 10, mailer: 5, reports: 3, exports: 2, maintenance: 2],
-  plugins: [Oban.Plugins.Pruner]
+  plugins: [
+    Oban.Plugins.Pruner,
+    {Oban.Plugins.Cron,
+     crontab: [
+       # 1st of each month at 06:00 UTC — refresh GeoIP databases
+       {"0 6 1 * *", Spectabas.Workers.GeoIPRefresh}
+     ]}
+  ]
 
 config :spectabas, Spectabas.Mailer, adapter: Swoosh.Adapters.Local
 

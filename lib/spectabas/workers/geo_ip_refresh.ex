@@ -33,9 +33,13 @@ defmodule Spectabas.Workers.GeoIPRefresh do
          :ok <- download_and_decompress(asn_url, asn_path) do
       Logger.info("[GeoIPRefresh] Successfully updated GeoIP databases for #{year}-#{month}")
 
+      # Reload Geolix with the new files
+      Geolix.load_database(%{id: :city, adapter: Geolix.Adapter.MMDB2, source: city_path})
+      Geolix.load_database(%{id: :asn, adapter: Geolix.Adapter.MMDB2, source: asn_path})
+
       # Clear the IP cache so new lookups use fresh data
       if Process.whereis(Spectabas.IPEnricher.IPCache) do
-        send(Spectabas.IPEnricher.IPCache, :clear)
+        Spectabas.IPEnricher.IPCache.clear()
       end
 
       :ok
