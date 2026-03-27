@@ -298,7 +298,16 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
           </div>
 
           <div class="border-t border-gray-200 pt-6">
-            <h3 class="text-base font-medium text-gray-900 mb-4">Cross-Domain Tracking</h3>
+            <h3 class="text-base font-medium text-gray-900 mb-4">
+              Allowed Domains &amp; Cross-Domain Tracking
+            </h3>
+            <p class="text-sm text-gray-500 mb-4">
+              The parent domain of your analytics subdomain (e.g.
+              <code class="bg-gray-100 px-1 rounded">dogbreederlicensing.org</code>
+              and <code class="bg-gray-100 px-1 rounded">www.dogbreederlicensing.org</code>) is automatically allowed to send analytics data.
+              Add additional domains below if you have other sites that should also be allowed to send data to this analytics endpoint.
+              Enable cross-domain tracking to share visitor sessions across these domains.
+            </p>
             <div class="space-y-4">
               <div class="flex items-center gap-3">
                 <input type="hidden" name="site[cross_domain_tracking]" value="false" />
@@ -312,19 +321,27 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                   }
                   class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                 />
-                <label class="text-sm text-gray-700">Enable cross-domain tracking</label>
+                <label class="text-sm text-gray-700">
+                  Enable cross-domain tracking (share sessions across domains)
+                </label>
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700">
-                  Allowed Domains (comma-separated)
+                  Additional Allowed Domains (comma-separated)
                 </label>
                 <input
                   type="text"
                   name="site[cross_domain_sites_text]"
                   value={Enum.join(@site.cross_domain_sites, ", ")}
                   class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
-                  placeholder="other-site.com, app.example.com"
+                  placeholder="app.example.com, shop.example.com"
                 />
+                <p class="mt-1.5 text-xs text-gray-500">
+                  Only needed for domains beyond the parent domain. For example, if your analytics subdomain is <code class="bg-gray-100 px-1 rounded">b.example.com</code>, then
+                  <code class="bg-gray-100 px-1 rounded">example.com</code>
+                  and <code class="bg-gray-100 px-1 rounded">www.example.com</code>
+                  are already allowed automatically.
+                </p>
               </div>
             </div>
           </div>
