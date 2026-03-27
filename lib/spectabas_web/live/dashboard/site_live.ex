@@ -172,7 +172,8 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     top_pages = safe_query(fn -> Analytics.top_pages(site, user, date_range) end, 5)
     top_sources = safe_query(fn -> Analytics.top_sources(site, user, date_range) end, 5)
     top_regions = safe_query(fn -> Analytics.top_regions(site, user, date_range) end, 5)
-    top_devices = safe_query(fn -> Analytics.top_devices(site, user, date_range) end, 5)
+    top_browsers = safe_query(fn -> Analytics.top_browsers(site, user, date_range) end, 5)
+    top_os = safe_query(fn -> Analytics.top_os(site, user, date_range) end, 5)
     entry_pages = safe_query(fn -> Analytics.entry_pages(site, user, date_range) end, 5)
 
     live_visitors =
@@ -189,7 +190,8 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     |> assign(:top_pages, top_pages)
     |> assign(:top_sources, top_sources)
     |> assign(:top_regions, top_regions)
-    |> assign(:top_devices, top_devices)
+    |> assign(:top_browsers, top_browsers)
+    |> assign(:top_os, top_os)
     |> assign(:entry_pages, entry_pages)
   end
 
@@ -430,16 +432,31 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         </.data_card>
 
         <.data_card
-          title="Top Devices"
+          title="Top Browsers"
           link={~p"/dashboard/sites/#{@site.id}/devices"}
-          empty={@top_devices == []}
+          empty={@top_browsers == []}
         >
-          <div :for={row <- @top_devices} class="flex items-center justify-between py-2">
+          <div :for={row <- @top_browsers} class="flex items-center justify-between py-2">
             <span class="text-sm text-gray-800 truncate mr-4">
-              {device_display(row)}
+              {row["name"] || "Unknown"}
             </span>
             <span class="text-sm font-medium text-gray-600 tabular-nums whitespace-nowrap">
-              {format_number(row["pageviews"])}
+              {format_number(row["unique_visitors"])}
+            </span>
+          </div>
+        </.data_card>
+
+        <.data_card
+          title="Top OS"
+          link={~p"/dashboard/sites/#{@site.id}/devices"}
+          empty={@top_os == []}
+        >
+          <div :for={row <- @top_os} class="flex items-center justify-between py-2">
+            <span class="text-sm text-gray-800 truncate mr-4">
+              {row["name"] || "Unknown"}
+            </span>
+            <span class="text-sm font-medium text-gray-600 tabular-nums whitespace-nowrap">
+              {format_number(row["unique_visitors"])}
             </span>
           </div>
         </.data_card>
@@ -533,7 +550,8 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
       :if={@timeseries != []}
       viewBox={"0 0 #{@w} #{@h + 24}"}
       class="w-full h-44"
-      preserveAspectRatio="xMidYMid meet"
+      preserveAspectRatio="none"
+      id={"chart-#{length(@timeseries)}-#{@timeseries |> Enum.map(& &1["pageviews"]) |> Enum.sum()}"}
     >
       <%!-- Pageviews area --%>
       <path d={@pv_area} fill="rgb(99 102 241 / 0.1)" />
@@ -706,14 +724,5 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
       region != "" -> region
       true -> "Unknown"
     end
-  end
-
-  defp device_display(row) do
-    browser = row["browser"] || ""
-    os = row["os"] || ""
-    device = row["device_type"] || ""
-
-    parts = [browser, os, device] |> Enum.reject(&(&1 == "")) |> Enum.take(2)
-    if parts == [], do: "Unknown", else: Enum.join(parts, " / ")
   end
 end

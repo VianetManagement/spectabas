@@ -173,7 +173,7 @@ defmodule SpectabasWeb.HealthController do
     # Step 1: Find IPs needing enrichment
     {:ok, rows} =
       ClickHouse.query(
-        "SELECT DISTINCT ip_address FROM events WHERE ip_country = '' AND ip_address != ''"
+        "SELECT DISTINCT ip_address FROM events WHERE ip_region_name = '' AND ip_address != ''"
       )
 
     ips = Enum.map(rows, & &1["ip_address"])
@@ -259,7 +259,7 @@ defmodule SpectabasWeb.HealthController do
             ip_asn_org = #{ClickHouse.param(asn_org)},
             ip_org = #{ClickHouse.param(if(asn_num > 0, do: "AS#{asn_num} #{asn_org}", else: ""))}
           WHERE ip_address = #{ClickHouse.param(ip_str)}
-            AND ip_country = ''
+            AND ip_region_name = ''
           """
 
           result = ClickHouse.execute(sql)

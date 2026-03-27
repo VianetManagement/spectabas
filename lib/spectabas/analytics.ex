@@ -370,6 +370,58 @@ defmodule Spectabas.Analytics do
   end
 
   @doc """
+  Top browsers by visitors (dashboard summary).
+  """
+  def top_browsers(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        browser AS name,
+        count() AS pageviews,
+        uniq(visitor_id) AS unique_visitors
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND browser != ''
+      GROUP BY browser
+      ORDER BY unique_visitors DESC
+      LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
+  Top operating systems by visitors (dashboard summary).
+  """
+  def top_os(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        os AS name,
+        count() AS pageviews,
+        uniq(visitor_id) AS unique_visitors
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND os != ''
+      GROUP BY os
+      ORDER BY unique_visitors DESC
+      LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
   Network stats: top ASNs, orgs, datacenter/VPN/Tor/bot percentages.
   """
   def network_stats(%Site{} = site, %User{} = user, date_range) do
