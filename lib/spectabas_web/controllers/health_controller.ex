@@ -362,17 +362,16 @@ defmodule SpectabasWeb.HealthController do
     {:ok, ip} = :inet.parse_address(String.to_charlist(ip_str))
     city_result = Geolix.lookup(ip, where: :city)
 
+    raw_keys = if is_map(city_result), do: Map.keys(city_result) |> Enum.map(&to_string/1), else: ["not_a_map"]
+    raw_city = if is_map(city_result), do: inspect(city_result[:city]) |> String.slice(0, 200), else: "nil"
+    raw_subs = if is_map(city_result), do: inspect(city_result[:subdivisions]) |> String.slice(0, 200), else: "nil"
+
     %{
+      raw_keys: raw_keys,
+      raw_city: raw_city,
+      raw_subdivisions: raw_subs,
       country: case city_result do
         %{country: %{iso_code: c}} -> c
-        _ -> "none"
-      end,
-      region: case city_result do
-        %{subdivisions: [%{names: %{"en" => r}} | _]} -> r
-        _ -> "none"
-      end,
-      city: case city_result do
-        %{city: %{names: %{"en" => c}}} -> c
         _ -> "none"
       end,
       enricher_result: case Spectabas.IPEnricher.enrich(ip_str, :off) do

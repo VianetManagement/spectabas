@@ -25,11 +25,15 @@ COPY priv priv
 COPY rel rel
 
 # Download GeoIP databases (DB-IP free, updated monthly)
+# Cache bust: 2026-03-27b
 RUN mkdir -p priv/geoip && \
     YEAR=$(date +%Y) && MONTH=$(date +%m) && \
-    curl -fsSL "https://download.db-ip.com/free/dbip-city-lite-${YEAR}-${MONTH}.mmdb.gz" | gunzip > priv/geoip/dbip-city-lite.mmdb && \
-    curl -fsSL "https://download.db-ip.com/free/dbip-asn-lite-${YEAR}-${MONTH}.mmdb.gz" | gunzip > priv/geoip/dbip-asn-lite.mmdb && \
-    echo "GeoIP databases downloaded: $(ls -lh priv/geoip/)"
+    curl -fsSL -o /tmp/city.mmdb.gz "https://download.db-ip.com/free/dbip-city-lite-${YEAR}-${MONTH}.mmdb.gz" && \
+    curl -fsSL -o /tmp/asn.mmdb.gz "https://download.db-ip.com/free/dbip-asn-lite-${YEAR}-${MONTH}.mmdb.gz" && \
+    gunzip -c /tmp/city.mmdb.gz > priv/geoip/dbip-city-lite.mmdb && \
+    gunzip -c /tmp/asn.mmdb.gz > priv/geoip/dbip-asn-lite.mmdb && \
+    echo "GeoIP city: $(wc -c < priv/geoip/dbip-city-lite.mmdb) bytes" && \
+    echo "GeoIP asn: $(wc -c < priv/geoip/dbip-asn-lite.mmdb) bytes"
 
 RUN mix compile && \
     mix ua_inspector.download --force && \
