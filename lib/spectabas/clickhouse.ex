@@ -188,7 +188,7 @@ defmodule Spectabas.ClickHouse do
           # Extract a short name for logging
           name = trimmed |> String.split("\n") |> hd() |> String.slice(0, 60)
 
-          case Req.post(admin_req, params: [query: trimmed]) do
+          case Req.post(admin_req, params: [query: trimmed], body: "") do
             {:ok, %{status: 200}} ->
               Logger.info("[CH:init] OK: #{name}")
               :ok
@@ -215,7 +215,7 @@ defmodule Spectabas.ClickHouse do
   end
 
   defp wait_for_clickhouse(req, retries) when retries > 0 do
-    case Req.post(req, params: [query: "SELECT 1"]) do
+    case Req.post(req, params: [query: "SELECT 1"], body: "") do
       {:ok, %{status: 200}} ->
         Logger.info("[CH:init] Connected to ClickHouse")
         true
