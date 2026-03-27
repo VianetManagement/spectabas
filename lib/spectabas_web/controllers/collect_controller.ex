@@ -9,20 +9,34 @@ defmodule SpectabasWeb.CollectController do
   @optout_max_age 63_072_000
 
   def create(conn, params) do
+    require Logger
+
     with :ok <- check_content_length(conn),
          {:ok, payload} <- CollectPayload.validate(params),
          {:ok, site} <- resolve_site(conn, params),
          :ok <- check_origin(conn, site),
          false <- Sites.ip_blocked?(site, client_ip(conn)) do
       conn = assign(conn, :site, site)
-      {:ok, event} = Ingest.process(payload, conn)
-      IngestBuffer.push(event)
+
+      try do
+        {:ok, event} = Ingest.process(payload, conn)
+        IngestBuffer.push(event)
+      rescue
+        e ->
+          Logger.error("[Collect] Ingest.process crashed: #{Exception.message(e)}")
+      end
+
       send_resp(conn, 204, "")
     else
       {:error, :site_not_found} ->
+        Logger.warning(
+          "[Collect] Site not found for params: #{inspect(Map.take(params, ["s", "site"]))}"
+        )
+
         send_resp(conn, 204, "")
 
       {:error, :origin_not_allowed} ->
+        Logger.warning("[Collect] Origin not allowed")
         send_resp(conn, 204, "")
 
       {:error, changeset} ->
