@@ -11,25 +11,27 @@ defmodule SpectabasWeb.CollectController do
   def create(conn, params) do
     with :ok <- check_content_length(conn),
          {:ok, payload} <- CollectPayload.validate(params),
-         site when not is_nil(site) <- conn.assigns[:site],
+         {:ok, site} <- resolve_site(conn, params),
+         :ok <- check_origin(conn, site),
          false <- Sites.ip_blocked?(site, client_ip(conn)) do
+      conn = assign(conn, :site, site)
       {:ok, event} = Ingest.process(payload, conn)
       IngestBuffer.push(event)
       send_resp(conn, 204, "")
     else
+      {:error, :site_not_found} ->
+        send_resp(conn, 204, "")
+
+      {:error, :origin_not_allowed} ->
+        send_resp(conn, 204, "")
+
       {:error, changeset} ->
         conn
         |> put_status(400)
         |> json(%{error: format_errors(changeset)})
 
       true ->
-        # IP is blocked — silently drop
         send_resp(conn, 204, "")
-
-      nil ->
-        conn
-        |> put_status(404)
-        |> json(%{error: "site not found"})
 
       :content_too_large ->
         conn
@@ -39,7 +41,11 @@ defmodule SpectabasWeb.CollectController do
   end
 
   def identify(conn, params) do
-    site = conn.assigns[:site]
+    site =
+      case resolve_site(conn, params) do
+        {:ok, s} -> s
+        _ -> nil
+      end
 
     if site do
       visitor_id = params["vid"]
@@ -57,7 +63,11 @@ defmodule SpectabasWeb.CollectController do
   end
 
   def cross_domain(conn, params) do
-    site = conn.assigns[:site]
+    site =
+      case resolve_site(conn, params) do
+        {:ok, s} -> s
+        _ -> nil
+      end
 
     if site do
       destination = params["destination"] || ""
@@ -170,6 +180,58 @@ defmodule SpectabasWeb.CollectController do
       false
     end
   end
+
+  defp resolve_site(conn, params) do
+    domain = params["site"] || conn.host
+
+    case Spectabas.Sites.get_site_by_domain(domain) do
+      %Spectabas.Sites.Site{} = site -> {:ok, site}
+      nil -> {:error, :site_not_found}
+    end
+  end
+
+  defp check_origin(conn, site) do
+    origin = get_req_header(conn, "origin") |> List.first() || ""
+    referer = get_req_header(conn, "referer") |> List.first() || ""
+
+    # Allow if no origin (server-side, curl, etc)
+    if origin == "" and referer == "" do
+      :ok
+    else
+      origin_host = extract_host(origin)
+      referer_host = extract_host(referer)
+
+      allowed = allowed_domains(site)
+
+      if origin_host in allowed or referer_host in allowed or origin_host == "" do
+        :ok
+      else
+        {:error, :origin_not_allowed}
+      end
+    end
+  end
+
+  defp allowed_domains(site) do
+    base = [site.domain]
+
+    cross =
+      if site.cross_domain_tracking do
+        site.cross_domain_sites || []
+      else
+        []
+      end
+
+    base ++ cross
+  end
+
+  defp extract_host(url) when is_binary(url) and url != "" do
+    case URI.parse(url) do
+      %{host: host} when is_binary(host) -> host
+      _ -> ""
+    end
+  end
+
+  defp extract_host(_), do: ""
 
   defp format_errors(%Ecto.Changeset{} = changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
