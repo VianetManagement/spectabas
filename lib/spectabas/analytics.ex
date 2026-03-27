@@ -20,15 +20,15 @@ defmodule Spectabas.Analytics do
          :ok <- check_clickhouse() do
       sql = """
       SELECT
-        sum(pageviews) AS pageviews,
-        sum(visitors) AS unique_visitors,
-        sum(sessions) AS total_sessions,
-        if(sum(sessions) > 0, round(toFloat64(sum(bounces)) / toFloat64(sum(sessions)) * 100, 1), 0) AS bounce_rate,
-        if(sum(sessions) > 0, round(toFloat64(sum(total_duration)) / toFloat64(sum(sessions)), 0), 0) AS avg_duration
-      FROM daily_stats
+        countIf(event_type = 'pageview') AS pageviews,
+        uniqExact(visitor_id) AS unique_visitors,
+        uniqExact(session_id) AS total_sessions,
+        0 AS bounce_rate,
+        0 AS avg_duration
+      FROM events
       WHERE site_id = #{ClickHouse.param(site.id)}
-        AND date >= #{ClickHouse.param(format_date(date_range.from))}
-        AND date <= #{ClickHouse.param(format_date(date_range.to))}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
       """
 
       case ClickHouse.query(sql) do
@@ -336,12 +336,6 @@ defmodule Spectabas.Analytics do
     end
   end
 
-  defp format_date(%DateTime{} = dt) do
-    Calendar.strftime(dt, "%Y-%m-%d")
-  end
-
-  defp format_date(date_string) when is_binary(date_string), do: date_string
-
   defp format_datetime(%DateTime{} = dt) do
     Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S")
   end
@@ -356,15 +350,15 @@ defmodule Spectabas.Analytics do
 
     sql = """
     SELECT
-      sum(pageviews) AS pageviews,
-      sum(visitors) AS unique_visitors,
-      sum(sessions) AS sessions,
-      if(sum(sessions) > 0, round(toFloat64(sum(bounces)) / toFloat64(sum(sessions)) * 100, 1), 0) AS bounce_rate,
-      if(sum(sessions) > 0, round(toFloat64(sum(total_duration)) / toFloat64(sum(sessions)), 0), 0) AS avg_duration
-    FROM daily_stats
+      countIf(event_type = 'pageview') AS pageviews,
+      uniqExact(visitor_id) AS unique_visitors,
+      uniqExact(session_id) AS total_sessions,
+      0 AS bounce_rate,
+      0 AS avg_duration
+    FROM events
     WHERE site_id = #{ClickHouse.param(site.id)}
-      AND date >= #{ClickHouse.param(format_date(date_range.from))}
-      AND date <= #{ClickHouse.param(format_date(date_range.to))}
+      AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+      AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
     """
 
     case ClickHouse.query(sql) do
