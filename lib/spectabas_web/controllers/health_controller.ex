@@ -24,6 +24,7 @@ defmodule SpectabasWeb.HealthController do
       clickhouse_events_count: test_clickhouse_count(),
       clickhouse_events_by_site: test_events_by_site(),
       clickhouse_sample_event: test_sample_event(),
+      top_pages_query: test_top_pages(),
       sites: test_sites(),
       write_test: test_write()
     }
@@ -59,6 +60,19 @@ defmodule SpectabasWeb.HealthController do
         {:ok, [%{"c" => c}]} -> c
         {:ok, _} -> 0
         {:error, e} -> "error: #{inspect(e) |> String.slice(0, 200)}"
+      end
+    else
+      "not_started"
+    end
+  end
+
+  defp test_top_pages do
+    if Process.whereis(Spectabas.ClickHouse) do
+      case Spectabas.ClickHouse.query(
+             "SELECT url_path, count() AS views FROM events WHERE site_id = 1 AND event_type = 'pageview' GROUP BY url_path ORDER BY views DESC LIMIT 5"
+           ) do
+        {:ok, rows} -> rows
+        {:error, e} -> "error: #{String.slice(to_string(e), 0, 200)}"
       end
     else
       "not_started"
