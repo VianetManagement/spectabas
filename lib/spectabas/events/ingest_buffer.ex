@@ -93,14 +93,18 @@ defmodule Spectabas.Events.IngestBuffer do
 
   defp do_flush(events) do
     rows = Enum.map(events, &EventSchema.to_row/1)
+    Logger.info("[IngestBuffer] Flushing #{length(rows)} events")
 
     case ClickHouse.insert("events", rows) do
       :ok ->
         broadcast_events(events)
-        Logger.debug("[IngestBuffer] Flushed #{length(rows)} events to ClickHouse")
+        Logger.info("[IngestBuffer] Flushed #{length(rows)} events OK")
 
       {:error, reason} ->
-        Logger.error("[IngestBuffer] ClickHouse insert failed: #{inspect(reason)}")
+        Logger.error(
+          "[IngestBuffer] ClickHouse insert FAILED: #{inspect(String.slice(to_string(reason), 0, 500))}"
+        )
+
         DeadLetter.enqueue(rows, reason)
     end
   end
