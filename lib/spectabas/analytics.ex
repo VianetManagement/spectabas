@@ -88,15 +88,16 @@ defmodule Spectabas.Analytics do
     end
   end
 
-  defp generate_buckets(from, _to, :day) do
-    # Hourly buckets
-    from_date = DateTime.to_date(from)
+  defp generate_buckets(from, to, :day) do
+    # Hourly buckets spanning the full 24h range
+    from_hour = from |> DateTime.truncate(:second) |> Map.put(:minute, 0) |> Map.put(:second, 0)
+    hours = max(div(DateTime.diff(to, from, :second), 3600), 1)
 
-    0..23
+    0..hours
     |> Enum.map(fn h ->
-      hour_str = String.pad_leading("#{h}", 2, "0")
-      bucket = "#{Date.to_iso8601(from_date)} #{hour_str}:00:00"
-      label = "#{hour_str}:00"
+      dt = DateTime.add(from_hour, h, :hour)
+      bucket = Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S")
+      label = Calendar.strftime(dt, "%H:%M")
       {bucket, label}
     end)
   end
