@@ -24,7 +24,8 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
        |> assign(:form, to_form(changeset))
        |> assign(:snippet, Sites.snippet_code(site))
        |> assign(:copied, false)
-       |> assign(:render_domain_status, check_render_domain(site.domain))}
+       |> assign(:render_domain_status, check_render_domain(site.domain))
+       |> assign(:example_html, example_html(site))}
     end
   end
 
@@ -197,11 +198,14 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
       <%!-- Tracking Snippet --%>
       <div class="bg-white rounded-lg shadow p-6 mb-8">
         <h2 class="text-lg font-semibold text-gray-900 mb-4">Tracking Snippet</h2>
-        <p class="text-sm text-gray-500 mb-4">
-          Add this snippet to the <code class="bg-gray-100 px-1 rounded">&lt;head&gt;</code>
-          of your website.
+        <p class="text-sm text-gray-600 mb-2">
+          Copy and paste this snippet into the
+          <code class="bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">&lt;head&gt;</code>
+          section of every page you want to track. It should go before the closing
+          <code class="bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">&lt;/head&gt;</code>
+          tag.
         </p>
-        <div class="relative">
+        <div class="relative mt-4">
           <pre class="bg-gray-900 text-gray-100 rounded-lg p-4 text-sm overflow-x-auto"><code><%= @snippet %></code></pre>
           <button
             phx-click="copy_snippet"
@@ -212,6 +216,14 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
           >
             {if @copied, do: "Copied!", else: "Copy"}
           </button>
+        </div>
+        <div class="mt-4 bg-gray-50 rounded-lg p-4 text-sm text-gray-600">
+          <p class="font-medium text-gray-700 mb-2">Example placement:</p>
+          <pre class="text-xs font-mono text-gray-500 overflow-x-auto"><code>{@example_html}</code></pre>
+          <p class="mt-3 text-xs text-gray-500">
+            The script loads asynchronously and won't slow down your page.
+            If you use a CMS or site builder, look for a "Custom HTML" or "Header Scripts" setting.
+          </p>
         </div>
       </div>
 
@@ -397,6 +409,26 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
         </.form>
       </div>
     </div>
+    """
+  end
+
+  defp example_html(site) do
+    snippet = Sites.snippet_code(site)
+
+    """
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Your Website</title>
+
+        <!-- Spectabas Analytics -->
+        #{snippet}
+      </head>
+      <body>
+        ...
+      </body>
+    </html>\
     """
   end
 
