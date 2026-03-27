@@ -303,6 +303,14 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                   placeholder=".example.com"
                   class="mt-1 block w-full md:w-1/2 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
                 />
+                <p class="mt-1.5 text-xs text-gray-500">
+                  Set this to share cookies across subdomains. Use a leading dot (e.g. <code class="bg-gray-100 px-1 rounded">.example.com</code>)
+                  to match all subdomains like
+                  <code class="bg-gray-100 px-1 rounded">www.example.com</code>
+                  and <code class="bg-gray-100 px-1 rounded">app.example.com</code>.
+                  Wildcards (<code class="bg-gray-100 px-1 rounded">*.example.com</code>) are not supported — use the dot prefix instead.
+                  Leave blank to restrict cookies to the exact analytics subdomain.
+                </p>
               </div>
             </div>
           </div>
