@@ -8,22 +8,28 @@ defmodule SpectabasWeb.Dashboard.IndexLive do
     user = socket.assigns.current_scope.user
     sites = Accounts.accessible_sites(user)
 
-    pageview_counts =
+    site_stats =
       Enum.reduce(sites, %{}, fn site, acc ->
-        count =
+        stats =
           case Analytics.overview_stats(site, user, :today) do
-            {:ok, %{pageviews: pv}} -> pv
-            _ -> 0
+            {:ok, s} ->
+              %{
+                pageviews: to_num(s["pageviews"]),
+                visitors: to_num(s["unique_visitors"])
+              }
+
+            _ ->
+              %{pageviews: 0, visitors: 0}
           end
 
-        Map.put(acc, site.id, count)
+        Map.put(acc, site.id, stats)
       end)
 
     {:ok,
      socket
      |> assign(:page_title, "Dashboard")
      |> assign(:sites, sites)
-     |> assign(:pageview_counts, pageview_counts)}
+     |> assign(:site_stats, site_stats)}
   end
 
   @impl true
@@ -47,21 +53,49 @@ defmodule SpectabasWeb.Dashboard.IndexLive do
         >
           <div class="flex items-center justify-between mb-4">
             <h2 class="text-lg font-semibold text-gray-900 truncate">{site.name}</h2>
-            <span :if={site.dns_verified} class="text-green-500 text-sm font-medium">Verified</span>
-            <span :if={!site.dns_verified} class="text-yellow-500 text-sm font-medium">Pending</span>
+            <span :if={site.dns_verified} class="text-green-500 text-sm font-medium">
+              Verified
+            </span>
+            <span :if={!site.dns_verified} class="text-yellow-500 text-sm font-medium">
+              Pending
+            </span>
           </div>
           <p class="text-sm text-gray-500 truncate mb-4">{site.domain}</p>
-          <div class="flex items-baseline gap-2">
-            <span class="text-3xl font-bold text-indigo-600">
-              {Map.get(@pageview_counts, site.id, 0) |> format_number()}
-            </span>
-            <span class="text-sm text-gray-500">pageviews today</span>
+          <div class="flex items-center gap-6">
+            <div>
+              <span class="text-3xl font-bold text-indigo-600">
+                {format_number(get_stat(@site_stats, site.id, :pageviews))}
+              </span>
+              <span class="text-sm text-gray-500 ml-1">pageviews</span>
+            </div>
+            <div>
+              <span class="text-3xl font-bold text-emerald-600">
+                {format_number(get_stat(@site_stats, site.id, :visitors))}
+              </span>
+              <span class="text-sm text-gray-500 ml-1">visitors</span>
+            </div>
           </div>
+          <p class="text-xs text-gray-400 mt-2">today</p>
         </.link>
       </div>
     </div>
     """
   end
+
+  defp get_stat(stats, site_id, key) do
+    stats |> Map.get(site_id, %{}) |> Map.get(key, 0)
+  end
+
+  defp to_num(n) when is_integer(n), do: n
+
+  defp to_num(n) when is_binary(n) do
+    case Integer.parse(n) do
+      {i, _} -> i
+      :error -> 0
+    end
+  end
+
+  defp to_num(_), do: 0
 
   defp format_number(n) when n >= 1_000_000, do: "#{Float.round(n / 1_000_000, 1)}M"
   defp format_number(n) when n >= 1_000, do: "#{Float.round(n / 1_000, 1)}K"

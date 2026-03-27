@@ -746,6 +746,7 @@ defmodule Spectabas.Analytics do
 
     from =
       case period do
+        :today -> DateTime.new!(Date.utc_today(), ~T[00:00:00])
         :day -> DateTime.add(now, -24, :hour)
         :week -> DateTime.add(now, -7, :day)
         :month -> DateTime.add(now, -30, :day)
