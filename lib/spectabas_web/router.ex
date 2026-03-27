@@ -39,12 +39,12 @@ defmodule SpectabasWeb.Router do
   scope "/c", SpectabasWeb do
     pipe_through :collect
 
-    post "/event", CollectController, :create
+    post "/e", CollectController, :create
     get "/p", CollectController, :pixel
-    post "/identify", CollectController, :identify
-    post "/xdomain", CollectController, :cross_domain
-    post "/optout", CollectController, :optout
-    options "/event", CollectController, :options
+    post "/i", CollectController, :identify
+    post "/x", CollectController, :cross_domain
+    post "/o", CollectController, :optout
+    options "/e", CollectController, :options
   end
 
   # Script serving
