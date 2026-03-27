@@ -1,6 +1,8 @@
 defmodule SpectabasWeb.Dashboard.SiteLive do
   use SpectabasWeb, :live_view
 
+  import SpectabasWeb.Dashboard.SegmentComponent
+
   alias Spectabas.{Accounts, Sites, Analytics}
 
   @refresh_interval_ms 60_000
@@ -33,6 +35,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
        |> assign(:date_to, today)
        |> assign(:compare, false)
        |> assign(:show_date_picker, false)
+       |> assign(:segment, [])
        |> assign(:live_visitors, 0)
        |> load_stats()}
     end
@@ -99,6 +102,28 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     end
   end
 
+  def handle_event(
+        "update_segment",
+        %{"action" => "add", "field" => f, "op" => op, "value" => v},
+        socket
+      )
+      when v != "" do
+    filter = %{"field" => f, "op" => op, "value" => v}
+    {:noreply, socket |> assign(:segment, socket.assigns.segment ++ [filter]) |> load_stats()}
+  end
+
+  def handle_event("update_segment", %{"action" => "remove", "index" => idx}, socket) do
+    idx = String.to_integer(idx)
+    segment = List.delete_at(socket.assigns.segment, idx)
+    {:noreply, socket |> assign(:segment, segment) |> load_stats()}
+  end
+
+  def handle_event("update_segment", %{"action" => "clear"}, socket) do
+    {:noreply, socket |> assign(:segment, []) |> load_stats()}
+  end
+
+  def handle_event("update_segment", _params, socket), do: {:noreply, socket}
+
   def handle_event("toggle_compare", _params, socket) do
     {:noreply,
      socket
@@ -111,8 +136,17 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   defp load_stats(socket) do
     require Logger
 
-    %{site: site, user: user, date_from: from, date_to: to, compare: compare, preset: preset} =
-      socket.assigns
+    %{
+      site: site,
+      user: user,
+      date_from: from,
+      date_to: to,
+      compare: compare,
+      preset: preset,
+      segment: segment
+    } = socket.assigns
+
+    seg_opts = [segment: segment]
 
     date_range = %{
       from: DateTime.new!(from, ~T[00:00:00]),
@@ -122,7 +156,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     period = preset_to_period(preset, from, to)
 
     stats =
-      case Analytics.overview_stats(site, user, date_range) do
+      case Analytics.overview_stats(site, user, date_range, seg_opts) do
         {:ok, s} ->
           %{
             pageviews: to_num(s["pageviews"]),
@@ -169,7 +203,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         _ -> []
       end
 
-    top_pages = safe_query(fn -> Analytics.top_pages(site, user, date_range) end, 5)
+    top_pages = safe_query(fn -> Analytics.top_pages(site, user, date_range, seg_opts) end, 5)
     top_sources = safe_query(fn -> Analytics.top_sources(site, user, date_range) end, 5)
     top_regions = safe_query(fn -> Analytics.top_regions(site, user, date_range) end, 5)
     top_browsers = safe_query(fn -> Analytics.top_browsers(site, user, date_range) end, 5)
@@ -365,6 +399,9 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           Compare
         </button>
       </div>
+
+      <%!-- Segment Filter --%>
+      <.segment_filter segment={@segment} />
 
       <%!-- Stat Cards with Comparison --%>
       <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">

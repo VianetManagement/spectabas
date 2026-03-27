@@ -1,0 +1,176 @@
+defmodule SpectabasWeb.Dashboard.VisitorLogLive do
+  use SpectabasWeb, :live_view
+
+  alias Spectabas.{Accounts, Sites, Analytics}
+
+  @impl true
+  def mount(%{"site_id" => site_id}, _session, socket) do
+    user = socket.assigns.current_scope.user
+    site = Sites.get_site!(site_id)
+
+    unless Accounts.can_access_site?(user, site) do
+      {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
+    else
+      {:ok,
+       socket
+       |> assign(:page_title, "Visitor Log - #{site.name}")
+       |> assign(:site, site)
+       |> assign(:user, user)
+       |> assign(:date_range, "7d")
+       |> assign(:page, 1)
+       |> load_data()}
+    end
+  end
+
+  @impl true
+  def handle_event("change_range", %{"range" => range}, socket) do
+    {:noreply, socket |> assign(:date_range, range) |> assign(:page, 1) |> load_data()}
+  end
+
+  def handle_event("next_page", _params, socket) do
+    {:noreply, socket |> assign(:page, socket.assigns.page + 1) |> load_data()}
+  end
+
+  def handle_event("prev_page", _params, socket) do
+    page = max(socket.assigns.page - 1, 1)
+    {:noreply, socket |> assign(:page, page) |> load_data()}
+  end
+
+  defp load_data(socket) do
+    %{site: site, user: user, date_range: range, page: page} = socket.assigns
+
+    visitors =
+      case Analytics.visitor_log(site, user, range_to_atom(range), page: page, per_page: 30) do
+        {:ok, rows} -> rows
+        _ -> []
+      end
+
+    assign(socket, :visitors, visitors)
+  end
+
+  defp range_to_atom("24h"), do: :day
+  defp range_to_atom("7d"), do: :week
+  defp range_to_atom("30d"), do: :month
+  defp range_to_atom(_), do: :week
+
+  @impl true
+  def render(assigns) do
+    ~H"""
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div class="flex items-center justify-between mb-8">
+        <div>
+          <.link
+            navigate={~p"/dashboard/sites/#{@site.id}"}
+            class="text-sm text-indigo-600 hover:text-indigo-800"
+          >
+            &larr; Back to {@site.name}
+          </.link>
+          <h1 class="text-2xl font-bold text-gray-900 mt-2">Visitor Log</h1>
+        </div>
+        <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">
+          <button
+            :for={r <- [{"24h", "24h"}, {"7d", "7 days"}, {"30d", "30 days"}]}
+            phx-click="change_range"
+            phx-value-range={elem(r, 0)}
+            class={[
+              "px-3 py-1.5 text-sm font-medium rounded-md",
+              if(@date_range == elem(r, 0),
+                do: "bg-white shadow text-gray-900",
+                else: "text-gray-600 hover:text-gray-900"
+              )
+            ]}
+          >
+            {elem(r, 1)}
+          </button>
+        </nav>
+      </div>
+
+      <div class="bg-white rounded-lg shadow overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Visitor</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pages</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                Duration
+              </th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                Location
+              </th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Device</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Entry</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200">
+            <tr :if={@visitors == []}>
+              <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                No visitors for this period.
+              </td>
+            </tr>
+            <tr :for={v <- @visitors} class="hover:bg-gray-50">
+              <td class="px-4 py-3 text-sm">
+                <.link
+                  navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{v["visitor_id"]}"}
+                  class="text-indigo-600 hover:text-indigo-800 font-mono text-xs"
+                >
+                  {String.slice(v["visitor_id"] || "", 0, 8)}...
+                </.link>
+              </td>
+              <td class="px-4 py-3 text-sm text-gray-900 tabular-nums">{v["pageviews"]}</td>
+              <td class="px-4 py-3 text-sm text-gray-500 tabular-nums">
+                {format_duration(v["duration"])}
+              </td>
+              <td class="px-4 py-3 text-sm text-gray-500">
+                {[v["city"], v["region"], v["country"]]
+                |> Enum.reject(&(&1 == "" || is_nil(&1)))
+                |> Enum.join(", ")}
+              </td>
+              <td class="px-4 py-3 text-sm text-gray-500">
+                {[v["browser"], v["os"]] |> Enum.reject(&(&1 == "" || is_nil(&1))) |> Enum.join(" / ")}
+              </td>
+              <td class="px-4 py-3 text-sm text-gray-500 truncate max-w-[120px]">
+                {v["referrer"] || "Direct"}
+              </td>
+              <td class="px-4 py-3 text-sm text-gray-500 font-mono truncate max-w-[150px]">
+                {v["entry_page"]}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="flex items-center justify-between mt-4">
+        <button
+          :if={@page > 1}
+          phx-click="prev_page"
+          class="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+        >
+          &larr; Previous
+        </button>
+        <span class="text-sm text-gray-500">Page {@page}</span>
+        <button
+          :if={length(@visitors) == 30}
+          phx-click="next_page"
+          class="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+        >
+          Next &rarr;
+        </button>
+      </div>
+    </div>
+    """
+  end
+
+  defp format_duration(s) when is_integer(s) and s > 0, do: "#{div(s, 60)}m #{rem(s, 60)}s"
+  defp format_duration(s) when is_binary(s), do: format_duration(to_int(s))
+  defp format_duration(_), do: "-"
+
+  defp to_int(s) when is_binary(s) do
+    case Integer.parse(s) do
+      {i, _} -> i
+      :error -> 0
+    end
+  end
+
+  defp to_int(n), do: n
+end

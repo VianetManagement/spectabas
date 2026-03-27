@@ -134,6 +134,11 @@ defmodule SpectabasWeb.Router do
       live "/sites/:site_id/geo", Dashboard.GeoLive, :index
       live "/sites/:site_id/entry-exit", Dashboard.EntryExitLive, :index
       live "/sites/:site_id/map", Dashboard.MapLive, :index
+      live "/sites/:site_id/visitor-log", Dashboard.VisitorLogLive, :index
+      live "/sites/:site_id/transitions", Dashboard.TransitionsLive, :index
+      live "/sites/:site_id/attribution", Dashboard.AttributionLive, :index
+      live "/sites/:site_id/search", Dashboard.SearchLive, :index
+      live "/sites/:site_id/cohort", Dashboard.CohortLive, :index
       live "/sites/:site_id/devices", Dashboard.DevicesLive, :index
       live "/sites/:site_id/network", Dashboard.NetworkLive, :index
       live "/sites/:site_id/campaigns", Dashboard.CampaignsLive, :index

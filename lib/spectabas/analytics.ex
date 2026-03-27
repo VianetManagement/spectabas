@@ -5,19 +5,24 @@ defmodule Spectabas.Analytics do
   """
 
   alias Spectabas.{Accounts, ClickHouse}
+  alias Spectabas.Analytics.Segment
   alias Spectabas.Sites.Site
   alias Spectabas.Accounts.User
 
   @doc """
   Overview stats: pageviews, unique_visitors, sessions, bounce_rate, avg_duration.
   """
-  def overview_stats(%Site{} = site, %User{} = user, date_range) when is_atom(date_range) do
-    overview_stats(site, user, period_to_date_range(date_range))
+  def overview_stats(site, user, date_range, opts \\ [])
+
+  def overview_stats(%Site{} = site, %User{} = user, date_range, opts) when is_atom(date_range) do
+    overview_stats(site, user, period_to_date_range(date_range), opts)
   end
 
-  def overview_stats(%Site{} = site, %User{} = user, date_range) when is_map(date_range) do
+  def overview_stats(%Site{} = site, %User{} = user, date_range, opts) when is_map(date_range) do
     with :ok <- authorize(site, user),
          :ok <- check_clickhouse() do
+      seg = segment_sql(opts)
+
       sql = """
       SELECT
         countIf(event_type = 'pageview') AS pageviews,
@@ -30,6 +35,7 @@ defmodule Spectabas.Analytics do
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        #{seg}
       """
 
       case ClickHouse.query(sql) do
@@ -198,8 +204,11 @@ defmodule Spectabas.Analytics do
   @doc """
   Top pages by pageviews from events table.
   """
-  def top_pages(%Site{} = site, %User{} = user, date_range) do
+  def top_pages(site, user, date_range, opts \\ [])
+
+  def top_pages(%Site{} = site, %User{} = user, date_range, opts) do
     date_range = ensure_date_range(date_range)
+    seg = segment_sql(opts)
 
     with :ok <- authorize(site, user) do
       sql = """
@@ -213,6 +222,7 @@ defmodule Spectabas.Analytics do
         AND event_type = 'pageview'
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        #{seg}
       GROUP BY url_path
       ORDER BY pageviews DESC
       LIMIT 100
@@ -687,7 +697,279 @@ defmodule Spectabas.Analytics do
     ClickHouse.query(sql)
   end
 
+  # ---- Visitor Log ----
+
+  @doc """
+  Recent visitors with summary: pages viewed, duration, location, device.
+  """
+  def visitor_log(site, user, date_range, opts \\ [])
+
+  def visitor_log(%Site{} = site, %User{} = user, date_range, opts) do
+    date_range = ensure_date_range(date_range)
+    seg = segment_sql(opts)
+    page = Keyword.get(opts, :page, 1)
+    per_page = Keyword.get(opts, :per_page, 50)
+    offset = (page - 1) * per_page
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        visitor_id,
+        min(timestamp) AS first_seen,
+        max(timestamp) AS last_seen,
+        countIf(event_type = 'pageview') AS pageviews,
+        maxIf(duration_s, event_type = 'duration') AS duration,
+        argMinIf(url_path, timestamp, event_type = 'pageview') AS entry_page,
+        argMaxIf(url_path, timestamp, event_type = 'pageview') AS exit_page,
+        any(ip_country) AS country,
+        any(ip_region_name) AS region,
+        any(ip_city) AS city,
+        any(browser) AS browser,
+        any(os) AS os,
+        any(device_type) AS device_type,
+        any(referrer_domain) AS referrer
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        #{seg}
+      GROUP BY visitor_id
+      ORDER BY last_seen DESC
+      LIMIT #{per_page} OFFSET #{offset}
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  # ---- Page Transitions ----
+
+  @doc """
+  For a given page, show previous pages (where visitors came from)
+  and next pages (where they went).
+  """
+  def page_transitions(%Site{} = site, %User{} = user, url_path, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      # Previous pages: the page viewed before this one in the same session
+      prev_sql = """
+      SELECT
+        prev_page,
+        count() AS transitions
+      FROM (
+        SELECT
+          session_id,
+          url_path,
+          lagInFrame(url_path) OVER (PARTITION BY session_id ORDER BY timestamp) AS prev_page
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND event_type = 'pageview'
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      )
+      WHERE url_path = #{ClickHouse.param(url_path)}
+        AND prev_page != ''
+        AND prev_page != url_path
+      GROUP BY prev_page
+      ORDER BY transitions DESC
+      LIMIT 20
+      """
+
+      # Next pages: the page viewed after this one in the same session
+      next_sql = """
+      SELECT
+        next_page,
+        count() AS transitions
+      FROM (
+        SELECT
+          session_id,
+          url_path,
+          leadInFrame(url_path) OVER (PARTITION BY session_id ORDER BY timestamp) AS next_page
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND event_type = 'pageview'
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      )
+      WHERE url_path = #{ClickHouse.param(url_path)}
+        AND next_page != ''
+        AND next_page != url_path
+      GROUP BY next_page
+      ORDER BY transitions DESC
+      LIMIT 20
+      """
+
+      total_sql = """
+      SELECT
+        countIf(event_type = 'pageview') AS total_views,
+        uniq(visitor_id) AS unique_visitors,
+        uniq(session_id) AS sessions
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND url_path = #{ClickHouse.param(url_path)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      """
+
+      with {:ok, prev} <- ClickHouse.query(prev_sql),
+           {:ok, next} <- ClickHouse.query(next_sql),
+           {:ok, [totals]} <- ClickHouse.query(total_sql) do
+        {:ok, %{previous: prev, next: next, totals: totals}}
+      end
+    end
+  end
+
+  # ---- Multi-Channel Attribution ----
+
+  @doc """
+  Attribution report: first-touch and last-touch channel for each converting visitor.
+  Requires at least one goal to be defined.
+  """
+  def attribution(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      # First touch: the first non-empty referrer for each visitor
+      sql = """
+      SELECT
+        channel,
+        countIf(touch = 'first') AS first_touch,
+        countIf(touch = 'last') AS last_touch,
+        uniq(visitor_id) AS visitors
+      FROM (
+        SELECT
+          visitor_id,
+          argMin(
+            if(referrer_domain != '', referrer_domain, if(utm_source != '', utm_source, 'Direct')),
+            timestamp
+          ) AS first_channel,
+          argMax(
+            if(referrer_domain != '', referrer_domain, if(utm_source != '', utm_source, 'Direct')),
+            timestamp
+          ) AS last_channel
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND event_type = 'pageview'
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY visitor_id
+      )
+      ARRAY JOIN
+        [first_channel, last_channel] AS channel,
+        ['first', 'last'] AS touch
+      GROUP BY channel
+      ORDER BY visitors DESC
+      LIMIT 50
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  # ---- Site Search ----
+
+  @doc """
+  Top internal site search queries extracted from URL params.
+  Looks for common search params: q, query, search, s, keyword.
+  """
+  def site_searches(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        search_term,
+        count() AS searches,
+        uniq(visitor_id) AS unique_searchers
+      FROM (
+        SELECT
+          visitor_id,
+          extractURLParameter(referrer_url, 'q') AS q1,
+          extractURLParameter(referrer_url, 'query') AS q2,
+          extractURLParameter(referrer_url, 'search') AS q3,
+          extractURLParameter(referrer_url, 's') AS q4,
+          extractURLParameter(referrer_url, 'keyword') AS q5,
+          multiIf(
+            q1 != '', q1,
+            q2 != '', q2,
+            q3 != '', q3,
+            q4 != '', q4,
+            q5 != '', q5,
+            ''
+          ) AS search_term
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND event_type = 'pageview'
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      )
+      WHERE search_term != ''
+      GROUP BY search_term
+      ORDER BY searches DESC
+      LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  # ---- Cohort Retention ----
+
+  @doc """
+  Cohort retention: for visitors first seen in each week, what % returned
+  in subsequent weeks. Returns a grid of cohort_week x return_week.
+  """
+  def cohort_retention(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        cohort_week,
+        week_number,
+        visitors,
+        cohort_size
+      FROM (
+        SELECT
+          toMonday(first_seen) AS cohort_week,
+          intDiv(dateDiff('day', first_seen, event_date), 7) AS week_number,
+          uniq(visitor_id) AS visitors
+        FROM (
+          SELECT
+            visitor_id,
+            toDate(timestamp) AS event_date,
+            min(toDate(timestamp)) OVER (PARTITION BY visitor_id) AS first_seen
+          FROM events
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+            AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        )
+        GROUP BY cohort_week, week_number
+      ) AS retention
+      LEFT JOIN (
+        SELECT
+          toMonday(min(toDate(timestamp))) AS cohort_week,
+          uniq(visitor_id) AS cohort_size
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY visitor_id
+      ) AS sizes USING (cohort_week)
+      ORDER BY cohort_week, week_number
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
   # --- Private helpers ---
+
+  defp segment_sql(opts) do
+    segment = Keyword.get(opts, :segment, [])
+    Segment.to_sql(segment)
+  end
 
   defp check_clickhouse do
     if Process.whereis(Spectabas.ClickHouse) do
