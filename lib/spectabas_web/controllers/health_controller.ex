@@ -311,6 +311,32 @@ defmodule SpectabasWeb.HealthController do
     json(conn, results)
   end
 
+  def test_audit(conn, _params) do
+    Spectabas.Audit.log("test.health_check", %{source: "diag"})
+
+    count =
+      Spectabas.Repo.aggregate(Spectabas.Accounts.AuditLog, :count)
+
+    import Ecto.Query
+
+    recent =
+      Spectabas.Repo.all(
+        from(a in Spectabas.Accounts.AuditLog,
+          order_by: [desc: a.occurred_at],
+          limit: 10
+        )
+      )
+      |> Enum.map(fn l ->
+        %{
+          event: l.event,
+          occurred_at: to_string(l.occurred_at),
+          metadata: l.metadata
+        }
+      end)
+
+    json(conn, %{total: count, recent: recent})
+  end
+
   defp safe_test(fun) do
     case fun.() do
       {:ok, data} -> %{status: "ok", rows: length(List.wrap(data))}
