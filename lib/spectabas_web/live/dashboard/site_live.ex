@@ -33,7 +33,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
        |> assign(:preset, "7d")
        |> assign(:date_from, Date.add(today, -7))
        |> assign(:date_to, today)
-       |> assign(:compare, false)
+       |> assign(:compare, true)
        |> assign(:show_date_picker, false)
        |> assign(:segment, [])
        |> assign(:live_visitors, 0)
