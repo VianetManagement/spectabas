@@ -35,6 +35,17 @@ topbar.config({barColors: {0: "#29d"}, shadowColor: "rgba(0, 0, 0, .3)"})
 window.addEventListener("phx:page-loading-start", _info => topbar.show(300))
 window.addEventListener("phx:page-loading-stop", _info => topbar.hide())
 
+// Clipboard copy for tracking snippet
+window.addEventListener("spectabas:clipcopy", (e) => {
+  const text = e.target.dataset.text
+  if (text) {
+    navigator.clipboard.writeText(text).then(() => {
+      e.target.innerText = "Copied!"
+      setTimeout(() => { e.target.innerText = "Copy" }, 2000)
+    })
+  }
+})
+
 // connect if there are any LiveViews on the page
 liveSocket.connect()
 

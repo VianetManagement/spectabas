@@ -23,7 +23,6 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
        |> assign(:user, user)
        |> assign(:form, to_form(changeset))
        |> assign(:snippet, Sites.snippet_code(site))
-       |> assign(:copied, false)
        |> assign(:render_domain_status, check_render_domain(site.domain))
        |> assign(:example_html, example_html(site))}
     end
@@ -54,10 +53,6 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
       {:error, changeset} ->
         {:noreply, assign(socket, :form, to_form(changeset))}
     end
-  end
-
-  def handle_event("copy_snippet", _params, socket) do
-    {:noreply, assign(socket, :copied, true)}
   end
 
   def handle_event("register_render_domain", _params, socket) do
@@ -208,13 +203,15 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
         <div class="relative mt-4">
           <pre class="bg-gray-900 text-gray-100 rounded-lg p-4 text-sm overflow-x-auto"><code><%= @snippet %></code></pre>
           <button
-            phx-click="copy_snippet"
             id="copy-snippet-btn"
             data-text={@snippet}
-            onclick="navigator.clipboard.writeText(this.dataset.text)"
+            phx-click={
+              JS.dispatch("spectabas:clipcopy", to: "#copy-snippet-btn")
+              |> JS.set_attribute({"data-copied", "true"}, to: "#copy-snippet-btn")
+            }
             class="absolute top-2 right-2 px-3 py-1 bg-gray-700 text-white rounded text-xs hover:bg-gray-600"
           >
-            {if @copied, do: "Copied!", else: "Copy"}
+            Copy
           </button>
         </div>
         <div class="mt-4 bg-gray-50 rounded-lg p-4 text-sm text-gray-600">

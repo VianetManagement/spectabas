@@ -88,6 +88,45 @@ defmodule SpectabasWeb.CollectController do
     |> send_resp(204, "")
   end
 
+  @gif_pixel <<71, 73, 70, 56, 57, 97, 1, 0, 1, 0, 128, 0, 0, 255, 255, 255, 0, 0, 0, 33, 249, 4,
+               0, 0, 0, 0, 0, 44, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 2, 68, 1, 0, 59>>
+
+  def pixel(conn, params) do
+    site_domain = params["site"] || conn.host
+
+    site =
+      case Spectabas.Sites.get_site_by_domain(site_domain) do
+        %Spectabas.Sites.Site{} = s -> s
+        nil -> nil
+      end
+
+    if site && !Sites.ip_blocked?(site, client_ip(conn)) do
+      payload_params = %{
+        "t" => "pageview",
+        "u" => params["u"] || get_req_header(conn, "referer") |> List.first() || "",
+        "r" => params["r"] || "",
+        "d" => 0,
+        "sw" => 0,
+        "sh" => 0,
+        "p" => %{"noscript" => "true"}
+      }
+
+      case CollectPayload.validate(payload_params) do
+        {:ok, payload} ->
+          {:ok, event} = Ingest.process(payload, conn)
+          IngestBuffer.push(event)
+
+        _ ->
+          :ok
+      end
+    end
+
+    conn
+    |> put_resp_content_type("image/gif")
+    |> put_resp_header("cache-control", "no-store, no-cache, must-revalidate, max-age=0")
+    |> send_resp(200, @gif_pixel)
+  end
+
   def options(conn, _params) do
     send_resp(conn, 204, "")
   end

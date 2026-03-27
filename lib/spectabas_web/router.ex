@@ -40,6 +40,7 @@ defmodule SpectabasWeb.Router do
     pipe_through :collect
 
     post "/event", CollectController, :create
+    get "/pixel", CollectController, :pixel
     post "/identify", CollectController, :identify
     post "/xdomain", CollectController, :cross_domain
     post "/optout", CollectController, :optout
