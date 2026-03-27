@@ -300,8 +300,14 @@ export function drawWorldMap(ctx, area, opts = {}) {
       const [x0, y0] = lonLatToXY(ring[0][0], ring[0][1], area)
       ctx.moveTo(x0, y0)
       for (let k = 1; k < ring.length; k++) {
+        // Skip segments that cross the antimeridian (huge lon jump)
+        const lonDiff = Math.abs(ring[k][0] - ring[k - 1][0])
         const [x, y] = lonLatToXY(ring[k][0], ring[k][1], area)
-        ctx.lineTo(x, y)
+        if (lonDiff > 180) {
+          ctx.moveTo(x, y)
+        } else {
+          ctx.lineTo(x, y)
+        }
       }
       ctx.closePath()
 
