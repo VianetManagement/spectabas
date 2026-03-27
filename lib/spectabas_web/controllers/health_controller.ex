@@ -167,13 +167,100 @@ defmodule SpectabasWeb.HealthController do
   end
 
   def backfill_geo(conn, _params) do
-    case Oban.insert(Spectabas.Workers.BackfillGeo.new(%{})) do
-      {:ok, job} ->
-        json(conn, %{status: "enqueued", job_id: job.id})
+    # Run inline instead of via Oban so we see immediate results
+    alias Spectabas.ClickHouse
 
-      {:error, reason} ->
-        conn |> put_status(500) |> json(%{status: "error", reason: inspect(reason)})
-    end
+    # Step 1: Find IPs needing enrichment
+    {:ok, rows} =
+      ClickHouse.query("SELECT DISTINCT ip_address FROM events WHERE ip_country = '' AND ip_address != ''")
+
+    ips = Enum.map(rows, & &1["ip_address"])
+
+    # Step 2: Look up each IP and build updates
+    results =
+      Enum.map(ips, fn ip_str ->
+        {:ok, parsed} = :inet.parse_address(String.to_charlist(ip_str))
+        city = Geolix.lookup(parsed, where: :city)
+        asn = Geolix.lookup(parsed, where: :asn)
+
+        country = case city do
+          %{country: %{iso_code: c}} -> c
+          _ -> nil
+        end
+
+        if country do
+          country_name = case city do
+            %{country: %{names: %{"en" => n}}} -> n
+            _ -> ""
+          end
+          continent = case city do
+            %{continent: %{code: c}} -> c
+            _ -> ""
+          end
+          continent_name = case city do
+            %{continent: %{names: %{"en" => n}}} -> n
+            _ -> ""
+          end
+          region_code = case city do
+            %{subdivisions: [%{iso_code: c} | _]} -> c || ""
+            _ -> ""
+          end
+          region_name = case city do
+            %{subdivisions: [%{names: %{"en" => n}} | _]} -> n
+            _ -> ""
+          end
+          city_name = case city do
+            %{city: %{names: %{"en" => n}}} -> n
+            _ -> ""
+          end
+          lat = case city do
+            %{location: %{latitude: l}} -> l
+            _ -> 0.0
+          end
+          lon = case city do
+            %{location: %{longitude: l}} -> l
+            _ -> 0.0
+          end
+          tz = case city do
+            %{location: %{time_zone: t}} -> t || ""
+            _ -> ""
+          end
+          asn_num = case asn do
+            %{autonomous_system_number: n} -> n || 0
+            _ -> 0
+          end
+          asn_org = case asn do
+            %{autonomous_system_organization: o} -> o || ""
+            _ -> ""
+          end
+
+          sql = """
+          ALTER TABLE events UPDATE
+            ip_country = #{ClickHouse.param(country)},
+            ip_country_name = #{ClickHouse.param(country_name)},
+            ip_continent = #{ClickHouse.param(continent)},
+            ip_continent_name = #{ClickHouse.param(continent_name)},
+            ip_region_code = #{ClickHouse.param(region_code)},
+            ip_region_name = #{ClickHouse.param(region_name)},
+            ip_city = #{ClickHouse.param(city_name)},
+            ip_lat = #{lat},
+            ip_lon = #{lon},
+            ip_timezone = #{ClickHouse.param(tz)},
+            ip_asn = #{asn_num},
+            ip_asn_org = #{ClickHouse.param(asn_org)},
+            ip_org = #{ClickHouse.param(if(asn_num > 0, do: "AS#{asn_num} #{asn_org}", else: ""))}
+          WHERE ip_address = #{ClickHouse.param(ip_str)}
+            AND ip_country = ''
+          """
+
+          result = ClickHouse.execute(sql)
+          %{ip: ip_str, country: country, region: region_name, city: city_name, result: inspect(result)}
+        else
+          %{ip: ip_str, country: nil, result: "no_geoip_match"}
+        end
+      end)
+
+    json(conn, %{status: "done", ips_found: length(ips), results: results})
   end
 
   defp test_geoip do
