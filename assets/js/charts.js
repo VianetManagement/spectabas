@@ -1,31 +1,6 @@
-import {
-  Chart,
-  LineController,
-  BarController,
-  BubbleController,
-  LineElement,
-  BarElement,
-  PointElement,
-  LinearScale,
-  CategoryScale,
-  Filler,
-  Tooltip,
-  Legend,
-} from "chart.js"
+import "../vendor/chart.umd.js"
 
-Chart.register(
-  LineController,
-  BarController,
-  BubbleController,
-  LineElement,
-  BarElement,
-  PointElement,
-  LinearScale,
-  CategoryScale,
-  Filler,
-  Tooltip,
-  Legend
-)
+const Chart = window.Chart
 
 Chart.defaults.font.family =
   'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'

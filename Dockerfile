@@ -1,7 +1,7 @@
 # Build stage
 FROM hexpm/elixir:1.17.3-erlang-27.2-ubuntu-jammy-20260217 AS build
 
-RUN apt-get update -y && apt-get install -y build-essential git curl nodejs npm \
+RUN apt-get update -y && apt-get install -y build-essential git curl \
     && apt-get clean && rm -f /var/lib/apt/lists/*_*
 
 WORKDIR /app
@@ -23,9 +23,6 @@ COPY lib lib
 COPY assets assets
 COPY priv priv
 COPY rel rel
-
-# Install JS dependencies (Chart.js etc)
-RUN cd assets && npm install --production
 
 # Download GeoIP databases (DB-IP free, updated monthly)
 # Cache bust: 2026-03-27b
