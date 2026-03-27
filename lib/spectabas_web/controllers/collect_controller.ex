@@ -102,12 +102,19 @@ defmodule SpectabasWeb.CollectController do
                0, 0, 0, 0, 0, 44, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 2, 68, 1, 0, 59>>
 
   def pixel(conn, params) do
-    site_domain = params["site"] || conn.host
-
     site =
-      case Spectabas.Sites.get_site_by_domain(site_domain) do
-        %Spectabas.Sites.Site{} = s -> s
-        nil -> nil
+      cond do
+        # Lookup by public key (obfuscated)
+        params["s"] ->
+          Spectabas.Repo.get_by(Spectabas.Sites.Site, public_key: params["s"])
+
+        # Fallback to domain
+        params["site"] ->
+          Spectabas.Sites.get_site_by_domain(params["site"])
+
+        # Fallback to host
+        true ->
+          Spectabas.Sites.get_site_by_domain(conn.host)
       end
 
     if site && !Sites.ip_blocked?(site, client_ip(conn)) do
