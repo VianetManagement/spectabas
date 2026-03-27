@@ -422,6 +422,62 @@ defmodule Spectabas.Analytics do
   end
 
   @doc """
+  Visitor locations: distinct lat/lon pairs with visitor counts for map plotting.
+  """
+  def visitor_locations(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        ip_lat,
+        ip_lon,
+        ip_city,
+        ip_region_name,
+        ip_country,
+        uniq(visitor_id) AS visitors
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_lat != 0
+        AND ip_lon != 0
+      GROUP BY ip_lat, ip_lon, ip_city, ip_region_name, ip_country
+      ORDER BY visitors DESC
+      LIMIT 200
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
+  Timezone distribution: visitor counts grouped by timezone.
+  """
+  def timezone_distribution(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        ip_timezone AS timezone,
+        uniq(visitor_id) AS visitors,
+        count() AS pageviews
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_timezone != ''
+      GROUP BY ip_timezone
+      ORDER BY visitors DESC
+      LIMIT 50
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
   Network stats: top ASNs, orgs, datacenter/VPN/Tor/bot percentages.
   """
   def network_stats(%Site{} = site, %User{} = user, date_range) do

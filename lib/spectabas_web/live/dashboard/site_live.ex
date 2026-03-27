@@ -175,6 +175,8 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     top_browsers = safe_query(fn -> Analytics.top_browsers(site, user, date_range) end, 5)
     top_os = safe_query(fn -> Analytics.top_os(site, user, date_range) end, 5)
     entry_pages = safe_query(fn -> Analytics.entry_pages(site, user, date_range) end, 5)
+    locations = safe_query(fn -> Analytics.visitor_locations(site, user, date_range) end, 50)
+    timezones = safe_query(fn -> Analytics.timezone_distribution(site, user, date_range) end, 5)
 
     live_visitors =
       case Analytics.realtime_visitors(site) do
@@ -193,6 +195,8 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     |> assign(:top_browsers, top_browsers)
     |> assign(:top_os, top_os)
     |> assign(:entry_pages, entry_pages)
+    |> assign(:locations, locations)
+    |> assign(:timezones, timezones)
   end
 
   defp preset_to_period("24h", _, _), do: :day
@@ -487,6 +491,50 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           </div>
         </.data_card>
       </div>
+
+      <%!-- Visitor Map --%>
+      <div class="bg-white rounded-lg shadow p-5 mt-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-sm font-medium text-gray-500">Visitor Map</h3>
+          <.link
+            navigate={~p"/dashboard/sites/#{@site.id}/map"}
+            class="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+          >
+            View details &rarr;
+          </.link>
+        </div>
+        <.mini_map locations={@locations} />
+      </div>
+
+      <%!-- Timezone Distribution --%>
+      <div :if={@timezones != []} class="bg-white rounded-lg shadow p-5 mt-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-sm font-medium text-gray-500">Top Timezones</h3>
+          <.link
+            navigate={~p"/dashboard/sites/#{@site.id}/map"}
+            class="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+          >
+            View all &rarr;
+          </.link>
+        </div>
+        <div class="space-y-2">
+          <div :for={tz <- @timezones} class="flex items-center gap-3">
+            <span class="text-xs text-gray-600 w-32 truncate text-right" title={tz["timezone"]}>
+              {short_tz(tz["timezone"])}
+            </span>
+            <div class="flex-1 bg-gray-100 rounded-full h-5 overflow-hidden">
+              <% max_v =
+                @timezones |> Enum.map(&to_num(&1["visitors"])) |> Enum.max(fn -> 1 end) |> max(1) %>
+              <div
+                class="bg-indigo-500 h-5 rounded-full flex items-center justify-end pr-2"
+                style={"width: #{max(to_num(tz["visitors"]) / max_v * 100, 4)}%"}
+              >
+                <span class="text-xs text-white font-medium">{tz["visitors"]}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
     """
   end
@@ -714,6 +762,84 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   defp format_number(n) when is_float(n), do: format_number(trunc(n))
   defp format_number(n) when is_binary(n), do: n
   defp format_number(_), do: "0"
+
+  defp mini_map(assigns) do
+    locations = assigns.locations
+    max_v = locations |> Enum.map(&to_num(&1["visitors"])) |> Enum.max(fn -> 1 end) |> max(1)
+    w = 900
+    h = 400
+
+    points =
+      Enum.map(locations, fn loc ->
+        lat = to_float(loc["ip_lat"])
+        lon = to_float(loc["ip_lon"])
+        visitors = to_num(loc["visitors"])
+        x = (lon + 180) / 360 * w
+        y = (90 - lat) / 180 * h
+        r = 3 + 7 * :math.sqrt(visitors / max_v)
+        opacity = 0.3 + 0.5 * (visitors / max_v)
+
+        %{
+          x: Float.round(x, 1),
+          y: Float.round(y, 1),
+          r: Float.round(r, 1),
+          opacity: Float.round(opacity, 2)
+        }
+      end)
+
+    assigns = assigns |> Map.put(:points, points) |> Map.put(:w, w) |> Map.put(:h, h)
+
+    ~H"""
+    <div :if={@locations == []} class="h-40 flex items-center justify-center text-sm text-gray-400">
+      No location data yet
+    </div>
+    <svg
+      :if={@locations != []}
+      viewBox={"0 0 #{@w} #{@h}"}
+      class="w-full rounded-lg"
+      style="background: #f0f4f8;"
+    >
+      <line
+        :for={lon <- [-120, -60, 0, 60, 120]}
+        x1={(lon + 180) / 360 * @w}
+        y1="0"
+        x2={(lon + 180) / 360 * @w}
+        y2={@h}
+        stroke="#dde3ea"
+        stroke-width="0.5"
+      />
+      <line
+        :for={lat <- [-60, -30, 0, 30, 60]}
+        x1="0"
+        y1={(90 - lat) / 180 * @h}
+        x2={@w}
+        y2={(90 - lat) / 180 * @h}
+        stroke="#dde3ea"
+        stroke-width="0.5"
+      />
+      <circle
+        :for={pt <- @points}
+        cx={pt.x}
+        cy={pt.y}
+        r={pt.r}
+        fill="#6366f1"
+        fill-opacity={pt.opacity}
+        stroke="#4f46e5"
+        stroke-width="0.5"
+        stroke-opacity={pt.opacity}
+      />
+    </svg>
+    """
+  end
+
+  defp short_tz(tz) when is_binary(tz) do
+    case String.split(tz, "/") do
+      [_, city | _] -> String.replace(city, "_", " ")
+      _ -> tz
+    end
+  end
+
+  defp short_tz(_), do: "Unknown"
 
   defp region_display(row) do
     region = row["ip_region_name"] || ""
