@@ -15,40 +15,40 @@
     <nav class="bg-white border-b border-gray-200">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between h-16">
-          <div class="flex items-center">
-            <.link href={~p"/"} class="text-xl font-bold text-indigo-600">
-              Spectabas
-            </.link>
+          <div class="flex items-center gap-6">
+            <a href="/" class="text-xl font-bold text-indigo-600">Spectabas</a>
+            <%= if assigns[:current_scope] && @current_scope.user do %>
+              <a href="/dashboard" class="text-sm text-gray-700 hover:text-indigo-600 font-medium">
+                Dashboard
+              </a>
+              <%= if @current_scope.user.role in [:superadmin, :admin] do %>
+                <a href="/admin" class="text-sm text-gray-700 hover:text-indigo-600 font-medium">
+                  Admin
+                </a>
+              <% end %>
+            <% end %>
           </div>
           <div class="flex items-center gap-4 text-sm">
             <%= if assigns[:current_scope] && @current_scope.user do %>
-              <span class="text-gray-600">{@current_scope.user.email}</span>
-              <.link
-                href={~p"/dashboard"}
-                class="text-gray-700 hover:text-indigo-600 font-medium"
-              >
-                Dashboard
-              </.link>
-              <.link
-                href={~p"/users/settings"}
-                class="text-gray-700 hover:text-indigo-600"
-              >
-                Settings
-              </.link>
-              <.link
-                href={~p"/users/log-out"}
-                method="delete"
-                class="text-gray-700 hover:text-indigo-600"
+              <span class="text-gray-500">{@current_scope.user.email}</span>
+              <a href="/users/settings" class="text-gray-600 hover:text-indigo-600">
+                Account
+              </a>
+              <a
+                href="/users/log-out"
+                data-method="delete"
+                data-csrf={get_csrf_token()}
+                class="text-gray-600 hover:text-indigo-600"
               >
                 Log out
-              </.link>
+              </a>
             <% else %>
-              <.link
-                href={~p"/users/log-in"}
+              <a
+                href="/users/log-in"
                 class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 transition"
               >
                 Sign in
-              </.link>
+              </a>
             <% end %>
           </div>
         </div>

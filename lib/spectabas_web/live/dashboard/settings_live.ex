@@ -23,7 +23,8 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
        |> assign(:user, user)
        |> assign(:form, to_form(changeset))
        |> assign(:snippet, Sites.snippet_code(site))
-       |> assign(:copied, false)}
+       |> assign(:copied, false)
+       |> assign(:render_domain_status, check_render_domain(site.domain))}
     end
   end
 
@@ -56,6 +57,27 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
 
   def handle_event("copy_snippet", _params, socket) do
     {:noreply, assign(socket, :copied, true)}
+  end
+
+  def handle_event("register_render_domain", _params, socket) do
+    domain = socket.assigns.site.domain
+
+    case Sites.register_render_domain(domain) do
+      :ok ->
+        {:noreply,
+         socket
+         |> assign(:render_domain_status, :active)
+         |> put_flash(:info, "Domain #{domain} registered on Render.")}
+
+      {:ok, :already_exists} ->
+        {:noreply,
+         socket
+         |> assign(:render_domain_status, :active)
+         |> put_flash(:info, "Domain #{domain} already registered on Render.")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to register: #{reason}")}
+    end
   end
 
   def handle_event("verify_dns", _params, socket) do
@@ -139,6 +161,37 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
           Add a CNAME record: <code class="bg-yellow-100 px-1 rounded">{@site.domain}</code>
           &rarr; <code class="bg-yellow-100 px-1 rounded">www.spectabas.com</code>
         </p>
+      </div>
+
+      <%!-- Render Domain Status --%>
+      <div class={[
+        "rounded-lg p-4 mb-8",
+        case @render_domain_status do
+          :active -> "bg-green-50 border border-green-200"
+          :not_found -> "bg-yellow-50 border border-yellow-200"
+          _ -> "bg-gray-50 border border-gray-200"
+        end
+      ]}>
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span :if={@render_domain_status == :active} class="text-green-700 font-medium">
+              Render Domain Active
+            </span>
+            <span :if={@render_domain_status == :not_found} class="text-yellow-700 font-medium">
+              Render Domain Not Registered
+            </span>
+            <span :if={@render_domain_status == :unknown} class="text-gray-600 font-medium">
+              Render Domain Status Unknown
+            </span>
+          </div>
+          <button
+            :if={@render_domain_status != :active}
+            phx-click="register_render_domain"
+            class="text-sm px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+          >
+            Register on Render
+          </button>
+        </div>
       </div>
 
       <%!-- Tracking Snippet --%>
@@ -345,5 +398,15 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
       </div>
     </div>
     """
+  end
+
+  defp check_render_domain(domain) do
+    case Sites.list_render_domains() do
+      {:ok, domains} ->
+        if domain in domains, do: :active, else: :not_found
+
+      {:error, _} ->
+        :unknown
+    end
   end
 end

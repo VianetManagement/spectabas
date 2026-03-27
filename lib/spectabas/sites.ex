@@ -247,17 +247,8 @@ defmodule Spectabas.Sites do
   Returns the HTML snippet for embedding the Spectabas tracker on a site.
   """
   def snippet_code(%Site{} = site) do
-    gdpr_attr = if site.gdpr_mode == "off", do: ~s( data-gdpr="off"), else: ""
-
-    xd_attr =
-      if site.cross_domain_tracking && site.cross_domain_sites != [] do
-        ~s( data-xd="#{Enum.join(site.cross_domain_sites, ",")}")
-      else
-        ""
-      end
-
     """
-    <script defer data-site="#{site.domain}"#{gdpr_attr}#{xd_attr} src="https://#{site.domain}/s.js"></script>
+    <script defer data-site="#{site.domain}" src="https://#{site.domain}/s.js"></script>
     """
     |> String.trim()
   end

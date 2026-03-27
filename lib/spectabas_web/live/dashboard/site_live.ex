@@ -100,7 +100,15 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div class="flex items-center justify-between mb-8">
         <div>
-          <h1 class="text-2xl font-bold text-gray-900">{@site.name}</h1>
+          <div class="flex items-center gap-3">
+            <h1 class="text-2xl font-bold text-gray-900">{@site.name}</h1>
+            <.link
+              navigate={~p"/dashboard/sites/#{@site.id}/settings"}
+              class="text-sm text-indigo-600 hover:text-indigo-800 border border-indigo-200 rounded-md px-2.5 py-1"
+            >
+              Settings
+            </.link>
+          </div>
           <p class="text-sm text-gray-500">{@site.domain}</p>
         </div>
         <div class="flex items-center gap-4">
