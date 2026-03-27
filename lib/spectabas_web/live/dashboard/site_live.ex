@@ -125,11 +125,11 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
       case Analytics.overview_stats(site, user, date_range) do
         {:ok, s} ->
           %{
-            pageviews: s["pageviews"] || 0,
-            unique_visitors: s["unique_visitors"] || 0,
-            sessions: s["total_sessions"] || 0,
-            bounce_rate: s["bounce_rate"] || 0.0,
-            avg_duration: s["avg_duration"] || 0
+            pageviews: to_num(s["pageviews"]),
+            unique_visitors: to_num(s["unique_visitors"]),
+            sessions: to_num(s["total_sessions"]),
+            bounce_rate: to_float(s["bounce_rate"]),
+            avg_duration: to_num(s["avg_duration"])
           }
 
         _ ->
@@ -149,11 +149,11 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         case Analytics.overview_stats(site, user, prev_range) do
           {:ok, s} ->
             %{
-              pageviews: s["pageviews"] || 0,
-              unique_visitors: s["unique_visitors"] || 0,
-              sessions: s["total_sessions"] || 0,
-              bounce_rate: s["bounce_rate"] || 0.0,
-              avg_duration: s["avg_duration"] || 0
+              pageviews: to_num(s["pageviews"]),
+              unique_visitors: to_num(s["unique_visitors"]),
+              sessions: to_num(s["total_sessions"]),
+              bounce_rate: to_float(s["bounce_rate"]),
+              avg_duration: to_num(s["avg_duration"])
             }
 
           _ ->
@@ -505,8 +505,8 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
 
   defp chart(assigns) do
     points = assigns.timeseries
-    max_pv = points |> Enum.map(& &1["pageviews"]) |> Enum.max(fn -> 1 end) |> max(1)
-    max_v = points |> Enum.map(& &1["visitors"]) |> Enum.max(fn -> 1 end) |> max(1)
+    max_pv = points |> Enum.map(&to_num(&1["pageviews"])) |> Enum.max(fn -> 1 end) |> max(1)
+    max_v = points |> Enum.map(&to_num(&1["visitors"])) |> Enum.max(fn -> 1 end) |> max(1)
     max_val = max(max_pv, max_v)
     count = length(points)
 
@@ -579,7 +579,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     |> Enum.with_index()
     |> Enum.map(fn {pt, i} ->
       x = pad_x + i * step
-      val = pt[key] || 0
+      val = to_num(pt[key])
       y = pad_y + (h - pad_y * 2) * (1 - val / max_val)
       if i == 0, do: "M#{x},#{y}", else: "L#{x},#{y}"
     end)
@@ -651,6 +651,30 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   end
 
   defp compute_delta(_, _, _), do: %{label: "", direction: :flat}
+
+  defp to_num(n) when is_integer(n), do: n
+  defp to_num(n) when is_float(n), do: trunc(n)
+
+  defp to_num(n) when is_binary(n) do
+    case Integer.parse(n) do
+      {i, _} -> i
+      :error -> 0
+    end
+  end
+
+  defp to_num(_), do: 0
+
+  defp to_float(n) when is_float(n), do: n
+  defp to_float(n) when is_integer(n), do: n * 1.0
+
+  defp to_float(n) when is_binary(n) do
+    case Float.parse(n) do
+      {f, _} -> f
+      :error -> 0.0
+    end
+  end
+
+  defp to_float(_), do: 0.0
 
   defp format_duration(seconds) when is_number(seconds) do
     minutes = div(trunc(seconds), 60)
