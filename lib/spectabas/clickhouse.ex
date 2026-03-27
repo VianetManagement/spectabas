@@ -28,18 +28,15 @@ defmodule Spectabas.ClickHouse do
       )
       |> Req.merge(@default_opts)
 
-    # Test connection first
-    case Req.post(admin_req, params: [query: "SELECT 1"]) do
-      {:ok, %{status: 200}} ->
-        Logger.info("[CH:init] Connected to ClickHouse")
+    # Wait for ClickHouse to be ready (up to 30 seconds)
+    connected = wait_for_clickhouse(admin_req, 15)
 
-      {:ok, %{status: s, body: b}} ->
-        Logger.error("[CH:init] Connection failed: #{s} #{inspect(b)}")
-        :ok
+    unless connected do
+      Logger.error(
+        "[CH:init] Could not connect to ClickHouse after retries, skipping schema init"
+      )
 
-      {:error, r} ->
-        Logger.error("[CH:init] Connection failed: #{inspect(r)}")
-        :ok
+      :ok
     end
 
     db = cfg[:database] || "spectabas"
@@ -184,20 +181,62 @@ defmodule Spectabas.ClickHouse do
       """
     ]
 
-    Enum.each(statements, fn sql ->
-      case Req.post(admin_req, params: [query: String.trim(sql)]) do
-        {:ok, %{status: 200}} ->
-          :ok
+    if connected do
+      results =
+        Enum.map(statements, fn sql ->
+          trimmed = String.trim(sql)
+          # Extract a short name for logging
+          name = trimmed |> String.split("\n") |> hd() |> String.slice(0, 60)
 
-        {:ok, %{status: s, body: b}} ->
-          Logger.warning("[CH:init] #{s}: #{inspect(String.slice(to_string(b), 0, 200))}")
+          case Req.post(admin_req, params: [query: trimmed]) do
+            {:ok, %{status: 200}} ->
+              Logger.info("[CH:init] OK: #{name}")
+              :ok
 
-        {:error, r} ->
-          Logger.warning("[CH:init] #{inspect(r)}")
-      end
-    end)
+            {:ok, %{status: s, body: b}} ->
+              Logger.error(
+                "[CH:init] FAILED (#{s}): #{name} — #{String.slice(to_string(b), 0, 300)}"
+              )
 
-    Logger.info("[CH:init] Schema ensured for database #{db}")
+              :error
+
+            {:error, r} ->
+              Logger.error("[CH:init] FAILED: #{name} — #{inspect(r)}")
+              :error
+          end
+        end)
+
+      errors = Enum.count(results, &(&1 == :error))
+
+      Logger.info(
+        "[CH:init] Schema ensured for database #{db} (#{length(results) - errors}/#{length(results)} OK)"
+      )
+    end
+  end
+
+  defp wait_for_clickhouse(req, retries) when retries > 0 do
+    case Req.post(req, params: [query: "SELECT 1"]) do
+      {:ok, %{status: 200}} ->
+        Logger.info("[CH:init] Connected to ClickHouse")
+        true
+
+      {:ok, %{status: s, body: b}} ->
+        Logger.warning(
+          "[CH:init] Not ready (#{s}): #{String.slice(to_string(b), 0, 100)}, retrying..."
+        )
+
+        Process.sleep(2_000)
+        wait_for_clickhouse(req, retries - 1)
+
+      {:error, r} ->
+        Logger.warning("[CH:init] Not ready: #{inspect(r)}, retrying...")
+        Process.sleep(2_000)
+        wait_for_clickhouse(req, retries - 1)
+    end
+  end
+
+  defp wait_for_clickhouse(_req, 0) do
+    false
   end
 
   defp build_req(url, user, pass, db) do
