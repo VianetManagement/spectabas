@@ -534,7 +534,15 @@ defmodule Spectabas.Accounts do
 
   @doc """
   Accept an invitation: register the user and mark the invitation as accepted.
+  Accepts either an Invitation struct or a plaintext token string.
   """
+  def accept_invitation(token, user_attrs) when is_binary(token) do
+    case get_valid_invitation(token) do
+      {:ok, invitation} -> accept_invitation(invitation, user_attrs)
+      error -> error
+    end
+  end
+
   def accept_invitation(%Invitation{} = invitation, user_attrs) do
     Repo.transact(fn ->
       with {:ok, user} <- register_user(user_attrs) do
