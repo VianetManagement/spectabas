@@ -1,7 +1,7 @@
 # Build stage
 FROM hexpm/elixir:1.17.3-erlang-27.2-ubuntu-jammy-20260217 AS build
 
-RUN apt-get update -y && apt-get install -y build-essential git curl \
+RUN apt-get update -y && apt-get install -y build-essential git curl nodejs npm \
     && apt-get clean && rm -f /var/lib/apt/lists/*_*
 
 WORKDIR /app
