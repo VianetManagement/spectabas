@@ -41,12 +41,28 @@ defmodule SpectabasWeb.Dashboard.DevicesLive do
   end
 
   defp load_devices(socket) do
-    %{site: site, user: user, date_range: range} = socket.assigns
+    %{site: site, user: user, date_range: range, tab: tab} = socket.assigns
+    period = range_to_atom(range)
 
     devices =
-      case Analytics.top_devices(site, user, range_to_atom(range)) do
-        {:ok, devices} -> devices
-        _ -> []
+      case tab do
+        "browser" ->
+          case Analytics.top_browsers(site, user, period) do
+            {:ok, rows} -> Enum.map(rows, &Map.put(&1, "browser", &1["name"]))
+            _ -> []
+          end
+
+        "os" ->
+          case Analytics.top_os(site, user, period) do
+            {:ok, rows} -> Enum.map(rows, &Map.put(&1, "os", &1["name"]))
+            _ -> []
+          end
+
+        _ ->
+          case Analytics.top_device_types(site, user, period) do
+            {:ok, rows} -> rows
+            _ -> []
+          end
       end
 
     assign(socket, :devices, devices)

@@ -27,35 +27,18 @@ Chart.register(
   Legend
 )
 
-// Shared defaults
 Chart.defaults.font.family =
   'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
 Chart.defaults.font.size = 11
 Chart.defaults.plugins.legend.display = false
 
-function getChartData(el) {
-  const raw = el.dataset.chartData
-  if (!raw) return null
-  try {
-    return JSON.parse(raw)
-  } catch (e) {
-    return null
-  }
-}
-
 // --- Timeseries Line Chart ---
 export const TimeseriesChart = {
   mounted() {
     this.chart = null
-    this.render()
+    this.handleEvent("timeseries-data", (data) => this.setData(data))
   },
-  updated() {
-    this.render()
-  },
-  render() {
-    const data = getChartData(this.el)
-    if (!data) return
-
+  setData(data) {
     const canvas = this.el.querySelector("canvas")
     if (!canvas) return
 
@@ -63,7 +46,7 @@ export const TimeseriesChart = {
       this.chart.data.labels = data.labels
       this.chart.data.datasets[0].data = data.pageviews
       this.chart.data.datasets[1].data = data.visitors
-      this.chart.update("none")
+      this.chart.update()
       return
     }
 
@@ -123,7 +106,12 @@ export const TimeseriesChart = {
             display: true,
             position: "top",
             align: "end",
-            labels: { usePointStyle: true, pointStyle: "line", boxWidth: 20, color: "#6b7280" },
+            labels: {
+              usePointStyle: true,
+              pointStyle: "line",
+              boxWidth: 20,
+              color: "#6b7280",
+            },
           },
         },
       },
@@ -138,22 +126,16 @@ export const TimeseriesChart = {
 export const BarChart = {
   mounted() {
     this.chart = null
-    this.render()
+    this.handleEvent("bar-data", (data) => this.setData(data))
   },
-  updated() {
-    this.render()
-  },
-  render() {
-    const data = getChartData(this.el)
-    if (!data) return
-
+  setData(data) {
     const canvas = this.el.querySelector("canvas")
     if (!canvas) return
 
     if (this.chart) {
       this.chart.data.labels = data.labels
       this.chart.data.datasets[0].data = data.values
-      this.chart.update("none")
+      this.chart.update()
       return
     }
 
@@ -204,13 +186,9 @@ export const BarChart = {
 export const BubbleMap = {
   mounted() {
     this.chart = null
-    this.render()
+    this.handleEvent("map-data", (data) => this.setData(data))
   },
-  updated() {
-    this.render()
-  },
-  render() {
-    const data = getChartData(this.el)
+  setData(data) {
     if (!data || !data.points) return
 
     const canvas = this.el.querySelector("canvas")
@@ -226,7 +204,7 @@ export const BubbleMap = {
 
     if (this.chart) {
       this.chart.data.datasets[0].data = points
-      this.chart.update("none")
+      this.chart.update()
       return
     }
 

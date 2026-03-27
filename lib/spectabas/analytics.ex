@@ -370,6 +370,32 @@ defmodule Spectabas.Analytics do
   end
 
   @doc """
+  Top device types by visitors (grouped at device_type level only).
+  """
+  def top_device_types(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        device_type,
+        count() AS pageviews,
+        uniq(visitor_id) AS unique_visitors
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND device_type != ''
+      GROUP BY device_type
+      ORDER BY unique_visitors DESC
+      LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
   Top browsers by visitors (dashboard summary).
   """
   def top_browsers(%Site{} = site, %User{} = user, date_range) do

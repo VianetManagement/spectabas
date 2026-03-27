@@ -197,6 +197,35 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     |> assign(:entry_pages, entry_pages)
     |> assign(:locations, locations)
     |> assign(:timezones, timezones)
+    |> push_chart_data(timeseries, locations, timezones)
+  end
+
+  defp push_chart_data(socket, timeseries, locations, timezones) do
+    if Phoenix.LiveView.connected?(socket) do
+      socket
+      |> push_event("timeseries-data", %{
+        labels: Enum.map(timeseries, & &1["label"]),
+        pageviews: Enum.map(timeseries, &to_num(&1["pageviews"])),
+        visitors: Enum.map(timeseries, &to_num(&1["visitors"]))
+      })
+      |> push_event("map-data", %{
+        points:
+          Enum.map(locations, fn loc ->
+            %{
+              lat: to_float(loc["ip_lat"]),
+              lon: to_float(loc["ip_lon"]),
+              visitors: to_num(loc["visitors"]),
+              label: location_label(loc)
+            }
+          end)
+      })
+      |> push_event("bar-data", %{
+        labels: Enum.map(timezones, &short_tz(&1["timezone"])),
+        values: Enum.map(timezones, &to_num(&1["visitors"]))
+      })
+    else
+      socket
+    end
   end
 
   defp preset_to_period("24h", _, _), do: :day
@@ -377,7 +406,6 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         class="bg-white rounded-lg shadow p-5 mb-6"
         id="timeseries-hook"
         phx-hook="TimeseriesChart"
-        data-chart-data={timeseries_json(@timeseries)}
       >
         <div style="height: 280px; position: relative;">
           <canvas></canvas>
@@ -503,7 +531,6 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           <div
             id="map-hook"
             phx-hook="BubbleMap"
-            data-chart-data={locations_json(@locations)}
           >
             <div style="height: 300px; position: relative;">
               <canvas></canvas>
@@ -525,7 +552,6 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           <div
             id="tz-hook"
             phx-hook="BarChart"
-            data-chart-data={timezones_json(@timezones)}
           >
             <div style={"height: #{max(length(@timezones) * 32, 100)}px; position: relative;"}>
               <canvas></canvas>
@@ -662,35 +688,6 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   end
 
   defp short_tz(_), do: "Unknown"
-
-  defp timeseries_json(timeseries) do
-    Jason.encode!(%{
-      labels: Enum.map(timeseries, & &1["label"]),
-      pageviews: Enum.map(timeseries, &to_num(&1["pageviews"])),
-      visitors: Enum.map(timeseries, &to_num(&1["visitors"]))
-    })
-  end
-
-  defp locations_json(locations) do
-    points =
-      Enum.map(locations, fn loc ->
-        %{
-          lat: to_float(loc["ip_lat"]),
-          lon: to_float(loc["ip_lon"]),
-          visitors: to_num(loc["visitors"]),
-          label: location_label(loc)
-        }
-      end)
-
-    Jason.encode!(%{points: points})
-  end
-
-  defp timezones_json(timezones) do
-    Jason.encode!(%{
-      labels: Enum.map(timezones, &short_tz(&1["timezone"])),
-      values: Enum.map(timezones, &to_num(&1["visitors"]))
-    })
-  end
 
   defp location_label(loc) do
     city = loc["ip_city"] || ""
