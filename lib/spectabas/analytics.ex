@@ -43,6 +43,8 @@ defmodule Spectabas.Analytics do
   Top pages by pageviews from events table.
   """
   def top_pages(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
     with :ok <- authorize(site, user) do
       sql = """
       SELECT
@@ -68,6 +70,8 @@ defmodule Spectabas.Analytics do
   Top traffic sources: referrer_domain, utm_source, utm_medium.
   """
   def top_sources(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
     with :ok <- authorize(site, user) do
       sql = """
       SELECT
@@ -94,6 +98,8 @@ defmodule Spectabas.Analytics do
   Top countries with region and city drill-down.
   """
   def top_countries(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
     with :ok <- authorize(site, user) do
       sql = """
       SELECT
@@ -120,6 +126,8 @@ defmodule Spectabas.Analytics do
   Top devices: device_type, browser, os breakdown.
   """
   def top_devices(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
     with :ok <- authorize(site, user) do
       sql = """
       SELECT
@@ -145,6 +153,8 @@ defmodule Spectabas.Analytics do
   Network stats: top ASNs, orgs, datacenter/VPN/Tor/bot percentages.
   """
   def network_stats(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
     with :ok <- authorize(site, user) do
       sql = """
       SELECT
@@ -263,6 +273,8 @@ defmodule Spectabas.Analytics do
   Goal completions per goal for a date range.
   """
   def goal_completions(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
     with :ok <- authorize(site, user) do
       goals = Spectabas.Goals.list_goals(site)
 
@@ -280,6 +292,8 @@ defmodule Spectabas.Analytics do
   Ecommerce stats: total revenue, orders, avg order value, top products.
   """
   def ecommerce_stats(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
     with :ok <- authorize(site, user) do
       sql = """
       SELECT
@@ -367,6 +381,9 @@ defmodule Spectabas.Analytics do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  defp ensure_date_range(period) when is_atom(period), do: period_to_date_range(period)
+  defp ensure_date_range(%{from: _, to: _} = dr), do: dr
 
   defp period_to_date_range(period) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)

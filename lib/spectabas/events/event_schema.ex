@@ -13,7 +13,7 @@ defmodule Spectabas.Events.EventSchema do
     %{
       # identifiers
       "event_id" => to_string(event[:event_id] || Ecto.UUID.generate()),
-      "site_id" => to_string(event[:site_id]),
+      "site_id" => to_integer(event[:site_id]),
       "visitor_id" => to_string(event[:visitor_id] || ""),
       "session_id" => to_string(event[:session_id] || ""),
 
@@ -22,13 +22,11 @@ defmodule Spectabas.Events.EventSchema do
       "event_name" => to_string(event[:event_name] || ""),
       "timestamp" => format_timestamp(event[:timestamp]),
 
-      # page / referrer
-      "url" => truncate(to_string(event[:url] || ""), 2048),
+      # page / referrer (must match ClickHouse table columns exactly)
       "url_path" => truncate(to_string(event[:url_path] || ""), 2048),
       "url_host" => truncate(to_string(event[:url_host] || ""), 512),
-      "url_scheme" => to_string(event[:url_scheme] || "https"),
-      "referrer" => truncate(to_string(event[:referrer] || ""), 2048),
       "referrer_domain" => truncate(to_string(event[:referrer_domain] || ""), 512),
+      "referrer_url" => truncate(to_string(event[:referrer] || event[:referrer_url] || ""), 2048),
 
       # UTM parameters
       "utm_source" => truncate(to_string(event[:utm_source] || ""), 256),
@@ -47,7 +45,7 @@ defmodule Spectabas.Events.EventSchema do
       "screen_height" => to_integer(event[:screen_height]),
 
       # duration
-      "duration" => to_integer(event[:duration]),
+      "duration_s" => to_integer(event[:duration]),
 
       # IP enrichment
       "ip_address" => to_string(event[:ip_address] || ""),
@@ -73,7 +71,7 @@ defmodule Spectabas.Events.EventSchema do
       "ip_gdpr_anonymized" => to_uint8(event[:ip_gdpr_anonymized]),
 
       # custom properties (JSON string)
-      "props" => Jason.encode!(event[:props] || %{})
+      "properties" => Jason.encode!(event[:props] || event[:properties] || %{})
     }
   end
 
