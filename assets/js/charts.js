@@ -1,4 +1,5 @@
 import "../vendor/chart.umd.js"
+import { worldMapPlugin } from "./world_map"
 
 const Chart = window.Chart
 
@@ -190,57 +191,9 @@ export const BubbleMap = {
       return
     }
 
-    // Background plugin: draws a map-like background
-    const bgPlugin = {
-      id: "mapBackground",
-      beforeDraw: (chart) => {
-        const { ctx, chartArea } = chart
-        if (!chartArea) return
-        const { left, top, right, bottom } = chartArea
-
-        // Ocean background
-        ctx.save()
-        ctx.fillStyle = "#e8f0f8"
-        ctx.fillRect(left, top, right - left, bottom - top)
-
-        // Grid lines
-        ctx.strokeStyle = "#d0dae6"
-        ctx.lineWidth = 0.5
-        const xScale = chart.scales.x
-        const yScale = chart.scales.y
-
-        // Longitude lines every 60 degrees
-        for (let lon = -120; lon <= 120; lon += 60) {
-          const x = xScale.getPixelForValue(lon)
-          ctx.beginPath()
-          ctx.moveTo(x, top)
-          ctx.lineTo(x, bottom)
-          ctx.stroke()
-        }
-        // Latitude lines every 30 degrees
-        for (let lat = -60; lat <= 60; lat += 30) {
-          const y = yScale.getPixelForValue(lat)
-          ctx.beginPath()
-          ctx.moveTo(left, y)
-          ctx.lineTo(right, y)
-          ctx.stroke()
-        }
-        // Equator
-        ctx.strokeStyle = "#b0bec9"
-        ctx.lineWidth = 1
-        const eqY = yScale.getPixelForValue(0)
-        ctx.beginPath()
-        ctx.moveTo(left, eqY)
-        ctx.lineTo(right, eqY)
-        ctx.stroke()
-
-        ctx.restore()
-      },
-    }
-
     this.chart = new Chart(canvas, {
       type: "bubble",
-      plugins: [bgPlugin],
+      plugins: [worldMapPlugin],
       data: {
         datasets: [
           {
@@ -274,6 +227,11 @@ export const BubbleMap = {
           },
         },
         plugins: {
+          worldMap: {
+            fillColor: "#e2e8f0",
+            strokeColor: "#cbd5e1",
+            lineWidth: 0.5,
+          },
           tooltip: {
             backgroundColor: "#1f2937",
             titleColor: "#f9fafb",
