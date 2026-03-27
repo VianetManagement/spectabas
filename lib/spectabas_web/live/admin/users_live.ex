@@ -58,6 +58,22 @@ defmodule SpectabasWeb.Admin.UsersLive do
     end
   end
 
+  def handle_event("resend_invite", %{"id" => id}, socket) do
+    admin = socket.assigns.current_scope.user
+    invitation = Spectabas.Repo.get!(Spectabas.Accounts.Invitation, id)
+
+    case Accounts.resend_invitation(admin, invitation) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Invitation resent to #{invitation.email}.")
+         |> assign(:pending_invitations, Accounts.list_pending_invitations())}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to resend: #{inspect(reason)}")}
+    end
+  end
+
   def handle_event("change_role", %{"user_id" => user_id, "role" => role}, socket) do
     admin = socket.assigns.current_scope.user
     user = Accounts.get_user!(user_id)
@@ -269,6 +285,9 @@ defmodule SpectabasWeb.Admin.UsersLive do
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Status
                 </th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200">
@@ -286,6 +305,15 @@ defmodule SpectabasWeb.Admin.UsersLive do
                   <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
                     Invited
                   </span>
+                </td>
+                <td class="px-6 py-4 text-right">
+                  <button
+                    phx-click="resend_invite"
+                    phx-value-id={inv.id}
+                    class="text-indigo-600 hover:text-indigo-800 text-sm font-medium"
+                  >
+                    Resend
+                  </button>
                 </td>
               </tr>
             </tbody>
