@@ -3,6 +3,7 @@ defmodule Spectabas.Sites do
   Context for managing sites: CRUD, DNS verification, IP filtering, and snippet generation.
   """
 
+  require Logger
   import Ecto.Query, warn: false
   alias Spectabas.{Repo, Audit}
   alias Spectabas.Sites.{Site, DomainCache}
@@ -53,30 +54,82 @@ defmodule Spectabas.Sites do
     end
   end
 
-  defp register_render_domain(domain) do
+  @doc """
+  Register a custom domain on Render. Returns :ok, {:ok, :already_exists}, or {:error, reason}.
+  """
+  def register_render_domain(domain) do
     api_key = System.get_env("RENDER_API_KEY")
     service_id = System.get_env("RENDER_SERVICE_ID")
 
     if api_key && service_id do
-      Task.start(fn ->
+      result =
         Req.post("https://api.render.com/v1/services/#{service_id}/custom-domains",
-          headers: [{"authorization", "Bearer #{api_key}"}],
+          headers: [
+            {"authorization", "Bearer #{api_key}"},
+            {"content-type", "application/json"}
+          ],
           json: %{name: domain}
         )
-        |> case do
-          {:ok, %{status: s}} when s in [200, 201] ->
-            require Logger
-            Logger.info("[Sites] Registered custom domain on Render: #{domain}")
 
-          {:ok, %{status: 409}} ->
-            require Logger
-            Logger.info("[Sites] Domain already registered on Render: #{domain}")
+      case result do
+        {:ok, %{status: s}} when s in [200, 201] ->
+          Logger.info("[Sites] Registered custom domain on Render: #{domain}")
+          :ok
 
-          other ->
-            require Logger
-            Logger.warning("[Sites] Failed to register domain on Render: #{inspect(other)}")
-        end
-      end)
+        {:ok, %{status: 409}} ->
+          Logger.info("[Sites] Domain already registered on Render: #{domain}")
+          {:ok, :already_exists}
+
+        {:ok, %{status: status, body: body}} ->
+          Logger.warning(
+            "[Sites] Failed to register domain #{domain} on Render: status=#{status} body=#{inspect(body)}"
+          )
+
+          {:error, "Render API returned #{status}: #{inspect(body)}"}
+
+        {:error, reason} ->
+          Logger.warning(
+            "[Sites] Failed to register domain #{domain} on Render: #{inspect(reason)}"
+          )
+
+          {:error, inspect(reason)}
+      end
+    else
+      missing =
+        [
+          if(is_nil(api_key), do: "RENDER_API_KEY"),
+          if(is_nil(service_id), do: "RENDER_SERVICE_ID")
+        ]
+        |> Enum.reject(&is_nil/1)
+        |> Enum.join(", ")
+
+      Logger.warning("[Sites] Cannot register domain — missing env vars: #{missing}")
+      {:error, "Missing env vars: #{missing}"}
+    end
+  end
+
+  @doc """
+  List custom domains currently registered on Render.
+  """
+  def list_render_domains do
+    api_key = System.get_env("RENDER_API_KEY")
+    service_id = System.get_env("RENDER_SERVICE_ID")
+
+    if api_key && service_id do
+      case Req.get("https://api.render.com/v1/services/#{service_id}/custom-domains",
+             headers: [{"authorization", "Bearer #{api_key}"}]
+           ) do
+        {:ok, %{status: 200, body: body}} when is_list(body) ->
+          {:ok, Enum.map(body, fn d -> d["customDomain"]["name"] end)}
+
+        {:ok, %{status: status, body: body}} ->
+          {:error, "status #{status}: #{inspect(body)}"}
+
+        {:error, reason} ->
+          {:error, inspect(reason)}
+      end
+    else
+      {:error, "Missing RENDER_API_KEY or RENDER_SERVICE_ID"}
     end
   end
 

@@ -31,18 +31,41 @@ defmodule SpectabasWeb.Admin.SitesLive do
 
   def handle_event("create_site", %{"site" => params}, socket) do
     case Sites.create_site(params) do
-      {:ok, _site} ->
+      {:ok, site} ->
+        render_msg =
+          case Sites.register_render_domain(site.domain) do
+            :ok -> " Custom domain #{site.domain} registered on Render."
+            {:ok, :already_exists} -> " Domain #{site.domain} already registered on Render."
+            {:error, reason} -> " Warning: failed to register domain on Render: #{reason}"
+          end
+
         sites = Sites.list_sites()
 
         {:noreply,
          socket
-         |> put_flash(:info, "Site created. Add the DNS record and install the tracking snippet.")
+         |> put_flash(
+           :info,
+           "Site created.#{render_msg} Add a CNAME for #{site.domain} → www.spectabas.com"
+         )
          |> assign(:sites, sites)
          |> assign(:show_form, false)
          |> assign(:form, to_form(site_changeset()))}
 
       {:error, changeset} ->
         {:noreply, assign(socket, :form, to_form(changeset))}
+    end
+  end
+
+  def handle_event("register_domain", %{"domain" => domain}, socket) do
+    case Sites.register_render_domain(domain) do
+      :ok ->
+        {:noreply, put_flash(socket, :info, "Domain #{domain} registered on Render.")}
+
+      {:ok, :already_exists} ->
+        {:noreply, put_flash(socket, :info, "Domain #{domain} already registered on Render.")}
+
+      {:error, reason} ->
+        {:noreply, put_flash(socket, :error, "Failed to register #{domain}: #{reason}")}
     end
   end
 
@@ -82,6 +105,19 @@ defmodule SpectabasWeb.Admin.SitesLive do
           {if @show_form, do: "Cancel", else: "New Site"}
         </button>
       </div>
+
+      <p
+        :if={msg = Phoenix.Flash.get(@flash, :info)}
+        class="rounded-lg bg-blue-50 p-3 text-sm text-blue-700 mb-6"
+      >
+        {msg}
+      </p>
+      <p
+        :if={msg = Phoenix.Flash.get(@flash, :error)}
+        class="rounded-lg bg-red-50 p-3 text-sm text-red-700 mb-6"
+      >
+        {msg}
+      </p>
 
       <div :if={@show_form} class="bg-white rounded-lg shadow p-6 mb-8">
         <h2 class="text-lg font-semibold text-gray-900 mb-4">Create Site</h2>
@@ -220,6 +256,13 @@ defmodule SpectabasWeb.Admin.SitesLive do
                 </span>
               </td>
               <td class="px-6 py-4 text-right">
+                <button
+                  phx-click="register_domain"
+                  phx-value-domain={site.domain}
+                  class="text-green-600 hover:text-green-800 text-sm mr-4"
+                >
+                  Register Domain
+                </button>
                 <.link
                   navigate={~p"/dashboard/sites/#{site.id}/settings"}
                   class="text-indigo-600 hover:text-indigo-800 text-sm mr-4"
