@@ -310,6 +310,27 @@ defmodule Spectabas.ClickHouse do
   def insert(_table, []), do: :ok
 
   @doc """
+  Execute a SQL statement using the write credentials.
+  Use for ALTER TABLE, mutations, or any DDL that requires write access.
+  """
+  def execute(sql) do
+    req = Req.merge(write_req(), params: [query: sql])
+
+    case Req.post(req, body: "") do
+      {:ok, %{status: 200}} ->
+        :ok
+
+      {:ok, %{status: s, body: b}} ->
+        Logger.error("[CH:exec] #{s}: #{inspect(b)}")
+        {:error, b}
+
+      {:error, r} ->
+        Logger.error("[CH:exec] #{inspect(r)}")
+        {:error, r}
+    end
+  end
+
+  @doc """
   Escape a value for safe ClickHouse SQL interpolation.
   Use this for every user-supplied value in a query string.
   """

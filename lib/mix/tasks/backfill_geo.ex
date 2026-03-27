@@ -60,8 +60,8 @@ defmodule Mix.Tasks.BackfillGeo do
             AND ip_country = ''
           """
 
-          case Spectabas.ClickHouse.query(update_sql) do
-            {:ok, _} ->
+          case Spectabas.ClickHouse.execute(update_sql) do
+            :ok ->
               Logger.info("[BackfillGeo] Updated #{ip} → #{geo.country} / #{geo.region_name} / #{geo.city}")
 
             {:error, e} ->
