@@ -2,6 +2,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   use SpectabasWeb, :live_view
 
   import SpectabasWeb.Dashboard.SegmentComponent
+  import SpectabasWeb.Dashboard.SidebarComponent
 
   alias Spectabas.{Accounts, Sites, Analytics}
 
@@ -309,353 +310,297 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <%!-- Header --%>
-      <div class="flex items-center justify-between mb-6">
-        <div>
-          <div class="flex items-center gap-3">
-            <h1 class="text-2xl font-bold text-gray-900">{@site.name}</h1>
-            <.link
-              navigate={~p"/dashboard/sites/#{@site.id}/settings"}
-              class="text-sm text-indigo-600 hover:text-indigo-800 border border-indigo-200 rounded-md px-2.5 py-1"
-            >
-              Settings
-            </.link>
+    <.dashboard_layout site={@site} active="overview" live_visitors={@live_visitors}>
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <%!-- Date Controls --%>
+        <div class="flex items-center justify-between mb-6">
+          <div class="flex items-center gap-2">
+            <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">
+              <button
+                :for={
+                  {id, label} <- [
+                    {"24h", "24h"},
+                    {"7d", "7d"},
+                    {"30d", "30d"},
+                    {"90d", "90d"},
+                    {"12m", "12m"}
+                  ]
+                }
+                phx-click="preset"
+                phx-value-range={id}
+                class={[
+                  "px-2.5 py-1 text-sm font-medium rounded-md",
+                  if(@preset == id,
+                    do: "bg-white shadow text-gray-900",
+                    else: "text-gray-600 hover:text-gray-900"
+                  )
+                ]}
+              >
+                {label}
+              </button>
+            </nav>
+            <div class="relative">
+              <button
+                phx-click="toggle_date_picker"
+                class={[
+                  "px-3 py-1.5 text-sm font-medium rounded-lg border",
+                  if(@preset == "custom",
+                    do: "bg-indigo-50 border-indigo-200 text-indigo-700",
+                    else: "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+                  )
+                ]}
+              >
+                {range_label(@date_from, @date_to)}
+              </button>
+              <div
+                :if={@show_date_picker}
+                class="absolute top-full mt-2 right-0 bg-white rounded-lg shadow-lg border border-gray-200 p-4 z-50"
+              >
+                <form phx-submit="custom_range" class="flex items-end gap-3">
+                  <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">From</label>
+                    <input
+                      type="date"
+                      name="from"
+                      value={Date.to_iso8601(@date_from)}
+                      class="block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">To</label>
+                    <input
+                      type="date"
+                      name="to"
+                      value={Date.to_iso8601(@date_to)}
+                      class="block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    class="px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
+                  >
+                    Apply
+                  </button>
+                </form>
+              </div>
+            </div>
           </div>
-          <p class="text-sm text-gray-500">{@site.domain}</p>
+          <button
+            phx-click="toggle_compare"
+            class={[
+              "px-3 py-1.5 text-sm font-medium rounded-lg border",
+              if(@compare,
+                do: "bg-indigo-50 border-indigo-200 text-indigo-700",
+                else: "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+              )
+            ]}
+          >
+            Compare
+          </button>
         </div>
-        <div class="flex items-center gap-3">
-          <div class="flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1.5 rounded-full text-sm font-medium">
-            <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-            {@live_visitors} online now
-          </div>
-        </div>
-      </div>
 
-      <%!-- Date Controls --%>
-      <div class="flex items-center justify-between mb-6">
-        <div class="flex items-center gap-2">
-          <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">
-            <button
-              :for={
-                {id, label} <- [
-                  {"24h", "24h"},
-                  {"7d", "7d"},
-                  {"30d", "30d"},
-                  {"90d", "90d"},
-                  {"12m", "12m"}
-                ]
-              }
-              phx-click="preset"
-              phx-value-range={id}
-              class={[
-                "px-2.5 py-1 text-sm font-medium rounded-md",
-                if(@preset == id,
-                  do: "bg-white shadow text-gray-900",
-                  else: "text-gray-600 hover:text-gray-900"
-                )
-              ]}
-            >
-              {label}
-            </button>
-          </nav>
-          <div class="relative">
-            <button
-              phx-click="toggle_date_picker"
-              class={[
-                "px-3 py-1.5 text-sm font-medium rounded-lg border",
-                if(@preset == "custom",
-                  do: "bg-indigo-50 border-indigo-200 text-indigo-700",
-                  else: "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
-                )
-              ]}
-            >
-              {range_label(@date_from, @date_to)}
-            </button>
+        <%!-- Segment Filter --%>
+        <.segment_filter segment={@segment} />
+
+        <%!-- Stat Cards with Comparison --%>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+          <.stat_card
+            label="Pageviews"
+            value={format_number(@stats.pageviews)}
+            prev={@prev_stats && @prev_stats.pageviews}
+            current={@stats.pageviews}
+          />
+          <.stat_card
+            label="Unique Visitors"
+            value={format_number(@stats.unique_visitors)}
+            prev={@prev_stats && @prev_stats.unique_visitors}
+            current={@stats.unique_visitors}
+          />
+          <.stat_card
+            label="Sessions"
+            value={format_number(@stats.sessions)}
+            prev={@prev_stats && @prev_stats.sessions}
+            current={@stats.sessions}
+          />
+          <.stat_card
+            label="Bounce Rate"
+            value={"#{@stats.bounce_rate}%"}
+            prev={@prev_stats && @prev_stats.bounce_rate}
+            current={@stats.bounce_rate}
+            invert={true}
+          />
+          <.stat_card
+            label="Avg Duration"
+            value={format_duration(@stats.avg_duration)}
+            prev={@prev_stats && @prev_stats.avg_duration}
+            current={@stats.avg_duration}
+          />
+        </div>
+
+        <%!-- Time-series Chart --%>
+        <div
+          class="bg-white rounded-lg shadow p-5 mb-6"
+          id="timeseries-hook"
+          phx-hook="TimeseriesChart"
+        >
+          <div style="height: 280px; position: relative;">
+            <canvas></canvas>
+          </div>
+        </div>
+
+        <%!-- Data Cards Grid --%>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <.data_card
+            title="Top Pages"
+            link={~p"/dashboard/sites/#{@site.id}/pages"}
+            empty={@top_pages == []}
+          >
+            <div :for={row <- @top_pages} class="flex items-center justify-between py-2">
+              <span class="text-sm text-gray-800 truncate mr-4" title={row["url_path"]}>
+                {row["url_path"]}
+              </span>
+              <span class="text-sm font-medium text-gray-600 tabular-nums whitespace-nowrap">
+                {format_number(row["pageviews"])}
+              </span>
+            </div>
+          </.data_card>
+
+          <.data_card
+            title="Top Sources"
+            link={~p"/dashboard/sites/#{@site.id}/sources"}
+            empty={@top_sources == []}
+          >
+            <div :for={row <- @top_sources} class="flex items-center justify-between py-2">
+              <span class="text-sm text-gray-800 truncate mr-4">
+                {row["referrer_domain"] || "Direct"}
+              </span>
+              <span class="text-sm font-medium text-gray-600 tabular-nums whitespace-nowrap">
+                {format_number(row["pageviews"])}
+              </span>
+            </div>
+          </.data_card>
+
+          <.data_card
+            title="Top States"
+            link={~p"/dashboard/sites/#{@site.id}/geo"}
+            empty={@top_regions == []}
+          >
+            <div :for={row <- @top_regions} class="flex items-center justify-between py-2">
+              <span class="text-sm text-gray-800 truncate mr-4">
+                {region_display(row)}
+              </span>
+              <span class="text-sm font-medium text-gray-600 tabular-nums whitespace-nowrap">
+                {format_number(row["unique_visitors"])}
+              </span>
+            </div>
+          </.data_card>
+
+          <.data_card
+            title="Top Browsers"
+            link={~p"/dashboard/sites/#{@site.id}/devices"}
+            empty={@top_browsers == []}
+          >
+            <div :for={row <- @top_browsers} class="flex items-center justify-between py-2">
+              <span class="text-sm text-gray-800 truncate mr-4">
+                {row["name"] || "Unknown"}
+              </span>
+              <span class="text-sm font-medium text-gray-600 tabular-nums whitespace-nowrap">
+                {format_number(row["unique_visitors"])}
+              </span>
+            </div>
+          </.data_card>
+
+          <.data_card
+            title="Top OS"
+            link={~p"/dashboard/sites/#{@site.id}/devices"}
+            empty={@top_os == []}
+          >
+            <div :for={row <- @top_os} class="flex items-center justify-between py-2">
+              <span class="text-sm text-gray-800 truncate mr-4">
+                {row["name"] || "Unknown"}
+              </span>
+              <span class="text-sm font-medium text-gray-600 tabular-nums whitespace-nowrap">
+                {format_number(row["unique_visitors"])}
+              </span>
+            </div>
+          </.data_card>
+
+          <.data_card
+            title="Entry Pages"
+            link={~p"/dashboard/sites/#{@site.id}/entry-exit"}
+            empty={@entry_pages == []}
+          >
+            <div :for={row <- @entry_pages} class="flex items-center justify-between py-2">
+              <span class="text-sm text-gray-800 truncate mr-4 font-mono" title={row["url_path"]}>
+                {row["url_path"]}
+              </span>
+              <span class="text-sm font-medium text-gray-600 tabular-nums whitespace-nowrap">
+                {format_number(row["entries"])}
+              </span>
+            </div>
+          </.data_card>
+
+          <.data_card
+            title="Realtime"
+            link={~p"/dashboard/sites/#{@site.id}/realtime"}
+            empty={false}
+          >
+            <div class="flex flex-col items-center justify-center py-4">
+              <div class="text-4xl font-bold text-gray-900">{@live_visitors}</div>
+              <div class="text-sm text-gray-500 mt-1">active visitors</div>
+            </div>
+          </.data_card>
+        </div>
+
+        <%!-- Visitor Map --%>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+          <div class="bg-white rounded-lg shadow p-5">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-sm font-medium text-gray-500">Visitor Map</h3>
+              <.link
+                navigate={~p"/dashboard/sites/#{@site.id}/map"}
+                class="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+              >
+                View details &rarr;
+              </.link>
+            </div>
             <div
-              :if={@show_date_picker}
-              class="absolute top-full mt-2 right-0 bg-white rounded-lg shadow-lg border border-gray-200 p-4 z-50"
+              id="map-hook"
+              phx-hook="BubbleMap"
             >
-              <form phx-submit="custom_range" class="flex items-end gap-3">
-                <div>
-                  <label class="block text-xs font-medium text-gray-500 mb-1">From</label>
-                  <input
-                    type="date"
-                    name="from"
-                    value={Date.to_iso8601(@date_from)}
-                    class="block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label class="block text-xs font-medium text-gray-500 mb-1">To</label>
-                  <input
-                    type="date"
-                    name="to"
-                    value={Date.to_iso8601(@date_to)}
-                    class="block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  class="px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
-                >
-                  Apply
-                </button>
-              </form>
+              <div style="height: 300px; position: relative;">
+                <canvas></canvas>
+              </div>
             </div>
           </div>
-        </div>
-        <button
-          phx-click="toggle_compare"
-          class={[
-            "px-3 py-1.5 text-sm font-medium rounded-lg border",
-            if(@compare,
-              do: "bg-indigo-50 border-indigo-200 text-indigo-700",
-              else: "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-            )
-          ]}
-        >
-          Compare
-        </button>
-      </div>
 
-      <%!-- Segment Filter --%>
-      <.segment_filter segment={@segment} />
-
-      <%!-- Stat Cards with Comparison --%>
-      <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-        <.stat_card
-          label="Pageviews"
-          value={format_number(@stats.pageviews)}
-          prev={@prev_stats && @prev_stats.pageviews}
-          current={@stats.pageviews}
-        />
-        <.stat_card
-          label="Unique Visitors"
-          value={format_number(@stats.unique_visitors)}
-          prev={@prev_stats && @prev_stats.unique_visitors}
-          current={@stats.unique_visitors}
-        />
-        <.stat_card
-          label="Sessions"
-          value={format_number(@stats.sessions)}
-          prev={@prev_stats && @prev_stats.sessions}
-          current={@stats.sessions}
-        />
-        <.stat_card
-          label="Bounce Rate"
-          value={"#{@stats.bounce_rate}%"}
-          prev={@prev_stats && @prev_stats.bounce_rate}
-          current={@stats.bounce_rate}
-          invert={true}
-        />
-        <.stat_card
-          label="Avg Duration"
-          value={format_duration(@stats.avg_duration)}
-          prev={@prev_stats && @prev_stats.avg_duration}
-          current={@stats.avg_duration}
-        />
-      </div>
-
-      <%!-- Time-series Chart --%>
-      <div
-        class="bg-white rounded-lg shadow p-5 mb-6"
-        id="timeseries-hook"
-        phx-hook="TimeseriesChart"
-      >
-        <div style="height: 280px; position: relative;">
-          <canvas></canvas>
-        </div>
-      </div>
-
-      <%!-- Data Cards Grid --%>
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <.data_card
-          title="Top Pages"
-          link={~p"/dashboard/sites/#{@site.id}/pages"}
-          empty={@top_pages == []}
-        >
-          <div :for={row <- @top_pages} class="flex items-center justify-between py-2">
-            <span class="text-sm text-gray-800 truncate mr-4" title={row["url_path"]}>
-              {row["url_path"]}
-            </span>
-            <span class="text-sm font-medium text-gray-600 tabular-nums whitespace-nowrap">
-              {format_number(row["pageviews"])}
-            </span>
-          </div>
-        </.data_card>
-
-        <.data_card
-          title="Top Sources"
-          link={~p"/dashboard/sites/#{@site.id}/sources"}
-          empty={@top_sources == []}
-        >
-          <div :for={row <- @top_sources} class="flex items-center justify-between py-2">
-            <span class="text-sm text-gray-800 truncate mr-4">
-              {row["referrer_domain"] || "Direct"}
-            </span>
-            <span class="text-sm font-medium text-gray-600 tabular-nums whitespace-nowrap">
-              {format_number(row["pageviews"])}
-            </span>
-          </div>
-        </.data_card>
-
-        <.data_card
-          title="Top States"
-          link={~p"/dashboard/sites/#{@site.id}/geo"}
-          empty={@top_regions == []}
-        >
-          <div :for={row <- @top_regions} class="flex items-center justify-between py-2">
-            <span class="text-sm text-gray-800 truncate mr-4">
-              {region_display(row)}
-            </span>
-            <span class="text-sm font-medium text-gray-600 tabular-nums whitespace-nowrap">
-              {format_number(row["unique_visitors"])}
-            </span>
-          </div>
-        </.data_card>
-
-        <.data_card
-          title="Top Browsers"
-          link={~p"/dashboard/sites/#{@site.id}/devices"}
-          empty={@top_browsers == []}
-        >
-          <div :for={row <- @top_browsers} class="flex items-center justify-between py-2">
-            <span class="text-sm text-gray-800 truncate mr-4">
-              {row["name"] || "Unknown"}
-            </span>
-            <span class="text-sm font-medium text-gray-600 tabular-nums whitespace-nowrap">
-              {format_number(row["unique_visitors"])}
-            </span>
-          </div>
-        </.data_card>
-
-        <.data_card
-          title="Top OS"
-          link={~p"/dashboard/sites/#{@site.id}/devices"}
-          empty={@top_os == []}
-        >
-          <div :for={row <- @top_os} class="flex items-center justify-between py-2">
-            <span class="text-sm text-gray-800 truncate mr-4">
-              {row["name"] || "Unknown"}
-            </span>
-            <span class="text-sm font-medium text-gray-600 tabular-nums whitespace-nowrap">
-              {format_number(row["unique_visitors"])}
-            </span>
-          </div>
-        </.data_card>
-
-        <.data_card
-          title="Entry Pages"
-          link={~p"/dashboard/sites/#{@site.id}/entry-exit"}
-          empty={@entry_pages == []}
-        >
-          <div :for={row <- @entry_pages} class="flex items-center justify-between py-2">
-            <span class="text-sm text-gray-800 truncate mr-4 font-mono" title={row["url_path"]}>
-              {row["url_path"]}
-            </span>
-            <span class="text-sm font-medium text-gray-600 tabular-nums whitespace-nowrap">
-              {format_number(row["entries"])}
-            </span>
-          </div>
-        </.data_card>
-
-        <.data_card
-          title="Realtime"
-          link={~p"/dashboard/sites/#{@site.id}/realtime"}
-          empty={false}
-        >
-          <div class="flex flex-col items-center justify-center py-4">
-            <div class="text-4xl font-bold text-gray-900">{@live_visitors}</div>
-            <div class="text-sm text-gray-500 mt-1">active visitors</div>
-          </div>
-        </.data_card>
-      </div>
-
-      <%!-- Visitor Map --%>
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-        <div class="bg-white rounded-lg shadow p-5">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="text-sm font-medium text-gray-500">Visitor Map</h3>
-            <.link
-              navigate={~p"/dashboard/sites/#{@site.id}/map"}
-              class="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
-            >
-              View details &rarr;
-            </.link>
-          </div>
-          <div
-            id="map-hook"
-            phx-hook="BubbleMap"
-          >
-            <div style="height: 300px; position: relative;">
-              <canvas></canvas>
+          <%!-- Timezone Distribution --%>
+          <div class="bg-white rounded-lg shadow p-5">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-sm font-medium text-gray-500">Top Timezones</h3>
+              <.link
+                navigate={~p"/dashboard/sites/#{@site.id}/map"}
+                class="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+              >
+                View all &rarr;
+              </.link>
             </div>
-          </div>
-        </div>
-
-        <%!-- Timezone Distribution --%>
-        <div class="bg-white rounded-lg shadow p-5">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="text-sm font-medium text-gray-500">Top Timezones</h3>
-            <.link
-              navigate={~p"/dashboard/sites/#{@site.id}/map"}
-              class="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+            <div
+              id="tz-hook"
+              phx-hook="BarChart"
             >
-              View all &rarr;
-            </.link>
-          </div>
-          <div
-            id="tz-hook"
-            phx-hook="BarChart"
-          >
-            <div style={"height: #{max(length(@timezones) * 32, 100)}px; position: relative;"}>
-              <canvas></canvas>
+              <div style={"height: #{max(length(@timezones) * 32, 100)}px; position: relative;"}>
+                <canvas></canvas>
+              </div>
             </div>
           </div>
         </div>
       </div>
-
-      <%!-- Analytics Navigation --%>
-      <div class="mt-6 bg-white rounded-lg shadow p-5">
-        <h3 class="text-sm font-medium text-gray-500 mb-3">Analytics</h3>
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-          <.nav_link to={~p"/dashboard/sites/#{@site.id}/pages"} label="Pages" />
-          <.nav_link to={~p"/dashboard/sites/#{@site.id}/entry-exit"} label="Entry / Exit" />
-          <.nav_link to={~p"/dashboard/sites/#{@site.id}/transitions"} label="Transitions" />
-          <.nav_link to={~p"/dashboard/sites/#{@site.id}/sources"} label="Sources" />
-          <.nav_link to={~p"/dashboard/sites/#{@site.id}/attribution"} label="Attribution" />
-          <.nav_link to={~p"/dashboard/sites/#{@site.id}/geo"} label="Geography" />
-          <.nav_link to={~p"/dashboard/sites/#{@site.id}/map"} label="Visitor Map" />
-          <.nav_link to={~p"/dashboard/sites/#{@site.id}/devices"} label="Devices" />
-          <.nav_link to={~p"/dashboard/sites/#{@site.id}/visitor-log"} label="Visitor Log" />
-          <.nav_link to={~p"/dashboard/sites/#{@site.id}/search"} label="Site Search" />
-          <.nav_link to={~p"/dashboard/sites/#{@site.id}/cohort"} label="Cohort Retention" />
-          <.nav_link to={~p"/dashboard/sites/#{@site.id}/realtime"} label="Realtime" />
-          <.nav_link to={~p"/dashboard/sites/#{@site.id}/network"} label="Network" />
-          <.nav_link to={~p"/dashboard/sites/#{@site.id}/goals"} label="Goals" />
-          <.nav_link to={~p"/dashboard/sites/#{@site.id}/funnels"} label="Funnels" />
-          <.nav_link to={~p"/dashboard/sites/#{@site.id}/campaigns"} label="Campaigns" />
-          <.nav_link to={~p"/dashboard/sites/#{@site.id}/ecommerce"} label="Ecommerce" />
-          <.nav_link to={~p"/dashboard/sites/#{@site.id}/exports"} label="Exports" />
-        </div>
-      </div>
-    </div>
+    </.dashboard_layout>
     """
   end
 
   # -- Components --
-
-  defp nav_link(assigns) do
-    ~H"""
-    <.link
-      navigate={@to}
-      class="flex items-center justify-center px-3 py-2 text-sm font-medium text-gray-700 bg-gray-50 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors border border-gray-200"
-    >
-      {@label}
-    </.link>
-    """
-  end
 
   defp stat_card(assigns) do
     assigns =
