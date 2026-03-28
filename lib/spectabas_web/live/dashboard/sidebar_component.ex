@@ -18,7 +18,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
 
   def dashboard_layout(assigns) do
     ~H"""
-    <div class="flex min-h-[calc(100vh-44px)]">
+    <div class="flex min-h-[calc(100vh-56px)]">
       <%!-- Sidebar --%>
       <aside class="hidden lg:flex lg:flex-col lg:w-60 bg-white border-r border-gray-200 flex-shrink-0">
         <%!-- Site header --%>

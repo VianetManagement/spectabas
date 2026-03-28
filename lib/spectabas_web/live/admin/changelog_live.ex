@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v0.6.1 — 2026-03-28 20:30 UTC",
+       [
+         %{
+           title: "Accessible top navigation bar",
+           description:
+             "light background, larger text (text-sm), higher contrast (gray-600 on white), ARIA roles and labels, taller bar (h-14), focus ring on sign-in button"
+         }
+       ]},
       {"v0.6.0 — 2026-03-28 20:00 UTC",
        [
          %{
@@ -54,8 +62,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
          },
          %{
            title: "Invitation workflow improvements",
-           description:
-             "resend deletes prior pending invitations, added revoke button"
+           description: "resend deletes prior pending invitations, added revoke button"
          }
        ]},
       {"v0.5.1 — 2026-03-28 19:15 UTC",

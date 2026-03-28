@@ -43,7 +43,7 @@ defmodule SpectabasWeb.DocsLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="flex min-h-[calc(100vh-44px)]">
+    <div class="flex min-h-[calc(100vh-56px)]">
       <%!-- Docs sidebar --%>
       <aside class="hidden lg:flex lg:flex-col lg:w-64 bg-white border-r border-gray-200 flex-shrink-0">
         <div class="p-4 border-b border-gray-200">
