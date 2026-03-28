@@ -738,7 +738,14 @@ defmodule Spectabas.Analytics do
   """
   def visitor_timeline(%Site{} = site, visitor_id) when is_binary(visitor_id) do
     sql = """
-    SELECT *
+    SELECT
+      event_type, event_name, url_path, url_host, referrer_domain, referrer_url,
+      utm_source, utm_medium, utm_campaign,
+      device_type, browser, browser_version, os, os_version,
+      screen_width, screen_height, duration_s,
+      ip_address, ip_country, ip_country_name, ip_region_name, ip_city,
+      ip_timezone, ip_org, ip_is_datacenter, ip_is_vpn, ip_is_tor, ip_is_bot,
+      session_id, timestamp
     FROM events
     WHERE site_id = #{ClickHouse.param(site.id)}
       AND visitor_id = #{ClickHouse.param(visitor_id)}
@@ -748,6 +755,105 @@ defmodule Spectabas.Analytics do
 
     ClickHouse.query(sql)
   end
+
+  @doc """
+  Aggregated visitor profile stats from ClickHouse events.
+  """
+  def visitor_profile(%Site{} = site, visitor_id) when is_binary(visitor_id) do
+    sql = """
+    SELECT
+      min(timestamp) AS first_seen,
+      max(timestamp) AS last_seen,
+      countIf(event_type = 'pageview') AS total_pageviews,
+      uniq(session_id) AS total_sessions,
+      maxIf(duration_s, event_type = 'duration') AS total_duration,
+      argMinIf(url_path, timestamp, event_type = 'pageview') AS first_page,
+      argMaxIf(url_path, timestamp, event_type = 'pageview') AS last_page,
+      argMinIf(referrer_domain, timestamp, referrer_domain != '') AS original_referrer,
+      any(ip_country) AS country,
+      any(ip_country_name) AS country_name,
+      any(ip_region_name) AS region,
+      any(ip_city) AS city,
+      any(ip_timezone) AS timezone,
+      any(browser) AS browser,
+      any(browser_version) AS browser_version,
+      any(os) AS os,
+      any(os_version) AS os_version,
+      any(device_type) AS device_type,
+      any(screen_width) AS screen_width,
+      any(screen_height) AS screen_height,
+      any(ip_org) AS org,
+      any(ip_is_datacenter) AS is_datacenter,
+      any(ip_is_vpn) AS is_vpn,
+      any(ip_is_bot) AS is_bot,
+      groupUniqArray(10)(url_path) AS top_pages,
+      groupUniqArray(5)(referrer_domain) AS referrers,
+      groupUniqArray(5)(utm_source) AS utm_sources
+    FROM events
+    WHERE site_id = #{ClickHouse.param(site.id)}
+      AND visitor_id = #{ClickHouse.param(visitor_id)}
+    """
+
+    case ClickHouse.query(sql) do
+      {:ok, [row]} -> {:ok, row}
+      {:ok, []} -> {:ok, nil}
+      error -> error
+    end
+  end
+
+  @doc """
+  Find other visitors who share the same IP address.
+  """
+  def visitors_by_ip(%Site{} = site, ip_address)
+      when is_binary(ip_address) and ip_address != "" do
+    sql = """
+    SELECT
+      visitor_id,
+      min(timestamp) AS first_seen,
+      max(timestamp) AS last_seen,
+      countIf(event_type = 'pageview') AS pageviews,
+      any(browser) AS browser,
+      any(os) AS os,
+      any(device_type) AS device_type
+    FROM events
+    WHERE site_id = #{ClickHouse.param(site.id)}
+      AND ip_address = #{ClickHouse.param(ip_address)}
+    GROUP BY visitor_id
+    ORDER BY last_seen DESC
+    LIMIT 20
+    """
+
+    ClickHouse.query(sql)
+  end
+
+  def visitors_by_ip(_, _), do: {:ok, []}
+
+  @doc """
+  Get enriched IP data from the most recent event with this IP.
+  """
+  def ip_details(%Site{} = site, ip_address) when is_binary(ip_address) and ip_address != "" do
+    sql = """
+    SELECT
+      ip_address, ip_country, ip_country_name, ip_continent, ip_continent_name,
+      ip_region_code, ip_region_name, ip_city, ip_postal_code,
+      ip_lat, ip_lon, ip_accuracy_radius, ip_timezone,
+      ip_asn, ip_asn_org, ip_org,
+      ip_is_datacenter, ip_is_vpn, ip_is_tor, ip_is_bot
+    FROM events
+    WHERE site_id = #{ClickHouse.param(site.id)}
+      AND ip_address = #{ClickHouse.param(ip_address)}
+    ORDER BY timestamp DESC
+    LIMIT 1
+    """
+
+    case ClickHouse.query(sql) do
+      {:ok, [row]} -> {:ok, row}
+      {:ok, []} -> {:ok, nil}
+      error -> error
+    end
+  end
+
+  def ip_details(_, _), do: {:ok, nil}
 
   # ---- Visitor Log ----
 
