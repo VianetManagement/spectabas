@@ -8,7 +8,7 @@ WORKDIR /app
 RUN mix local.hex --force && mix local.rebar --force
 ENV MIX_ENV=prod
 
-# --- Deps layer (cached unless mix.exs/mix.lock change) ---
+# --- Layer 1: Deps (cached unless mix.exs/mix.lock change) ---
 COPY mix.exs mix.lock ./
 RUN mix deps.get --only $MIX_ENV
 
@@ -18,22 +18,24 @@ RUN mix deps.compile
 # Pre-install esbuild + tailwind binaries (cached with deps)
 RUN mix esbuild.install --if-missing && mix tailwind.install --if-missing
 
-# --- App layer (changes on every code push) ---
-COPY lib lib
-COPY assets assets
-COPY priv priv
-COPY rel rel
-
-# Download GeoIP databases (DB-IP free, updated monthly)
-# Cache bust: 2026-03-27b
+# --- Layer 2: GeoIP + UA databases (cached separately, rarely changes) ---
+# Only re-downloads when this RUN instruction changes (monthly cache bust)
+# Cache key: 2026-03
 RUN mkdir -p priv/geoip && \
-    YEAR=$(date +%Y) && MONTH=$(date +%m) && \
-    curl -fsSL -o /tmp/city.mmdb.gz "https://download.db-ip.com/free/dbip-city-lite-${YEAR}-${MONTH}.mmdb.gz" && \
-    curl -fsSL -o /tmp/asn.mmdb.gz "https://download.db-ip.com/free/dbip-asn-lite-${YEAR}-${MONTH}.mmdb.gz" && \
+    curl -fsSL -o /tmp/city.mmdb.gz "https://download.db-ip.com/free/dbip-city-lite-2026-03.mmdb.gz" && \
+    curl -fsSL -o /tmp/asn.mmdb.gz "https://download.db-ip.com/free/dbip-asn-lite-2026-03.mmdb.gz" && \
     gunzip -c /tmp/city.mmdb.gz > priv/geoip/dbip-city-lite.mmdb && \
     gunzip -c /tmp/asn.mmdb.gz > priv/geoip/dbip-asn-lite.mmdb && \
-    echo "GeoIP city: $(wc -c < priv/geoip/dbip-city-lite.mmdb) bytes" && \
-    echo "GeoIP asn: $(wc -c < priv/geoip/dbip-asn-lite.mmdb) bytes"
+    rm -f /tmp/*.gz
+
+# --- Layer 3: App code (changes on every push) ---
+COPY lib lib
+COPY assets assets
+COPY priv/static priv/static
+COPY priv/repo priv/repo
+COPY priv/asn_lists priv/asn_lists
+COPY priv/clickhouse priv/clickhouse
+COPY rel rel
 
 RUN mix compile && \
     mix ua_inspector.download --force && \
