@@ -183,7 +183,13 @@ defmodule Spectabas.ClickHouse do
       "CREATE USER IF NOT EXISTS #{cfg[:username]} IDENTIFIED WITH plaintext_password BY '#{cfg[:password]}'",
       "CREATE USER IF NOT EXISTS #{cfg[:read_username]} IDENTIFIED WITH plaintext_password BY '#{cfg[:read_password]}'",
       "GRANT INSERT, SELECT, ALTER UPDATE ON #{db}.* TO #{cfg[:username]}",
-      "GRANT SELECT ON #{db}.* TO #{cfg[:read_username]}"
+      "GRANT SELECT ON #{db}.* TO #{cfg[:read_username]}",
+      # Skip indexes for common query patterns
+      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_session session_id TYPE bloom_filter GRANULARITY 4",
+      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_visitor visitor_id TYPE bloom_filter GRANULARITY 4",
+      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_country ip_country TYPE bloom_filter GRANULARITY 4",
+      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_browser browser TYPE bloom_filter GRANULARITY 4",
+      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_referrer referrer_domain TYPE bloom_filter GRANULARITY 4"
     ]
 
     if connected do

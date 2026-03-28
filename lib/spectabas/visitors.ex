@@ -114,6 +114,7 @@ defmodule Spectabas.Visitors do
   """
   def generate_xdomain_token(visitor_id) do
     ensure_xdomain_table()
+    sweep_expired_xdomain_tokens()
 
     token = :crypto.strong_rand_bytes(16) |> Base.url_encode64(padding: false)
     ttl_ms = xdomain_ttl_ms()
@@ -121,6 +122,16 @@ defmodule Spectabas.Visitors do
 
     :ets.insert(@xdomain_table, {token, visitor_id, expires_at})
     token
+  end
+
+  defp sweep_expired_xdomain_tokens do
+    now = System.monotonic_time(:millisecond)
+
+    :ets.select_delete(@xdomain_table, [
+      {{:_, :_, :"$1"}, [{:<, :"$1", now}], [true]}
+    ])
+  rescue
+    _ -> :ok
   end
 
   @doc """

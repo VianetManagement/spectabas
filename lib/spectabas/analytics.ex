@@ -650,13 +650,58 @@ defmodule Spectabas.Analytics do
     with :ok <- authorize(site, user) do
       goals = Spectabas.Goals.list_goals(site)
 
-      results =
-        Enum.map(goals, fn goal ->
-          count = count_goal_completions(site, goal, date_range)
-          %{goal_id: goal.id, name: goal.name, goal_type: goal.goal_type, completions: count}
-        end)
+      if goals == [] do
+        {:ok, []}
+      else
+        # Batch all goals into a single query with UNION ALL
+        unions =
+          goals
+          |> Enum.map(fn goal ->
+            condition = goal_condition(goal)
 
-      {:ok, results}
+            """
+            SELECT #{ClickHouse.param(to_string(goal.id))} AS goal_id, count() AS completions
+            FROM events
+            WHERE site_id = #{ClickHouse.param(site.id)}
+              AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+              AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+              AND #{condition}
+            """
+          end)
+          |> Enum.join("\nUNION ALL\n")
+
+        counts =
+          case ClickHouse.query(unions) do
+            {:ok, rows} -> Map.new(rows, fn r -> {r["goal_id"], to_int(r["completions"])} end)
+            _ -> %{}
+          end
+
+        results =
+          Enum.map(goals, fn goal ->
+            %{
+              goal_id: goal.id,
+              name: goal.name,
+              goal_type: goal.goal_type,
+              completions: Map.get(counts, to_string(goal.id), 0)
+            }
+          end)
+
+        {:ok, results}
+      end
+    end
+  end
+
+  defp goal_condition(goal) do
+    case goal.goal_type do
+      "pageview" ->
+        path_pattern = goal.page_path |> to_string() |> String.replace("*", "%")
+        "event_type = 'pageview' AND url_path LIKE #{ClickHouse.param(path_pattern)}"
+
+      "custom_event" ->
+        "event_type = 'custom' AND event_name = #{ClickHouse.param(to_string(goal.event_name))}"
+
+      _ ->
+        "1 = 0"
     end
   end
 
@@ -1098,37 +1143,4 @@ defmodule Spectabas.Analytics do
   end
 
   defp self_referrer_domains(_), do: ["www.spectabas.com", "spectabas.com"]
-
-  defp count_goal_completions(site, goal, date_range) do
-    condition =
-      case goal.goal_type do
-        "pageview" ->
-          path_pattern =
-            goal.page_path
-            |> to_string()
-            |> String.replace("*", "%")
-
-          "event_type = 'pageview' AND url_path LIKE #{ClickHouse.param(path_pattern)}"
-
-        "custom_event" ->
-          "event_type = 'custom' AND event_name = #{ClickHouse.param(to_string(goal.event_name))}"
-
-        _ ->
-          "1 = 0"
-      end
-
-    sql = """
-    SELECT count() AS completions
-    FROM events
-    WHERE site_id = #{ClickHouse.param(site.id)}
-      AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-      AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-      AND #{condition}
-    """
-
-    case ClickHouse.query(sql) do
-      {:ok, [%{"completions" => count}]} -> count
-      _ -> 0
-    end
-  end
 end

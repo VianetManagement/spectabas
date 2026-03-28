@@ -8,7 +8,9 @@ defmodule Spectabas.Accounts.InvitationTest do
   describe "invite_user/3" do
     test "creates a pending invitation" do
       admin = user_fixture()
-      {:ok, admin} = admin |> Accounts.User.profile_changeset(%{role: :superadmin}) |> Repo.update()
+
+      {:ok, admin} =
+        admin |> Accounts.User.profile_changeset(%{role: :superadmin}) |> Repo.update()
 
       assert {:ok, invitation} = Accounts.invite_user(admin, "new@example.com", "analyst")
       assert invitation.email == "new@example.com"
@@ -20,7 +22,9 @@ defmodule Spectabas.Accounts.InvitationTest do
 
     test "rejects invalid email" do
       admin = user_fixture()
-      {:ok, admin} = admin |> Accounts.User.profile_changeset(%{role: :superadmin}) |> Repo.update()
+
+      {:ok, admin} =
+        admin |> Accounts.User.profile_changeset(%{role: :superadmin}) |> Repo.update()
 
       assert {:error, _changeset} = Accounts.invite_user(admin, "not-an-email", "analyst")
     end
@@ -29,7 +33,10 @@ defmodule Spectabas.Accounts.InvitationTest do
   describe "get_valid_invitation/1" do
     test "finds invitation by token" do
       admin = user_fixture()
-      {:ok, admin} = admin |> Accounts.User.profile_changeset(%{role: :superadmin}) |> Repo.update()
+
+      {:ok, admin} =
+        admin |> Accounts.User.profile_changeset(%{role: :superadmin}) |> Repo.update()
+
       {:ok, invitation} = Accounts.invite_user(admin, "find@example.com", "viewer")
 
       assert {:ok, found} = Accounts.get_valid_invitation(invitation.token)
@@ -44,7 +51,10 @@ defmodule Spectabas.Accounts.InvitationTest do
   describe "accept_invitation/2" do
     test "creates user and marks invitation as accepted" do
       admin = user_fixture()
-      {:ok, admin} = admin |> Accounts.User.profile_changeset(%{role: :superadmin}) |> Repo.update()
+
+      {:ok, admin} =
+        admin |> Accounts.User.profile_changeset(%{role: :superadmin}) |> Repo.update()
+
       {:ok, invitation} = Accounts.invite_user(admin, "accept@example.com", "analyst")
 
       assert {:ok, user} =
@@ -59,7 +69,10 @@ defmodule Spectabas.Accounts.InvitationTest do
 
     test "rejects already accepted invitation" do
       admin = user_fixture()
-      {:ok, admin} = admin |> Accounts.User.profile_changeset(%{role: :superadmin}) |> Repo.update()
+
+      {:ok, admin} =
+        admin |> Accounts.User.profile_changeset(%{role: :superadmin}) |> Repo.update()
+
       {:ok, invitation} = Accounts.invite_user(admin, "once@example.com", "viewer")
 
       assert {:ok, _user} =
@@ -80,7 +93,9 @@ defmodule Spectabas.Accounts.InvitationTest do
   describe "list_pending_invitations/0" do
     test "returns only unaccepted invitations" do
       admin = user_fixture()
-      {:ok, admin} = admin |> Accounts.User.profile_changeset(%{role: :superadmin}) |> Repo.update()
+
+      {:ok, admin} =
+        admin |> Accounts.User.profile_changeset(%{role: :superadmin}) |> Repo.update()
 
       {:ok, _inv1} = Accounts.invite_user(admin, "pending1@example.com", "analyst")
       {:ok, inv2} = Accounts.invite_user(admin, "pending2@example.com", "viewer")

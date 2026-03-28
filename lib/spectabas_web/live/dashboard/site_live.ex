@@ -37,7 +37,19 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
        |> assign(:show_date_picker, false)
        |> assign(:segment, [])
        |> assign(:live_visitors, 0)
-       |> load_stats()}
+       |> assign(:top_pages, [])
+       |> assign(:top_sources, [])
+       |> assign(:top_regions, [])
+       |> assign(:top_browsers, [])
+       |> assign(:top_os, [])
+       |> assign(:entry_pages, [])
+       |> assign(:locations, [])
+       |> assign(:timezones, [])
+       |> load_critical_stats()
+       |> then(fn s ->
+         if connected?(s), do: send(self(), :load_deferred)
+         s
+       end)}
     end
   end
 
@@ -45,6 +57,10 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   def handle_info(:refresh, socket) do
     schedule_refresh()
     {:noreply, load_stats(socket)}
+  end
+
+  def handle_info(:load_deferred, socket) do
+    {:noreply, load_deferred_stats(socket)}
   end
 
   def handle_info({:new_event, _event}, socket) do
@@ -133,44 +149,30 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
 
   defp schedule_refresh, do: Process.send_after(self(), :refresh, @refresh_interval_ms)
 
+  defp date_range_and_opts(socket) do
+    %{date_from: from, date_to: to, segment: segment} = socket.assigns
+
+    {%{from: DateTime.new!(from, ~T[00:00:00]), to: DateTime.new!(to, ~T[23:59:59])},
+     [segment: segment]}
+  end
+
+  # Full reload — used on period/segment change and refresh
   defp load_stats(socket) do
-    require Logger
+    socket
+    |> load_critical_stats()
+    |> load_deferred_stats()
+  end
 
-    %{
-      site: site,
-      user: user,
-      date_from: from,
-      date_to: to,
-      compare: compare,
-      preset: preset,
-      segment: segment
-    } = socket.assigns
+  # Fast path: overview stats + timeseries (renders above the fold)
+  defp load_critical_stats(socket) do
+    %{site: site, user: user, compare: compare, preset: preset, date_from: from, date_to: to} =
+      socket.assigns
 
-    seg_opts = [segment: segment]
-
-    date_range = %{
-      from: DateTime.new!(from, ~T[00:00:00]),
-      to: DateTime.new!(to, ~T[23:59:59])
-    }
-
+    {date_range, seg_opts} = date_range_and_opts(socket)
     period = preset_to_period(preset, from, to)
 
-    stats =
-      case Analytics.overview_stats(site, user, date_range, seg_opts) do
-        {:ok, s} ->
-          %{
-            pageviews: to_num(s["pageviews"]),
-            unique_visitors: to_num(s["unique_visitors"]),
-            sessions: to_num(s["total_sessions"]),
-            bounce_rate: to_float(s["bounce_rate"]),
-            avg_duration: to_num(s["avg_duration"])
-          }
+    stats = fetch_overview(site, user, date_range, seg_opts)
 
-        _ ->
-          %{pageviews: 0, unique_visitors: 0, sessions: 0, bounce_rate: 0.0, avg_duration: 0}
-      end
-
-    # Comparison period
     prev_stats =
       if compare do
         days = Date.diff(to, from)
@@ -180,19 +182,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           to: DateTime.new!(Date.add(from, -1), ~T[23:59:59])
         }
 
-        case Analytics.overview_stats(site, user, prev_range) do
-          {:ok, s} ->
-            %{
-              pageviews: to_num(s["pageviews"]),
-              unique_visitors: to_num(s["unique_visitors"]),
-              sessions: to_num(s["total_sessions"]),
-              bounce_rate: to_float(s["bounce_rate"]),
-              avg_duration: to_num(s["avg_duration"])
-            }
-
-          _ ->
-            nil
-        end
+        fetch_overview(site, user, prev_range, [])
       else
         nil
       end
@@ -202,15 +192,6 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         {:ok, rows} -> rows
         _ -> []
       end
-
-    top_pages = safe_query(fn -> Analytics.top_pages(site, user, date_range, seg_opts) end, 5)
-    top_sources = safe_query(fn -> Analytics.top_sources(site, user, date_range) end, 5)
-    top_regions = safe_query(fn -> Analytics.top_regions(site, user, date_range) end, 5)
-    top_browsers = safe_query(fn -> Analytics.top_browsers(site, user, date_range) end, 5)
-    top_os = safe_query(fn -> Analytics.top_os(site, user, date_range) end, 5)
-    entry_pages = safe_query(fn -> Analytics.entry_pages(site, user, date_range) end, 5)
-    locations = safe_query(fn -> Analytics.visitor_locations(site, user, date_range) end, 50)
-    timezones = safe_query(fn -> Analytics.timezone_distribution(site, user, date_range) end, 5)
 
     live_visitors =
       case Analytics.realtime_visitors(site) do
@@ -223,6 +204,28 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     |> assign(:prev_stats, prev_stats)
     |> assign(:timeseries, timeseries)
     |> assign(:live_visitors, live_visitors)
+    |> push_chart_data(
+      timeseries,
+      socket.assigns[:locations] || [],
+      socket.assigns[:timezones] || []
+    )
+  end
+
+  # Slow path: all the data cards, map, timezones
+  defp load_deferred_stats(socket) do
+    %{site: site, user: user} = socket.assigns
+    {date_range, seg_opts} = date_range_and_opts(socket)
+
+    top_pages = safe_query(fn -> Analytics.top_pages(site, user, date_range, seg_opts) end, 5)
+    top_sources = safe_query(fn -> Analytics.top_sources(site, user, date_range) end, 5)
+    top_regions = safe_query(fn -> Analytics.top_regions(site, user, date_range) end, 5)
+    top_browsers = safe_query(fn -> Analytics.top_browsers(site, user, date_range) end, 5)
+    top_os = safe_query(fn -> Analytics.top_os(site, user, date_range) end, 5)
+    entry_pages = safe_query(fn -> Analytics.entry_pages(site, user, date_range) end, 5)
+    locations = safe_query(fn -> Analytics.visitor_locations(site, user, date_range) end, 50)
+    timezones = safe_query(fn -> Analytics.timezone_distribution(site, user, date_range) end, 5)
+
+    socket
     |> assign(:top_pages, top_pages)
     |> assign(:top_sources, top_sources)
     |> assign(:top_regions, top_regions)
@@ -231,7 +234,23 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     |> assign(:entry_pages, entry_pages)
     |> assign(:locations, locations)
     |> assign(:timezones, timezones)
-    |> push_chart_data(timeseries, locations, timezones)
+    |> push_chart_data(socket.assigns.timeseries, locations, timezones)
+  end
+
+  defp fetch_overview(site, user, date_range, opts) do
+    case Analytics.overview_stats(site, user, date_range, opts) do
+      {:ok, s} ->
+        %{
+          pageviews: to_num(s["pageviews"]),
+          unique_visitors: to_num(s["unique_visitors"]),
+          sessions: to_num(s["total_sessions"]),
+          bounce_rate: to_float(s["bounce_rate"]),
+          avg_duration: to_num(s["avg_duration"])
+        }
+
+      _ ->
+        %{pageviews: 0, unique_visitors: 0, sessions: 0, bounce_rate: 0.0, avg_duration: 0}
+    end
   end
 
   defp push_chart_data(socket, timeseries, locations, timezones) do

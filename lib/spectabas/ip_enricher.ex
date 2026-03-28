@@ -230,20 +230,24 @@ defmodule Spectabas.IPEnricher.IPCache do
       {{:_, :_, :"$1"}, [{:<, :"$1", now}], [true]}
     ])
 
-    # Trim to max size if needed
+    # Trim to max size: delete entries expiring soonest using a cutoff
     size = :ets.info(@table, :size)
 
     if size > @max_entries do
-      # Delete oldest entries (those with earliest expiry)
-      entries =
-        :ets.tab2list(@table)
-        |> Enum.sort_by(fn {_ip, _result, expires_at} -> expires_at end)
+      # Find the median expiry and delete everything below it
+      # This avoids tab2list + sort (O(n log n)) by using select_delete
+      cutoff = now + div(@ttl_ms, 2)
 
-      to_delete = Enum.take(entries, size - @max_entries)
+      :ets.select_delete(@table, [
+        {{:_, :_, :"$1"}, [{:<, :"$1", cutoff}], [true]}
+      ])
 
-      Enum.each(to_delete, fn {ip, _result, _expires_at} ->
-        :ets.delete(@table, ip)
-      end)
+      # If still over, do a more aggressive cutoff
+      if :ets.info(@table, :size) > @max_entries do
+        :ets.select_delete(@table, [
+          {{:_, :_, :"$1"}, [{:<, :"$1", now + @ttl_ms}], [true]}
+        ])
+      end
     end
   end
 end

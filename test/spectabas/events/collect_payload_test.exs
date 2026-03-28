@@ -21,7 +21,13 @@ defmodule Spectabas.Events.CollectPayloadTest do
     end
 
     test "accepts valid custom event" do
-      params = %{"t" => "custom", "n" => "signup", "u" => "https://example.com", "p" => %{"plan" => "pro"}}
+      params = %{
+        "t" => "custom",
+        "n" => "signup",
+        "u" => "https://example.com",
+        "p" => %{"plan" => "pro"}
+      }
+
       assert {:ok, %CollectPayload{}} = CollectPayload.validate(params)
     end
 
