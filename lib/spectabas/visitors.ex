@@ -18,7 +18,7 @@ defmodule Spectabas.Visitors do
 
   Returns `{:ok, %Visitor{}}` or `{:error, changeset}`.
   """
-  def get_or_create(site_id, id_value, gdpr_mode) do
+  def get_or_create(site_id, id_value, gdpr_mode, client_ip \\ nil) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
     {field, mode_str} =
@@ -35,19 +35,28 @@ defmodule Spectabas.Visitors do
 
     case Repo.one(query) do
       %Visitor{} = visitor ->
+        known_ips = update_known_ips(visitor.known_ips, client_ip)
+
+        update_attrs =
+          %{last_seen_at: now}
+          |> maybe_put(:last_ip, client_ip)
+          |> maybe_put(:known_ips, known_ips)
+
         visitor
-        |> Visitor.changeset(%{last_seen_at: now})
+        |> Visitor.changeset(update_attrs)
         |> Repo.update()
 
       nil ->
-        attrs = %{
-          site_id: site_id,
-          first_seen_at: now,
-          last_seen_at: now,
-          gdpr_mode: mode_str
-        }
-
-        attrs = Map.put(attrs, field, id_value)
+        attrs =
+          %{
+            site_id: site_id,
+            first_seen_at: now,
+            last_seen_at: now,
+            gdpr_mode: mode_str
+          }
+          |> Map.put(field, id_value)
+          |> maybe_put(:last_ip, client_ip)
+          |> maybe_put(:known_ips, if(client_ip, do: [client_ip], else: []))
 
         %Visitor{}
         |> Visitor.changeset(attrs)

@@ -199,7 +199,7 @@ defmodule Spectabas.Events.Ingest do
     cond do
       # If the payload includes a visitor id, use it
       payload.vid != nil and payload.vid != "" ->
-        case Visitors.get_or_create(site.id, payload.vid, gdpr_mode) do
+        case Visitors.get_or_create(site.id, payload.vid, gdpr_mode, client_ip) do
           {:ok, visitor} -> visitor.id
           _ -> payload.vid
         end
@@ -208,7 +208,7 @@ defmodule Spectabas.Events.Ingest do
       gdpr_mode == :off ->
         cookie_id = Ecto.UUID.generate()
 
-        case Visitors.get_or_create(site.id, cookie_id, :off) do
+        case Visitors.get_or_create(site.id, cookie_id, :off, client_ip) do
           {:ok, visitor} -> visitor.id
           _ -> cookie_id
         end
@@ -217,7 +217,7 @@ defmodule Spectabas.Events.Ingest do
       true ->
         fingerprint = generate_fingerprint(ua_string, client_ip)
 
-        case Visitors.get_or_create(site.id, fingerprint, :on) do
+        case Visitors.get_or_create(site.id, fingerprint, :on, client_ip) do
           {:ok, visitor} -> visitor.id
           _ -> fingerprint
         end
