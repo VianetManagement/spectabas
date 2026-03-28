@@ -40,11 +40,15 @@ defmodule Spectabas.IPEnricher do
     asn_number = get_in_safe(asn_result, [:autonomous_system_number])
     asn_org = get_in_safe(asn_result, [:autonomous_system_organization]) || ""
 
-    # Timezone: try MaxMind first (has timezone), then DB-IP
+    # MaxMind extras: timezone, EU flag, metro code
     timezone =
       get_in_safe(maxmind_result, [:location, :time_zone]) ||
         get_in_safe(city_result, [:location, :time_zone]) ||
         get_in_safe(city_result, [:location, :timezone]) || ""
+
+    is_eu =
+      get_in_safe(maxmind_result, [:country, :is_in_european_union]) ||
+        get_in_safe(city_result, [:country, :is_in_european_union]) || false
 
     %{
       ip_address: if(gdpr_on?, do: anonymize(original_ip), else: original_ip),
@@ -67,6 +71,7 @@ defmodule Spectabas.IPEnricher do
       ip_is_vpn: if(asn_number && ASNBlocklist.vpn?(asn_number), do: 1, else: 0),
       ip_is_tor: if(asn_number && ASNBlocklist.tor?(asn_number), do: 1, else: 0),
       ip_is_bot: 0,
+      ip_is_eu: if(is_eu, do: 1, else: 0),
       ip_gdpr_anonymized: if(gdpr_on?, do: 1, else: 0)
     }
   end
@@ -160,6 +165,7 @@ defmodule Spectabas.IPEnricher do
       ip_is_vpn: 0,
       ip_is_tor: 0,
       ip_is_bot: 0,
+      ip_is_eu: 0,
       ip_gdpr_anonymized: 0
     }
   end

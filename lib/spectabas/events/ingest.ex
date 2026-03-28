@@ -191,6 +191,7 @@ defmodule Spectabas.Events.Ingest do
       ip_is_vpn: 0,
       ip_is_tor: 0,
       ip_is_bot: 0,
+      ip_is_eu: 0,
       ip_gdpr_anonymized: 0
     }
   end

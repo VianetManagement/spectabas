@@ -98,9 +98,9 @@ defmodule Spectabas.Workers.GeoIPRefresh do
   defp download_maxmind(url, dest_path) do
     Logger.info("[GeoIPRefresh] Downloading MaxMind GeoLite2-City")
 
-    case Req.get(url, receive_timeout: 120_000) do
-      {:ok, %{status: 200, body: body}} ->
-        # MaxMind comes as tar.gz; extract the MMDB file
+    case Req.get(url, receive_timeout: 120_000, raw: true) do
+      {:ok, %{status: 200, body: body}} when is_binary(body) ->
+        # MaxMind comes as tar.gz; extract in memory
         {:ok, files} = :erl_tar.extract({:binary, body}, [:compressed, :memory])
 
         case Enum.find(files, fn {name, _} -> String.ends_with?(to_string(name), ".mmdb") end) do

@@ -59,11 +59,12 @@ defmodule SpectabasWeb.Dashboard.NetworkLive do
             datacenter_pct: avg_pct.("datacenter_pct"),
             vpn_pct: avg_pct.("vpn_pct"),
             tor_pct: avg_pct.("tor_pct"),
-            bot_pct: avg_pct.("bot_pct")
+            bot_pct: avg_pct.("bot_pct"),
+            eu_pct: avg_pct.("eu_pct")
           }
 
         _ ->
-          %{asns: [], datacenter_pct: 0.0, vpn_pct: 0.0, tor_pct: 0.0, bot_pct: 0.0}
+          %{asns: [], datacenter_pct: 0.0, vpn_pct: 0.0, tor_pct: 0.0, bot_pct: 0.0, eu_pct: 0.0}
       end
 
     assign(socket, :network, network)
@@ -146,6 +147,10 @@ defmodule SpectabasWeb.Dashboard.NetworkLive do
           <div class="bg-white rounded-lg shadow p-4">
             <dt class="text-sm font-medium text-gray-500">Bot</dt>
             <dd class="mt-1 text-2xl font-bold text-gray-900">{@network.bot_pct}%</dd>
+          </div>
+          <div class="bg-white rounded-lg shadow p-4">
+            <dt class="text-sm font-medium text-gray-500">EU Visitors</dt>
+            <dd class="mt-1 text-2xl font-bold text-gray-900">{@network.eu_pct}%</dd>
           </div>
         </div>
 

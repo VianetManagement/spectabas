@@ -68,6 +68,7 @@ defmodule Spectabas.Events.EventSchema do
       "ip_is_vpn" => to_uint8(event[:ip_is_vpn]),
       "ip_is_tor" => to_uint8(event[:ip_is_tor]),
       "ip_is_bot" => to_uint8(event[:ip_is_bot]),
+      "ip_is_eu" => to_uint8(event[:ip_is_eu]),
       "ip_gdpr_anonymized" => to_uint8(event[:ip_gdpr_anonymized]),
 
       # custom properties (JSON string)

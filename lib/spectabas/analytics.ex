@@ -536,7 +536,8 @@ defmodule Spectabas.Analytics do
         round(countIf(ip_is_datacenter = 1) / count() * 100, 1) AS datacenter_pct,
         round(countIf(ip_is_vpn = 1) / count() * 100, 1) AS vpn_pct,
         round(countIf(ip_is_tor = 1) / count() * 100, 1) AS tor_pct,
-        round(countIf(ip_is_bot = 1) / count() * 100, 1) AS bot_pct
+        round(countIf(ip_is_bot = 1) / count() * 100, 1) AS bot_pct,
+        round(countIf(ip_is_eu = 1) / count() * 100, 1) AS eu_pct
       FROM events
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
