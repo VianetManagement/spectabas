@@ -45,6 +45,28 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v0.7.0 — 2026-03-28 21:00 UTC",
+       [
+         %{
+           title: "Visitor intent icons and cross-linking",
+           description:
+             "FontAwesome SVG icons for each intent category, clickable to filter visitor log. Intent pill added to visitor log table."
+         },
+         %{
+           title: "Enhanced realtime feed",
+           description:
+             "shows visitor ID (clickable to profile), location (to geo), browser (to devices), referrer (to visitor log), and page path (to transitions)"
+         },
+         %{
+           title: "Color-coded sidebar categories",
+           description:
+             "Overview=indigo, Behavior=blue, Acquisition=emerald, Audience=amber, Conversions=rose, Tools=gray"
+         },
+         %{
+           title: "Docs page scroll navigation",
+           description: "clicking a topic in the sidebar now scrolls to that section"
+         }
+       ]},
       {"v0.6.1 — 2026-03-28 20:30 UTC",
        [
          %{

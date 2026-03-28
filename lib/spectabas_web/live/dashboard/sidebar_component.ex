@@ -91,7 +91,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
 
         <%!-- Navigation --%>
         <nav class="flex-1 p-3 space-y-0.5 overflow-y-auto">
-          <.nav_section label="Overview">
+          <.nav_section label="Overview" color="text-indigo-500">
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}"}
               label="Dashboard"
@@ -104,7 +104,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
             />
           </.nav_section>
 
-          <.nav_section label="Behavior">
+          <.nav_section label="Behavior" color="text-blue-500">
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/pages"}
               label="Pages"
@@ -127,7 +127,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
             />
           </.nav_section>
 
-          <.nav_section label="Acquisition">
+          <.nav_section label="Acquisition" color="text-emerald-500">
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/sources"}
               label="Sources"
@@ -145,7 +145,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
             />
           </.nav_section>
 
-          <.nav_section label="Audience">
+          <.nav_section label="Audience" color="text-amber-500">
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/geo"}
               label="Geography"
@@ -178,7 +178,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
             />
           </.nav_section>
 
-          <.nav_section label="Conversions">
+          <.nav_section label="Conversions" color="text-rose-500">
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/goals"}
               label="Goals"
@@ -248,9 +248,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
   end
 
   defp nav_section(assigns) do
+    assigns = Map.put_new(assigns, :color, "text-gray-400")
+
     ~H"""
-    <div class="pt-3 first:pt-0">
-      <p class="px-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">
+    <div class="pt-4 first:pt-0">
+      <p class={["px-2 text-[10px] font-bold uppercase tracking-wider mb-1", @color]}>
         {@label}
       </p>
       {render_slot(@inner_block)}

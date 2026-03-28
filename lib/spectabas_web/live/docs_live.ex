@@ -37,7 +37,10 @@ defmodule SpectabasWeb.DocsLive do
   end
 
   def handle_event("nav", %{"section" => section}, socket) do
-    {:noreply, assign(socket, :active_section, section)}
+    {:noreply,
+     socket
+     |> assign(:active_section, section)
+     |> push_event("scroll-to", %{id: section})}
   end
 
   @impl true

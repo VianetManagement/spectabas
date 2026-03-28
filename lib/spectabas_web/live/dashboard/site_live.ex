@@ -488,15 +488,33 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         </div>
 
         <%!-- Visitor Intent --%>
-        <div :if={@intents != []} class="bg-white rounded-lg shadow p-5 mt-6">
-          <h3 class="text-sm font-medium text-gray-500 mb-4">Visitor Intent</h3>
-          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
-            <div :for={intent <- @intents} class="text-center">
-              <div class={"inline-flex items-center justify-center w-10 h-10 rounded-full mb-1 " <> intent_color(intent["intent"])}>
-                <span class="text-lg">{intent_icon(intent["intent"])}</span>
-              </div>
-              <div class="text-lg font-bold text-gray-900">{intent["visitors"]}</div>
-              <div class="text-xs text-gray-500 capitalize">{intent["intent"]}</div>
+        <div :if={@intents != []} class="bg-white rounded-lg shadow overflow-hidden mt-6">
+          <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h3 class="font-semibold text-gray-900">Visitor Intent</h3>
+            <.link
+              navigate={~p"/dashboard/sites/#{@site.id}/visitor-log"}
+              class="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+            >
+              View all &rarr;
+            </.link>
+          </div>
+          <div class="px-5 py-4">
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
+              <.link
+                :for={intent <- @intents}
+                navigate={
+                  ~p"/dashboard/sites/#{@site.id}/visitor-log?filter_field=visitor_intent&filter_value=#{intent["intent"]}"
+                }
+                class="text-center group hover:bg-gray-50 rounded-lg p-2 transition-colors"
+              >
+                <div class={"inline-flex items-center justify-center w-10 h-10 rounded-full mb-1.5 " <> intent_color(intent["intent"])}>
+                  {raw(intent_icon(intent["intent"]))}
+                </div>
+                <div class="text-lg font-bold text-gray-900 group-hover:text-indigo-600">
+                  {intent["visitors"]}
+                </div>
+                <div class="text-xs text-gray-500 capitalize">{intent["intent"]}</div>
+              </.link>
             </div>
           </div>
         </div>
@@ -684,23 +702,41 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
 
   defp short_tz(_), do: "Unknown"
 
-  defp intent_color("buying"), do: "bg-green-100"
-  defp intent_color("researching"), do: "bg-blue-100"
-  defp intent_color("comparing"), do: "bg-purple-100"
-  defp intent_color("support"), do: "bg-yellow-100"
-  defp intent_color("returning"), do: "bg-indigo-100"
-  defp intent_color("browsing"), do: "bg-gray-100"
-  defp intent_color("bot"), do: "bg-red-100"
-  defp intent_color(_), do: "bg-gray-100"
+  defp intent_color("buying"), do: "bg-green-100 text-green-600"
+  defp intent_color("researching"), do: "bg-blue-100 text-blue-600"
+  defp intent_color("comparing"), do: "bg-purple-100 text-purple-600"
+  defp intent_color("support"), do: "bg-yellow-100 text-yellow-600"
+  defp intent_color("returning"), do: "bg-indigo-100 text-indigo-600"
+  defp intent_color("browsing"), do: "bg-gray-100 text-gray-500"
+  defp intent_color("bot"), do: "bg-red-100 text-red-500"
+  defp intent_color(_), do: "bg-gray-100 text-gray-500"
 
-  defp intent_icon("buying"), do: "$"
-  defp intent_icon("researching"), do: "?"
-  defp intent_icon("comparing"), do: "~"
-  defp intent_icon("support"), do: "!"
-  defp intent_icon("returning"), do: "R"
-  defp intent_icon("browsing"), do: "B"
-  defp intent_icon("bot"), do: "X"
-  defp intent_icon(_), do: "-"
+  # FontAwesome free SVG icons (16x16 viewBox)
+  @intent_icons %{
+    # shopping-cart
+    "buying" =>
+      ~s(<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 576 512"><path d="M0 24C0 10.7 10.7 0 24 0H69.5c22 0 41.5 12.8 50.6 32h411c26.3 0 45.5 25 38.6 50.4l-41 152.3c-8.5 31.4-37 53.3-69.5 53.3H170.7l5.4 28.5c2.2 11.3 12.1 19.5 23.6 19.5H488c13.3 0 24 10.7 24 24s-10.7 24-24 24H199.7c-34.6 0-64.3-24.6-70.7-58.5L77.4 54.5c-.7-3.8-4-6.5-7.9-6.5H24C10.7 48 0 37.3 0 24zM128 464a48 48 0 1 1 96 0 48 48 0 1 1-96 0zm336-48a48 48 0 1 1 0 96 48 48 0 1 1 0-96z"/></svg>),
+    # magnifying-glass
+    "researching" =>
+      ~s(<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 512 512"><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352a144 144 0 1 0 0-288 144 144 0 1 0 0 288z"/></svg>),
+    # scale-balanced
+    "comparing" =>
+      ~s(<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 640 512"><path d="M384 32H512c17.7 0 32 14.3 32 32s-14.3 32-32 32H398.4c-5.2 25.8-22.9 47.1-46.4 57.3V448H512c17.7 0 32 14.3 32 32s-14.3 32-32 32H128c-17.7 0-32-14.3-32-32s14.3-32 32-32H288V153.3c-23.5-10.3-41.2-31.6-46.4-57.3H128c-17.7 0-32-14.3-32-32s14.3-32 32-32H256c14.6-19.4 37.8-32 64-32s49.4 12.6 64 32z"/></svg>),
+    # life-ring
+    "support" =>
+      ~s(<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 512 512"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zm0-160a96 96 0 1 1 0-192 96 96 0 1 1 0 192z"/></svg>),
+    # rotate-left
+    "returning" =>
+      ~s(<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 512 512"><path d="M125.7 160H176c17.7 0 32 14.3 32 32s-14.3 32-32 32H48c-17.7 0-32-14.3-32-32V64c0-17.7 14.3-32 32-32s32 14.3 32 32v51.2L97.6 97.6c87.5-87.5 229.3-87.5 316.8 0s87.5 229.3 0 316.8s-229.3 87.5-316.8 0c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0c62.5 62.5 163.8 62.5 226.3 0s62.5-163.8 0-226.3s-163.8-62.5-226.3 0L125.7 160z"/></svg>),
+    # eye
+    "browsing" =>
+      ~s(<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 576 512"><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM144 256a144 144 0 1 1 288 0 144 144 0 1 1-288 0zm144-64a64 64 0 1 0 0 128 64 64 0 1 0 0-128z"/></svg>),
+    # robot
+    "bot" =>
+      ~s(<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 640 512"><path d="M320 0c17.7 0 32 14.3 32 32V96H472c39.8 0 72 32.2 72 72V440c0 39.8-32.2 72-72 72H168c-39.8 0-72-32.2-72-72V168c0-39.8 32.2-72 72-72H288V32c0-17.7 14.3-32 32-32zM208 384c-8.8 0-16 7.2-16 16s7.2 16 16 16h32c8.8 0 16-7.2 16-16s-7.2-16-16-16H208zm96 0c-8.8 0-16 7.2-16 16s7.2 16 16 16h32c8.8 0 16-7.2 16-16s-7.2-16-16-16H304zm96 0c-8.8 0-16 7.2-16 16s7.2 16 16 16h32c8.8 0 16-7.2 16-16s-7.2-16-16-16H400zM264 256a40 40 0 1 0-80 0 40 40 0 1 0 80 0zm152-40a40 40 0 1 0 0 80 40 40 0 1 0 0-80z"/></svg>)
+  }
+
+  defp intent_icon(intent), do: Map.get(@intent_icons, intent, "")
 
   defp location_label(loc) do
     city = loc["ip_city"] || ""

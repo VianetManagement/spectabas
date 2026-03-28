@@ -109,6 +109,9 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Visitor
                 </th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Intent
+                </th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pages</th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Duration
@@ -127,7 +130,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
             </thead>
             <tbody class="divide-y divide-gray-200">
               <tr :if={@visitors == []}>
-                <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                <td colspan="8" class="px-4 py-8 text-center text-gray-500">
                   No visitors for this period.
                 </td>
               </tr>
@@ -138,6 +141,20 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
                     class="text-indigo-600 hover:text-indigo-800 font-mono text-xs"
                   >
                     {String.slice(v["visitor_id"] || "", 0, 8)}...
+                  </.link>
+                </td>
+                <td class="px-4 py-3">
+                  <.link
+                    :if={v["intent"] && v["intent"] != ""}
+                    navigate={
+                      ~p"/dashboard/sites/#{@site.id}/visitor-log?filter_field=visitor_intent&filter_value=#{v["intent"]}"
+                    }
+                    class={[
+                      "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
+                      intent_pill(v["intent"])
+                    ]}
+                  >
+                    {v["intent"]}
                   </.link>
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-900 tabular-nums">{v["pageviews"]}</td>
@@ -210,6 +227,15 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
     </.dashboard_layout>
     """
   end
+
+  defp intent_pill("buying"), do: "bg-green-100 text-green-800"
+  defp intent_pill("researching"), do: "bg-blue-100 text-blue-800"
+  defp intent_pill("comparing"), do: "bg-purple-100 text-purple-800"
+  defp intent_pill("support"), do: "bg-yellow-100 text-yellow-800"
+  defp intent_pill("returning"), do: "bg-indigo-100 text-indigo-800"
+  defp intent_pill("browsing"), do: "bg-gray-100 text-gray-700"
+  defp intent_pill("bot"), do: "bg-red-100 text-red-800"
+  defp intent_pill(_), do: "bg-gray-100 text-gray-700"
 
   defp format_duration(s) when is_integer(s) and s > 0, do: "#{div(s, 60)}m #{rem(s, 60)}s"
   defp format_duration(s) when is_binary(s), do: format_duration(to_int(s))

@@ -42,7 +42,7 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
 
   @impl true
   def handle_info({:new_event, event}, socket) do
-    events = [event | socket.assigns.events] |> Enum.take(20)
+    events = [event | socket.assigns.events] |> Enum.take(30)
 
     active_count =
       case Analytics.realtime_visitors(socket.assigns.site) do
@@ -64,18 +64,13 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
     <.dashboard_layout
       site={@site}
       page_title="Realtime"
-      page_description="Live visitor feed from the last 5 minutes."
+      page_description="Live visitor activity from the last 5 minutes."
       active="realtime"
-      live_visitors={0}
+      live_visitors={@active_count}
     >
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div class="flex items-center justify-between mb-8">
-          <div>
-            <h1 class="text-2xl font-bold text-gray-900 mt-2">Realtime</h1>
-          </div>
-        </div>
-
-        <div class="bg-white rounded-lg shadow p-8 mb-8 text-center">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <%!-- Active count hero --%>
+        <div class="bg-white rounded-lg shadow p-6 mb-6 text-center">
           <div class="flex items-center justify-center gap-3">
             <span class="w-3 h-3 bg-green-500 rounded-full animate-pulse"></span>
             <span class="text-5xl font-bold text-gray-900">{@active_count}</span>
@@ -83,33 +78,80 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
           <p class="text-gray-500 mt-2">visitors online right now</p>
         </div>
 
-        <div class="bg-white rounded-lg shadow">
-          <div class="px-6 py-4 border-b border-gray-200">
-            <h2 class="text-lg font-semibold text-gray-900">Live Event Feed</h2>
+        <%!-- Live event feed --%>
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+          <div class="px-5 py-4 border-b border-gray-100">
+            <h3 class="font-semibold text-gray-900">Live Event Feed</h3>
           </div>
-          <div :if={@events == []} class="px-6 py-8 text-center text-gray-500">
+          <div :if={@events == []} class="px-5 py-8 text-center text-gray-500">
             Waiting for events...
           </div>
-          <ul class="divide-y divide-gray-100">
-            <li :for={event <- @events} class="px-6 py-3 flex items-center justify-between">
-              <div class="flex items-center gap-3">
-                <span class={[
-                  "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
-                  event_type_class(Map.get(event, "event_type", "pageview"))
-                ]}>
-                  {Map.get(event, "event_type", "pageview")}
-                </span>
-                <span class="text-sm text-gray-900 truncate max-w-md">
-                  {Map.get(event, "url_path", "/")}
-                </span>
+          <div class="divide-y divide-gray-50">
+            <div :for={event <- @events} class="px-5 py-3">
+              <div class="flex items-center justify-between mb-1">
+                <div class="flex items-center gap-2 min-w-0">
+                  <%!-- Event type badge --%>
+                  <span class={[
+                    "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium shrink-0",
+                    event_type_class(event["event_type"])
+                  ]}>
+                    {event["event_type"]}
+                  </span>
+                  <%!-- Page path (clickable to transitions) --%>
+                  <.link
+                    navigate={
+                      ~p"/dashboard/sites/#{@site.id}/transitions?page=#{event["url_path"] || "/"}"
+                    }
+                    class="text-sm text-indigo-600 hover:text-indigo-800 font-mono truncate"
+                  >
+                    {event["url_path"] || "/"}
+                  </.link>
+                </div>
+                <span class="text-xs text-gray-400 shrink-0 ml-3">{event["timestamp"]}</span>
               </div>
-              <div class="flex items-center gap-4 text-sm text-gray-500">
-                <span :if={country = Map.get(event, "ip_country")}>{country}</span>
-                <span :if={browser = Map.get(event, "browser")}>{browser}</span>
-                <span>{Map.get(event, "timestamp", "")}</span>
+              <%!-- Visitor details row --%>
+              <div class="flex items-center gap-3 text-xs text-gray-500 mt-1 flex-wrap">
+                <%!-- Visitor ID (clickable to profile) --%>
+                <.link
+                  navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{event["visitor_id"]}"}
+                  class="text-indigo-500 hover:text-indigo-700 font-mono"
+                  title="View visitor profile"
+                >
+                  {String.slice(event["visitor_id"] || "", 0, 8)}
+                </.link>
+                <%!-- Location (clickable to geo) --%>
+                <.link
+                  :if={event["ip_country"] && event["ip_country"] != ""}
+                  navigate={~p"/dashboard/sites/#{@site.id}/geo"}
+                  class="hover:text-indigo-600"
+                >
+                  {event["ip_country"]}
+                </.link>
+                <%!-- Browser (clickable to devices) --%>
+                <.link
+                  :if={event["browser"] && event["browser"] != ""}
+                  navigate={~p"/dashboard/sites/#{@site.id}/devices"}
+                  class="hover:text-indigo-600"
+                >
+                  {event["browser"]}
+                </.link>
+                <%!-- Device type --%>
+                <span :if={event["device_type"] && event["device_type"] != ""} class="text-gray-400">
+                  {event["device_type"]}
+                </span>
+                <%!-- Referrer (clickable to sources) --%>
+                <.link
+                  :if={event["referrer_domain"] && event["referrer_domain"] != ""}
+                  navigate={
+                    ~p"/dashboard/sites/#{@site.id}/visitor-log?filter_field=referrer_domain&filter_value=#{event["referrer_domain"]}"
+                  }
+                  class="hover:text-indigo-600"
+                >
+                  via {event["referrer_domain"]}
+                </.link>
               </div>
-            </li>
-          </ul>
+            </div>
+          </div>
         </div>
       </div>
     </.dashboard_layout>
@@ -118,5 +160,6 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
 
   defp event_type_class("pageview"), do: "bg-blue-100 text-blue-800"
   defp event_type_class("custom"), do: "bg-purple-100 text-purple-800"
+  defp event_type_class("duration"), do: "bg-gray-100 text-gray-600"
   defp event_type_class(_), do: "bg-gray-100 text-gray-800"
 end
