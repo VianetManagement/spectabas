@@ -34,12 +34,20 @@
   // Single consistent fingerprint — no two-phase to avoid split visitor IDs
   var browserFp = enhancedFingerprint();
 
-  // GDPR-off: use cookies, fingerprint sent separately for dedup
   if (gdpr === "off") {
     vid = getCookie("_sab");
     if (!vid) {
-      vid = generateId();
-      setCookie("_sab", vid, 63072000);
+      // Try to set a cookie
+      var newId = generateId();
+      setCookie("_sab", newId, 63072000);
+
+      // Verify cookie actually persisted (may be blocked by browser/extension)
+      vid = getCookie("_sab");
+      if (!vid) {
+        // Cookies blocked — fall back to fingerprint (same as GDPR-on behavior)
+        // This ensures the same visitor gets the same ID across page loads
+        vid = browserFp;
+      }
     }
   } else {
     // GDPR-on: fingerprint IS the visitor id

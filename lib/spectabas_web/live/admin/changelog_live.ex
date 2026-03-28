@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.3.2 — 2026-03-29 10:00 UTC",
+       [
+         %{
+           title: "Fix: complete visitor deduplication rewrite",
+           description:
+             "server now checks cookie THEN fingerprint before creating visitors. Cookie-lost visitors matched by fingerprint and existing record updated with new cookie. Cookies-blocked visitors fall back to fingerprint as ID. Single-phase fingerprint eliminates split IDs."
+         }
+       ]},
       {"v1.3.1 — 2026-03-29 09:00 UTC",
        [
          %{

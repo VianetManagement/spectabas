@@ -15,6 +15,7 @@ defmodule Spectabas.Events.Ingest do
   9. Build complete event map
   """
 
+  import Ecto.Query
   alias Spectabas.Events.{CollectPayload, IntentClassifier}
   alias Spectabas.{Sessions, Visitors}
   alias Spectabas.Visitors.Visitor
@@ -230,26 +231,70 @@ defmodule Spectabas.Events.Ingest do
           _ -> fingerprint
         end
 
-      # If the payload includes a visitor id in GDPR-off mode, use it
-      payload.vid != nil and payload.vid != "" ->
-        case Visitors.get_or_create(site.id, payload.vid, gdpr_mode, client_ip) do
-          {:ok, visitor} ->
-            # Store client browser fingerprint for future dedup if cookie is ever lost
-            fp = if payload._fp && payload._fp != "", do: payload._fp, else: nil
-
-            if fp && (visitor.fingerprint_id == nil or visitor.fingerprint_id == "") do
-              visitor
-              |> Visitor.changeset(%{fingerprint_id: fp})
-              |> Spectabas.Repo.update()
-            end
-
-            visitor.id
-
-          _ ->
-            payload.vid
+      # GDPR-off with fingerprint as vid (cookies blocked) — treat like GDPR-on
+      gdpr_mode == :off and is_binary(payload.vid) and String.starts_with?(payload.vid, "fp_") ->
+        case Visitors.get_or_create(site.id, payload.vid, :on, client_ip) do
+          {:ok, visitor} -> visitor.id
+          _ -> payload.vid
         end
 
-      # GDPR-off: no cookie present — try fingerprint dedup, then create new
+      # GDPR-off with cookie UUID as vid
+      gdpr_mode == :off and payload.vid != nil and payload.vid != "" ->
+        fp = if payload._fp && payload._fp != "", do: payload._fp, else: nil
+
+        # Step 1: Try to find visitor by this cookie_id
+        existing_by_cookie =
+          Spectabas.Repo.one(
+            from(v in Visitor,
+              where: v.site_id == ^site.id and v.cookie_id == ^payload.vid,
+              limit: 1
+            )
+          )
+
+        if existing_by_cookie do
+          # Cookie matches an existing visitor — return visit
+          if fp &&
+               (existing_by_cookie.fingerprint_id == nil or
+                  existing_by_cookie.fingerprint_id == "") do
+            existing_by_cookie
+            |> Visitor.changeset(%{fingerprint_id: fp})
+            |> Spectabas.Repo.update()
+          end
+
+          Visitors.get_or_create(site.id, payload.vid, :off, client_ip)
+          existing_by_cookie.id
+        else
+          # New cookie — check fingerprint for dedup
+          existing_by_fp = if fp, do: Visitors.find_by_fingerprint(site.id, fp), else: nil
+
+          if existing_by_fp do
+            # Fingerprint match! Update existing visitor with new cookie_id
+            existing_by_fp
+            |> Visitor.changeset(%{
+              cookie_id: payload.vid,
+              last_seen_at: DateTime.utc_now() |> DateTime.truncate(:second),
+              last_ip: client_ip
+            })
+            |> Spectabas.Repo.update()
+
+            existing_by_fp.id
+          else
+            # Truly new visitor
+            case Visitors.get_or_create(site.id, payload.vid, :off, client_ip) do
+              {:ok, visitor} ->
+                if fp do
+                  visitor |> Visitor.changeset(%{fingerprint_id: fp}) |> Spectabas.Repo.update()
+                end
+
+                visitor.id
+
+              _ ->
+                payload.vid
+            end
+          end
+        end
+
+      # Fallback: no vid (defensive)
       gdpr_mode == :off ->
         # Use client-side browser fingerprint (canvas/WebGL) — much more stable
         # than the server-side fingerprint (UA + IP + date which rotates daily)
