@@ -45,6 +45,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v0.6.0 — 2026-03-28 20:00 UTC",
+       [
+         %{
+           title: "Documentation page",
+           description:
+             "comprehensive searchable docs at /docs covering all dashboard pages, tracker installation, JS API, REST API, GDPR config, campaigns, goals, and administration"
+         },
+         %{
+           title: "Invitation workflow improvements",
+           description:
+             "resend deletes prior pending invitations, added revoke button"
+         }
+       ]},
       {"v0.5.1 — 2026-03-28 19:15 UTC",
        [
          %{

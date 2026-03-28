@@ -33,6 +33,9 @@
               <a href="/dashboard" class="text-xs text-slate-400 hover:text-white font-medium">
                 Dashboard
               </a>
+              <a href="/docs" class="text-xs text-slate-400 hover:text-white font-medium">
+                Docs
+              </a>
               <%= if @current_scope.user.role in [:superadmin, :admin] do %>
                 <a href="/admin" class="text-xs text-slate-400 hover:text-white font-medium">
                   Admin

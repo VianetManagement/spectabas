@@ -91,6 +91,7 @@ defmodule SpectabasWeb.Router do
       on_mount: [{SpectabasWeb.UserAuth, :require_authenticated}] do
       live "/users/settings", UserLive.Settings, :edit
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
+      live "/docs", DocsLive, :index
     end
 
     post "/users/update-password", UserSessionController, :update_password
