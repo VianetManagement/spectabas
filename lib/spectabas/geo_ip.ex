@@ -1,8 +1,8 @@
 defmodule Spectabas.GeoIP do
   @moduledoc """
   Manages GeoIP database loading via Geolix.
-  Resolves database paths at runtime via :code.priv_dir so it works
-  in both dev and releases.
+  Loads DB-IP (primary geo/ASN) and MaxMind GeoLite2 (timezone).
+  Resolves database paths at runtime via :code.priv_dir.
   """
 
   use GenServer
@@ -26,6 +26,11 @@ defmodule Spectabas.GeoIP do
         id: :asn,
         adapter: Geolix.Adapter.MMDB2,
         source: Path.join([priv_dir, "geoip", "dbip-asn-lite.mmdb"])
+      },
+      %{
+        id: :maxmind_city,
+        adapter: Geolix.Adapter.MMDB2,
+        source: Path.join([priv_dir, "geoip", "GeoLite2-City.mmdb"])
       }
     ]
 
@@ -34,7 +39,7 @@ defmodule Spectabas.GeoIP do
         Geolix.load_database(db)
         Logger.info("[GeoIP] Loaded #{db.id} from #{db.source}")
       else
-        Logger.warning("[GeoIP] Database not found: #{db.source}")
+        Logger.info("[GeoIP] Not found (optional): #{db.source}")
       end
     end)
 

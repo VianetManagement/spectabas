@@ -53,8 +53,9 @@ config :spectabas, Oban,
     Oban.Plugins.Pruner,
     {Oban.Plugins.Cron,
      crontab: [
-       # 1st of each month at 06:00 UTC — refresh GeoIP databases
-       {"0 6 1 * *", Spectabas.Workers.GeoIPRefresh}
+       # 1st and 15th of each month at 06:00 UTC — refresh GeoIP databases
+       # DB-IP updates monthly, MaxMind updates biweekly
+       {"0 6 1,15 * *", Spectabas.Workers.GeoIPRefresh}
      ]}
   ]
 

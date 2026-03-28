@@ -28,12 +28,23 @@ defmodule Spectabas.IPEnricher do
   def enrich(_, _), do: empty_result()
 
   defp do_enrich(original_ip, gdpr_on?) do
-    # Always look up the full IP for maximum geo accuracy
-    city_result = Geolix.lookup(parse_ip(original_ip), where: :city)
-    asn_result = Geolix.lookup(parse_ip(original_ip), where: :asn)
+    parsed_ip = parse_ip(original_ip)
+
+    # DB-IP for primary geo data
+    city_result = Geolix.lookup(parsed_ip, where: :city)
+    asn_result = Geolix.lookup(parsed_ip, where: :asn)
+
+    # MaxMind GeoLite2 for timezone (falls back gracefully if not loaded)
+    maxmind_result = Geolix.lookup(parsed_ip, where: :maxmind_city)
 
     asn_number = get_in_safe(asn_result, [:autonomous_system_number])
     asn_org = get_in_safe(asn_result, [:autonomous_system_organization]) || ""
+
+    # Timezone: try MaxMind first (has timezone), then DB-IP
+    timezone =
+      get_in_safe(maxmind_result, [:location, :time_zone]) ||
+        get_in_safe(city_result, [:location, :time_zone]) ||
+        get_in_safe(city_result, [:location, :timezone]) || ""
 
     %{
       ip_address: if(gdpr_on?, do: anonymize(original_ip), else: original_ip),
@@ -48,9 +59,7 @@ defmodule Spectabas.IPEnricher do
       ip_lat: get_in_safe(city_result, [:location, :latitude]) || 0.0,
       ip_lon: get_in_safe(city_result, [:location, :longitude]) || 0.0,
       ip_accuracy_radius: get_in_safe(city_result, [:location, :accuracy_radius]) || 0,
-      ip_timezone:
-        get_in_safe(city_result, [:location, :time_zone]) ||
-          get_in_safe(city_result, [:location, :timezone]) || "",
+      ip_timezone: timezone,
       ip_asn: asn_number || 0,
       ip_asn_org: asn_org,
       ip_org: format_org(asn_number, asn_org),

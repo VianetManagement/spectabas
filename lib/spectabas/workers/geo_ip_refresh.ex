@@ -31,11 +31,34 @@ defmodule Spectabas.Workers.GeoIPRefresh do
 
     with :ok <- download_and_decompress(city_url, city_path),
          :ok <- download_and_decompress(asn_url, asn_path) do
-      Logger.info("[GeoIPRefresh] Successfully updated GeoIP databases for #{year}-#{month}")
+      Logger.info("[GeoIPRefresh] Updated DB-IP databases for #{year}-#{month}")
 
-      # Reload Geolix with the new files
       Geolix.load_database(%{id: :city, adapter: Geolix.Adapter.MMDB2, source: city_path})
       Geolix.load_database(%{id: :asn, adapter: Geolix.Adapter.MMDB2, source: asn_path})
+
+      # Also refresh MaxMind GeoLite2 if license key is available
+      maxmind_key = System.get_env("MAXMIND_LICENSE_KEY")
+
+      if maxmind_key && maxmind_key != "" do
+        maxmind_url =
+          "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=#{maxmind_key}&suffix=tar.gz"
+
+        maxmind_path = Path.join(geoip_dir, "GeoLite2-City.mmdb")
+
+        case download_maxmind(maxmind_url, maxmind_path) do
+          :ok ->
+            Geolix.load_database(%{
+              id: :maxmind_city,
+              adapter: Geolix.Adapter.MMDB2,
+              source: maxmind_path
+            })
+
+            Logger.info("[GeoIPRefresh] Updated MaxMind GeoLite2-City")
+
+          {:error, reason} ->
+            Logger.warning("[GeoIPRefresh] MaxMind update failed: #{inspect(reason)}")
+        end
+      end
 
       # Clear the IP cache so new lookups use fresh data
       if Process.whereis(Spectabas.IPEnricher.IPCache) do
@@ -69,6 +92,36 @@ defmodule Spectabas.Workers.GeoIPRefresh do
   rescue
     e ->
       Logger.error("[GeoIPRefresh] Error downloading #{url}: #{Exception.message(e)}")
+      {:error, Exception.message(e)}
+  end
+
+  defp download_maxmind(url, dest_path) do
+    Logger.info("[GeoIPRefresh] Downloading MaxMind GeoLite2-City")
+
+    case Req.get(url, receive_timeout: 120_000) do
+      {:ok, %{status: 200, body: body}} ->
+        # MaxMind comes as tar.gz; extract the MMDB file
+        {:ok, files} = :erl_tar.extract({:binary, body}, [:compressed, :memory])
+
+        case Enum.find(files, fn {name, _} -> String.ends_with?(to_string(name), ".mmdb") end) do
+          {_, mmdb_data} ->
+            File.write!(dest_path, mmdb_data)
+            Logger.info("[GeoIPRefresh] MaxMind: #{byte_size(mmdb_data)} bytes to #{dest_path}")
+            :ok
+
+          nil ->
+            {:error, "No .mmdb file found in MaxMind archive"}
+        end
+
+      {:ok, %{status: status}} ->
+        {:error, "HTTP #{status} from MaxMind"}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  rescue
+    e ->
+      Logger.error("[GeoIPRefresh] MaxMind download error: #{Exception.message(e)}")
       {:error, Exception.message(e)}
   end
 end
