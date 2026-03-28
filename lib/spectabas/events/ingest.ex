@@ -15,7 +15,7 @@ defmodule Spectabas.Events.Ingest do
   9. Build complete event map
   """
 
-  alias Spectabas.Events.CollectPayload
+  alias Spectabas.Events.{CollectPayload, IntentClassifier}
   alias Spectabas.{Sessions, Visitors}
 
   @tracking_params ~w(utm_source utm_medium utm_campaign utm_term utm_content
@@ -76,6 +76,15 @@ defmodule Spectabas.Events.Ingest do
         props: payload.p || %{}
       }
       |> Map.merge(ip_data)
+
+    # Classify visitor intent
+    session_context = %{
+      pageview_count: session.pageview_count || 0,
+      is_returning: (session.pageview_count || 0) > 0
+    }
+
+    intent = IntentClassifier.classify(event, session_context)
+    event = Map.put(event, :visitor_intent, intent)
 
     {:ok, event}
   end

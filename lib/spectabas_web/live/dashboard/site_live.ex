@@ -46,6 +46,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
        |> assign(:entry_pages, [])
        |> assign(:locations, [])
        |> assign(:timezones, [])
+       |> assign(:intents, [])
        |> load_critical_stats()
        |> then(fn s ->
          if connected?(s), do: send(self(), :load_deferred)
@@ -225,6 +226,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     entry_pages = safe_query(fn -> Analytics.entry_pages(site, user, date_range) end, 5)
     locations = safe_query(fn -> Analytics.visitor_locations(site, user, date_range) end, 50)
     timezones = safe_query(fn -> Analytics.timezone_distribution(site, user, date_range) end, 5)
+    intents = safe_query(fn -> Analytics.intent_breakdown(site, user, date_range) end, 10)
 
     socket
     |> assign(:top_pages, top_pages)
@@ -235,6 +237,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     |> assign(:entry_pages, entry_pages)
     |> assign(:locations, locations)
     |> assign(:timezones, timezones)
+    |> assign(:intents, intents)
     |> push_chart_data(socket.assigns.timeseries, locations, timezones)
   end
 
@@ -484,6 +487,20 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           </.data_card>
         </div>
 
+        <%!-- Visitor Intent --%>
+        <div :if={@intents != []} class="bg-white rounded-lg shadow p-5 mt-6">
+          <h3 class="text-sm font-medium text-gray-500 mb-4">Visitor Intent</h3>
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
+            <div :for={intent <- @intents} class="text-center">
+              <div class={"inline-flex items-center justify-center w-10 h-10 rounded-full mb-1 " <> intent_color(intent["intent"])}>
+                <span class="text-lg">{intent_icon(intent["intent"])}</span>
+              </div>
+              <div class="text-lg font-bold text-gray-900">{intent["visitors"]}</div>
+              <div class="text-xs text-gray-500 capitalize">{intent["intent"]}</div>
+            </div>
+          </div>
+        </div>
+
         <%!-- Visitor Map --%>
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
           <div class="bg-white rounded-lg shadow p-5">
@@ -666,6 +683,24 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   end
 
   defp short_tz(_), do: "Unknown"
+
+  defp intent_color("buying"), do: "bg-green-100"
+  defp intent_color("researching"), do: "bg-blue-100"
+  defp intent_color("comparing"), do: "bg-purple-100"
+  defp intent_color("support"), do: "bg-yellow-100"
+  defp intent_color("returning"), do: "bg-indigo-100"
+  defp intent_color("browsing"), do: "bg-gray-100"
+  defp intent_color("bot"), do: "bg-red-100"
+  defp intent_color(_), do: "bg-gray-100"
+
+  defp intent_icon("buying"), do: "$"
+  defp intent_icon("researching"), do: "?"
+  defp intent_icon("comparing"), do: "~"
+  defp intent_icon("support"), do: "!"
+  defp intent_icon("returning"), do: "R"
+  defp intent_icon("browsing"), do: "B"
+  defp intent_icon("bot"), do: "X"
+  defp intent_icon(_), do: "-"
 
   defp location_label(loc) do
     city = loc["ip_city"] || ""

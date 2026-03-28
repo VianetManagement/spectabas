@@ -856,6 +856,33 @@ defmodule Spectabas.Analytics do
 
   def ip_details(_, _), do: {:ok, nil}
 
+  # ---- Visitor Intent ----
+
+  @doc """
+  Intent breakdown: visitor counts by classified intent.
+  """
+  def intent_breakdown(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        visitor_intent AS intent,
+        uniq(visitor_id) AS visitors,
+        count() AS events
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND visitor_intent != ''
+      GROUP BY visitor_intent
+      ORDER BY visitors DESC
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
   # ---- Visitor Log ----
 
   @doc """
@@ -883,6 +910,7 @@ defmodule Spectabas.Analytics do
         any(ip_country) AS country,
         any(ip_region_name) AS region,
         any(ip_city) AS city,
+        any(visitor_intent) AS intent,
         any(browser) AS browser,
         any(os) AS os,
         any(device_type) AS device_type,

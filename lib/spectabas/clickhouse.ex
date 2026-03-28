@@ -89,6 +89,7 @@ defmodule Spectabas.ClickHouse do
         ip_is_bot UInt8 DEFAULT 0,
         ip_is_eu UInt8 DEFAULT 0,
         ip_gdpr_anonymized UInt8 DEFAULT 0,
+        visitor_intent LowCardinality(String) DEFAULT '',
         duration_s UInt32 DEFAULT 0,
         properties String DEFAULT '{}',
         is_bounce UInt8 DEFAULT 1,
@@ -185,8 +186,8 @@ defmodule Spectabas.ClickHouse do
       "CREATE USER IF NOT EXISTS #{cfg[:read_username]} IDENTIFIED WITH plaintext_password BY '#{cfg[:read_password]}'",
       "GRANT INSERT, SELECT, ALTER UPDATE ON #{db}.* TO #{cfg[:username]}",
       "GRANT SELECT ON #{db}.* TO #{cfg[:read_username]}",
-      # Add ip_is_eu column (may already exist)
       "ALTER TABLE #{db}.events ADD COLUMN IF NOT EXISTS ip_is_eu UInt8 DEFAULT 0 AFTER ip_is_bot",
+      "ALTER TABLE #{db}.events ADD COLUMN IF NOT EXISTS visitor_intent String DEFAULT '' AFTER ip_gdpr_anonymized",
       # Skip indexes for common query patterns
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_session session_id TYPE bloom_filter GRANULARITY 4",
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_visitor visitor_id TYPE bloom_filter GRANULARITY 4",

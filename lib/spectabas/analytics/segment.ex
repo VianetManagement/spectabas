@@ -22,6 +22,7 @@ defmodule Spectabas.Analytics.Segment do
     referrer_domain utm_source utm_medium utm_campaign
     url_path url_host
     event_type event_name
+    visitor_intent
   )
 
   @doc """
