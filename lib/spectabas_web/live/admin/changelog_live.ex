@@ -45,6 +45,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v0.9.1 — 2026-03-28 23:30 UTC",
+       [
+         %{
+           title: "API key management in Account Settings",
+           description:
+             "generate, view, and revoke API keys directly from the settings page. Key shown once on creation."
+         },
+         %{
+           title: "2FA setup link in Account Settings",
+           description:
+             "shows 2FA status (enabled/disabled) and link to set up TOTP authenticator"
+         }
+       ]},
       {"v0.9.0 — 2026-03-28 23:00 UTC",
        [
          %{

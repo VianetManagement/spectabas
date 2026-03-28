@@ -3,18 +3,18 @@ defmodule SpectabasWeb.UserLive.Settings do
 
   on_mount {SpectabasWeb.UserAuth, :require_sudo_mode}
 
-  alias Spectabas.Accounts
+  alias Spectabas.{Accounts, APIKeys}
 
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div class="mb-8">
         <.link navigate={~p"/dashboard"} class="text-sm text-indigo-600 hover:text-indigo-800">
           &larr; Dashboard
         </.link>
         <h1 class="text-2xl font-bold text-gray-900 mt-2">Account Settings</h1>
-        <p class="text-sm text-gray-500 mt-1">Manage your email and password</p>
+        <p class="text-sm text-gray-500 mt-1">{@current_email}</p>
       </div>
 
       <p
@@ -30,6 +30,7 @@ defmodule SpectabasWeb.UserLive.Settings do
         {msg}
       </p>
 
+      <%!-- Email --%>
       <div class="bg-white rounded-lg shadow p-6 mb-6">
         <h2 class="text-lg font-semibold text-gray-900 mb-4">Change Email</h2>
         <.form
@@ -41,7 +42,7 @@ defmodule SpectabasWeb.UserLive.Settings do
         >
           <div>
             <label for="email_form_email" class="block text-sm font-medium text-gray-700">
-              Email
+              New email
             </label>
             <input
               id="email_form_email"
@@ -58,14 +59,15 @@ defmodule SpectabasWeb.UserLive.Settings do
           </div>
           <button
             type="submit"
-            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 transition"
+            class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700"
           >
             Change Email
           </button>
         </.form>
       </div>
 
-      <div class="bg-white rounded-lg shadow p-6">
+      <%!-- Password --%>
+      <div class="bg-white rounded-lg shadow p-6 mb-6">
         <h2 class="text-lg font-semibold text-gray-900 mb-4">Change Password</h2>
         <.form
           for={@password_form}
@@ -126,11 +128,108 @@ defmodule SpectabasWeb.UserLive.Settings do
           </div>
           <button
             type="submit"
-            class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 transition"
+            class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700"
           >
             Save Password
           </button>
         </.form>
+      </div>
+
+      <%!-- Two-Factor Authentication --%>
+      <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Two-Factor Authentication</h2>
+        <div :if={@totp_enabled} class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+              Enabled
+            </span>
+            <span class="text-sm text-gray-600">TOTP authenticator is active</span>
+          </div>
+        </div>
+        <div :if={!@totp_enabled}>
+          <p class="text-sm text-gray-600 mb-4">
+            Add an extra layer of security by enabling two-factor authentication with an authenticator app (Google Authenticator, Authy, 1Password, etc.).
+          </p>
+          <.link
+            navigate={~p"/auth/2fa/setup"}
+            class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700"
+          >
+            Set Up 2FA
+          </.link>
+        </div>
+      </div>
+
+      <%!-- API Keys --%>
+      <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold text-gray-900">API Keys</h2>
+          <button
+            phx-click="toggle_api_form"
+            class="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+          >
+            {if @show_api_form, do: "Cancel", else: "+ New Key"}
+          </button>
+        </div>
+
+        <p class="text-sm text-gray-600 mb-4">
+          Use API keys to access the Spectabas REST API. Keys start with <code class="text-xs bg-gray-100 px-1 rounded">sab_live_</code>.
+        </p>
+
+        <%!-- New key form --%>
+        <div :if={@show_api_form} class="bg-gray-50 rounded-lg p-4 mb-4">
+          <form phx-submit="create_api_key" class="flex items-end gap-3">
+            <div class="flex-1">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Key Name</label>
+              <input
+                type="text"
+                name="name"
+                required
+                placeholder="e.g. Production, CI/CD, My App"
+                class="block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+              />
+            </div>
+            <button
+              type="submit"
+              class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
+            >
+              Generate
+            </button>
+          </form>
+        </div>
+
+        <%!-- Newly created key (shown once) --%>
+        <div :if={@new_api_key} class="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+          <p class="text-sm text-green-800 font-medium mb-1">
+            API key created! Copy it now — you won't see it again.
+          </p>
+          <code class="block bg-white border border-green-300 rounded p-2 text-sm font-mono text-green-900 break-all">
+            {@new_api_key}
+          </code>
+        </div>
+
+        <%!-- Key list --%>
+        <div :if={@api_keys == []} class="text-sm text-gray-500">
+          No API keys yet.
+        </div>
+        <div :if={@api_keys != []} class="divide-y divide-gray-100">
+          <div :for={key <- @api_keys} class="flex items-center justify-between py-3">
+            <div>
+              <span class="text-sm font-medium text-gray-900">{key.name}</span>
+              <span class="text-xs text-gray-500 ml-2 font-mono">{key.key_prefix}...</span>
+              <span :if={key.last_used_at} class="text-xs text-gray-400 ml-2">
+                Last used: {Calendar.strftime(key.last_used_at, "%Y-%m-%d")}
+              </span>
+            </div>
+            <button
+              phx-click="revoke_api_key"
+              phx-value-id={key.id}
+              data-confirm={"Revoke API key \"#{key.name}\"? This cannot be undone."}
+              class="text-red-500 hover:text-red-700 text-sm font-medium"
+            >
+              Revoke
+            </button>
+          </div>
+        </div>
       </div>
     </div>
     """
@@ -162,6 +261,10 @@ defmodule SpectabasWeb.UserLive.Settings do
       |> assign(:email_form, to_form(email_changeset))
       |> assign(:password_form, to_form(password_changeset))
       |> assign(:trigger_submit, false)
+      |> assign(:totp_enabled, user.totp_enabled || false)
+      |> assign(:show_api_form, false)
+      |> assign(:new_api_key, nil)
+      |> assign(:api_keys, APIKeys.list_user_keys(user))
 
     {:ok, socket}
   end
@@ -223,6 +326,42 @@ defmodule SpectabasWeb.UserLive.Settings do
 
       changeset ->
         {:noreply, assign(socket, password_form: to_form(changeset, action: :insert))}
+    end
+  end
+
+  def handle_event("toggle_api_form", _params, socket) do
+    {:noreply, assign(socket, :show_api_form, !socket.assigns.show_api_form)}
+  end
+
+  def handle_event("create_api_key", %{"name" => name}, socket) do
+    user = socket.assigns.current_scope.user
+
+    case APIKeys.generate(user, name) do
+      {:ok, plaintext, _api_key} ->
+        {:noreply,
+         socket
+         |> assign(:new_api_key, plaintext)
+         |> assign(:api_keys, APIKeys.list_user_keys(user))
+         |> assign(:show_api_form, false)}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to create API key.")}
+    end
+  end
+
+  def handle_event("revoke_api_key", %{"id" => id}, socket) do
+    user = socket.assigns.current_scope.user
+    api_key = Spectabas.Repo.get!(Spectabas.APIKeys.APIKey, id)
+
+    case APIKeys.revoke(user, api_key) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "API key revoked.")
+         |> assign(:api_keys, APIKeys.list_user_keys(user))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to revoke API key.")}
     end
   end
 end
