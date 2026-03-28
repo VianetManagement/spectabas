@@ -596,11 +596,47 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           </div>
         </div>
       </div>
+
+      <%!-- Analytics Navigation --%>
+      <div class="mt-6 bg-white rounded-lg shadow p-5">
+        <h3 class="text-sm font-medium text-gray-500 mb-3">Analytics</h3>
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+          <.nav_link to={~p"/dashboard/sites/#{@site.id}/pages"} label="Pages" />
+          <.nav_link to={~p"/dashboard/sites/#{@site.id}/entry-exit"} label="Entry / Exit" />
+          <.nav_link to={~p"/dashboard/sites/#{@site.id}/transitions"} label="Transitions" />
+          <.nav_link to={~p"/dashboard/sites/#{@site.id}/sources"} label="Sources" />
+          <.nav_link to={~p"/dashboard/sites/#{@site.id}/attribution"} label="Attribution" />
+          <.nav_link to={~p"/dashboard/sites/#{@site.id}/geo"} label="Geography" />
+          <.nav_link to={~p"/dashboard/sites/#{@site.id}/map"} label="Visitor Map" />
+          <.nav_link to={~p"/dashboard/sites/#{@site.id}/devices"} label="Devices" />
+          <.nav_link to={~p"/dashboard/sites/#{@site.id}/visitor-log"} label="Visitor Log" />
+          <.nav_link to={~p"/dashboard/sites/#{@site.id}/search"} label="Site Search" />
+          <.nav_link to={~p"/dashboard/sites/#{@site.id}/cohort"} label="Cohort Retention" />
+          <.nav_link to={~p"/dashboard/sites/#{@site.id}/realtime"} label="Realtime" />
+          <.nav_link to={~p"/dashboard/sites/#{@site.id}/network"} label="Network" />
+          <.nav_link to={~p"/dashboard/sites/#{@site.id}/goals"} label="Goals" />
+          <.nav_link to={~p"/dashboard/sites/#{@site.id}/funnels"} label="Funnels" />
+          <.nav_link to={~p"/dashboard/sites/#{@site.id}/campaigns"} label="Campaigns" />
+          <.nav_link to={~p"/dashboard/sites/#{@site.id}/ecommerce"} label="Ecommerce" />
+          <.nav_link to={~p"/dashboard/sites/#{@site.id}/exports"} label="Exports" />
+        </div>
+      </div>
     </div>
     """
   end
 
   # -- Components --
+
+  defp nav_link(assigns) do
+    ~H"""
+    <.link
+      navigate={@to}
+      class="flex items-center justify-center px-3 py-2 text-sm font-medium text-gray-700 bg-gray-50 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors border border-gray-200"
+    >
+      {@label}
+    </.link>
+    """
+  end
 
   defp stat_card(assigns) do
     assigns =
