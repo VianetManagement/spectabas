@@ -14,10 +14,18 @@ defmodule Spectabas.Audit do
   Sensitive fields are automatically stripped from metadata.
   """
   def log(event, metadata \\ %{}) do
+    {user_id, meta} =
+      case metadata do
+        %{user_id: uid} -> {uid, Map.delete(metadata, :user_id)}
+        %{"user_id" => uid} -> {uid, Map.delete(metadata, "user_id")}
+        _ -> {nil, metadata}
+      end
+
     %AuditLog{}
     |> AuditLog.changeset(%{
       event: to_string(event),
-      metadata: sanitize(metadata),
+      metadata: sanitize(meta),
+      user_id: user_id,
       occurred_at: DateTime.utc_now() |> DateTime.truncate(:second)
     })
     |> Repo.insert()
