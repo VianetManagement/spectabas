@@ -78,5 +78,19 @@ defmodule Spectabas.Events.EventSchemaTest do
       assert row["ip_country"] == ""
       assert row["duration_s"] == 0
     end
+
+    test "includes browser_fingerprint in output" do
+      event = %{site_id: 1, browser_fingerprint: "fp_abc123def456"}
+      row = EventSchema.to_row(event)
+
+      assert row["browser_fingerprint"] == "fp_abc123def456"
+    end
+
+    test "browser_fingerprint defaults to empty string when absent" do
+      event = %{site_id: 1}
+      row = EventSchema.to_row(event)
+
+      assert row["browser_fingerprint"] == ""
+    end
   end
 end

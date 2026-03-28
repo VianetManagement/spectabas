@@ -897,6 +897,64 @@ defmodule SpectabasWeb.DocsLive do
             - **Segment filter** — use `visitor_intent is buying` to filter any report
             - **Visitor profiles** — intent pill shown on each visitor
             """
+          },
+          %{
+            id: "browser-fingerprinting",
+            title: "Browser Fingerprinting",
+            body: """
+            Spectabas generates a unique browser fingerprint for every visitor using canvas rendering, WebGL renderer strings, AudioContext output, and 15+ additional browser signals including installed fonts, screen properties, timezone, language, and hardware concurrency.
+
+            ### How It Works
+
+            The fingerprint is a stable hash that **survives cookie clearing, incognito mode, and VPN changes**. Because it is derived from browser and hardware characteristics rather than stored state, it persists across sessions even when visitors take steps to reset their identity.
+
+            ### GDPR Mode Integration
+
+            When GDPR mode is enabled (`data-gdpr="on"`), the browser fingerprint is used as the visitor ID instead of a cookie. This means accurate visitor deduplication without storing any cookies or requiring a consent banner.
+
+            ### Visitor Profiles
+
+            Each visitor profile includes a **Same Browser Fingerprint** section that lists other visitor IDs sharing the same fingerprint. This reveals alt accounts, shared devices, or attempts to create multiple identities.
+
+            ### Use Cases
+
+            - **Alt account detection** — identify users operating multiple accounts
+            - **Ban evasion** — detect banned users returning under new visitor IDs
+            - **Fraud detection** — correlate suspicious activity across sessions
+            - **Spam correlation** — link spam submissions to a single browser
+
+            No configuration is needed. Browser fingerprinting is automatic for all tracked sites.
+            """
+          },
+          %{
+            id: "form-abuse-detection",
+            title: "Form Abuse Detection",
+            body: """
+            The Spectabas tracker automatically monitors form interactions on your site and detects suspicious submission patterns without any configuration.
+
+            ### Detected Patterns
+
+            The tracker watches for the following abuse signals:
+
+            - **Rapid submission** — form submitted less than 2 seconds after page load
+            - **Repeated submissions** — more than 3 form submissions on a single page
+            - **Excessive pasting** — more than 3 paste events detected in form fields
+            - **Click flooding** — more than 10 rapid clicks in a short time window
+
+            ### Automatic Event Firing
+
+            When suspicious patterns are detected, the tracker automatically fires a `_form_abuse` custom event. This event appears in your dashboard alongside other custom events and includes properties describing which signals were triggered.
+
+            ### No Configuration Required
+
+            Form abuse detection works on any site running the Spectabas tracker. There are no data attributes to set and no JavaScript API calls to make. The tracker handles all monitoring and event firing automatically.
+
+            ### Combined with Fingerprinting
+
+            Form abuse events are tagged with the visitor's browser fingerprint. This means you can correlate abuse across sessions, detect serial spammers who clear cookies between submissions, and link form abuse to specific visitor profiles for investigation.
+
+            > **Example:** A spammer submits your contact form 5 times in 10 seconds, clears cookies, and tries again. Spectabas fires `_form_abuse` events for both sessions, and the browser fingerprint links them to the same person.
+            """
           }
         ]
       }
