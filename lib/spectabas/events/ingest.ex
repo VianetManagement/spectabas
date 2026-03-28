@@ -17,6 +17,7 @@ defmodule Spectabas.Events.Ingest do
 
   alias Spectabas.Events.{CollectPayload, IntentClassifier}
   alias Spectabas.{Sessions, Visitors}
+  alias Spectabas.Visitors.Visitor
 
   @tracking_params ~w(utm_source utm_medium utm_campaign utm_term utm_content
                       gclid fbclid msclkid mc_cid mc_eid _ga _gl)
@@ -225,17 +226,50 @@ defmodule Spectabas.Events.Ingest do
       # If the payload includes a visitor id in GDPR-off mode, use it
       payload.vid != nil and payload.vid != "" ->
         case Visitors.get_or_create(site.id, payload.vid, gdpr_mode, client_ip) do
-          {:ok, visitor} -> visitor.id
-          _ -> payload.vid
+          {:ok, visitor} ->
+            # Store fingerprint for future dedup if cookie is ever lost
+            if visitor.fingerprint_id == nil or visitor.fingerprint_id == "" do
+              fp = generate_fingerprint(ua_string, client_ip)
+
+              visitor
+              |> Visitor.changeset(%{fingerprint_id: fp})
+              |> Spectabas.Repo.update()
+            end
+
+            visitor.id
+
+          _ ->
+            payload.vid
         end
 
-      # GDPR-off: use cookie-based identification
+      # GDPR-off: no cookie present — try fingerprint dedup, then create new
       gdpr_mode == :off ->
-        cookie_id = Ecto.UUID.generate()
+        fp = generate_fingerprint(ua_string, client_ip)
 
-        case Visitors.get_or_create(site.id, cookie_id, :off, client_ip) do
-          {:ok, visitor} -> visitor.id
-          _ -> cookie_id
+        case Visitors.find_by_fingerprint(site.id, fp) do
+          %{id: existing_id, cookie_id: existing_cookie} when not is_nil(existing_cookie) ->
+            # Found an existing visitor with this fingerprint — reuse their cookie_id
+            case Visitors.get_or_create(site.id, existing_cookie, :off, client_ip) do
+              {:ok, visitor} -> visitor.id
+              _ -> existing_id
+            end
+
+          _ ->
+            # No fingerprint match — create a new visitor
+            cookie_id = Ecto.UUID.generate()
+
+            case Visitors.get_or_create(site.id, cookie_id, :off, client_ip) do
+              {:ok, visitor} ->
+                # Store the fingerprint on the new visitor for future dedup
+                visitor
+                |> Visitor.changeset(%{fingerprint_id: fp})
+                |> Spectabas.Repo.update()
+
+                visitor.id
+
+              _ ->
+                cookie_id
+            end
         end
 
       # GDPR-on: use fingerprint-based identification

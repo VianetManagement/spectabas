@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.2.1 — 2026-03-29 05:00 UTC",
+       [
+         %{
+           title: "Visitor deduplication via fingerprint",
+           description:
+             "GDPR-off visitors who lose their cookie are now matched by browser fingerprint to their existing visitor record. Prevents duplicate visitor counts. Also stores fingerprint on first cookie-based visit for future dedup."
+         }
+       ]},
       {"v1.2.0 — 2026-03-29 04:00 UTC",
        [
          %{

@@ -13,10 +13,25 @@ defmodule Spectabas.Visitors do
   @xdomain_table :spectabas_xdomain_tokens
 
   @doc """
+  Find an existing visitor by fingerprint ID for a site.
+  Used to deduplicate visitors who lost their cookie.
+  """
+  def find_by_fingerprint(site_id, fingerprint)
+      when is_binary(fingerprint) and fingerprint != "" do
+    query =
+      from(v in Visitor,
+        where: v.site_id == ^site_id and v.fingerprint_id == ^fingerprint,
+        limit: 1
+      )
+
+    Repo.one(query)
+  end
+
+  def find_by_fingerprint(_, _), do: nil
+
+  @doc """
   Get or create a visitor for the given site. In GDPR-off mode,
   `id_value` is used as cookie_id; in GDPR-on mode, as fingerprint_id.
-
-  Returns `{:ok, %Visitor{}}` or `{:error, changeset}`.
   """
   def get_or_create(site_id, id_value, gdpr_mode, client_ip \\ nil) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
