@@ -5,13 +5,23 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
   import SpectabasWeb.Dashboard.SidebarComponent
 
   @impl true
-  def mount(%{"site_id" => site_id}, _session, socket) do
+  def mount(%{"site_id" => site_id} = params, _session, socket) do
     user = socket.assigns.current_scope.user
     site = Sites.get_site!(site_id)
 
     unless Accounts.can_access_site?(user, site) do
       {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
     else
+      # Accept filter from URL (e.g., from network page ASN click)
+      segment =
+        case {params["filter_field"], params["filter_value"]} do
+          {f, v} when is_binary(f) and is_binary(v) and f != "" and v != "" ->
+            [%{"field" => f, "op" => "is", "value" => v}]
+
+          _ ->
+            []
+        end
+
       {:ok,
        socket
        |> assign(:page_title, "Visitor Log - #{site.name}")
@@ -19,6 +29,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
        |> assign(:user, user)
        |> assign(:date_range, "7d")
        |> assign(:page, 1)
+       |> assign(:segment, segment)
        |> load_data()}
     end
   end
@@ -38,10 +49,14 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
   end
 
   defp load_data(socket) do
-    %{site: site, user: user, date_range: range, page: page} = socket.assigns
+    %{site: site, user: user, date_range: range, page: page, segment: segment} = socket.assigns
 
     visitors =
-      case Analytics.visitor_log(site, user, range_to_atom(range), page: page, per_page: 30) do
+      case Analytics.visitor_log(site, user, range_to_atom(range),
+             page: page,
+             per_page: 30,
+             segment: segment
+           ) do
         {:ok, rows} -> rows
         _ -> []
       end
@@ -129,21 +144,45 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
                 <td class="px-4 py-3 text-sm text-gray-500 tabular-nums">
                   {format_duration(v["duration"])}
                 </td>
-                <td class="px-4 py-3 text-sm text-gray-500">
-                  {[v["city"], v["region"], v["country"]]
-                  |> Enum.reject(&(&1 == "" || is_nil(&1)))
-                  |> Enum.join(", ")}
+                <td class="px-4 py-3 text-sm">
+                  <.link
+                    :if={v["country"] && v["country"] != ""}
+                    navigate={~p"/dashboard/sites/#{@site.id}/geo"}
+                    class="text-indigo-600 hover:text-indigo-800"
+                  >
+                    {[v["city"], v["region"], v["country"]]
+                    |> Enum.reject(&(&1 == "" || is_nil(&1)))
+                    |> Enum.join(", ")}
+                  </.link>
+                  <span :if={!v["country"] || v["country"] == ""} class="text-gray-400">-</span>
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-500">
                   {[v["browser"], v["os"]]
                   |> Enum.reject(&(&1 == "" || is_nil(&1)))
                   |> Enum.join(" / ")}
                 </td>
-                <td class="px-4 py-3 text-sm text-gray-500 truncate max-w-[120px]">
-                  {v["referrer"] || "Direct"}
+                <td class="px-4 py-3 text-sm truncate max-w-[120px]">
+                  <.link
+                    :if={v["referrer"] && v["referrer"] != ""}
+                    navigate={
+                      ~p"/dashboard/sites/#{@site.id}/visitor-log?filter_field=referrer_domain&filter_value=#{v["referrer"]}"
+                    }
+                    class="text-indigo-600 hover:text-indigo-800"
+                  >
+                    {v["referrer"]}
+                  </.link>
+                  <span :if={!v["referrer"] || v["referrer"] == ""} class="text-gray-400">
+                    Direct
+                  </span>
                 </td>
-                <td class="px-4 py-3 text-sm text-gray-500 font-mono truncate max-w-[150px]">
-                  {v["entry_page"]}
+                <td class="px-4 py-3 text-sm truncate max-w-[150px]">
+                  <.link
+                    :if={v["entry_page"] && v["entry_page"] != ""}
+                    navigate={~p"/dashboard/sites/#{@site.id}/transitions?page=#{v["entry_page"]}"}
+                    class="text-indigo-600 hover:text-indigo-800 font-mono"
+                  >
+                    {v["entry_page"]}
+                  </.link>
                 </td>
               </tr>
             </tbody>

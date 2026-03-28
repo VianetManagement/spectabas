@@ -17,6 +17,7 @@ defmodule Spectabas.Analytics.Segment do
 
   @allowed_fields ~w(
     ip_country ip_country_name ip_region_name ip_city ip_timezone
+    ip_asn ip_org
     browser os device_type
     referrer_domain utm_source utm_medium utm_campaign
     url_path url_host

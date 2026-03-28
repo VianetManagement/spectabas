@@ -177,8 +177,16 @@ defmodule SpectabasWeb.Dashboard.NetworkLive do
                 </td>
               </tr>
               <tr :for={asn <- Map.get(@network, :asns, [])} class="hover:bg-gray-50">
-                <td class="px-6 py-4 text-sm text-gray-900 font-mono">
-                  AS{Map.get(asn, "ip_asn", "")}
+                <td class="px-6 py-4 text-sm font-mono">
+                  <.link
+                    navigate={
+                      ~p"/dashboard/sites/#{@site.id}/visitor-log?filter_field=ip_asn&filter_value=#{Map.get(asn, "ip_asn", "")}"
+                    }
+                    class="text-indigo-600 hover:text-indigo-800"
+                    title="View visitors from this ASN"
+                  >
+                    AS{Map.get(asn, "ip_asn", "")}
+                  </.link>
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900">
                   {Map.get(asn, "ip_org", "Unknown")}

@@ -136,8 +136,13 @@ defmodule SpectabasWeb.Dashboard.SourcesLive do
                 </td>
               </tr>
               <tr :for={source <- @sources} class="hover:bg-gray-50">
-                <td class="px-6 py-4 text-sm text-gray-900">
-                  {source_name(source, @tab)}
+                <td class="px-6 py-4 text-sm">
+                  <.link
+                    navigate={source_link(@site.id, source, @tab)}
+                    class="text-indigo-600 hover:text-indigo-800"
+                  >
+                    {source_name(source, @tab)}
+                  </.link>
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right">
                   {Map.get(source, "pageviews", 0)}
@@ -158,4 +163,24 @@ defmodule SpectabasWeb.Dashboard.SourcesLive do
   defp source_name(source, "utm_source"), do: Map.get(source, "utm_source", "(none)")
   defp source_name(source, "utm_medium"), do: Map.get(source, "utm_medium", "(none)")
   defp source_name(source, _), do: Map.get(source, "referrer_domain", "Direct / None")
+
+  defp source_link(site_id, source, "referrers") do
+    domain = Map.get(source, "referrer_domain", "")
+
+    ~p"/dashboard/sites/#{site_id}/visitor-log?filter_field=referrer_domain&filter_value=#{domain}"
+  end
+
+  defp source_link(site_id, source, "utm_source") do
+    val = Map.get(source, "utm_source", "")
+    ~p"/dashboard/sites/#{site_id}/visitor-log?filter_field=utm_source&filter_value=#{val}"
+  end
+
+  defp source_link(site_id, source, "utm_medium") do
+    val = Map.get(source, "utm_medium", "")
+    ~p"/dashboard/sites/#{site_id}/visitor-log?filter_field=utm_medium&filter_value=#{val}"
+  end
+
+  defp source_link(site_id, _source, _) do
+    ~p"/dashboard/sites/#{site_id}/visitor-log"
+  end
 end

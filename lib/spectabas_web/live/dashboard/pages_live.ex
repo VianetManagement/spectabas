@@ -134,8 +134,16 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
                 </td>
               </tr>
               <tr :for={page <- @pages} class="hover:bg-gray-50">
-                <td class="px-6 py-4 text-sm text-gray-900 truncate max-w-md">
-                  {Map.get(page, "url_path", "/")}
+                <td class="px-6 py-4 text-sm truncate max-w-md">
+                  <.link
+                    navigate={
+                      ~p"/dashboard/sites/#{@site.id}/transitions?page=#{Map.get(page, "url_path", "/")}"
+                    }
+                    class="text-indigo-600 hover:text-indigo-800 font-mono"
+                    title="View page transitions"
+                  >
+                    {Map.get(page, "url_path", "/")}
+                  </.link>
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right">
                   {Map.get(page, "pageviews", 0)}

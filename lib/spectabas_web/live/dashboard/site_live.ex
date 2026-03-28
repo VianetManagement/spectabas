@@ -506,23 +506,31 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
             </div>
           </div>
 
-          <%!-- Timezone Distribution --%>
+          <%!-- Top Cities --%>
           <div class="bg-white rounded-lg shadow p-5">
             <div class="flex items-center justify-between mb-4">
-              <h3 class="text-sm font-medium text-gray-500">Top Timezones</h3>
+              <h3 class="text-sm font-medium text-gray-500">Top Cities</h3>
               <.link
-                navigate={~p"/dashboard/sites/#{@site.id}/map"}
+                navigate={~p"/dashboard/sites/#{@site.id}/geo"}
                 class="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
               >
                 View all &rarr;
               </.link>
             </div>
-            <div
-              id="tz-hook"
-              phx-hook="BarChart"
-            >
-              <div style={"height: #{max(length(@timezones) * 32, 100)}px; position: relative;"}>
-                <canvas></canvas>
+            <div :if={@locations == []} class="py-4 text-center text-sm text-gray-400">
+              No location data yet
+            </div>
+            <div :if={@locations != []} class="divide-y divide-gray-50">
+              <div
+                :for={loc <- Enum.take(@locations, 8)}
+                class="flex items-center justify-between py-2"
+              >
+                <span class="text-sm text-gray-800 truncate mr-4">
+                  {location_label(loc)}
+                </span>
+                <span class="text-sm font-medium text-gray-600 tabular-nums">
+                  {loc["visitors"]}
+                </span>
               </div>
             </div>
           </div>

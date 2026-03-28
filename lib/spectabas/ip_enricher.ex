@@ -48,7 +48,9 @@ defmodule Spectabas.IPEnricher do
       ip_lat: get_in_safe(city_result, [:location, :latitude]) || 0.0,
       ip_lon: get_in_safe(city_result, [:location, :longitude]) || 0.0,
       ip_accuracy_radius: get_in_safe(city_result, [:location, :accuracy_radius]) || 0,
-      ip_timezone: get_in_safe(city_result, [:location, :time_zone]) || "",
+      ip_timezone:
+        get_in_safe(city_result, [:location, :time_zone]) ||
+          get_in_safe(city_result, [:location, :timezone]) || "",
       ip_asn: asn_number || 0,
       ip_asn_org: asn_org,
       ip_org: format_org(asn_number, asn_org),
