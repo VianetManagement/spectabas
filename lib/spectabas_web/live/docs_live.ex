@@ -916,6 +916,14 @@ defmodule SpectabasWeb.DocsLive do
 
             Each visitor profile includes a **Same Browser Fingerprint** section that lists other visitor IDs sharing the same fingerprint. This reveals alt accounts, shared devices, or attempts to create multiple identities.
 
+            ### Visitor Deduplication
+
+            In GDPR-off mode, when a visitor's cookie is lost — whether cleared manually, expired, used in incognito mode, or from a new browser session — Spectabas uses the browser fingerprint to match them to their existing visitor record instead of creating a duplicate. This prevents inflated visitor counts in your analytics by recognizing returning visitors even without their original cookie.
+
+            The fingerprint is stored when a visitor first arrives at your site. On subsequent visits where no cookie is present, Spectabas looks up the fingerprint to find the existing visitor record and re-associates the session. If no match is found, a new visitor record is created as usual.
+
+            This is fully automatic and requires no configuration. It works transparently alongside cookie-based tracking to ensure your unique visitor counts remain accurate.
+
             ### Use Cases
 
             - **Alt account detection** — identify users operating multiple accounts

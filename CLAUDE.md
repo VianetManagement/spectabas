@@ -19,7 +19,7 @@ Spectabas is a multi-tenant, privacy-first web analytics SaaS platform built wit
 1. Website loads `/assets/v1.js` from analytics subdomain
 2. Script sends beacon to `/c/e?s=<public_key>` (obfuscated endpoints)
 3. CollectController validates payload, checks origin, resolves site by public key
-4. Ingest.process enriches event (IP geo, UA parsing, session resolution, intent classification)
+4. Ingest.process enriches event (IP geo, UA parsing, session resolution, intent classification, fingerprint-based visitor dedup)
 5. IngestBuffer batches events, flushes to ClickHouse every 500ms
 6. Dashboard LiveViews query ClickHouse events table directly
 
@@ -57,7 +57,7 @@ mix ecto.setup
 mix phx.server
 ```
 
-Tests: `mix test` (205 tests, no ClickHouse needed)
+Tests: `mix test` (211 tests, no ClickHouse needed)
 Format: `mix format`
 Compile check: `mix compile --warnings-as-errors`
 
@@ -178,3 +178,4 @@ A comprehensive security audit identified and fixed 10 findings:
 - **Sidebar layout**: All dashboard pages use `<.dashboard_layout>` from SidebarComponent
 - **Async dashboard**: Mount loads critical stats only; deferred stats load via `handle_info(:load_deferred)`
 - **Chart updates**: Use `push_event` to push data to Chart.js hooks (not data attributes)
+- **Visitor dedup**: GDPR-off visitors without cookies are matched by fingerprint via `Visitors.find_by_fingerprint/2` before creating a new record
