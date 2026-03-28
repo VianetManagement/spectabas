@@ -154,7 +154,7 @@ defmodule SpectabasWeb.Dashboard.NetworkLive do
           </div>
         </div>
 
-        <div class="bg-white rounded-lg shadow overflow-hidden">
+        <div class="bg-white rounded-lg shadow overflow-x-auto">
           <div class="px-6 py-4 border-b border-gray-200">
             <h2 class="text-lg font-semibold text-gray-900">Top ASNs</h2>
           </div>

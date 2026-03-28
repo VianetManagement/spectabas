@@ -219,24 +219,48 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
       <%!-- Main content area --%>
       <div class="flex-1 flex flex-col min-w-0">
         <%!-- Page header with title + description --%>
-        <div :if={@page_title} class="bg-white border-b border-gray-200 px-6 py-4">
+        <div :if={@page_title} class="hidden lg:block bg-white border-b border-gray-200 px-6 py-4">
           <h1 class="text-xl font-bold text-gray-900">{@page_title}</h1>
           <p :if={@page_description} class="text-sm text-gray-500 mt-1 max-w-3xl">
             {@page_description}
           </p>
         </div>
 
-        <%!-- Mobile breadcrumb --%>
-        <div class="lg:hidden bg-white border-b border-gray-200 px-4 py-2 flex items-center gap-3 overflow-x-auto">
-          <.link navigate={~p"/dashboard"} class="text-xs text-gray-500 whitespace-nowrap">
-            Sites
-          </.link>
-          <span class="text-gray-300">/</span>
-          <span class="text-xs text-gray-700 font-medium whitespace-nowrap">{@site.name}</span>
-          <span class="text-gray-300">/</span>
-          <span class="text-xs text-indigo-600 font-medium whitespace-nowrap">
-            {@page_title || @active}
-          </span>
+        <%!-- Mobile navigation bar --%>
+        <div class="lg:hidden bg-white border-b border-gray-200 px-4 py-2.5 flex items-center justify-between">
+          <div class="flex items-center gap-2 min-w-0">
+            <.link navigate={~p"/dashboard"} class="text-gray-400 hover:text-gray-600 shrink-0">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M15 19l-7-7 7-7"
+                />
+              </svg>
+            </.link>
+            <span class="text-sm font-medium text-gray-900 truncate">{@page_title || @active}</span>
+          </div>
+          <div class="flex items-center gap-3 text-xs shrink-0">
+            <.link
+              navigate={~p"/dashboard/sites/#{@site.id}"}
+              class="text-gray-500 hover:text-indigo-600"
+            >
+              Dashboard
+            </.link>
+            <.link
+              navigate={~p"/dashboard/sites/#{@site.id}/visitor-log"}
+              class="text-gray-500 hover:text-indigo-600"
+            >
+              Visitors
+            </.link>
+            <.link
+              navigate={~p"/dashboard/sites/#{@site.id}/settings"}
+              class="text-gray-500 hover:text-indigo-600"
+            >
+              Settings
+            </.link>
+          </div>
         </div>
 
         <main class="flex-1 overflow-y-auto bg-gray-50">

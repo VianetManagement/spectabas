@@ -71,6 +71,7 @@ defmodule Spectabas.Events.EventSchema do
       "ip_is_eu" => to_uint8(event[:ip_is_eu]),
       "ip_gdpr_anonymized" => to_uint8(event[:ip_gdpr_anonymized]),
       "visitor_intent" => to_string(event[:visitor_intent] || ""),
+      "user_agent" => truncate(to_string(event[:user_agent] || ""), 512),
 
       # custom properties (JSON string)
       "properties" => Jason.encode!(event[:props] || event[:properties] || %{})

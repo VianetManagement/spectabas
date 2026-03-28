@@ -73,7 +73,8 @@ defmodule Spectabas.Events.Ingest do
         screen_width: payload.sw,
         screen_height: payload.sh,
         duration: payload.d,
-        props: payload.p || %{}
+        props: payload.p || %{},
+        user_agent: ua_string
       }
       |> Map.merge(ip_data)
 

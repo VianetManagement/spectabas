@@ -607,7 +607,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
 
   defp data_card(assigns) do
     ~H"""
-    <div class="bg-white rounded-lg shadow overflow-hidden">
+    <div class="bg-white rounded-lg shadow overflow-x-auto">
       <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
         <h3 class="font-semibold text-gray-900">{@title}</h3>
         <.link navigate={@link} class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">

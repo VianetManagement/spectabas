@@ -45,6 +45,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v0.9.0 — 2026-03-28 23:00 UTC",
+       [
+         %{
+           title: "Raw user-agent string storage",
+           description:
+             "user_agent column added to ClickHouse events. Full UA string displayed in visitor profiles for debugging."
+         },
+         %{
+           title: "Mobile responsiveness",
+           description:
+             "all tables horizontally scrollable on mobile, mobile nav bar with back button and quick links, page header hidden on mobile (shown in nav bar instead)"
+         }
+       ]},
       {"v0.8.0 — 2026-03-28 22:00 UTC",
        [
          %{

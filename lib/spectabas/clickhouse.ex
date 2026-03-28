@@ -90,6 +90,7 @@ defmodule Spectabas.ClickHouse do
         ip_is_eu UInt8 DEFAULT 0,
         ip_gdpr_anonymized UInt8 DEFAULT 0,
         visitor_intent LowCardinality(String) DEFAULT '',
+        user_agent String DEFAULT '',
         duration_s UInt32 DEFAULT 0,
         properties String DEFAULT '{}',
         is_bounce UInt8 DEFAULT 1,
@@ -188,6 +189,7 @@ defmodule Spectabas.ClickHouse do
       "GRANT SELECT ON #{db}.* TO #{cfg[:read_username]}",
       "ALTER TABLE #{db}.events ADD COLUMN IF NOT EXISTS ip_is_eu UInt8 DEFAULT 0 AFTER ip_is_bot",
       "ALTER TABLE #{db}.events ADD COLUMN IF NOT EXISTS visitor_intent String DEFAULT '' AFTER ip_gdpr_anonymized",
+      "ALTER TABLE #{db}.events ADD COLUMN IF NOT EXISTS user_agent String DEFAULT '' AFTER visitor_intent",
       # Data retention: delete events older than 2 years
       "ALTER TABLE #{db}.events MODIFY TTL timestamp + INTERVAL 2 YEAR",
       # Skip indexes for common query patterns

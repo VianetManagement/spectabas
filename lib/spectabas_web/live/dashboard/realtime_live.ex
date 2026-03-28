@@ -79,7 +79,7 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
         </div>
 
         <%!-- Live event feed --%>
-        <div class="bg-white rounded-lg shadow overflow-hidden">
+        <div class="bg-white rounded-lg shadow overflow-x-auto">
           <div class="px-5 py-4 border-b border-gray-100">
             <h3 class="font-semibold text-gray-900">Live Event Feed</h3>
           </div>

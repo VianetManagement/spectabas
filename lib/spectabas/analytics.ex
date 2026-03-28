@@ -774,7 +774,7 @@ defmodule Spectabas.Analytics do
       screen_width, screen_height, duration_s,
       ip_address, ip_country, ip_country_name, ip_region_name, ip_city,
       ip_timezone, ip_org, ip_is_datacenter, ip_is_vpn, ip_is_tor, ip_is_bot,
-      session_id, timestamp
+      session_id, visitor_intent, user_agent, timestamp
     FROM events
     WHERE site_id = #{ClickHouse.param(site.id)}
       AND visitor_id = #{ClickHouse.param(visitor_id)}
@@ -815,6 +815,7 @@ defmodule Spectabas.Analytics do
       any(ip_is_datacenter) AS is_datacenter,
       any(ip_is_vpn) AS is_vpn,
       any(ip_is_bot) AS is_bot,
+      any(user_agent) AS user_agent,
       groupUniqArray(10)(url_path) AS top_pages,
       groupUniqArray(5)(referrer_domain) AS referrers,
       groupUniqArray(5)(utm_source) AS utm_sources

@@ -124,7 +124,7 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
         <%!-- Transition flow --%>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <%!-- Previous pages --%>
-          <div class="bg-white rounded-lg shadow overflow-hidden">
+          <div class="bg-white rounded-lg shadow overflow-x-auto">
             <div class="px-5 py-4 border-b border-gray-100">
               <h3 class="font-semibold text-gray-900">Came from</h3>
               <p class="text-xs text-gray-400">Pages visitors viewed before this one</p>
@@ -153,7 +153,7 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
           </div>
 
           <%!-- Next pages --%>
-          <div class="bg-white rounded-lg shadow overflow-hidden">
+          <div class="bg-white rounded-lg shadow overflow-x-auto">
             <div class="px-5 py-4 border-b border-gray-100">
               <h3 class="font-semibold text-gray-900">Went to</h3>
               <p class="text-xs text-gray-400">Pages visitors viewed after this one</p>
