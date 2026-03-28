@@ -47,7 +47,13 @@ defmodule SpectabasWeb.Dashboard.AttributionLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <.dashboard_layout site={@site} active="attribution" live_visitors={0}>
+    <.dashboard_layout
+      site={@site}
+      page_title="Channel Attribution"
+      page_description="First-touch vs last-touch attribution by traffic channel."
+      active="attribution"
+      live_visitors={0}
+    >
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div class="flex items-center justify-between mb-8">
           <div>

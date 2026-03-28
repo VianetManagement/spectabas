@@ -77,7 +77,13 @@ defmodule SpectabasWeb.Dashboard.EntryExitLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <.dashboard_layout site={@site} active="entry-exit" live_visitors={0}>
+    <.dashboard_layout
+      site={@site}
+      page_title="Entry <.dashboard_layout site={@site} active=amp; Exit Pages"
+      page_description="Where visitors land and where they leave your site."
+      active="entry-exit"
+      live_visitors={0}
+    >
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div class="flex items-center justify-between mb-8">
           <div>

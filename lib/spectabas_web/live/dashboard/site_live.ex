@@ -310,102 +310,21 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   defp preset_label("12m"), do: "12 months"
   defp preset_label(_), do: "period"
 
-  defp range_label(from, to) do
-    "#{Calendar.strftime(from, "%b %d")} - #{Calendar.strftime(to, "%b %d, %Y")}"
-  end
-
   @impl true
   def render(assigns) do
     ~H"""
-    <.dashboard_layout site={@site} active="overview" live_visitors={@live_visitors}>
+    <.dashboard_layout
+      site={@site}
+      active="overview"
+      live_visitors={@live_visitors}
+      preset={@preset}
+      date_from={@date_from}
+      date_to={@date_to}
+      compare={@compare}
+      page_title="Dashboard"
+      page_description="Overview of your site's traffic, visitors, and engagement metrics."
+    >
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <%!-- Date Controls --%>
-        <div class="flex items-center justify-between mb-6">
-          <div class="flex items-center gap-2">
-            <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">
-              <button
-                :for={
-                  {id, label} <- [
-                    {"24h", "24h"},
-                    {"7d", "7d"},
-                    {"30d", "30d"},
-                    {"90d", "90d"},
-                    {"12m", "12m"}
-                  ]
-                }
-                phx-click="preset"
-                phx-value-range={id}
-                class={[
-                  "px-2.5 py-1 text-sm font-medium rounded-md",
-                  if(@preset == id,
-                    do: "bg-white shadow text-gray-900",
-                    else: "text-gray-600 hover:text-gray-900"
-                  )
-                ]}
-              >
-                {label}
-              </button>
-            </nav>
-            <div class="relative">
-              <button
-                phx-click="toggle_date_picker"
-                class={[
-                  "px-3 py-1.5 text-sm font-medium rounded-lg border",
-                  if(@preset == "custom",
-                    do: "bg-indigo-50 border-indigo-200 text-indigo-700",
-                    else: "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
-                  )
-                ]}
-              >
-                {range_label(@date_from, @date_to)}
-              </button>
-              <div
-                :if={@show_date_picker}
-                class="absolute top-full mt-2 right-0 bg-white rounded-lg shadow-lg border border-gray-200 p-4 z-50"
-              >
-                <form phx-submit="custom_range" class="flex items-end gap-3">
-                  <div>
-                    <label class="block text-xs font-medium text-gray-500 mb-1">From</label>
-                    <input
-                      type="date"
-                      name="from"
-                      value={Date.to_iso8601(@date_from)}
-                      class="block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <div>
-                    <label class="block text-xs font-medium text-gray-500 mb-1">To</label>
-                    <input
-                      type="date"
-                      name="to"
-                      value={Date.to_iso8601(@date_to)}
-                      class="block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    class="px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
-                  >
-                    Apply
-                  </button>
-                </form>
-              </div>
-            </div>
-          </div>
-          <button
-            phx-click="toggle_compare"
-            class={[
-              "px-3 py-1.5 text-sm font-medium rounded-lg border",
-              if(@compare,
-                do: "bg-indigo-50 border-indigo-200 text-indigo-700",
-                else: "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
-              )
-            ]}
-          >
-            Compare
-          </button>
-        </div>
-
         <%!-- Segment Filter --%>
         <.segment_filter segment={@segment} />
 
@@ -667,8 +586,8 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   defp compute_delta(current, prev, invert) when is_number(current) and is_number(prev) do
     if prev == 0 do
       if current > 0,
-        do: %{label: "+100%", direction: if(invert, do: :down, else: :up)},
-        else: %{label: "0%", direction: :flat}
+        do: %{label: "new", direction: :flat},
+        else: %{label: "—", direction: :flat}
     else
       pct = Float.round((current - prev) / prev * 100, 1)
 

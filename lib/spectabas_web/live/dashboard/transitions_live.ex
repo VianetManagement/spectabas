@@ -58,7 +58,13 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <.dashboard_layout site={@site} active="transitions" live_visitors={0}>
+    <.dashboard_layout
+      site={@site}
+      page_title="Page Transitions"
+      page_description="See where visitors came from and went to for any page."
+      active="transitions"
+      live_visitors={0}
+    >
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div class="flex items-center justify-between mb-8">
           <div>

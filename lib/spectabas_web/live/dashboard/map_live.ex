@@ -80,7 +80,13 @@ defmodule SpectabasWeb.Dashboard.MapLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <.dashboard_layout site={@site} active="map" live_visitors={0}>
+    <.dashboard_layout
+      site={@site}
+      page_title="Visitor Map"
+      page_description="Geographic visualization of visitor locations with timezone distribution."
+      active="map"
+      live_visitors={0}
+    >
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div class="flex items-center justify-between mb-8">
           <div>
