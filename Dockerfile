@@ -19,24 +19,14 @@ RUN mix deps.compile
 RUN mix esbuild.install --if-missing && mix tailwind.install --if-missing
 
 # --- Layer 2: GeoIP databases ---
-# DB-IP (primary geo), MaxMind GeoLite2 (timezone)
-ARG MAXMIND_LICENSE_KEY
+# DB-IP downloaded at build time; MaxMind downloaded at runtime (needs env var)
 # Cache key: 2026-03
 RUN mkdir -p priv/geoip && \
     curl -fsSL -o /tmp/city.mmdb.gz "https://download.db-ip.com/free/dbip-city-lite-2026-03.mmdb.gz" && \
     curl -fsSL -o /tmp/asn.mmdb.gz "https://download.db-ip.com/free/dbip-asn-lite-2026-03.mmdb.gz" && \
     gunzip -c /tmp/city.mmdb.gz > priv/geoip/dbip-city-lite.mmdb && \
     gunzip -c /tmp/asn.mmdb.gz > priv/geoip/dbip-asn-lite.mmdb && \
-    rm -f /tmp/*.gz && \
-    if [ -n "$MAXMIND_LICENSE_KEY" ]; then \
-      curl -fsSL -o /tmp/maxmind-city.tar.gz "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=${MAXMIND_LICENSE_KEY}&suffix=tar.gz" && \
-      tar xzf /tmp/maxmind-city.tar.gz -C /tmp && \
-      cp /tmp/GeoLite2-City_*/GeoLite2-City.mmdb priv/geoip/GeoLite2-City.mmdb && \
-      rm -rf /tmp/maxmind-city.tar.gz /tmp/GeoLite2-City_* && \
-      echo "MaxMind GeoLite2-City: $(wc -c < priv/geoip/GeoLite2-City.mmdb) bytes"; \
-    else \
-      echo "MAXMIND_LICENSE_KEY not set, skipping MaxMind download"; \
-    fi
+    rm -f /tmp/*.gz
 
 # --- Layer 3: App code (changes on every push) ---
 COPY lib lib
