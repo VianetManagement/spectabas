@@ -10,6 +10,7 @@ Spectabas is a multi-tenant, privacy-first web analytics SaaS platform built wit
 - **PostgreSQL** — users, sites, sessions, visitors, audit logs (on Render, Ohio region)
 - **ClickHouse** — event storage and analytics queries (Render private service, Ohio region)
 - **Chart.js** — interactive charts (vendored UMD build, no CDN)
+- **wax_** — WebAuthn/passkey 2FA support (FIDO2 hardware keys, platform authenticators)
 - **Render** — deployment platform (Docker-based)
 
 ## Architecture
@@ -56,7 +57,7 @@ mix ecto.setup
 mix phx.server
 ```
 
-Tests: `mix test` (182 tests, no ClickHouse needed)
+Tests: `mix test` (205 tests, no ClickHouse needed)
 Format: `mix format`
 Compile check: `mix compile --warnings-as-errors`
 
@@ -120,6 +121,48 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Cross-linking** — click any dimension to navigate to filtered views (ASN→visitors, page→transitions, source→visitor log)
 - **IP Cross-referencing** — visitor profiles show other visitors sharing the same IP
 - **EU Flag** — GDPR compliance indicator from MaxMind
+
+## Authentication
+
+### Multi-factor Authentication
+- **TOTP** — standard time-based one-time passwords (Google Authenticator, etc.)
+- **WebAuthn/Passkeys** — FIDO2 hardware keys and platform authenticators via `wax_` library
+- Users can register multiple WebAuthn credentials from account settings
+- **Admin force 2FA** — admins can require 2FA for specific users from the admin panel
+
+### wax_ Configuration
+- Requires `origin` setting in `config/config.exs` (production) and `config/test.exs` (test)
+- Example: `config :wax_, origin: "https://www.spectabas.com"`
+- Test config must match the test environment origin or WebAuthn tests will fail
+
+### API Keys
+- Users can create/revoke API keys from account settings
+- Used for programmatic access to analytics data
+
+## Security
+
+### Audit Completed
+A comprehensive security audit identified and fixed 10 findings:
+
+1. **Auth on health endpoints** — `/health/diag` and other diagnostic endpoints now require admin authentication
+2. **Opt-out cookie check** — collection endpoint respects the opt-out cookie before processing events
+3. **Login rate limiting** — brute-force protection on login attempts
+4. **Invitation email verification** — invitations verify the email matches the intended recipient
+5. **Null byte sanitization** — all user input sanitized against null byte injection
+6. **Buffer overflow protection** — IngestBuffer has size limits to prevent memory exhaustion
+7. **ClickHouse TTL** — events table has TTL for automatic data expiration
+8. **MMDB integrity checks** — GeoIP database files validated on load to prevent corrupt data
+9. **Input validation** — strengthened across all collection endpoints
+10. **Session fixation** — session tokens regenerated on authentication state changes
+
+## UI/UX
+
+- **Sidebar navigation** — color-coded categories (Behavior, Acquisition, Audience, Conversions, Tools)
+- **Cross-linking** — click any dimension value to navigate to filtered views across analytics pages
+- **Mobile responsiveness** — scrollable tables, collapsible mobile nav bar
+- **Accessible top nav** — WCAG AA contrast compliance
+- **Documentation page** — comprehensive docs at `/docs`
+- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push
 
 ## Important Patterns
 
