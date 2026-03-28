@@ -100,6 +100,72 @@ defmodule SpectabasWeb.DashboardPagesTest do
       {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/settings")
       assert html =~ "Settings"
     end
+
+    test "goals", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/goals")
+      assert html =~ "Goals"
+    end
+
+    test "funnels", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/funnels")
+      assert html =~ "Funnels"
+    end
+
+    test "ecommerce", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/ecommerce")
+      assert html =~ "Ecommerce"
+    end
+
+    test "campaigns", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/campaigns")
+      assert html =~ "Campaigns"
+    end
+
+    test "reports", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/reports")
+      assert html =~ "Reports"
+    end
+
+    test "exports", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/exports")
+      assert html =~ "Exports"
+    end
+
+    test "visitors list", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/visitors")
+      assert html =~ "Visitors"
+    end
+  end
+
+  describe "sidebar is present on all pages" do
+    test "main dashboard has sidebar", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}")
+      assert html =~ "All Sites"
+      assert html =~ "Behavior"
+      assert html =~ "Acquisition"
+      assert html =~ "Audience"
+    end
+
+    test "sub-pages have sidebar", %{conn: conn, site: site} do
+      pages = ~w(pages sources geo devices network entry-exit map visitor-log transitions attribution search cohort campaigns goals funnels ecommerce reports exports settings)
+
+      for page <- pages do
+        {:ok, _view, html} = live(conn, "/dashboard/sites/#{site.id}/#{page}")
+        assert html =~ "All Sites", "Sidebar missing on /#{page}"
+      end
+    end
+  end
+
+  describe "page descriptions are present" do
+    test "dashboard has description", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}")
+      assert html =~ "Overview of your site"
+    end
+
+    test "pages has description", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/pages")
+      assert html =~ "Top pages ranked"
+    end
   end
 
   describe "admin pages render without errors" do

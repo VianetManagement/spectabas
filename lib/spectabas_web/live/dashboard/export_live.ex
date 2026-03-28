@@ -2,6 +2,7 @@ defmodule SpectabasWeb.Dashboard.ExportLive do
   use SpectabasWeb, :live_view
 
   alias Spectabas.{Accounts, Sites, Reports}
+  import SpectabasWeb.Dashboard.SidebarComponent
 
   @poll_interval_ms 5_000
 
@@ -93,99 +94,101 @@ defmodule SpectabasWeb.Dashboard.ExportLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="mb-8">
-        <.link
-          navigate={~p"/dashboard/sites/#{@site.id}"}
-          class="text-sm text-indigo-600 hover:text-indigo-800"
-        >
-          &larr; Back to {@site.name}
-        </.link>
-        <h1 class="text-2xl font-bold text-gray-900 mt-2">Data Export</h1>
-      </div>
+    <.dashboard_layout
+      site={@site}
+      page_title="Exports"
+      page_description="Export your analytics data."
+      active="exports"
+      live_visitors={0}
+    >
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="mb-8">
+          <h1 class="text-2xl font-bold text-gray-900">Data Export</h1>
+        </div>
 
-      <div class="bg-white rounded-lg shadow p-6 mb-8">
-        <h2 class="text-lg font-semibold text-gray-900 mb-4">Export Configuration</h2>
-        <form phx-change="update_form" phx-submit="start_export" class="space-y-4">
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Date From</label>
-              <input
-                type="date"
-                name="date_from"
-                value={@date_from}
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              />
+        <div class="bg-white rounded-lg shadow p-6 mb-8">
+          <h2 class="text-lg font-semibold text-gray-900 mb-4">Export Configuration</h2>
+          <form phx-change="update_form" phx-submit="start_export" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Date From</label>
+                <input
+                  type="date"
+                  name="date_from"
+                  value={@date_from}
+                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Date To</label>
+                <input
+                  type="date"
+                  name="date_to"
+                  value={@date_to}
+                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Format</label>
+                <select
+                  name="format"
+                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                >
+                  <option value="csv" selected={@format == "csv"}>CSV</option>
+                  <option value="json" selected={@format == "json"}>JSON</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Date To</label>
-              <input
-                type="date"
-                name="date_to"
-                value={@date_to}
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Format</label>
-              <select
-                name="format"
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+            <div class="flex justify-end">
+              <button
+                type="submit"
+                disabled={@polling}
+                class={[
+                  "inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white",
+                  if(@polling,
+                    do: "bg-gray-400 cursor-not-allowed",
+                    else: "bg-indigo-600 hover:bg-indigo-700"
+                  )
+                ]}
               >
-                <option value="csv" selected={@format == "csv"}>CSV</option>
-                <option value="json" selected={@format == "json"}>JSON</option>
-              </select>
+                {if @polling, do: "Exporting...", else: "Start Export"}
+              </button>
             </div>
-          </div>
-          <div class="flex justify-end">
-            <button
-              type="submit"
-              disabled={@polling}
-              class={[
-                "inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white",
-                if(@polling,
-                  do: "bg-gray-400 cursor-not-allowed",
-                  else: "bg-indigo-600 hover:bg-indigo-700"
-                )
-              ]}
-            >
-              {if @polling, do: "Exporting...", else: "Start Export"}
-            </button>
-          </div>
-        </form>
-      </div>
+          </form>
+        </div>
 
-      <div :if={@export} class="bg-white rounded-lg shadow p-6">
-        <h2 class="text-lg font-semibold text-gray-900 mb-4">Export Status</h2>
-        <dl class="grid grid-cols-2 gap-4">
-          <div>
-            <dt class="text-sm font-medium text-gray-500">Status</dt>
-            <dd class="mt-1">
-              <span class={[
-                "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
-                export_status_class(@export.status)
-              ]}>
-                {@export.status}
-              </span>
-            </dd>
-          </div>
-          <div>
-            <dt class="text-sm font-medium text-gray-500">Format</dt>
-            <dd class="mt-1 text-sm text-gray-900 uppercase">{@export.format}</dd>
-          </div>
-          <div :if={@export.completed_at}>
-            <dt class="text-sm font-medium text-gray-500">Completed At</dt>
-            <dd class="mt-1 text-sm text-gray-900">
-              {Calendar.strftime(@export.completed_at, "%Y-%m-%d %H:%M")}
-            </dd>
-          </div>
-          <div :if={@export.error}>
-            <dt class="text-sm font-medium text-gray-500">Error</dt>
-            <dd class="mt-1 text-sm text-red-600">{@export.error}</dd>
-          </div>
-        </dl>
+        <div :if={@export} class="bg-white rounded-lg shadow p-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-4">Export Status</h2>
+          <dl class="grid grid-cols-2 gap-4">
+            <div>
+              <dt class="text-sm font-medium text-gray-500">Status</dt>
+              <dd class="mt-1">
+                <span class={[
+                  "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
+                  export_status_class(@export.status)
+                ]}>
+                  {@export.status}
+                </span>
+              </dd>
+            </div>
+            <div>
+              <dt class="text-sm font-medium text-gray-500">Format</dt>
+              <dd class="mt-1 text-sm text-gray-900 uppercase">{@export.format}</dd>
+            </div>
+            <div :if={@export.completed_at}>
+              <dt class="text-sm font-medium text-gray-500">Completed At</dt>
+              <dd class="mt-1 text-sm text-gray-900">
+                {Calendar.strftime(@export.completed_at, "%Y-%m-%d %H:%M")}
+              </dd>
+            </div>
+            <div :if={@export.error}>
+              <dt class="text-sm font-medium text-gray-500">Error</dt>
+              <dd class="mt-1 text-sm text-red-600">{@export.error}</dd>
+            </div>
+          </dl>
+        </div>
       </div>
-    </div>
+    </.dashboard_layout>
     """
   end
 
