@@ -74,6 +74,21 @@ defmodule SpectabasWeb.Admin.UsersLive do
     end
   end
 
+  def handle_event("delete_invite", %{"id" => id}, socket) do
+    invitation = Spectabas.Repo.get!(Spectabas.Accounts.Invitation, id)
+
+    case Accounts.delete_invitation(invitation) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Invitation for #{invitation.email} revoked.")
+         |> assign(:pending_invitations, Accounts.list_pending_invitations())}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to revoke invitation.")}
+    end
+  end
+
   def handle_event("change_role", %{"user_id" => user_id, "role" => role}, socket) do
     admin = socket.assigns.current_scope.user
     user = Accounts.get_user!(user_id)
@@ -314,13 +329,21 @@ defmodule SpectabasWeb.Admin.UsersLive do
                     Invited
                   </span>
                 </td>
-                <td class="px-6 py-4 text-right">
+                <td class="px-6 py-4 text-right space-x-3">
                   <button
                     phx-click="resend_invite"
                     phx-value-id={inv.id}
                     class="text-indigo-600 hover:text-indigo-800 text-sm font-medium"
                   >
                     Resend
+                  </button>
+                  <button
+                    phx-click="delete_invite"
+                    phx-value-id={inv.id}
+                    data-confirm="Revoke invitation for #{inv.email}?"
+                    class="text-red-500 hover:text-red-700 text-sm font-medium"
+                  >
+                    Revoke
                   </button>
                 </td>
               </tr>

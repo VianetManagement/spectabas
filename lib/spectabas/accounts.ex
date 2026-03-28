@@ -573,6 +573,21 @@ defmodule Spectabas.Accounts do
   The old invitation is left as-is (for audit trail).
   """
   def resend_invitation(%User{} = admin, %Invitation{} = invitation) do
+    # Delete all prior pending invitations for this email
+    import Ecto.Query
+
+    from(i in Invitation,
+      where: i.email == ^invitation.email and is_nil(i.accepted_at)
+    )
+    |> Repo.delete_all()
+
     invite_user(admin, invitation.email, invitation.role)
+  end
+
+  @doc """
+  Revoke/delete a pending invitation.
+  """
+  def delete_invitation(%Invitation{} = invitation) do
+    Repo.delete(invitation)
   end
 end

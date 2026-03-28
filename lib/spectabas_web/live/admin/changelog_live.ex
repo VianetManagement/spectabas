@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v0.5.1 — 2026-03-28 19:15 UTC",
+       [
+         %{
+           title: "Invitation workflow improvements",
+           description:
+             "Resending an invite now deletes prior pending invitations for the same email. Added Revoke button with confirmation to delete pending invitations."
+         }
+       ]},
       {"v0.5.0 — 2026-03-28 18:30 UTC",
        [
          %{
