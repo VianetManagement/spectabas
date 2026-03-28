@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.1.1 — 2026-03-29 03:00 UTC",
+       [
+         %{
+           title: "Tracker performance optimization",
+           description:
+             "zero-blocking fingerprint: quick sync fingerprint (~0.1ms) fires with first beacon, enhanced fingerprint (canvas+WebGL) runs async 50ms later. Canvas hashes raw pixels instead of base64 toDataURL. Removed broken AudioContext (was async but result never captured). Form abuse listeners deferred 100ms. URL parsing skipped when no xd token. UTM parsing skipped when no utm_ in query string. ~9KB minified, ~3KB gzipped."
+         }
+       ]},
       {"v1.1.0 — 2026-03-29 02:00 UTC",
        [
          %{

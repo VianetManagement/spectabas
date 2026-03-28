@@ -19,7 +19,7 @@
   var pageStart = Date.now();
   var hadInteraction = false;
 
-  // Track human interaction signals
+  // Track human interaction signals (passive, non-blocking)
   var interactionEvents = ["mousedown", "touchstart", "scroll", "keydown"];
   function markInteraction() {
     hadInteraction = true;
@@ -31,36 +31,38 @@
     document.addEventListener(e, markInteraction, { once: false, passive: true });
   });
 
-  // GDPR-off: use cookies
+  // GDPR-off: use cookies (fast path)
   if (gdpr === "off") {
     vid = getCookie("_sab");
     if (!vid) {
       vid = generateId();
-      setCookie("_sab", vid, 63072000); // 2 years
+      setCookie("_sab", vid, 63072000);
     }
   } else {
-    // GDPR-on: fingerprint
-    vid = fingerprint();
+    // GDPR-on: quick fingerprint now, enhanced fingerprint async
+    vid = quickFingerprint();
   }
 
-  // Clean cross-domain token from URL
-  var url = new URL(window.location.href);
-  var xdToken = url.searchParams.get("_sabt");
-  if (xdToken) {
-    url.searchParams.delete("_sabt");
-    window.history.replaceState({}, "", url.toString());
+  // Clean cross-domain token from URL (only if present)
+  if (window.location.search.indexOf("_sabt") !== -1) {
+    try {
+      var url = new URL(window.location.href);
+      var xdToken = url.searchParams.get("_sabt");
+      if (xdToken) {
+        url.searchParams.delete("_sabt");
+        window.history.replaceState({}, "", url.toString());
+      }
+    } catch (e) {}
   }
 
   // Persist UTMs in sessionStorage (GDPR-off only)
-  if (gdpr === "off") {
+  if (gdpr === "off" && window.location.search.indexOf("utm_") !== -1) {
     var utmParams = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
     utmParams.forEach(function (key) {
-      var val = url.searchParams.get(key);
-      if (val) {
-        try {
-          sessionStorage.setItem("_sab_" + key, val);
-        } catch (e) {}
-      }
+      try {
+        var match = window.location.search.match(new RegExp("[?&]" + key + "=([^&]+)"));
+        if (match) sessionStorage.setItem("_sab_" + key, decodeURIComponent(match[1]));
+      } catch (e) {}
     });
   }
 
@@ -69,8 +71,20 @@
     decorateLinks();
   }
 
-  // Send initial pageview
+  // Send initial pageview immediately (non-blocking)
   sendEvent("pageview");
+
+  // Compute enhanced fingerprint asynchronously after first paint
+  if (gdpr !== "off") {
+    setTimeout(function () {
+      var enhanced = enhancedFingerprint();
+      if (enhanced !== vid) {
+        vid = enhanced;
+        // Update the server with the more accurate fingerprint
+        sendEvent("duration");
+      }
+    }, 50);
+  }
 
   // SPA support
   var origPushState = history.pushState;
@@ -120,7 +134,7 @@
 
   function sendEvent(type, extra) {
     var botHints =
-      !!(navigator.webdriver) ||
+      !!navigator.webdriver ||
       (window.screen.width === 0 && window.screen.height === 0) ||
       !("onmouseover" in document) ||
       /headless/i.test(navigator.userAgent);
@@ -147,13 +161,7 @@
     // Add UTMs from sessionStorage
     if (gdpr === "off") {
       try {
-        var utms = [
-          "utm_source",
-          "utm_medium",
-          "utm_campaign",
-          "utm_term",
-          "utm_content",
-        ];
+        var utms = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
         utms.forEach(function (key) {
           var val = sessionStorage.getItem("_sab_" + key);
           if (val) payload.p[key] = val;
@@ -168,7 +176,7 @@
     var duration = Math.round((Date.now() - pageStart) / 1000);
     if (duration < 1) return;
 
-    var payload = {
+    send(endpoint + "/c/e?s=" + encodeURIComponent(site), {
       t: "duration",
       u: window.location.href,
       vid: vid,
@@ -177,17 +185,12 @@
       sw: 0,
       sh: 0,
       p: {},
-    };
-
-    send(
-      endpoint + "/c/e?s=" + encodeURIComponent(site),
-      payload
-    );
+    });
   }
 
   function send(url, data) {
     var body = JSON.stringify(data);
-    if (body.length > 8192) return; // Drop oversized payloads
+    if (body.length > 8192) return;
 
     try {
       if (navigator.sendBeacon) {
@@ -214,11 +217,26 @@
     }).join("");
   }
 
-  // ---- Enhanced Browser Fingerprint ----
-  // Combines multiple browser signals into a stable hash for cross-session correlation.
-  // Survives cookie clearing, incognito, and VPN changes.
+  // ---- Fingerprinting ----
 
-  function fingerprint() {
+  // Quick fingerprint: runs synchronously before first beacon (~0.1ms)
+  // Uses only fast, non-blocking signals
+  function quickFingerprint() {
+    var s = [
+      navigator.userAgent,
+      screen.width + "x" + screen.height,
+      Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+      navigator.language || "",
+      navigator.hardwareConcurrency || 0,
+      navigator.maxTouchPoints || 0,
+      new Date().getTimezoneOffset(),
+    ].join("|");
+    return "fp_" + murmurHash(s);
+  }
+
+  // Enhanced fingerprint: runs async after first paint (~5ms)
+  // Adds canvas, WebGL, and deeper browser probing
+  function enhancedFingerprint() {
     var signals = [
       navigator.userAgent,
       screen.width + "x" + screen.height + "x" + (screen.colorDepth || 0),
@@ -236,21 +254,25 @@
       new Date().getTimezoneOffset(),
     ];
 
-    // Canvas fingerprint (GPU/driver differences)
+    // Canvas fingerprint — hash pixel data directly (not toDataURL)
     try {
       var canvas = document.createElement("canvas");
-      canvas.width = 200;
-      canvas.height = 50;
+      canvas.width = 120;
+      canvas.height = 30;
       var ctx = canvas.getContext("2d");
       ctx.textBaseline = "top";
       ctx.font = "14px Arial";
       ctx.fillStyle = "#f60";
-      ctx.fillRect(0, 0, 200, 50);
+      ctx.fillRect(0, 0, 120, 30);
       ctx.fillStyle = "#069";
-      ctx.fillText("Spectabas\ud83d\ude00", 2, 15);
-      ctx.fillStyle = "rgba(102, 204, 0, 0.7)";
-      ctx.fillText("analytics", 4, 30);
-      signals.push(canvas.toDataURL());
+      ctx.fillText("Sptbs\ud83d\ude00", 2, 5);
+      // Hash raw pixel data instead of base64 toDataURL (~100x less data)
+      var pixels = ctx.getImageData(0, 0, 120, 30).data;
+      var canvasHash = 0;
+      for (var i = 0; i < pixels.length; i += 37) {
+        canvasHash = ((canvasHash << 5) - canvasHash + pixels[i]) | 0;
+      }
+      signals.push("c:" + canvasHash);
     } catch (e) {
       signals.push("no-canvas");
     }
@@ -264,36 +286,16 @@
           signals.push(gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) || "");
           signals.push(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || "");
         }
+        gl.getExtension("WEBGL_lose_context").loseContext();
       }
     } catch (e) {
       signals.push("no-webgl");
     }
 
-    // AudioContext fingerprint
-    try {
-      var audioCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, 44100, 44100);
-      var osc = audioCtx.createOscillator();
-      osc.type = "triangle";
-      osc.frequency.setValueAtTime(10000, audioCtx.currentTime);
-      var comp = audioCtx.createDynamicsCompressor();
-      osc.connect(comp);
-      comp.connect(audioCtx.destination);
-      osc.start(0);
-      audioCtx.startRendering();
-      audioCtx.oncomplete = function (e) {
-        var buf = e.renderedBuffer.getChannelData(0);
-        var sum = 0;
-        for (var i = 4500; i < 5000; i++) sum += Math.abs(buf[i]);
-        signals.push("audio:" + sum.toFixed(6));
-      };
-    } catch (e) {
-      signals.push("no-audio");
-    }
-
     return "fp_" + murmurHash(signals.join("|||"));
   }
 
-  // MurmurHash3 (32-bit) — fast, good distribution, not cryptographic
+  // MurmurHash3 (32-bit) — fast, good distribution
   function murmurHash(str) {
     var h = 0x12345678;
     for (var i = 0; i < str.length; i++) {
@@ -315,45 +317,51 @@
   }
 
   // ---- Form Abuse Detection ----
-  // Monitors form interactions to detect spam/abuse patterns.
+  // Deferred to after page load to avoid any impact on initial render
 
-  var formStats = { submits: 0, pastes: 0, rapidClicks: 0, lastClickTime: 0 };
+  setTimeout(function () {
+    var formStats = { submits: 0, pastes: 0, rapidClicks: 0, lastClickTime: 0 };
 
-  document.addEventListener("submit", function (e) {
-    formStats.submits++;
-    var timeSinceLoad = (Date.now() - pageStart) / 1000;
+    document.addEventListener(
+      "submit",
+      function () {
+        formStats.submits++;
+        var timeSinceLoad = (Date.now() - pageStart) / 1000;
+        var suspicious = timeSinceLoad < 2 || formStats.submits > 3;
 
-    // Suspicious: form submitted < 2 seconds after page load
-    var suspicious = timeSinceLoad < 2 || formStats.submits > 3;
-
-    if (suspicious || formStats.pastes > 3 || formStats.rapidClicks > 10) {
-      sendEvent("custom", {
-        n: "_form_abuse",
-        p: {
-          submits: String(formStats.submits),
-          pastes: String(formStats.pastes),
-          rapid_clicks: String(formStats.rapidClicks),
-          time_to_submit: String(Math.round(timeSinceLoad)),
-          had_interaction: hadInteraction ? "1" : "0"
+        if (suspicious || formStats.pastes > 3 || formStats.rapidClicks > 10) {
+          sendEvent("custom", {
+            n: "_form_abuse",
+            p: {
+              submits: String(formStats.submits),
+              pastes: String(formStats.pastes),
+              rapid_clicks: String(formStats.rapidClicks),
+              time_to_submit: String(Math.round(timeSinceLoad)),
+              had_interaction: hadInteraction ? "1" : "0",
+            },
+          });
         }
-      });
-    }
-  }, true);
+      },
+      true
+    );
 
-  document.addEventListener("paste", function () {
-    formStats.pastes++;
-  }, true);
+    document.addEventListener("paste", function () { formStats.pastes++; }, true);
 
-  document.addEventListener("click", function () {
-    var now = Date.now();
-    if (now - formStats.lastClickTime < 200) formStats.rapidClicks++;
-    formStats.lastClickTime = now;
-  }, true);
+    document.addEventListener(
+      "click",
+      function () {
+        var now = Date.now();
+        if (now - formStats.lastClickTime < 200) formStats.rapidClicks++;
+        formStats.lastClickTime = now;
+      },
+      true
+    );
+  }, 100);
+
+  // ---- Utilities ----
 
   function getCookie(name) {
-    var match = document.cookie.match(
-      new RegExp("(^| )" + name + "=([^;]+)")
-    );
+    var match = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
     return match ? match[2] : null;
   }
 
@@ -375,7 +383,6 @@
         var domain = linkUrl.hostname;
 
         if (xdSites.indexOf(domain) !== -1) {
-          // Request cross-domain token
           fetch(endpoint + "/c/x", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -384,9 +391,7 @@
               destination: domain,
             }),
           })
-            .then(function (res) {
-              return res.json();
-            })
+            .then(function (res) { return res.json(); })
             .then(function (data) {
               if (data.token) {
                 linkUrl.searchParams.set("_sabt", data.token);
