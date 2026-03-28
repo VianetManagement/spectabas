@@ -31,7 +31,9 @@
     document.addEventListener(e, markInteraction, { once: false, passive: true });
   });
 
-  // GDPR-off: use cookies (fast path)
+  var browserFp = quickFingerprint();
+
+  // GDPR-off: use cookies, fingerprint sent separately for dedup
   if (gdpr === "off") {
     vid = getCookie("_sab");
     if (!vid) {
@@ -39,8 +41,8 @@
       setCookie("_sab", vid, 63072000);
     }
   } else {
-    // GDPR-on: quick fingerprint now, enhanced fingerprint async
-    vid = quickFingerprint();
+    // GDPR-on: fingerprint IS the visitor id
+    vid = browserFp;
   }
 
   // Clean cross-domain token from URL (only if present)
@@ -75,16 +77,17 @@
   sendEvent("pageview");
 
   // Compute enhanced fingerprint asynchronously after first paint
-  if (gdpr !== "off") {
-    setTimeout(function () {
-      var enhanced = enhancedFingerprint();
+  setTimeout(function () {
+    var enhanced = enhancedFingerprint();
+    browserFp = enhanced;
+    if (gdpr !== "off") {
+      // GDPR-on: fingerprint IS the vid
       if (enhanced !== vid) {
         vid = enhanced;
-        // Update the server with the more accurate fingerprint
         sendEvent("duration");
       }
-    }, 50);
-  }
+    }
+  }, 50);
 
   // SPA support
   var origPushState = history.pushState;
@@ -151,6 +154,7 @@
       p: {},
       _bot: botHints ? 1 : 0,
       _hi: hadInteraction ? 1 : 0,
+      _fp: browserFp,
     };
 
     if (extra) {

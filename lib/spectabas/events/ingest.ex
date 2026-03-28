@@ -77,10 +77,11 @@ defmodule Spectabas.Events.Ingest do
         props: payload.p || %{},
         user_agent: ua_string,
         browser_fingerprint:
-          if(payload.vid && String.starts_with?(to_string(payload.vid), "fp_"),
-            do: payload.vid,
-            else: ""
-          )
+          cond do
+            payload._fp && payload._fp != "" -> payload._fp
+            payload.vid && String.starts_with?(to_string(payload.vid), "fp_") -> payload.vid
+            true -> ""
+          end
       }
       |> Map.merge(ip_data)
 
@@ -214,9 +215,15 @@ defmodule Spectabas.Events.Ingest do
 
   defp resolve_visitor(site, payload, gdpr_mode, client_ip, ua_string) do
     cond do
-      # In GDPR-on mode, always use server-generated fingerprint (ignore client vid)
+      # In GDPR-on mode, use the client browser fingerprint (stable canvas/WebGL)
+      # or fall back to server-generated fingerprint (UA + IP + date)
       gdpr_mode == :on ->
-        fingerprint = generate_fingerprint(ua_string, client_ip)
+        fingerprint =
+          cond do
+            payload._fp && payload._fp != "" -> payload._fp
+            payload.vid && String.starts_with?(to_string(payload.vid), "fp_") -> payload.vid
+            true -> generate_fingerprint(ua_string, client_ip)
+          end
 
         case Visitors.get_or_create(site.id, fingerprint, :on, client_ip) do
           {:ok, visitor} -> visitor.id
@@ -227,10 +234,10 @@ defmodule Spectabas.Events.Ingest do
       payload.vid != nil and payload.vid != "" ->
         case Visitors.get_or_create(site.id, payload.vid, gdpr_mode, client_ip) do
           {:ok, visitor} ->
-            # Store fingerprint for future dedup if cookie is ever lost
-            if visitor.fingerprint_id == nil or visitor.fingerprint_id == "" do
-              fp = generate_fingerprint(ua_string, client_ip)
+            # Store client browser fingerprint for future dedup if cookie is ever lost
+            fp = if payload._fp && payload._fp != "", do: payload._fp, else: nil
 
+            if fp && (visitor.fingerprint_id == nil or visitor.fingerprint_id == "") do
               visitor
               |> Visitor.changeset(%{fingerprint_id: fp})
               |> Spectabas.Repo.update()
@@ -244,7 +251,12 @@ defmodule Spectabas.Events.Ingest do
 
       # GDPR-off: no cookie present — try fingerprint dedup, then create new
       gdpr_mode == :off ->
-        fp = generate_fingerprint(ua_string, client_ip)
+        # Use client-side browser fingerprint (canvas/WebGL) — much more stable
+        # than the server-side fingerprint (UA + IP + date which rotates daily)
+        fp =
+          if payload._fp && payload._fp != "",
+            do: payload._fp,
+            else: generate_fingerprint(ua_string, client_ip)
 
         case Visitors.find_by_fingerprint(site.id, fp) do
           %{id: existing_id, cookie_id: existing_cookie} when not is_nil(existing_cookie) ->

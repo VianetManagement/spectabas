@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.2.2 — 2026-03-29 06:00 UTC",
+       [
+         %{
+           title: "Fix visitor dedup: use client browser fingerprint",
+           description:
+             "tracker now sends _fp (canvas/WebGL fingerprint) in every beacon. Server uses client fingerprint for dedup instead of server-generated UA+IP+date which rotated daily. GDPR-on mode also prefers client fingerprint. Both modes now store the stable fingerprint for future matching."
+         }
+       ]},
       {"v1.2.1 — 2026-03-29 05:00 UTC",
        [
          %{
