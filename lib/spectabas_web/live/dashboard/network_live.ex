@@ -38,13 +38,13 @@ defmodule SpectabasWeb.Dashboard.NetworkLive do
     network =
       case Analytics.network_stats(site, user, range_to_atom(range)) do
         {:ok, rows} when is_list(rows) ->
-          total_hits = Enum.reduce(rows, 0, fn r, acc -> acc + (r["hits"] || 0) end)
+          total_hits = Enum.reduce(rows, 0, fn r, acc -> acc + to_num(r["hits"]) end)
 
           avg_pct = fn key ->
             if total_hits > 0 do
               weighted =
                 Enum.reduce(rows, 0.0, fn r, acc ->
-                  acc + (r[key] || 0.0) * (r["hits"] || 0)
+                  acc + to_float(r[key]) * to_num(r["hits"])
                 end)
 
               Float.round(weighted / total_hits, 1)
@@ -67,6 +67,29 @@ defmodule SpectabasWeb.Dashboard.NetworkLive do
 
     assign(socket, :network, network)
   end
+
+  defp to_num(n) when is_integer(n), do: n
+
+  defp to_num(n) when is_binary(n) do
+    case Integer.parse(n) do
+      {i, _} -> i
+      :error -> 0
+    end
+  end
+
+  defp to_num(_), do: 0
+
+  defp to_float(n) when is_float(n), do: n
+  defp to_float(n) when is_integer(n), do: n * 1.0
+
+  defp to_float(n) when is_binary(n) do
+    case Float.parse(n) do
+      {f, _} -> f
+      :error -> 0.0
+    end
+  end
+
+  defp to_float(_), do: 0.0
 
   defp range_to_atom("24h"), do: :day
   defp range_to_atom("7d"), do: :week
@@ -163,19 +186,19 @@ defmodule SpectabasWeb.Dashboard.NetworkLive do
               </td>
               <td class="px-6 py-4 text-center">
                 <span
-                  :if={Map.get(asn, "datacenter_pct", 0) > 50}
+                  :if={to_float(asn["datacenter_pct"]) > 50}
                   class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800"
                 >
                   DC
                 </span>
                 <span
-                  :if={Map.get(asn, "vpn_pct", 0) > 50}
+                  :if={to_float(asn["vpn_pct"]) > 50}
                   class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800"
                 >
                   VPN
                 </span>
                 <span
-                  :if={Map.get(asn, "tor_pct", 0) > 50}
+                  :if={to_float(asn["tor_pct"]) > 50}
                   class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800"
                 >
                   Tor
