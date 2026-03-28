@@ -13,12 +13,12 @@
     </script>
   </head>
   <body class="bg-white antialiased">
-    <nav class="bg-white border-b border-gray-200 relative z-50">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between h-16">
-          <div class="flex items-center gap-6">
-            <a href="/" class="flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 32 32">
+    <nav class="bg-slate-900 relative z-50">
+      <div class="px-4 sm:px-6">
+        <div class="flex justify-between h-11">
+          <div class="flex items-center gap-4">
+            <a href="/" class="flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 32 32">
                 <rect width="32" height="32" rx="6" ry="6" fill="#6366f1" />
                 <g transform="translate(5, 5) scale(0.043)">
                   <path
@@ -27,40 +27,34 @@
                   />
                 </g>
               </svg>
-              <span class="text-xl font-bold text-indigo-600">Spectabas</span>
+              <span class="text-sm font-bold text-white">Spectabas</span>
             </a>
             <%= if assigns[:current_scope] && @current_scope.user do %>
-              <a
-                href="/dashboard"
-                class="text-sm text-gray-700 hover:text-indigo-600 font-medium"
-              >
+              <a href="/dashboard" class="text-xs text-slate-400 hover:text-white font-medium">
                 Dashboard
               </a>
               <%= if @current_scope.user.role in [:superadmin, :admin] do %>
-                <a
-                  href="/admin"
-                  class="text-sm text-gray-700 hover:text-indigo-600 font-medium"
-                >
+                <a href="/admin" class="text-xs text-slate-400 hover:text-white font-medium">
                   Admin
                 </a>
               <% end %>
             <% end %>
           </div>
-          <div class="flex items-center gap-4 text-sm">
+          <div class="flex items-center gap-3 text-xs">
             <%= if assigns[:current_scope] && @current_scope.user do %>
-              <span class="text-gray-500">{@current_scope.user.email}</span>
-              <a href="/users/settings" class="text-gray-600 hover:text-indigo-600">Account</a>
+              <span class="text-slate-500 hidden sm:inline">{@current_scope.user.email}</span>
+              <a href="/users/settings" class="text-slate-400 hover:text-white">Account</a>
               <.link
                 href={~p"/users/log-out"}
                 method="delete"
-                class="text-gray-600 hover:text-indigo-600"
+                class="text-slate-400 hover:text-white"
               >
                 Log out
               </.link>
             <% else %>
               <a
                 href="/users/log-in"
-                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 transition"
+                class="inline-flex items-center px-3 py-1 text-xs font-medium rounded text-white bg-indigo-600 hover:bg-indigo-700"
               >
                 Sign in
               </a>

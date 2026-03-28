@@ -18,25 +18,25 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
 
   def dashboard_layout(assigns) do
     ~H"""
-    <div class="flex min-h-[calc(100vh-64px)]">
+    <div class="flex min-h-[calc(100vh-44px)]">
       <%!-- Sidebar --%>
-      <aside class="hidden lg:flex lg:flex-col lg:w-60 bg-slate-800 flex-shrink-0">
+      <aside class="hidden lg:flex lg:flex-col lg:w-60 bg-white border-r border-gray-200 flex-shrink-0">
         <%!-- Site header --%>
-        <div class="p-4 border-b border-slate-700">
-          <.link navigate={~p"/dashboard"} class="text-xs text-slate-400 hover:text-white">
+        <div class="p-4 border-b border-gray-200">
+          <.link navigate={~p"/dashboard"} class="text-xs text-gray-500 hover:text-indigo-600">
             &larr; All Sites
           </.link>
-          <h2 class="text-sm font-semibold text-white mt-1 truncate">{@site.name}</h2>
-          <p class="text-xs text-slate-400 truncate">{@site.domain}</p>
+          <h2 class="text-sm font-semibold text-gray-900 mt-1 truncate">{@site.name}</h2>
+          <p class="text-xs text-gray-500 truncate">{@site.domain}</p>
           <div :if={@live_visitors > 0} class="flex items-center gap-1.5 mt-2">
-            <span class="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
-            <span class="text-xs text-green-300 font-medium">{@live_visitors} online</span>
+            <span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+            <span class="text-xs text-green-700 font-medium">{@live_visitors} online</span>
           </div>
         </div>
 
         <%!-- Date Controls (only on pages with date state) --%>
-        <div :if={@preset} class="p-3 border-b border-slate-700">
-          <p class="px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">
+        <div :if={@preset} class="p-3 border-b border-gray-200">
+          <p class="px-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">
             Time Period
           </p>
           <div class="flex flex-wrap gap-1 mb-2">
@@ -56,31 +56,31 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
                 "px-2 py-1 text-xs font-medium rounded",
                 if(@preset == id,
                   do: "bg-indigo-600 text-white",
-                  else: "text-slate-300 bg-slate-700 hover:bg-slate-600"
+                  else: "text-gray-600 bg-gray-100 hover:bg-gray-200"
                 )
               ]}
             >
               {label}
             </button>
           </div>
-          <div :if={@date_from && @date_to} class="text-xs text-slate-400 px-1 mb-2">
+          <div :if={@date_from && @date_to} class="text-xs text-gray-500 px-1 mb-2">
             {Calendar.strftime(@date_from, "%b %d")} - {Calendar.strftime(@date_to, "%b %d, %Y")}
           </div>
           <button
             phx-click="toggle_compare"
             class={[
-              "w-full px-2 py-1 text-xs font-medium rounded flex items-center gap-1.5",
+              "w-full px-2 py-1.5 text-xs font-medium rounded flex items-center gap-1.5",
               if(@compare,
-                do: "bg-indigo-600/20 text-indigo-300 border border-indigo-500/30",
-                else: "text-slate-400 bg-slate-700 hover:bg-slate-600"
+                do: "bg-indigo-50 text-indigo-700 border border-indigo-200",
+                else: "text-gray-500 bg-gray-50 hover:bg-gray-100 border border-gray-200"
               )
             ]}
           >
             <span class={[
               "w-3 h-3 rounded-sm border flex items-center justify-center",
               if(@compare,
-                do: "bg-indigo-500 border-indigo-500",
-                else: "border-slate-500"
+                do: "bg-indigo-600 border-indigo-600",
+                else: "border-gray-300 bg-white"
               )
             ]}>
               <span :if={@compare} class="text-white text-[8px]">&#10003;</span>
@@ -250,7 +250,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
   defp nav_section(assigns) do
     ~H"""
     <div class="pt-3 first:pt-0">
-      <p class="px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+      <p class="px-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">
         {@label}
       </p>
       {render_slot(@inner_block)}
@@ -265,8 +265,8 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
       class={[
         "flex items-center px-2 py-1.5 text-sm rounded-md transition-colors",
         if(@active,
-          do: "bg-indigo-600 text-white font-medium",
-          else: "text-slate-300 hover:text-white hover:bg-slate-700"
+          do: "bg-indigo-50 text-indigo-700 font-medium",
+          else: "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
         )
       ]}
     >

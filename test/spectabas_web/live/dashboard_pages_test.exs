@@ -147,7 +147,8 @@ defmodule SpectabasWeb.DashboardPagesTest do
     end
 
     test "sub-pages have sidebar", %{conn: conn, site: site} do
-      pages = ~w(pages sources geo devices network entry-exit map visitor-log transitions attribution search cohort campaigns goals funnels ecommerce reports exports settings)
+      pages =
+        ~w(pages sources geo devices network entry-exit map visitor-log transitions attribution search cohort campaigns goals funnels ecommerce reports exports settings)
 
       for page <- pages do
         {:ok, _view, html} = live(conn, "/dashboard/sites/#{site.id}/#{page}")
