@@ -31,7 +31,8 @@
     document.addEventListener(e, markInteraction, { once: false, passive: true });
   });
 
-  var browserFp = quickFingerprint();
+  // Single consistent fingerprint — no two-phase to avoid split visitor IDs
+  var browserFp = enhancedFingerprint();
 
   // GDPR-off: use cookies, fingerprint sent separately for dedup
   if (gdpr === "off") {
@@ -76,18 +77,7 @@
   // Send initial pageview immediately (non-blocking)
   sendEvent("pageview");
 
-  // Compute enhanced fingerprint asynchronously after first paint
-  setTimeout(function () {
-    var enhanced = enhancedFingerprint();
-    browserFp = enhanced;
-    if (gdpr !== "off") {
-      // GDPR-on: fingerprint IS the vid
-      if (enhanced !== vid) {
-        vid = enhanced;
-        sendEvent("duration");
-      }
-    }
-  }, 50);
+  // No async fingerprint update needed — single consistent fingerprint used
 
   // SPA support
   var origPushState = history.pushState;
@@ -223,23 +213,8 @@
 
   // ---- Fingerprinting ----
 
-  // Quick fingerprint: runs synchronously before first beacon (~0.1ms)
-  // Uses only fast, non-blocking signals
-  function quickFingerprint() {
-    var s = [
-      navigator.userAgent,
-      screen.width + "x" + screen.height,
-      Intl.DateTimeFormat().resolvedOptions().timeZone || "",
-      navigator.language || "",
-      navigator.hardwareConcurrency || 0,
-      navigator.maxTouchPoints || 0,
-      new Date().getTimezoneOffset(),
-    ].join("|");
-    return "fp_" + murmurHash(s);
-  }
-
-  // Enhanced fingerprint: runs async after first paint (~5ms)
-  // Adds canvas, WebGL, and deeper browser probing
+  // Browser fingerprint: canvas + WebGL + navigator signals (~3-5ms)
+  // Single consistent fingerprint used for both GDPR-on vid and dedup
   function enhancedFingerprint() {
     var signals = [
       navigator.userAgent,
@@ -370,9 +345,9 @@
   }
 
   function setCookie(name, value, maxAge) {
-    var cookie = name + "=" + value + ";path=/;max-age=" + maxAge;
-    if (gdpr === "off") {
-      cookie += ";SameSite=None;Secure";
+    var cookie = name + "=" + value + ";path=/;max-age=" + maxAge + ";SameSite=Lax";
+    if (window.location.protocol === "https:") {
+      cookie += ";Secure";
     }
     document.cookie = cookie;
   }

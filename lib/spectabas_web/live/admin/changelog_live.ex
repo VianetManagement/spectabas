@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.3.1 — 2026-03-29 09:00 UTC",
+       [
+         %{
+           title: "Fix: visitor deduplication — cookie + fingerprint",
+           description:
+             "eliminated two-phase fingerprint (was creating split visitor IDs). Fixed cookie SameSite=None→Lax (None silently fails on HTTP). Single consistent fingerprint computed once on page load. Cookie now persists correctly on both HTTP and HTTPS sites."
+         }
+       ]},
       {"v1.3.0 — 2026-03-29 08:00 UTC",
        [
          %{
