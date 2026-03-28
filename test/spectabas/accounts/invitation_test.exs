@@ -65,6 +65,24 @@ defmodule Spectabas.Accounts.InvitationTest do
 
       assert user.email == "accept@example.com"
       assert user.role == :analyst
+
+      # Verify the user can actually log in with the password they set
+      assert Accounts.get_user_by_email_and_password("accept@example.com", "a_good_password123")
+    end
+
+    test "rejects email mismatch" do
+      admin = user_fixture()
+
+      {:ok, admin} =
+        admin |> Accounts.User.profile_changeset(%{role: :superadmin}) |> Repo.update()
+
+      {:ok, invitation} = Accounts.invite_user(admin, "intended@example.com", "viewer")
+
+      assert {:error, :email_mismatch} =
+               Accounts.accept_invitation(invitation.token, %{
+                 email: "different@example.com",
+                 password: "a_good_password123"
+               })
     end
 
     test "rejects already accepted invitation" do

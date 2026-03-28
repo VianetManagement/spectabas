@@ -45,6 +45,24 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.2.3 — 2026-03-29 07:00 UTC",
+       [
+         %{
+           title: "Fix: invited users can now log in with password",
+           description:
+             "invitation acceptance was only saving the email (email_changeset) but not hashing the password. Now uses register_user_with_password which applies both email and password changesets."
+         },
+         %{
+           title: "Fix: use client fingerprint for dedup",
+           description:
+             "tracker sends stable canvas/WebGL fingerprint (_fp) in every beacon. Server uses client fingerprint instead of rotating server-generated one for visitor dedup."
+         },
+         %{
+           title: "New test: verify invited user can log in",
+           description:
+             "end-to-end test that invitation acceptance creates a user who can authenticate with their password. Also tests email mismatch rejection."
+         }
+       ]},
       {"v1.2.2 — 2026-03-29 06:00 UTC",
        [
          %{

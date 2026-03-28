@@ -105,6 +105,16 @@ defmodule Spectabas.Accounts do
     |> Repo.insert()
   end
 
+  @doc """
+  Registers a user with email AND password (used by invitation acceptance).
+  """
+  def register_user_with_password(attrs) do
+    %User{}
+    |> User.email_changeset(attrs)
+    |> User.password_changeset(attrs)
+    |> Repo.insert()
+  end
+
   ## Settings
 
   @doc """
@@ -556,7 +566,7 @@ defmodule Spectabas.Accounts do
 
   defp accept_invitation_inner(invitation, user_attrs) do
     Repo.transact(fn ->
-      with {:ok, user} <- register_user(user_attrs) do
+      with {:ok, user} <- register_user_with_password(user_attrs) do
         now = DateTime.utc_now() |> DateTime.truncate(:second)
 
         invitation
