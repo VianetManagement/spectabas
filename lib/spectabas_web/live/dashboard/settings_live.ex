@@ -2,6 +2,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   use SpectabasWeb, :live_view
 
   alias Spectabas.{Accounts, Sites}
+  import SpectabasWeb.Dashboard.SidebarComponent
 
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
@@ -104,324 +105,321 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="mb-8">
-        <.link
-          navigate={~p"/dashboard/sites/#{@site.id}"}
-          class="text-sm text-indigo-600 hover:text-indigo-800"
+    <.dashboard_layout site={@site} active="settings" live_visitors={0}>
+      <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="mb-8">
+          <h1 class="text-2xl font-bold text-gray-900 mt-2">Site Settings</h1>
+        </div>
+
+        <p
+          :if={msg = Phoenix.Flash.get(@flash, :info)}
+          class="rounded-lg bg-blue-50 p-3 text-sm text-blue-700 mb-6"
         >
-          &larr; Back to {@site.name}
-        </.link>
-        <h1 class="text-2xl font-bold text-gray-900 mt-2">Site Settings</h1>
-      </div>
-
-      <p
-        :if={msg = Phoenix.Flash.get(@flash, :info)}
-        class="rounded-lg bg-blue-50 p-3 text-sm text-blue-700 mb-6"
-      >
-        {msg}
-      </p>
-      <p
-        :if={msg = Phoenix.Flash.get(@flash, :error)}
-        class="rounded-lg bg-red-50 p-3 text-sm text-red-700 mb-6"
-      >
-        {msg}
-      </p>
-
-      <%!-- Tracking Snippet --%>
-      <div class="bg-white rounded-lg shadow p-6 mb-8">
-        <h2 class="text-lg font-semibold text-gray-900 mb-4">Tracking Snippet</h2>
-        <p class="text-sm text-gray-600 mb-2">
-          Copy and paste this snippet into the
-          <code class="bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">&lt;head&gt;</code>
-          section of every page you want to track. It should go before the closing
-          <code class="bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">&lt;/head&gt;</code>
-          tag.
+          {msg}
         </p>
-        <div class="relative mt-4">
-          <pre class="bg-gray-900 text-gray-100 rounded-lg p-4 text-sm overflow-x-auto"><code><%= @snippet %></code></pre>
-          <button
-            id="copy-snippet-btn"
-            data-text={@snippet}
-            phx-click={
-              JS.dispatch("spectabas:clipcopy", to: "#copy-snippet-btn")
-              |> JS.set_attribute({"data-copied", "true"}, to: "#copy-snippet-btn")
-            }
-            class="absolute top-2 right-2 px-3 py-1 bg-gray-700 text-white rounded text-xs hover:bg-gray-600"
-          >
-            Copy
-          </button>
-        </div>
-        <div class="mt-4 bg-gray-50 rounded-lg p-4 text-sm text-gray-600">
-          <p class="font-medium text-gray-700 mb-2">Example placement:</p>
-          <pre class="text-xs font-mono text-gray-500 overflow-x-auto"><code>{@example_html}</code></pre>
-          <p class="mt-3 text-xs text-gray-500">
-            The script loads asynchronously and won't slow down your page.
-            If you use a CMS or site builder, look for a "Custom HTML" or "Header Scripts" setting.
-          </p>
-        </div>
-      </div>
+        <p
+          :if={msg = Phoenix.Flash.get(@flash, :error)}
+          class="rounded-lg bg-red-50 p-3 text-sm text-red-700 mb-6"
+        >
+          {msg}
+        </p>
 
-      <%!-- Settings Form --%>
-      <div class="bg-white rounded-lg shadow p-6">
-        <h2 class="text-lg font-semibold text-gray-900 mb-6">Configuration</h2>
-        <.form for={@form} phx-submit="save" phx-change="validate" class="space-y-6">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Site Name</label>
-              <input
-                type="text"
-                name="site[name]"
-                value={@form[:name].value}
-                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
-              />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Domain</label>
-              <input
-                type="text"
-                name="site[domain]"
-                value={@form[:domain].value}
-                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
-              />
-              <div class="mt-2 flex flex-wrap items-center gap-2">
-                <span class={[
-                  "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium",
-                  if(@site.dns_verified,
-                    do: "bg-green-100 text-green-700",
-                    else: "bg-yellow-100 text-yellow-700"
-                  )
-                ]}>
-                  <span class={"w-1.5 h-1.5 rounded-full " <> if(@site.dns_verified, do: "bg-green-500", else: "bg-yellow-500")} />
-                  {if @site.dns_verified, do: "DNS Verified", else: "DNS Pending"}
-                </span>
-                <button phx-click="verify_dns" class="text-xs text-indigo-600 hover:text-indigo-800">
-                  Check
-                </button>
-                <span class={[
-                  "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium",
-                  case @render_domain_status do
-                    :active -> "bg-green-100 text-green-700"
-                    :not_found -> "bg-yellow-100 text-yellow-700"
-                    _ -> "bg-gray-100 text-gray-600"
-                  end
-                ]}>
-                  <span class={"w-1.5 h-1.5 rounded-full " <> case @render_domain_status do
+        <%!-- Tracking Snippet --%>
+        <div class="bg-white rounded-lg shadow p-6 mb-8">
+          <h2 class="text-lg font-semibold text-gray-900 mb-4">Tracking Snippet</h2>
+          <p class="text-sm text-gray-600 mb-2">
+            Copy and paste this snippet into the
+            <code class="bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">&lt;head&gt;</code>
+            section of every page you want to track. It should go before the closing
+            <code class="bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">&lt;/head&gt;</code>
+            tag.
+          </p>
+          <div class="relative mt-4">
+            <pre class="bg-gray-900 text-gray-100 rounded-lg p-4 text-sm overflow-x-auto"><code><%= @snippet %></code></pre>
+            <button
+              id="copy-snippet-btn"
+              data-text={@snippet}
+              phx-click={
+                JS.dispatch("spectabas:clipcopy", to: "#copy-snippet-btn")
+                |> JS.set_attribute({"data-copied", "true"}, to: "#copy-snippet-btn")
+              }
+              class="absolute top-2 right-2 px-3 py-1 bg-gray-700 text-white rounded text-xs hover:bg-gray-600"
+            >
+              Copy
+            </button>
+          </div>
+          <div class="mt-4 bg-gray-50 rounded-lg p-4 text-sm text-gray-600">
+            <p class="font-medium text-gray-700 mb-2">Example placement:</p>
+            <pre class="text-xs font-mono text-gray-500 overflow-x-auto"><code>{@example_html}</code></pre>
+            <p class="mt-3 text-xs text-gray-500">
+              The script loads asynchronously and won't slow down your page.
+              If you use a CMS or site builder, look for a "Custom HTML" or "Header Scripts" setting.
+            </p>
+          </div>
+        </div>
+
+        <%!-- Settings Form --%>
+        <div class="bg-white rounded-lg shadow p-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-6">Configuration</h2>
+          <.form for={@form} phx-submit="save" phx-change="validate" class="space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Site Name</label>
+                <input
+                  type="text"
+                  name="site[name]"
+                  value={@form[:name].value}
+                  class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Domain</label>
+                <input
+                  type="text"
+                  name="site[domain]"
+                  value={@form[:domain].value}
+                  class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
+                />
+                <div class="mt-2 flex flex-wrap items-center gap-2">
+                  <span class={[
+                    "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium",
+                    if(@site.dns_verified,
+                      do: "bg-green-100 text-green-700",
+                      else: "bg-yellow-100 text-yellow-700"
+                    )
+                  ]}>
+                    <span class={"w-1.5 h-1.5 rounded-full " <> if(@site.dns_verified, do: "bg-green-500", else: "bg-yellow-500")} />
+                    {if @site.dns_verified, do: "DNS Verified", else: "DNS Pending"}
+                  </span>
+                  <button phx-click="verify_dns" class="text-xs text-indigo-600 hover:text-indigo-800">
+                    Check
+                  </button>
+                  <span class={[
+                    "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium",
+                    case @render_domain_status do
+                      :active -> "bg-green-100 text-green-700"
+                      :not_found -> "bg-yellow-100 text-yellow-700"
+                      _ -> "bg-gray-100 text-gray-600"
+                    end
+                  ]}>
+                    <span class={"w-1.5 h-1.5 rounded-full " <> case @render_domain_status do
                     :active -> "bg-green-500"
                     :not_found -> "bg-yellow-500"
                     _ -> "bg-gray-400"
                   end} />
-                  {case @render_domain_status do
-                    :active -> "Render Active"
-                    :not_found -> "Render Pending"
-                    _ -> "Render Unknown"
-                  end}
-                </span>
-                <button
-                  :if={@render_domain_status != :active}
-                  phx-click="register_render_domain"
-                  class="text-xs text-indigo-600 hover:text-indigo-800"
-                >
-                  Register
-                </button>
-              </div>
-              <p :if={!@site.dns_verified} class="mt-1 text-xs text-yellow-600">
-                CNAME {@site.domain} &rarr; www.spectabas.com
-              </p>
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Timezone</label>
-              <select
-                name="site[timezone]"
-                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
-              >
-                <option
-                  :for={
-                    tz <-
-                      ~w(UTC US/Eastern US/Central US/Mountain US/Pacific Europe/London Europe/Paris Europe/Berlin Asia/Tokyo Asia/Shanghai Australia/Sydney Pacific/Auckland America/New_York America/Chicago America/Denver America/Los_Angeles America/Toronto America/Sao_Paulo)
-                  }
-                  value={tz}
-                  selected={@form[:timezone].value == tz}
-                >
-                  {tz}
-                </option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Retention Days</label>
-              <input
-                type="number"
-                name="site[retention_days]"
-                value={@form[:retention_days].value}
-                min="30"
-                max="3650"
-                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
-              />
-            </div>
-          </div>
-
-          <div class="border-t border-gray-200 pt-6">
-            <h3 class="text-base font-medium text-gray-900 mb-4">Privacy</h3>
-            <div class="space-y-4">
-              <div class="flex items-center gap-3">
-                <input type="hidden" name="site[gdpr_mode]" value="off" />
-                <input
-                  type="checkbox"
-                  name="site[gdpr_mode]"
-                  value="on"
-                  checked={@form[:gdpr_mode].value == "on"}
-                  class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                />
-                <label class="text-sm text-gray-700">
-                  GDPR Mode (cookieless, IP anonymization)
-                </label>
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700">Cookie Domain</label>
-                <input
-                  type="text"
-                  name="site[cookie_domain]"
-                  value={@form[:cookie_domain].value}
-                  placeholder=".example.com"
-                  class="mt-1 block w-full md:w-1/2 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
-                />
-                <p class="mt-1.5 text-xs text-gray-500">
-                  Set this to share cookies across subdomains. Use a leading dot (e.g. <code class="bg-gray-100 px-1 rounded">.example.com</code>)
-                  to match all subdomains like
-                  <code class="bg-gray-100 px-1 rounded">www.example.com</code>
-                  and <code class="bg-gray-100 px-1 rounded">app.example.com</code>.
-                  Wildcards (<code class="bg-gray-100 px-1 rounded">*.example.com</code>) are not supported — use the dot prefix instead.
-                  Leave blank to restrict cookies to the exact analytics subdomain.
+                    {case @render_domain_status do
+                      :active -> "Render Active"
+                      :not_found -> "Render Pending"
+                      _ -> "Render Unknown"
+                    end}
+                  </span>
+                  <button
+                    :if={@render_domain_status != :active}
+                    phx-click="register_render_domain"
+                    class="text-xs text-indigo-600 hover:text-indigo-800"
+                  >
+                    Register
+                  </button>
+                </div>
+                <p :if={!@site.dns_verified} class="mt-1 text-xs text-yellow-600">
+                  CNAME {@site.domain} &rarr; www.spectabas.com
                 </p>
               </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Timezone</label>
+                <select
+                  name="site[timezone]"
+                  class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
+                >
+                  <option
+                    :for={
+                      tz <-
+                        ~w(UTC US/Eastern US/Central US/Mountain US/Pacific Europe/London Europe/Paris Europe/Berlin Asia/Tokyo Asia/Shanghai Australia/Sydney Pacific/Auckland America/New_York America/Chicago America/Denver America/Los_Angeles America/Toronto America/Sao_Paulo)
+                    }
+                    value={tz}
+                    selected={@form[:timezone].value == tz}
+                  >
+                    {tz}
+                  </option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Retention Days</label>
+                <input
+                  type="number"
+                  name="site[retention_days]"
+                  value={@form[:retention_days].value}
+                  min="30"
+                  max="3650"
+                  class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
+                />
+              </div>
             </div>
-          </div>
 
-          <div class="border-t border-gray-200 pt-6">
-            <h3 class="text-base font-medium text-gray-900 mb-4">
-              Allowed Domains &amp; Cross-Domain Tracking
-            </h3>
-            <p class="text-sm text-gray-500 mb-4">
-              The parent domain of your analytics subdomain (e.g.
-              <code class="bg-gray-100 px-1 rounded">dogbreederlicensing.org</code>
-              and <code class="bg-gray-100 px-1 rounded">www.dogbreederlicensing.org</code>) is automatically allowed to send analytics data.
-              Add additional domains below if you have other sites that should also be allowed to send data to this analytics endpoint.
-              Enable cross-domain tracking to share visitor sessions across these domains.
-            </p>
-            <div class="space-y-4">
+            <div class="border-t border-gray-200 pt-6">
+              <h3 class="text-base font-medium text-gray-900 mb-4">Privacy</h3>
+              <div class="space-y-4">
+                <div class="flex items-center gap-3">
+                  <input type="hidden" name="site[gdpr_mode]" value="off" />
+                  <input
+                    type="checkbox"
+                    name="site[gdpr_mode]"
+                    value="on"
+                    checked={@form[:gdpr_mode].value == "on"}
+                    class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                  />
+                  <label class="text-sm text-gray-700">
+                    GDPR Mode (cookieless, IP anonymization)
+                  </label>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700">Cookie Domain</label>
+                  <input
+                    type="text"
+                    name="site[cookie_domain]"
+                    value={@form[:cookie_domain].value}
+                    placeholder=".example.com"
+                    class="mt-1 block w-full md:w-1/2 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
+                  />
+                  <p class="mt-1.5 text-xs text-gray-500">
+                    Set this to share cookies across subdomains. Use a leading dot (e.g. <code class="bg-gray-100 px-1 rounded">.example.com</code>)
+                    to match all subdomains like
+                    <code class="bg-gray-100 px-1 rounded">www.example.com</code>
+                    and <code class="bg-gray-100 px-1 rounded">app.example.com</code>.
+                    Wildcards (<code class="bg-gray-100 px-1 rounded">*.example.com</code>) are not supported — use the dot prefix instead.
+                    Leave blank to restrict cookies to the exact analytics subdomain.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="border-t border-gray-200 pt-6">
+              <h3 class="text-base font-medium text-gray-900 mb-4">
+                Allowed Domains &amp; Cross-Domain Tracking
+              </h3>
+              <p class="text-sm text-gray-500 mb-4">
+                The parent domain of your analytics subdomain (e.g.
+                <code class="bg-gray-100 px-1 rounded">dogbreederlicensing.org</code>
+                and <code class="bg-gray-100 px-1 rounded">www.dogbreederlicensing.org</code>) is automatically allowed to send analytics data.
+                Add additional domains below if you have other sites that should also be allowed to send data to this analytics endpoint.
+                Enable cross-domain tracking to share visitor sessions across these domains.
+              </p>
+              <div class="space-y-4">
+                <div class="flex items-center gap-3">
+                  <input type="hidden" name="site[cross_domain_tracking]" value="false" />
+                  <input
+                    type="checkbox"
+                    name="site[cross_domain_tracking]"
+                    value="true"
+                    checked={
+                      @form[:cross_domain_tracking].value == true ||
+                        @form[:cross_domain_tracking].value == "true"
+                    }
+                    class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                  />
+                  <label class="text-sm text-gray-700">
+                    Enable cross-domain tracking (share sessions across domains)
+                  </label>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700">
+                    Additional Allowed Domains (comma-separated)
+                  </label>
+                  <input
+                    type="text"
+                    name="site[cross_domain_sites_text]"
+                    value={Enum.join(@site.cross_domain_sites, ", ")}
+                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
+                    placeholder="app.example.com, shop.example.com"
+                  />
+                  <p class="mt-1.5 text-xs text-gray-500">
+                    Only needed for domains beyond the parent domain. For example, if your analytics subdomain is <code class="bg-gray-100 px-1 rounded">b.example.com</code>, then
+                    <code class="bg-gray-100 px-1 rounded">example.com</code>
+                    and <code class="bg-gray-100 px-1 rounded">www.example.com</code>
+                    are already allowed automatically.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="border-t border-gray-200 pt-6">
+              <h3 class="text-base font-medium text-gray-900 mb-4">IP Filtering</h3>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700">
+                    IP Allowlist (one per line)
+                  </label>
+                  <textarea
+                    name="site[ip_allowlist_text]"
+                    rows="3"
+                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5 font-mono text-xs"
+                    placeholder="1.2.3.4&#10;5.6.7.0/24"
+                  ><%= Enum.join(@site.ip_allowlist, "\n") %></textarea>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700">
+                    IP Blocklist (one per line)
+                  </label>
+                  <textarea
+                    name="site[ip_blocklist_text]"
+                    rows="3"
+                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5 font-mono text-xs"
+                    placeholder="10.0.0.1&#10;192.168.0.0/16"
+                  ><%= Enum.join(@site.ip_blocklist, "\n") %></textarea>
+                </div>
+              </div>
+            </div>
+
+            <div class="border-t border-gray-200 pt-6">
+              <h3 class="text-base font-medium text-gray-900 mb-4">Ecommerce</h3>
               <div class="flex items-center gap-3">
-                <input type="hidden" name="site[cross_domain_tracking]" value="false" />
+                <input type="hidden" name="site[ecommerce_enabled]" value="false" />
                 <input
                   type="checkbox"
-                  name="site[cross_domain_tracking]"
+                  name="site[ecommerce_enabled]"
                   value="true"
                   checked={
-                    @form[:cross_domain_tracking].value == true ||
-                      @form[:cross_domain_tracking].value == "true"
+                    @form[:ecommerce_enabled].value == true ||
+                      @form[:ecommerce_enabled].value == "true"
                   }
                   class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
                 />
-                <label class="text-sm text-gray-700">
-                  Enable cross-domain tracking (share sessions across domains)
-                </label>
+                <label class="text-sm text-gray-700">Enable ecommerce tracking</label>
               </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700">
-                  Additional Allowed Domains (comma-separated)
-                </label>
-                <input
-                  type="text"
-                  name="site[cross_domain_sites_text]"
-                  value={Enum.join(@site.cross_domain_sites, ", ")}
-                  class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
-                  placeholder="app.example.com, shop.example.com"
-                />
-                <p class="mt-1.5 text-xs text-gray-500">
-                  Only needed for domains beyond the parent domain. For example, if your analytics subdomain is <code class="bg-gray-100 px-1 rounded">b.example.com</code>, then
-                  <code class="bg-gray-100 px-1 rounded">example.com</code>
-                  and <code class="bg-gray-100 px-1 rounded">www.example.com</code>
-                  are already allowed automatically.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div class="border-t border-gray-200 pt-6">
-            <h3 class="text-base font-medium text-gray-900 mb-4">IP Filtering</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700">
-                  IP Allowlist (one per line)
-                </label>
-                <textarea
-                  name="site[ip_allowlist_text]"
-                  rows="3"
-                  class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5 font-mono text-xs"
-                  placeholder="1.2.3.4&#10;5.6.7.0/24"
-                ><%= Enum.join(@site.ip_allowlist, "\n") %></textarea>
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700">
-                  IP Blocklist (one per line)
-                </label>
-                <textarea
-                  name="site[ip_blocklist_text]"
-                  rows="3"
-                  class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5 font-mono text-xs"
-                  placeholder="10.0.0.1&#10;192.168.0.0/16"
-                ><%= Enum.join(@site.ip_blocklist, "\n") %></textarea>
-              </div>
-            </div>
-          </div>
-
-          <div class="border-t border-gray-200 pt-6">
-            <h3 class="text-base font-medium text-gray-900 mb-4">Ecommerce</h3>
-            <div class="flex items-center gap-3">
-              <input type="hidden" name="site[ecommerce_enabled]" value="false" />
-              <input
-                type="checkbox"
-                name="site[ecommerce_enabled]"
-                value="true"
-                checked={
+              <div
+                :if={
                   @form[:ecommerce_enabled].value == true || @form[:ecommerce_enabled].value == "true"
                 }
-                class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-              />
-              <label class="text-sm text-gray-700">Enable ecommerce tracking</label>
-            </div>
-            <div
-              :if={
-                @form[:ecommerce_enabled].value == true || @form[:ecommerce_enabled].value == "true"
-              }
-              class="mt-4"
-            >
-              <label class="block text-sm font-medium text-gray-700">Currency</label>
-              <select
-                name="site[currency]"
-                class="mt-1 block w-full md:w-48 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
+                class="mt-4"
               >
-                <option
-                  :for={c <- ["USD", "EUR", "GBP", "CAD", "AUD", "JPY"]}
-                  value={c}
-                  selected={@form[:currency].value == c}
+                <label class="block text-sm font-medium text-gray-700">Currency</label>
+                <select
+                  name="site[currency]"
+                  class="mt-1 block w-full md:w-48 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
                 >
-                  {c}
-                </option>
-              </select>
+                  <option
+                    :for={c <- ["USD", "EUR", "GBP", "CAD", "AUD", "JPY"]}
+                    value={c}
+                    selected={@form[:currency].value == c}
+                  >
+                    {c}
+                  </option>
+                </select>
+              </div>
             </div>
-          </div>
 
-          <div class="border-t border-gray-200 pt-6 flex justify-end">
-            <button
-              type="submit"
-              class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
-            >
-              Save Settings
-            </button>
-          </div>
-        </.form>
+            <div class="border-t border-gray-200 pt-6 flex justify-end">
+              <button
+                type="submit"
+                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
+              >
+                Save Settings
+              </button>
+            </div>
+          </.form>
+        </div>
       </div>
-    </div>
+    </.dashboard_layout>
     """
   end
 

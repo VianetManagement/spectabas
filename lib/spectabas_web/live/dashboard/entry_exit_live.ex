@@ -2,6 +2,7 @@ defmodule SpectabasWeb.Dashboard.EntryExitLive do
   use SpectabasWeb, :live_view
 
   alias Spectabas.{Accounts, Sites, Analytics}
+  import SpectabasWeb.Dashboard.SidebarComponent
 
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
@@ -76,88 +77,84 @@ defmodule SpectabasWeb.Dashboard.EntryExitLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="flex items-center justify-between mb-8">
-        <div>
-          <.link
-            navigate={~p"/dashboard/sites/#{@site.id}"}
-            class="text-sm text-indigo-600 hover:text-indigo-800"
-          >
-            &larr; Back to {@site.name}
-          </.link>
-          <h1 class="text-2xl font-bold text-gray-900 mt-2">Entry & Exit Pages</h1>
+    <.dashboard_layout site={@site} active="entry-exit" live_visitors={0}>
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="flex items-center justify-between mb-8">
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900 mt-2">Entry & Exit Pages</h1>
+          </div>
+          <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">
+            <button
+              :for={r <- [{"24h", "24h"}, {"7d", "7 days"}, {"30d", "30 days"}]}
+              phx-click="change_range"
+              phx-value-range={elem(r, 0)}
+              class={[
+                "px-3 py-1.5 text-sm font-medium rounded-md",
+                if(@date_range == elem(r, 0),
+                  do: "bg-white shadow text-gray-900",
+                  else: "text-gray-600 hover:text-gray-900"
+                )
+              ]}
+            >
+              {elem(r, 1)}
+            </button>
+          </nav>
         </div>
-        <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">
+
+        <div class="flex gap-1 bg-gray-100 rounded-lg p-1 mb-6 w-fit">
           <button
-            :for={r <- [{"24h", "24h"}, {"7d", "7 days"}, {"30d", "30 days"}]}
-            phx-click="change_range"
-            phx-value-range={elem(r, 0)}
+            :for={{id, label} <- [{"entry", "Entry Pages"}, {"exit", "Exit Pages"}]}
+            phx-click="change_tab"
+            phx-value-tab={id}
             class={[
-              "px-3 py-1.5 text-sm font-medium rounded-md",
-              if(@date_range == elem(r, 0),
+              "px-4 py-2 text-sm font-medium rounded-md",
+              if(@tab == id,
                 do: "bg-white shadow text-gray-900",
                 else: "text-gray-600 hover:text-gray-900"
               )
             ]}
           >
-            {elem(r, 1)}
+            {label}
           </button>
-        </nav>
-      </div>
+        </div>
 
-      <div class="flex gap-1 bg-gray-100 rounded-lg p-1 mb-6 w-fit">
-        <button
-          :for={{id, label} <- [{"entry", "Entry Pages"}, {"exit", "Exit Pages"}]}
-          phx-click="change_tab"
-          phx-value-tab={id}
-          class={[
-            "px-4 py-2 text-sm font-medium rounded-md",
-            if(@tab == id,
-              do: "bg-white shadow text-gray-900",
-              else: "text-gray-600 hover:text-gray-900"
-            )
-          ]}
-        >
-          {label}
-        </button>
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Page
+                </th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Visitors
+                </th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {if @tab == "entry", do: "Entries", else: "Exits"}
+                </th>
+              </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+              <tr :if={@data == []}>
+                <td colspan="3" class="px-6 py-8 text-center text-gray-500">
+                  No data for this period.
+                </td>
+              </tr>
+              <tr :for={row <- @data} class="hover:bg-gray-50">
+                <td class="px-6 py-4 text-sm text-gray-900 font-mono">
+                  {row["url_path"]}
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                  {row["unique_visitors"]}
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                  {row[count_key(@tab)]}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-
-      <div class="bg-white rounded-lg shadow overflow-hidden">
-        <table class="min-w-full divide-y divide-gray-200">
-          <thead class="bg-gray-50">
-            <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Page
-              </th>
-              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Visitors
-              </th>
-              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                {if @tab == "entry", do: "Entries", else: "Exits"}
-              </th>
-            </tr>
-          </thead>
-          <tbody class="bg-white divide-y divide-gray-200">
-            <tr :if={@data == []}>
-              <td colspan="3" class="px-6 py-8 text-center text-gray-500">
-                No data for this period.
-              </td>
-            </tr>
-            <tr :for={row <- @data} class="hover:bg-gray-50">
-              <td class="px-6 py-4 text-sm text-gray-900 font-mono">
-                {row["url_path"]}
-              </td>
-              <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                {row["unique_visitors"]}
-              </td>
-              <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                {row[count_key(@tab)]}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+    </.dashboard_layout>
     """
   end
 end

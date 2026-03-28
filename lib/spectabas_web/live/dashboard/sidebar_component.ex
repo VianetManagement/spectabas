@@ -13,17 +13,17 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
     ~H"""
     <div class="flex min-h-[calc(100vh-64px)]">
       <%!-- Sidebar --%>
-      <aside class="hidden lg:flex lg:flex-col lg:w-56 bg-gray-900 text-gray-300 flex-shrink-0">
+      <aside class="hidden lg:flex lg:flex-col lg:w-56 bg-slate-800 flex-shrink-0">
         <%!-- Site header --%>
-        <div class="p-4 border-b border-gray-800">
-          <.link navigate={~p"/dashboard"} class="text-xs text-gray-500 hover:text-gray-300">
+        <div class="p-4 border-b border-slate-700">
+          <.link navigate={~p"/dashboard"} class="text-xs text-slate-400 hover:text-white">
             &larr; All Sites
           </.link>
           <h2 class="text-sm font-semibold text-white mt-1 truncate">{@site.name}</h2>
-          <p class="text-xs text-gray-500 truncate">{@site.domain}</p>
+          <p class="text-xs text-slate-400 truncate">{@site.domain}</p>
           <div :if={@live_visitors > 0} class="flex items-center gap-1.5 mt-2">
             <span class="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
-            <span class="text-xs text-green-400">{@live_visitors} online</span>
+            <span class="text-xs text-green-300 font-medium">{@live_visitors} online</span>
           </div>
         </div>
 
@@ -178,7 +178,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
   defp nav_section(assigns) do
     ~H"""
     <div class="pt-3 first:pt-0">
-      <p class="px-2 text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-1">
+      <p class="px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
         {@label}
       </p>
       {render_slot(@inner_block)}
@@ -193,8 +193,8 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
       class={[
         "flex items-center px-2 py-1.5 text-sm rounded-md transition-colors",
         if(@active,
-          do: "bg-gray-800 text-white font-medium",
-          else: "text-gray-400 hover:text-white hover:bg-gray-800/50"
+          do: "bg-indigo-600 text-white font-medium",
+          else: "text-slate-300 hover:text-white hover:bg-slate-700"
         )
       ]}
     >

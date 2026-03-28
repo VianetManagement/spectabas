@@ -2,6 +2,7 @@ defmodule SpectabasWeb.Dashboard.CohortLive do
   use SpectabasWeb, :live_view
 
   alias Spectabas.{Accounts, Sites, Analytics}
+  import SpectabasWeb.Dashboard.SidebarComponent
 
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
@@ -87,87 +88,83 @@ defmodule SpectabasWeb.Dashboard.CohortLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="flex items-center justify-between mb-8">
-        <div>
-          <.link
-            navigate={~p"/dashboard/sites/#{@site.id}"}
-            class="text-sm text-indigo-600 hover:text-indigo-800"
-          >
-            &larr; Back to {@site.name}
-          </.link>
-          <h1 class="text-2xl font-bold text-gray-900 mt-2">Cohort Retention</h1>
-          <p class="text-sm text-gray-500 mt-1">
-            Percentage of visitors returning in subsequent weeks after their first visit
-          </p>
+    <.dashboard_layout site={@site} active="cohort" live_visitors={0}>
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="flex items-center justify-between mb-8">
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900 mt-2">Cohort Retention</h1>
+            <p class="text-sm text-gray-500 mt-1">
+              Percentage of visitors returning in subsequent weeks after their first visit
+            </p>
+          </div>
+          <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">
+            <button
+              :for={r <- [{"30d", "30 days"}, {"90d", "90 days"}, {"180d", "6 months"}]}
+              phx-click="change_range"
+              phx-value-range={elem(r, 0)}
+              class={[
+                "px-3 py-1.5 text-sm font-medium rounded-md",
+                if(@date_range == elem(r, 0),
+                  do: "bg-white shadow text-gray-900",
+                  else: "text-gray-600 hover:text-gray-900"
+                )
+              ]}
+            >
+              {elem(r, 1)}
+            </button>
+          </nav>
         </div>
-        <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">
-          <button
-            :for={r <- [{"30d", "30 days"}, {"90d", "90 days"}, {"180d", "6 months"}]}
-            phx-click="change_range"
-            phx-value-range={elem(r, 0)}
-            class={[
-              "px-3 py-1.5 text-sm font-medium rounded-md",
-              if(@date_range == elem(r, 0),
-                do: "bg-white shadow text-gray-900",
-                else: "text-gray-600 hover:text-gray-900"
-              )
-            ]}
-          >
-            {elem(r, 1)}
-          </button>
-        </nav>
-      </div>
 
-      <div class="bg-white rounded-lg shadow overflow-x-auto">
-        <table class="min-w-full">
-          <thead class="bg-gray-50">
-            <tr>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase sticky left-0 bg-gray-50">
-                Cohort
-              </th>
-              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                Size
-              </th>
-              <th
-                :for={w <- 0..min(@max_week, 12)}
-                class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase"
-              >
-                {if w == 0, do: "Week 0", else: "+#{w}w"}
-              </th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100">
-            <tr :if={@cohort_weeks == []}>
-              <td colspan={@max_week + 3} class="px-4 py-8 text-center text-gray-500">
-                Not enough data for cohort analysis yet.
-              </td>
-            </tr>
-            <tr :for={week <- @cohort_weeks}>
-              <td class="px-4 py-2 text-xs text-gray-700 font-medium whitespace-nowrap sticky left-0 bg-white">
-                {format_week(week)}
-              </td>
-              <td class="px-4 py-2 text-xs text-gray-500 text-center tabular-nums">
-                {cohort_size(@cohort_grid, week)}
-              </td>
-              <td
-                :for={w <- 0..min(@max_week, 12)}
-                class="px-4 py-2 text-center"
-              >
-                <% cell = get_in(@cohort_grid, [week, w]) %>
-                <span
-                  :if={cell}
-                  class="inline-block px-2 py-1 rounded text-xs tabular-nums font-medium"
-                  style={"background-color: #{retention_color(cell.pct)}; color: #{if cell.pct > 50, do: "white", else: "#374151"}"}
+        <div class="bg-white rounded-lg shadow overflow-x-auto">
+          <table class="min-w-full">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase sticky left-0 bg-gray-50">
+                  Cohort
+                </th>
+                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                  Size
+                </th>
+                <th
+                  :for={w <- 0..min(@max_week, 12)}
+                  class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase"
                 >
-                  {cell.pct}%
-                </span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+                  {if w == 0, do: "Week 0", else: "+#{w}w"}
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr :if={@cohort_weeks == []}>
+                <td colspan={@max_week + 3} class="px-4 py-8 text-center text-gray-500">
+                  Not enough data for cohort analysis yet.
+                </td>
+              </tr>
+              <tr :for={week <- @cohort_weeks}>
+                <td class="px-4 py-2 text-xs text-gray-700 font-medium whitespace-nowrap sticky left-0 bg-white">
+                  {format_week(week)}
+                </td>
+                <td class="px-4 py-2 text-xs text-gray-500 text-center tabular-nums">
+                  {cohort_size(@cohort_grid, week)}
+                </td>
+                <td
+                  :for={w <- 0..min(@max_week, 12)}
+                  class="px-4 py-2 text-center"
+                >
+                  <% cell = get_in(@cohort_grid, [week, w]) %>
+                  <span
+                    :if={cell}
+                    class="inline-block px-2 py-1 rounded text-xs tabular-nums font-medium"
+                    style={"background-color: #{retention_color(cell.pct)}; color: #{if cell.pct > 50, do: "white", else: "#374151"}"}
+                  >
+                    {cell.pct}%
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
+    </.dashboard_layout>
     """
   end
 

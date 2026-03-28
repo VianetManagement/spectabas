@@ -2,6 +2,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
   use SpectabasWeb, :live_view
 
   alias Spectabas.{Accounts, Sites, Analytics}
+  import SpectabasWeb.Dashboard.SidebarComponent
 
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
@@ -56,108 +57,112 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="flex items-center justify-between mb-8">
-        <div>
-          <.link
-            navigate={~p"/dashboard/sites/#{@site.id}"}
-            class="text-sm text-indigo-600 hover:text-indigo-800"
-          >
-            &larr; Back to {@site.name}
-          </.link>
-          <h1 class="text-2xl font-bold text-gray-900 mt-2">Visitor Log</h1>
+    <.dashboard_layout site={@site} active="visitor-log" live_visitors={0}>
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="flex items-center justify-between mb-8">
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900 mt-2">Visitor Log</h1>
+          </div>
+          <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">
+            <button
+              :for={r <- [{"24h", "24h"}, {"7d", "7 days"}, {"30d", "30 days"}]}
+              phx-click="change_range"
+              phx-value-range={elem(r, 0)}
+              class={[
+                "px-3 py-1.5 text-sm font-medium rounded-md",
+                if(@date_range == elem(r, 0),
+                  do: "bg-white shadow text-gray-900",
+                  else: "text-gray-600 hover:text-gray-900"
+                )
+              ]}
+            >
+              {elem(r, 1)}
+            </button>
+          </nav>
         </div>
-        <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">
+
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Visitor
+                </th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pages</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Duration
+                </th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Location
+                </th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Device
+                </th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Source
+                </th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Entry</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              <tr :if={@visitors == []}>
+                <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                  No visitors for this period.
+                </td>
+              </tr>
+              <tr :for={v <- @visitors} class="hover:bg-gray-50">
+                <td class="px-4 py-3 text-sm">
+                  <.link
+                    navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{v["visitor_id"]}"}
+                    class="text-indigo-600 hover:text-indigo-800 font-mono text-xs"
+                  >
+                    {String.slice(v["visitor_id"] || "", 0, 8)}...
+                  </.link>
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-900 tabular-nums">{v["pageviews"]}</td>
+                <td class="px-4 py-3 text-sm text-gray-500 tabular-nums">
+                  {format_duration(v["duration"])}
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-500">
+                  {[v["city"], v["region"], v["country"]]
+                  |> Enum.reject(&(&1 == "" || is_nil(&1)))
+                  |> Enum.join(", ")}
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-500">
+                  {[v["browser"], v["os"]]
+                  |> Enum.reject(&(&1 == "" || is_nil(&1)))
+                  |> Enum.join(" / ")}
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-500 truncate max-w-[120px]">
+                  {v["referrer"] || "Direct"}
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-500 font-mono truncate max-w-[150px]">
+                  {v["entry_page"]}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="flex items-center justify-between mt-4">
           <button
-            :for={r <- [{"24h", "24h"}, {"7d", "7 days"}, {"30d", "30 days"}]}
-            phx-click="change_range"
-            phx-value-range={elem(r, 0)}
-            class={[
-              "px-3 py-1.5 text-sm font-medium rounded-md",
-              if(@date_range == elem(r, 0),
-                do: "bg-white shadow text-gray-900",
-                else: "text-gray-600 hover:text-gray-900"
-              )
-            ]}
+            :if={@page > 1}
+            phx-click="prev_page"
+            class="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50"
           >
-            {elem(r, 1)}
+            &larr; Previous
           </button>
-        </nav>
+          <span class="text-sm text-gray-500">Page {@page}</span>
+          <button
+            :if={length(@visitors) == 30}
+            phx-click="next_page"
+            class="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+          >
+            Next &rarr;
+          </button>
+        </div>
       </div>
-
-      <div class="bg-white rounded-lg shadow overflow-hidden">
-        <table class="min-w-full divide-y divide-gray-200">
-          <thead class="bg-gray-50">
-            <tr>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Visitor</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pages</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Duration
-              </th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                Location
-              </th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Device</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Entry</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-200">
-            <tr :if={@visitors == []}>
-              <td colspan="7" class="px-4 py-8 text-center text-gray-500">
-                No visitors for this period.
-              </td>
-            </tr>
-            <tr :for={v <- @visitors} class="hover:bg-gray-50">
-              <td class="px-4 py-3 text-sm">
-                <.link
-                  navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{v["visitor_id"]}"}
-                  class="text-indigo-600 hover:text-indigo-800 font-mono text-xs"
-                >
-                  {String.slice(v["visitor_id"] || "", 0, 8)}...
-                </.link>
-              </td>
-              <td class="px-4 py-3 text-sm text-gray-900 tabular-nums">{v["pageviews"]}</td>
-              <td class="px-4 py-3 text-sm text-gray-500 tabular-nums">
-                {format_duration(v["duration"])}
-              </td>
-              <td class="px-4 py-3 text-sm text-gray-500">
-                {[v["city"], v["region"], v["country"]]
-                |> Enum.reject(&(&1 == "" || is_nil(&1)))
-                |> Enum.join(", ")}
-              </td>
-              <td class="px-4 py-3 text-sm text-gray-500">
-                {[v["browser"], v["os"]] |> Enum.reject(&(&1 == "" || is_nil(&1))) |> Enum.join(" / ")}
-              </td>
-              <td class="px-4 py-3 text-sm text-gray-500 truncate max-w-[120px]">
-                {v["referrer"] || "Direct"}
-              </td>
-              <td class="px-4 py-3 text-sm text-gray-500 font-mono truncate max-w-[150px]">
-                {v["entry_page"]}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="flex items-center justify-between mt-4">
-        <button
-          :if={@page > 1}
-          phx-click="prev_page"
-          class="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-        >
-          &larr; Previous
-        </button>
-        <span class="text-sm text-gray-500">Page {@page}</span>
-        <button
-          :if={length(@visitors) == 30}
-          phx-click="next_page"
-          class="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-        >
-          Next &rarr;
-        </button>
-      </div>
-    </div>
+    </.dashboard_layout>
     """
   end
 

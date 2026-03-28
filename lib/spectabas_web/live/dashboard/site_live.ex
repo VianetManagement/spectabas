@@ -303,6 +303,13 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     end
   end
 
+  defp preset_label("24h"), do: "24h"
+  defp preset_label("7d"), do: "7 days"
+  defp preset_label("30d"), do: "30 days"
+  defp preset_label("90d"), do: "90 days"
+  defp preset_label("12m"), do: "12 months"
+  defp preset_label(_), do: "period"
+
   defp range_label(from, to) do
     "#{Calendar.strftime(from, "%b %d")} - #{Calendar.strftime(to, "%b %d, %Y")}"
   end
@@ -403,24 +410,28 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         <.segment_filter segment={@segment} />
 
         <%!-- Stat Cards with Comparison --%>
+        <% period_label = preset_label(@preset) %>
         <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           <.stat_card
             label="Pageviews"
             value={format_number(@stats.pageviews)}
             prev={@prev_stats && @prev_stats.pageviews}
             current={@stats.pageviews}
+            period={period_label}
           />
           <.stat_card
             label="Unique Visitors"
             value={format_number(@stats.unique_visitors)}
             prev={@prev_stats && @prev_stats.unique_visitors}
             current={@stats.unique_visitors}
+            period={period_label}
           />
           <.stat_card
             label="Sessions"
             value={format_number(@stats.sessions)}
             prev={@prev_stats && @prev_stats.sessions}
             current={@stats.sessions}
+            period={period_label}
           />
           <.stat_card
             label="Bounce Rate"
@@ -428,12 +439,14 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
             prev={@prev_stats && @prev_stats.bounce_rate}
             current={@stats.bounce_rate}
             invert={true}
+            period={period_label}
           />
           <.stat_card
             label="Avg Duration"
             value={format_duration(@stats.avg_duration)}
             prev={@prev_stats && @prev_stats.avg_duration}
             current={@stats.avg_duration}
+            period={period_label}
           />
         </div>
 
@@ -608,6 +621,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
       |> Map.put_new(:prev, nil)
       |> Map.put_new(:current, nil)
       |> Map.put_new(:invert, false)
+      |> Map.put_new(:period, "")
 
     ~H"""
     <div class="bg-white rounded-lg shadow p-4">
@@ -623,7 +637,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         ]}>
           {delta.label}
         </span>
-        <span class="text-xs text-gray-400 ml-1">vs prior</span>
+        <span class="text-xs text-gray-400 ml-1">vs prev {@period}</span>
       </dd>
     </div>
     """

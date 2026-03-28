@@ -2,6 +2,7 @@ defmodule SpectabasWeb.Dashboard.AttributionLive do
   use SpectabasWeb, :live_view
 
   alias Spectabas.{Accounts, Sites, Analytics}
+  import SpectabasWeb.Dashboard.SidebarComponent
 
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
@@ -46,74 +47,72 @@ defmodule SpectabasWeb.Dashboard.AttributionLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="flex items-center justify-between mb-8">
-        <div>
-          <.link
-            navigate={~p"/dashboard/sites/#{@site.id}"}
-            class="text-sm text-indigo-600 hover:text-indigo-800"
-          >
-            &larr; Back to {@site.name}
-          </.link>
-          <h1 class="text-2xl font-bold text-gray-900 mt-2">Channel Attribution</h1>
-          <p class="text-sm text-gray-500 mt-1">First touch vs last touch attribution by channel</p>
+    <.dashboard_layout site={@site} active="attribution" live_visitors={0}>
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="flex items-center justify-between mb-8">
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900 mt-2">Channel Attribution</h1>
+            <p class="text-sm text-gray-500 mt-1">First touch vs last touch attribution by channel</p>
+          </div>
+          <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">
+            <button
+              :for={r <- [{"7d", "7 days"}, {"30d", "30 days"}, {"90d", "90 days"}]}
+              phx-click="change_range"
+              phx-value-range={elem(r, 0)}
+              class={[
+                "px-3 py-1.5 text-sm font-medium rounded-md",
+                if(@date_range == elem(r, 0),
+                  do: "bg-white shadow text-gray-900",
+                  else: "text-gray-600 hover:text-gray-900"
+                )
+              ]}
+            >
+              {elem(r, 1)}
+            </button>
+          </nav>
         </div>
-        <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">
-          <button
-            :for={r <- [{"7d", "7 days"}, {"30d", "30 days"}, {"90d", "90 days"}]}
-            phx-click="change_range"
-            phx-value-range={elem(r, 0)}
-            class={[
-              "px-3 py-1.5 text-sm font-medium rounded-md",
-              if(@date_range == elem(r, 0),
-                do: "bg-white shadow text-gray-900",
-                else: "text-gray-600 hover:text-gray-900"
-              )
-            ]}
-          >
-            {elem(r, 1)}
-          </button>
-        </nav>
-      </div>
 
-      <div class="bg-white rounded-lg shadow overflow-hidden">
-        <table class="min-w-full divide-y divide-gray-200">
-          <thead class="bg-gray-50">
-            <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Channel</th>
-              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                Visitors
-              </th>
-              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                First Touch
-              </th>
-              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                Last Touch
-              </th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-200">
-            <tr :if={@channels == []}>
-              <td colspan="4" class="px-6 py-8 text-center text-gray-500">
-                No attribution data yet.
-              </td>
-            </tr>
-            <tr :for={ch <- @channels} class="hover:bg-gray-50">
-              <td class="px-6 py-4 text-sm font-medium text-gray-900">{ch["channel"]}</td>
-              <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                {ch["visitors"]}
-              </td>
-              <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                {ch["first_touch"]}
-              </td>
-              <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                {ch["last_touch"]}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Channel
+                </th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                  Visitors
+                </th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                  First Touch
+                </th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                  Last Touch
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              <tr :if={@channels == []}>
+                <td colspan="4" class="px-6 py-8 text-center text-gray-500">
+                  No attribution data yet.
+                </td>
+              </tr>
+              <tr :for={ch <- @channels} class="hover:bg-gray-50">
+                <td class="px-6 py-4 text-sm font-medium text-gray-900">{ch["channel"]}</td>
+                <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                  {ch["visitors"]}
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                  {ch["first_touch"]}
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                  {ch["last_touch"]}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
+    </.dashboard_layout>
     """
   end
 end

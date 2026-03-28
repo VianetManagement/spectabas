@@ -167,25 +167,33 @@ defmodule SpectabasWeb.Admin.UsersLive do
             <span class="inline-block px-2 py-0.5 rounded bg-red-50 text-red-700 font-medium mb-1">
               Superadmin
             </span>
-            <p>Full access. Manage users, sites, billing, and all settings. Required for 2FA configuration.</p>
+            <p>
+              Full access. Manage users, sites, billing, and all settings. Required for 2FA configuration.
+            </p>
           </div>
           <div>
             <span class="inline-block px-2 py-0.5 rounded bg-orange-50 text-orange-700 font-medium mb-1">
               Admin
             </span>
-            <p>Manage sites and settings. Can add/remove sites, configure tracking, and invite users.</p>
+            <p>
+              Manage sites and settings. Can add/remove sites, configure tracking, and invite users.
+            </p>
           </div>
           <div>
             <span class="inline-block px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-medium mb-1">
               Analyst
             </span>
-            <p>View all analytics data. Access dashboards, reports, visitor logs, and exports. Cannot change settings.</p>
+            <p>
+              View all analytics data. Access dashboards, reports, visitor logs, and exports. Cannot change settings.
+            </p>
           </div>
           <div>
             <span class="inline-block px-2 py-0.5 rounded bg-gray-100 text-gray-700 font-medium mb-1">
               Viewer
             </span>
-            <p>Read-only dashboard access. Can view basic stats for sites they have permission to access.</p>
+            <p>
+              Read-only dashboard access. Can view basic stats for sites they have permission to access.
+            </p>
           </div>
         </div>
       </div>
