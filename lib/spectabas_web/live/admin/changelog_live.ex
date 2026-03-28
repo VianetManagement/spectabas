@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.3.0 — 2026-03-29 08:00 UTC",
+       [
+         %{
+           title: "Mobile navigation overhaul",
+           description:
+             "top navbar: text links hidden on mobile, replaced with icon buttons (dashboard, docs, account). Dashboard sidebar: two-row mobile nav — quick access to top 5 pages + scrollable full navigation bar with all 19 pages. Active page highlighted in both rows."
+         }
+       ]},
       {"v1.2.3 — 2026-03-29 07:00 UTC",
        [
          %{

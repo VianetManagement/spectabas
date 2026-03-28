@@ -18,7 +18,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
 
   def dashboard_layout(assigns) do
     ~H"""
-    <div class="flex min-h-[calc(100vh-56px)]">
+    <div class="flex min-h-[calc(100vh-48px)] sm:min-h-[calc(100vh-56px)]">
       <%!-- Sidebar --%>
       <aside class="hidden lg:flex lg:flex-col lg:w-60 bg-white border-r border-gray-200 flex-shrink-0">
         <%!-- Site header --%>
@@ -226,39 +226,68 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
           </p>
         </div>
 
-        <%!-- Mobile navigation bar --%>
-        <div class="lg:hidden bg-white border-b border-gray-200 px-4 py-2.5 flex items-center justify-between">
-          <div class="flex items-center gap-2 min-w-0">
-            <.link navigate={~p"/dashboard"} class="text-gray-400 hover:text-gray-600 shrink-0">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M15 19l-7-7 7-7"
-                />
-              </svg>
-            </.link>
-            <span class="text-sm font-medium text-gray-900 truncate">{@page_title || @active}</span>
+        <%!-- Mobile header + navigation --%>
+        <div class="lg:hidden">
+          <div class="bg-white border-b border-gray-200 px-4 py-2.5 flex items-center justify-between">
+            <div class="flex items-center gap-2 min-w-0">
+              <.link navigate={~p"/dashboard"} class="text-gray-400 hover:text-gray-600 shrink-0">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M15 19l-7-7 7-7"
+                  />
+                </svg>
+              </.link>
+              <span class="text-sm font-medium text-gray-900 truncate">{@page_title || @active}</span>
+            </div>
+            <%!-- Mobile quick-nav links --%>
+            <div class="flex items-center gap-1 shrink-0">
+              <.link
+                navigate={~p"/dashboard/sites/#{@site.id}"}
+                class={"px-2 py-1 text-xs rounded " <> if(@active == "overview", do: "bg-indigo-50 text-indigo-700 font-medium", else: "text-gray-500")}
+              >
+                Home
+              </.link>
+              <.link
+                navigate={~p"/dashboard/sites/#{@site.id}/pages"}
+                class={"px-2 py-1 text-xs rounded " <> if(@active == "pages", do: "bg-indigo-50 text-indigo-700 font-medium", else: "text-gray-500")}
+              >
+                Pages
+              </.link>
+              <.link
+                navigate={~p"/dashboard/sites/#{@site.id}/sources"}
+                class={"px-2 py-1 text-xs rounded " <> if(@active == "sources", do: "bg-indigo-50 text-indigo-700 font-medium", else: "text-gray-500")}
+              >
+                Sources
+              </.link>
+              <.link
+                navigate={~p"/dashboard/sites/#{@site.id}/visitor-log"}
+                class={"px-2 py-1 text-xs rounded " <> if(@active == "visitor-log", do: "bg-indigo-50 text-indigo-700 font-medium", else: "text-gray-500")}
+              >
+                Visitors
+              </.link>
+              <.link
+                navigate={~p"/dashboard/sites/#{@site.id}/geo"}
+                class={"px-2 py-1 text-xs rounded " <> if(@active == "geo", do: "bg-indigo-50 text-indigo-700 font-medium", else: "text-gray-500")}
+              >
+                Geo
+              </.link>
+            </div>
           </div>
-          <div class="flex items-center gap-3 text-xs shrink-0">
+          <%!-- Mobile: scrollable secondary nav for all pages --%>
+          <div class="bg-gray-50 border-b border-gray-200 px-4 py-1.5 overflow-x-auto flex gap-1">
             <.link
-              navigate={~p"/dashboard/sites/#{@site.id}"}
-              class="text-gray-500 hover:text-indigo-600"
+              :for={{path, label} <- mobile_nav_items(@site.id)}
+              navigate={path}
+              class={"px-2 py-1 text-xs rounded whitespace-nowrap " <>
+                if(String.ends_with?(path, "/" <> @active) || (@active == "overview" && String.ends_with?(path, to_string(@site.id))),
+                  do: "bg-indigo-100 text-indigo-700 font-medium",
+                  else: "text-gray-500 hover:text-gray-700"
+                )}
             >
-              Dashboard
-            </.link>
-            <.link
-              navigate={~p"/dashboard/sites/#{@site.id}/visitor-log"}
-              class="text-gray-500 hover:text-indigo-600"
-            >
-              Visitors
-            </.link>
-            <.link
-              navigate={~p"/dashboard/sites/#{@site.id}/settings"}
-              class="text-gray-500 hover:text-indigo-600"
-            >
-              Settings
+              {label}
             </.link>
           </div>
         </div>
@@ -269,6 +298,30 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
       </div>
     </div>
     """
+  end
+
+  defp mobile_nav_items(site_id) do
+    [
+      {~p"/dashboard/sites/#{site_id}", "Dashboard"},
+      {~p"/dashboard/sites/#{site_id}/realtime", "Realtime"},
+      {~p"/dashboard/sites/#{site_id}/pages", "Pages"},
+      {~p"/dashboard/sites/#{site_id}/entry-exit", "Entry/Exit"},
+      {~p"/dashboard/sites/#{site_id}/transitions", "Transitions"},
+      {~p"/dashboard/sites/#{site_id}/search", "Search"},
+      {~p"/dashboard/sites/#{site_id}/sources", "Sources"},
+      {~p"/dashboard/sites/#{site_id}/attribution", "Attribution"},
+      {~p"/dashboard/sites/#{site_id}/campaigns", "Campaigns"},
+      {~p"/dashboard/sites/#{site_id}/geo", "Geography"},
+      {~p"/dashboard/sites/#{site_id}/map", "Map"},
+      {~p"/dashboard/sites/#{site_id}/devices", "Devices"},
+      {~p"/dashboard/sites/#{site_id}/network", "Network"},
+      {~p"/dashboard/sites/#{site_id}/visitor-log", "Visitors"},
+      {~p"/dashboard/sites/#{site_id}/cohort", "Retention"},
+      {~p"/dashboard/sites/#{site_id}/goals", "Goals"},
+      {~p"/dashboard/sites/#{site_id}/funnels", "Funnels"},
+      {~p"/dashboard/sites/#{site_id}/ecommerce", "Ecommerce"},
+      {~p"/dashboard/sites/#{site_id}/settings", "Settings"}
+    ]
   end
 
   defp nav_section(assigns) do
