@@ -30,13 +30,19 @@ defmodule SpectabasWeb.Router do
     plug SpectabasWeb.Plugs.RequireAdmin
   end
 
-  # Health check — no auth
+  # Health check — public (just returns ok/error)
   scope "/", SpectabasWeb do
     get "/health", HealthController, :show
-    get "/health/diag", HealthController, :diag
-    get "/health/backfill-geo", HealthController, :backfill_geo
-    get "/health/dashboard-test", HealthController, :test_dashboard
-    get "/health/audit-test", HealthController, :test_audit
+  end
+
+  # Diagnostic endpoints — admin only
+  scope "/health", SpectabasWeb do
+    pipe_through [:browser, :require_authenticated_user, :require_admin]
+
+    get "/diag", HealthController, :diag
+    get "/backfill-geo", HealthController, :backfill_geo
+    get "/dashboard-test", HealthController, :test_dashboard
+    get "/audit-test", HealthController, :test_audit
   end
 
   # Collect endpoint — CORS, rate-limited, no CSRF

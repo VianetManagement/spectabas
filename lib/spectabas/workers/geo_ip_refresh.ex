@@ -79,9 +79,17 @@ defmodule Spectabas.Workers.GeoIPRefresh do
     case Req.get(url, receive_timeout: 120_000) do
       {:ok, %{status: 200, body: body}} ->
         decompressed = :zlib.gunzip(body)
-        File.write!(dest_path, decompressed)
-        Logger.info("[GeoIPRefresh] Wrote #{byte_size(decompressed)} bytes to #{dest_path}")
-        :ok
+
+        # Basic integrity check: MMDB files should be >1MB and contain the metadata marker
+        if byte_size(decompressed) > 1_000_000 and
+             String.contains?(decompressed, <<0xAB, 0xCD, 0xEF>>) do
+          File.write!(dest_path, decompressed)
+          Logger.info("[GeoIPRefresh] Wrote #{byte_size(decompressed)} bytes to #{dest_path}")
+          :ok
+        else
+          {:error,
+           "Downloaded file does not appear to be a valid MMDB (#{byte_size(decompressed)} bytes)"}
+        end
 
       {:ok, %{status: status}} ->
         {:error, "HTTP #{status} for #{url}"}

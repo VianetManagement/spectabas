@@ -11,6 +11,17 @@ defmodule SpectabasWeb.CollectController do
   def create(conn, params) do
     require Logger
 
+    # Respect opt-out cookie
+    if conn.cookies[@optout_cookie] do
+      send_resp(conn, 204, "")
+    else
+      do_create(conn, params)
+    end
+  end
+
+  defp do_create(conn, params) do
+    require Logger
+
     with :ok <- check_content_length(conn),
          {:ok, payload} <- CollectPayload.validate(params),
          {:ok, site} <- resolve_site(conn, params),

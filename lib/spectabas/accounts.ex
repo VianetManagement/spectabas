@@ -544,6 +544,17 @@ defmodule Spectabas.Accounts do
   end
 
   def accept_invitation(%Invitation{} = invitation, user_attrs) do
+    # Verify email matches the invitation
+    provided_email = to_string(user_attrs["email"] || user_attrs[:email] || "")
+
+    if String.downcase(provided_email) != String.downcase(invitation.email) do
+      {:error, :email_mismatch}
+    else
+      accept_invitation_inner(invitation, user_attrs)
+    end
+  end
+
+  defp accept_invitation_inner(invitation, user_attrs) do
     Repo.transact(fn ->
       with {:ok, user} <- register_user(user_attrs) do
         now = DateTime.utc_now() |> DateTime.truncate(:second)

@@ -20,11 +20,14 @@ defmodule SpectabasWeb.Plugs.CollectRateLimit do
   end
 
   defp client_ip(conn) do
-    case get_req_header(conn, "x-forwarded-for") do
-      [forwarded | _] ->
-        forwarded |> String.split(",") |> List.first() |> String.trim()
+    cond do
+      (cf = get_req_header(conn, "cf-connecting-ip")) != [] ->
+        cf |> List.first() |> String.trim()
 
-      [] ->
+      (xff = get_req_header(conn, "x-forwarded-for")) != [] ->
+        xff |> List.first() |> String.split(",") |> List.first() |> String.trim()
+
+      true ->
         conn.remote_ip |> :inet.ntoa() |> to_string()
     end
   end

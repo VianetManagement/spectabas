@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v0.8.0 — 2026-03-28 22:00 UTC",
+       [
+         %{
+           title: "Security audit: 10 findings fixed",
+           description:
+             "Critical: diagnostic endpoints now require admin auth. High: opt-out cookie now respected. Medium: login rate limiting, invitation email verification, TOTP rate limits, buffer overflow protection, visitor_id validation, ClickHouse 2-year TTL, MMDB integrity checks, null byte sanitization."
+         }
+       ]},
       {"v0.7.0 — 2026-03-28 21:00 UTC",
        [
          %{

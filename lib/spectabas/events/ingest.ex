@@ -207,7 +207,16 @@ defmodule Spectabas.Events.Ingest do
 
   defp resolve_visitor(site, payload, gdpr_mode, client_ip, ua_string) do
     cond do
-      # If the payload includes a visitor id, use it
+      # In GDPR-on mode, always use server-generated fingerprint (ignore client vid)
+      gdpr_mode == :on ->
+        fingerprint = generate_fingerprint(ua_string, client_ip)
+
+        case Visitors.get_or_create(site.id, fingerprint, :on, client_ip) do
+          {:ok, visitor} -> visitor.id
+          _ -> fingerprint
+        end
+
+      # If the payload includes a visitor id in GDPR-off mode, use it
       payload.vid != nil and payload.vid != "" ->
         case Visitors.get_or_create(site.id, payload.vid, gdpr_mode, client_ip) do
           {:ok, visitor} -> visitor.id

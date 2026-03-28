@@ -188,6 +188,8 @@ defmodule Spectabas.ClickHouse do
       "GRANT SELECT ON #{db}.* TO #{cfg[:read_username]}",
       "ALTER TABLE #{db}.events ADD COLUMN IF NOT EXISTS ip_is_eu UInt8 DEFAULT 0 AFTER ip_is_bot",
       "ALTER TABLE #{db}.events ADD COLUMN IF NOT EXISTS visitor_intent String DEFAULT '' AFTER ip_gdpr_anonymized",
+      # Data retention: delete events older than 2 years
+      "ALTER TABLE #{db}.events MODIFY TTL timestamp + INTERVAL 2 YEAR",
       # Skip indexes for common query patterns
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_session session_id TYPE bloom_filter GRANULARITY 4",
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_visitor visitor_id TYPE bloom_filter GRANULARITY 4",
@@ -349,7 +351,12 @@ defmodule Spectabas.ClickHouse do
   def param(nil), do: "NULL"
 
   def param(v) when is_binary(v) do
-    e = v |> String.replace("\\", "\\\\") |> String.replace("'", "\\'")
+    e =
+      v
+      |> String.replace("\0", "")
+      |> String.replace("\\", "\\\\")
+      |> String.replace("'", "\\'")
+
     "'#{e}'"
   end
 

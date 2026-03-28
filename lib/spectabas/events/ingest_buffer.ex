@@ -52,16 +52,24 @@ defmodule Spectabas.Events.IngestBuffer do
      }}
   end
 
+  @max_buffer_size 10_000
+
   @impl true
   def handle_cast({:push, event}, state) do
-    new_buffer = [event | state.buffer]
-    new_size = state.size + 1
-
-    if new_size >= state.max_batch do
-      do_flush(new_buffer)
-      {:noreply, %{state | buffer: [], size: 0}}
+    # Drop events if buffer is too large (prevents OOM if ClickHouse is down)
+    if state.size >= @max_buffer_size do
+      Logger.warning("[IngestBuffer] Buffer full (#{@max_buffer_size}), dropping event")
+      {:noreply, state}
     else
-      {:noreply, %{state | buffer: new_buffer, size: new_size}}
+      new_buffer = [event | state.buffer]
+      new_size = state.size + 1
+
+      if new_size >= state.max_batch do
+        do_flush(new_buffer)
+        {:noreply, %{state | buffer: [], size: 0}}
+      else
+        {:noreply, %{state | buffer: new_buffer, size: new_size}}
+      end
     end
   end
 
