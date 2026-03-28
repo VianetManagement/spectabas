@@ -825,6 +825,78 @@ defmodule SpectabasWeb.DocsLive do
 
             > **Example funnel:** Homepage → Features → Pricing → Signup. If 1000 visitors start at Homepage but only 50 reach Signup, you can see exactly where the drop-off happens.
             """
+          },
+          %{
+            id: "api-keys-setup",
+            title: "API Keys",
+            body: """
+            Generate API keys from **Account > Settings > API Keys**.
+
+            1. Click **+ New Key**
+            2. Enter a name (e.g., "Production", "CI/CD")
+            3. Copy the key immediately — it's only shown once
+            4. Use the key in the `Authorization: Bearer <key>` header
+
+            Keys can be revoked at any time. Revoked keys stop working immediately.
+
+            > **Security:** Only the SHA-256 hash of the key is stored. The plaintext is never saved.
+            """
+          },
+          %{
+            id: "two-factor",
+            title: "Two-Factor Authentication",
+            body: """
+            Spectabas supports two types of 2FA:
+
+            ### TOTP (Authenticator App)
+
+            Use any TOTP-compatible app (Google Authenticator, Authy, 1Password, Bitwarden):
+            1. Go to **Account > Settings > Two-Factor Authentication**
+            2. Click **Set Up 2FA**
+            3. Scan the QR code with your authenticator app
+            4. Enter the 6-digit code to confirm
+
+            ### Passkeys / Security Keys
+
+            Use a passkey (Bitwarden, 1Password, YubiKey, Touch ID, Windows Hello):
+            1. Go to **Account > Settings > Security Keys (Passkeys)**
+            2. Click **+ Add Key**
+            3. Follow your browser's prompt to create or select a passkey
+            4. Name the key for identification
+
+            You can register multiple security keys. Each can be removed individually.
+
+            ### Admin: Force 2FA
+
+            Administrators can require 2FA for specific users:
+            1. Go to **Admin > Users**
+            2. Click the **Optional/Required** toggle in the Force 2FA column
+            3. Users with "Required" must set up 2FA before accessing the dashboard
+            """
+          },
+          %{
+            id: "visitor-intent",
+            title: "Visitor Intent Detection",
+            body: """
+            Spectabas automatically classifies every visitor by their behavior:
+
+            | Intent | How it's detected |
+            |--------|------------------|
+            | Buying | Visited /pricing, /checkout, /signup, or came from paid ad |
+            | Researching | Viewed 3+ pages, or paid traffic on content pages |
+            | Comparing | Came from G2, Capterra, TrustRadius, ProductHunt |
+            | Support | Visited /help, /contact, /docs, /faq |
+            | Returning | Prior sessions, direct access |
+            | Browsing | 1-2 pages, no conversion signals |
+            | Bot | Datacenter IP, headless browser, no interaction |
+
+            ### Using Intent Data
+
+            - **Dashboard** — intent breakdown card shows visitor counts per category
+            - **Click any intent** to see those visitors in the Visitor Log
+            - **Segment filter** — use `visitor_intent is buying` to filter any report
+            - **Visitor profiles** — intent pill shown on each visitor
+            """
           }
         ]
       }
