@@ -214,23 +214,141 @@
     }).join("");
   }
 
+  // ---- Enhanced Browser Fingerprint ----
+  // Combines multiple browser signals into a stable hash for cross-session correlation.
+  // Survives cookie clearing, incognito, and VPN changes.
+
   function fingerprint() {
-    var data = [
+    var signals = [
       navigator.userAgent,
-      screen.width + "x" + screen.height,
+      screen.width + "x" + screen.height + "x" + (screen.colorDepth || 0),
+      window.devicePixelRatio || 1,
       Intl.DateTimeFormat().resolvedOptions().timeZone || "",
       navigator.language || "",
-    ].join("|");
+      navigator.languages ? navigator.languages.join(",") : "",
+      navigator.hardwareConcurrency || 0,
+      navigator.deviceMemory || 0,
+      navigator.maxTouchPoints || 0,
+      navigator.platform || "",
+      !!window.chrome,
+      !!window.safari,
+      typeof window.SharedArrayBuffer !== "undefined",
+      new Date().getTimezoneOffset(),
+    ];
 
-    // Simple hash
-    var hash = 0;
-    for (var i = 0; i < data.length; i++) {
-      var chr = data.charCodeAt(i);
-      hash = (hash << 5) - hash + chr;
-      hash |= 0;
+    // Canvas fingerprint (GPU/driver differences)
+    try {
+      var canvas = document.createElement("canvas");
+      canvas.width = 200;
+      canvas.height = 50;
+      var ctx = canvas.getContext("2d");
+      ctx.textBaseline = "top";
+      ctx.font = "14px Arial";
+      ctx.fillStyle = "#f60";
+      ctx.fillRect(0, 0, 200, 50);
+      ctx.fillStyle = "#069";
+      ctx.fillText("Spectabas\ud83d\ude00", 2, 15);
+      ctx.fillStyle = "rgba(102, 204, 0, 0.7)";
+      ctx.fillText("analytics", 4, 30);
+      signals.push(canvas.toDataURL());
+    } catch (e) {
+      signals.push("no-canvas");
     }
-    return "fp_" + Math.abs(hash).toString(36);
+
+    // WebGL renderer
+    try {
+      var gl = document.createElement("canvas").getContext("webgl");
+      if (gl) {
+        var dbg = gl.getExtension("WEBGL_debug_renderer_info");
+        if (dbg) {
+          signals.push(gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) || "");
+          signals.push(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || "");
+        }
+      }
+    } catch (e) {
+      signals.push("no-webgl");
+    }
+
+    // AudioContext fingerprint
+    try {
+      var audioCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, 44100, 44100);
+      var osc = audioCtx.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(10000, audioCtx.currentTime);
+      var comp = audioCtx.createDynamicsCompressor();
+      osc.connect(comp);
+      comp.connect(audioCtx.destination);
+      osc.start(0);
+      audioCtx.startRendering();
+      audioCtx.oncomplete = function (e) {
+        var buf = e.renderedBuffer.getChannelData(0);
+        var sum = 0;
+        for (var i = 4500; i < 5000; i++) sum += Math.abs(buf[i]);
+        signals.push("audio:" + sum.toFixed(6));
+      };
+    } catch (e) {
+      signals.push("no-audio");
+    }
+
+    return "fp_" + murmurHash(signals.join("|||"));
   }
+
+  // MurmurHash3 (32-bit) — fast, good distribution, not cryptographic
+  function murmurHash(str) {
+    var h = 0x12345678;
+    for (var i = 0; i < str.length; i++) {
+      var k = str.charCodeAt(i);
+      k = Math.imul(k, 0xcc9e2d51);
+      k = (k << 15) | (k >>> 17);
+      k = Math.imul(k, 0x1b873593);
+      h ^= k;
+      h = (h << 13) | (h >>> 19);
+      h = Math.imul(h, 5) + 0xe6546b64;
+    }
+    h ^= str.length;
+    h ^= h >>> 16;
+    h = Math.imul(h, 0x85ebca6b);
+    h ^= h >>> 13;
+    h = Math.imul(h, 0xc2b2ae35);
+    h ^= h >>> 16;
+    return (h >>> 0).toString(36);
+  }
+
+  // ---- Form Abuse Detection ----
+  // Monitors form interactions to detect spam/abuse patterns.
+
+  var formStats = { submits: 0, pastes: 0, rapidClicks: 0, lastClickTime: 0 };
+
+  document.addEventListener("submit", function (e) {
+    formStats.submits++;
+    var timeSinceLoad = (Date.now() - pageStart) / 1000;
+
+    // Suspicious: form submitted < 2 seconds after page load
+    var suspicious = timeSinceLoad < 2 || formStats.submits > 3;
+
+    if (suspicious || formStats.pastes > 3 || formStats.rapidClicks > 10) {
+      sendEvent("custom", {
+        n: "_form_abuse",
+        p: {
+          submits: String(formStats.submits),
+          pastes: String(formStats.pastes),
+          rapid_clicks: String(formStats.rapidClicks),
+          time_to_submit: String(Math.round(timeSinceLoad)),
+          had_interaction: hadInteraction ? "1" : "0"
+        }
+      });
+    }
+  }, true);
+
+  document.addEventListener("paste", function () {
+    formStats.pastes++;
+  }, true);
+
+  document.addEventListener("click", function () {
+    var now = Date.now();
+    if (now - formStats.lastClickTime < 200) formStats.rapidClicks++;
+    formStats.lastClickTime = now;
+  }, true);
 
   function getCookie(name) {
     var match = document.cookie.match(

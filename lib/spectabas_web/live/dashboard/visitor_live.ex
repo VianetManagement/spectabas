@@ -49,6 +49,19 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
           {nil, []}
         end
 
+      # Get visitors with same browser fingerprint
+      fingerprint = profile["browser_fingerprint"]
+
+      fp_visitors =
+        if fingerprint && fingerprint != "" do
+          case Analytics.visitors_by_fingerprint(site, fingerprint) do
+            {:ok, rows} -> Enum.reject(rows, &(&1["visitor_id"] == visitor_id))
+            _ -> []
+          end
+        else
+          []
+        end
+
       # Compute session list from timeline
       sessions =
         timeline
@@ -79,6 +92,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
        |> assign(:last_ip, last_ip)
        |> assign(:ip_info, ip_info)
        |> assign(:ip_visitors, ip_visitors)
+       |> assign(:fp_visitors, fp_visitors)
        |> assign(:show_ip_panel, false)}
     end
   end
@@ -364,6 +378,49 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
                 </td>
                 <td class="px-4 py-2 text-gray-900 text-right tabular-nums">
                   {format_duration(s.duration)}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <%!-- Browser Fingerprint Cross-Reference --%>
+        <div :if={@fp_visitors != []} class="bg-white rounded-lg shadow mb-6">
+          <div class="px-5 py-4 border-b border-gray-100">
+            <h3 class="text-sm font-semibold text-gray-700">
+              Same Browser Fingerprint ({length(@fp_visitors)} other visitors)
+            </h3>
+            <p class="text-xs text-gray-500 mt-0.5">
+              These visitors share the same browser fingerprint — possible alt accounts or shared device.
+            </p>
+          </div>
+          <table class="min-w-full divide-y divide-gray-200 text-sm">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-3 py-2 text-left text-xs text-gray-500">Visitor</th>
+                <th class="px-3 py-2 text-left text-xs text-gray-500">Last Seen</th>
+                <th class="px-3 py-2 text-right text-xs text-gray-500">Pages</th>
+                <th class="px-3 py-2 text-left text-xs text-gray-500">IP</th>
+                <th class="px-3 py-2 text-left text-xs text-gray-500">Location</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr :for={v <- @fp_visitors} class="hover:bg-gray-50">
+                <td class="px-3 py-2">
+                  <.link
+                    navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{v["visitor_id"]}"}
+                    class="text-indigo-600 hover:text-indigo-800 font-mono text-xs"
+                  >
+                    {String.slice(v["visitor_id"] || "", 0, 10)}...
+                  </.link>
+                </td>
+                <td class="px-3 py-2 text-gray-500 text-xs">{v["last_seen"]}</td>
+                <td class="px-3 py-2 text-gray-900 text-right tabular-nums">{v["pageviews"]}</td>
+                <td class="px-3 py-2 text-gray-500 font-mono text-xs">{v["ip_address"]}</td>
+                <td class="px-3 py-2 text-gray-500 text-xs">
+                  {[v["city"], v["country"]]
+                  |> Enum.reject(&(&1 == "" || is_nil(&1)))
+                  |> Enum.join(", ")}
                 </td>
               </tr>
             </tbody>

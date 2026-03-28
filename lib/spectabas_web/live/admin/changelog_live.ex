@@ -45,6 +45,24 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.1.0 — 2026-03-29 02:00 UTC",
+       [
+         %{
+           title: "Enhanced browser fingerprinting",
+           description:
+             "canvas, WebGL, AudioContext, and 15+ browser signals combined into a stable hash. Survives cookie clearing, incognito, and VPN. Stored per event for cross-session correlation."
+         },
+         %{
+           title: "Form abuse detection",
+           description:
+             "tracker monitors form submissions, paste events, and rapid clicks. Fires _form_abuse custom event when suspicious patterns detected."
+         },
+         %{
+           title: "Fingerprint cross-referencing",
+           description:
+             "visitor profiles show other visitors with the same browser fingerprint — detects alt accounts, ban evasion, shared devices."
+         }
+       ]},
       {"v1.0.1 — 2026-03-29 01:00 UTC",
        [
          %{

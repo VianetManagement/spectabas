@@ -74,7 +74,12 @@ defmodule Spectabas.Events.Ingest do
         screen_height: payload.sh,
         duration: payload.d,
         props: payload.p || %{},
-        user_agent: ua_string
+        user_agent: ua_string,
+        browser_fingerprint:
+          if(payload.vid && String.starts_with?(to_string(payload.vid), "fp_"),
+            do: payload.vid,
+            else: ""
+          )
       }
       |> Map.merge(ip_data)
 

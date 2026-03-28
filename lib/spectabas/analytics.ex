@@ -816,6 +816,7 @@ defmodule Spectabas.Analytics do
       any(ip_is_vpn) AS is_vpn,
       any(ip_is_bot) AS is_bot,
       any(user_agent) AS user_agent,
+      any(browser_fingerprint) AS browser_fingerprint,
       groupUniqArray(10)(url_path) AS top_pages,
       groupUniqArray(5)(referrer_domain) AS referrers,
       groupUniqArray(5)(utm_source) AS utm_sources
@@ -857,6 +858,36 @@ defmodule Spectabas.Analytics do
   end
 
   def visitors_by_ip(_, _), do: {:ok, []}
+
+  @doc """
+  Find other visitors who share the same browser fingerprint.
+  Useful for detecting alt accounts, ban evasion, and fraud.
+  """
+  def visitors_by_fingerprint(%Site{} = site, fingerprint)
+      when is_binary(fingerprint) and fingerprint != "" do
+    sql = """
+    SELECT
+      visitor_id,
+      min(timestamp) AS first_seen,
+      max(timestamp) AS last_seen,
+      countIf(event_type = 'pageview') AS pageviews,
+      any(browser) AS browser,
+      any(os) AS os,
+      any(ip_address) AS ip_address,
+      any(ip_country) AS country,
+      any(ip_city) AS city
+    FROM events
+    WHERE site_id = #{ClickHouse.param(site.id)}
+      AND browser_fingerprint = #{ClickHouse.param(fingerprint)}
+    GROUP BY visitor_id
+    ORDER BY last_seen DESC
+    LIMIT 20
+    """
+
+    ClickHouse.query(sql)
+  end
+
+  def visitors_by_fingerprint(_, _), do: {:ok, []}
 
   @doc """
   Get enriched IP data from the most recent event with this IP.
