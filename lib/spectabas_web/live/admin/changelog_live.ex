@@ -45,7 +45,27 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
-      {"2026-03-28",
+      {"v0.5.0 — 2026-03-28 18:30 UTC",
+       [
+         %{
+           title: "Timezone-aware charts",
+           description:
+             "24h timeseries chart now displays hours in the site's configured timezone instead of UTC"
+         },
+         %{
+           title: "Changelog page",
+           description: "versioned changelog with timestamps accessible from admin panel"
+         },
+         %{
+           title: "Audit log fix",
+           description: "user_id now properly extracted and displayed in audit entries"
+         },
+         %{
+           title: "Updated CLAUDE.md and README",
+           description: "comprehensive developer guide and project documentation"
+         }
+       ]},
+      {"v0.4.0 — 2026-03-28 15:00 UTC",
        [
          %{
            title: "Visitor Intent Detection",
@@ -82,7 +102,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
            description: nil
          }
        ]},
-      {"2026-03-27",
+      {"v0.1.0 — 2026-03-27",
        [
          %{
            title: "Initial launch of Spectabas analytics platform",

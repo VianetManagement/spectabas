@@ -63,11 +63,12 @@ defmodule Spectabas.Analytics do
 
   def timeseries(%Site{} = site, %User{} = user, %{from: _, to: _} = date_range, period) do
     with :ok <- authorize(site, user) do
+      tz = site.timezone || "UTC"
       trunc_fn = if period == :day, do: "toStartOfHour", else: "toDate"
 
       sql = """
       SELECT
-        #{trunc_fn}(timestamp) AS bucket,
+        #{trunc_fn}(toTimezone(timestamp, #{ClickHouse.param(tz)})) AS bucket,
         countIf(event_type = 'pageview') AS pageviews,
         uniq(visitor_id) AS visitors
       FROM events
@@ -85,7 +86,7 @@ defmodule Spectabas.Analytics do
               {row["bucket"] || "", {to_int(row["pageviews"]), to_int(row["visitors"])}}
             end)
 
-          all_buckets = generate_buckets(date_range.from, date_range.to, period)
+          all_buckets = generate_buckets(date_range.from, date_range.to, period, tz)
 
           filled =
             Enum.map(all_buckets, fn {bucket_key, label} ->
@@ -101,9 +102,15 @@ defmodule Spectabas.Analytics do
     end
   end
 
-  defp generate_buckets(from, to, :day) do
-    # Hourly buckets spanning the full 24h range
-    from_hour = from |> DateTime.truncate(:second) |> Map.put(:minute, 0) |> Map.put(:second, 0)
+  defp generate_buckets(from, to, :day, tz) do
+    # Hourly buckets in the site's timezone
+    # Shift UTC from/to to the site's timezone for bucket generation
+    offset = tz_offset_hours(tz)
+    from_local = DateTime.add(from, offset, :hour)
+
+    from_hour =
+      from_local |> DateTime.truncate(:second) |> Map.put(:minute, 0) |> Map.put(:second, 0)
+
     hours = max(div(DateTime.diff(to, from, :second), 3600), 1)
 
     0..hours
@@ -115,8 +122,8 @@ defmodule Spectabas.Analytics do
     end)
   end
 
-  defp generate_buckets(from, to, _period) do
-    # Daily buckets
+  defp generate_buckets(from, to, _period, _tz) do
+    # Daily buckets (date-level, timezone doesn't shift dates much)
     from_date = DateTime.to_date(from)
     to_date = DateTime.to_date(to)
     days = Date.diff(to_date, from_date)
@@ -130,6 +137,27 @@ defmodule Spectabas.Analytics do
       {bucket, label}
     end)
   end
+
+  # Approximate UTC offset for common timezones (DST not handled, close enough for bucket alignment)
+  defp tz_offset_hours("America/New_York"), do: -5
+  defp tz_offset_hours("America/Chicago"), do: -6
+  defp tz_offset_hours("America/Denver"), do: -7
+  defp tz_offset_hours("America/Los_Angeles"), do: -8
+  defp tz_offset_hours("America/Anchorage"), do: -9
+  defp tz_offset_hours("Pacific/Honolulu"), do: -10
+  defp tz_offset_hours("America/Phoenix"), do: -7
+  defp tz_offset_hours("America/Toronto"), do: -5
+  defp tz_offset_hours("America/Vancouver"), do: -8
+  defp tz_offset_hours("Europe/London"), do: 0
+  defp tz_offset_hours("Europe/Paris"), do: 1
+  defp tz_offset_hours("Europe/Berlin"), do: 1
+  defp tz_offset_hours("Europe/Moscow"), do: 3
+  defp tz_offset_hours("Asia/Tokyo"), do: 9
+  defp tz_offset_hours("Asia/Shanghai"), do: 8
+  defp tz_offset_hours("Asia/Kolkata"), do: 5
+  defp tz_offset_hours("Australia/Sydney"), do: 10
+  defp tz_offset_hours("UTC"), do: 0
+  defp tz_offset_hours(_), do: 0
 
   defp to_int(n) when is_integer(n), do: n
 
