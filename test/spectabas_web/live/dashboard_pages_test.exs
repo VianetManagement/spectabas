@@ -1,0 +1,134 @@
+defmodule SpectabasWeb.DashboardPagesTest do
+  use SpectabasWeb.ConnCase, async: true
+
+  import Phoenix.LiveViewTest
+  import Spectabas.AccountsFixtures
+
+  setup do
+    user = user_fixture() |> set_password()
+    # Make user an admin so they can access all pages
+    {:ok, user} =
+      user
+      |> Spectabas.Accounts.User.profile_changeset(%{role: :superadmin})
+      |> Spectabas.Repo.update()
+
+    site =
+      Spectabas.Repo.insert!(%Spectabas.Sites.Site{
+        name: "Test Site",
+        domain: "b.test.com",
+        public_key: "test_key_#{System.unique_integer([:positive])}",
+        active: true,
+        gdpr_mode: "off"
+      })
+
+    conn = log_in_user(build_conn(), user)
+    %{conn: conn, user: user, site: site}
+  end
+
+  describe "dashboard pages render without errors" do
+    test "main dashboard", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}")
+      assert html =~ site.name
+    end
+
+    test "pages", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/pages")
+      assert html =~ "Top Pages"
+    end
+
+    test "sources", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/sources")
+      assert html =~ "Sources"
+    end
+
+    test "geography", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/geo")
+      assert html =~ "Geography"
+    end
+
+    test "devices", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/devices")
+      assert html =~ "Devices"
+    end
+
+    test "entry/exit pages", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/entry-exit")
+      assert html =~ "Entry"
+    end
+
+    test "visitor map", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/map")
+      assert html =~ "Visitor Map"
+    end
+
+    test "visitor log", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/visitor-log")
+      assert html =~ "Visitor Log"
+    end
+
+    test "transitions", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/transitions")
+      assert html =~ "Page Transitions"
+    end
+
+    test "attribution", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/attribution")
+      assert html =~ "Attribution"
+    end
+
+    test "site search", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/search")
+      assert html =~ "Site Search"
+    end
+
+    test "cohort retention", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/cohort")
+      assert html =~ "Cohort Retention"
+    end
+
+    test "network", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/network")
+      assert html =~ "Network"
+    end
+
+    test "realtime", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/realtime")
+      assert html =~ "Realtime"
+    end
+
+    test "settings", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/settings")
+      assert html =~ "Settings"
+    end
+  end
+
+  describe "admin pages render without errors" do
+    test "admin dashboard", %{conn: conn} do
+      {:ok, _view, html} = live(conn, ~p"/admin")
+      assert html =~ "Admin"
+    end
+
+    test "admin users", %{conn: conn} do
+      {:ok, _view, html} = live(conn, ~p"/admin/users")
+      assert html =~ "Users"
+    end
+
+    test "admin sites", %{conn: conn} do
+      {:ok, _view, html} = live(conn, ~p"/admin/sites")
+      assert html =~ "Sites"
+    end
+
+    test "admin audit", %{conn: conn} do
+      {:ok, _view, html} = live(conn, ~p"/admin/audit")
+      assert html =~ "Audit"
+    end
+  end
+
+  describe "dashboard index" do
+    test "shows sites and add button for admins", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard")
+      assert html =~ site.name
+      assert html =~ "Add Site"
+    end
+  end
+end
