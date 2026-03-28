@@ -45,6 +45,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.2.0 — 2026-03-29 04:00 UTC",
+       [
+         %{
+           title: "Grouped realtime visitors",
+           description:
+             "realtime page now shows 'Active Visitors' view (one row per visitor with current page, pageviews, location, device, intent, last activity) and 'Event Feed' view (raw events). Auto-refreshes every 5 seconds."
+         },
+         %{
+           title: "Browser fingerprint in visitor profiles",
+           description:
+             "fingerprint hash displayed in Identity & Device card with count of other visitors sharing the same fingerprint"
+         }
+       ]},
       {"v1.1.1 — 2026-03-29 03:00 UTC",
        [
          %{

@@ -625,6 +625,36 @@ defmodule Spectabas.Analytics do
   end
 
   @doc """
+  Active visitors grouped: one row per visitor with their latest activity.
+  """
+  def realtime_visitors_grouped(%Site{} = site) do
+    sql = """
+    SELECT
+      visitor_id,
+      argMax(url_path, timestamp) AS current_page,
+      argMax(event_type, timestamp) AS last_event_type,
+      countIf(event_type = 'pageview') AS pageviews,
+      min(timestamp) AS session_start,
+      max(timestamp) AS last_activity,
+      any(ip_country) AS country,
+      any(ip_city) AS city,
+      any(browser) AS browser,
+      any(os) AS os,
+      any(device_type) AS device_type,
+      any(referrer_domain) AS referrer,
+      any(visitor_intent) AS intent
+    FROM events
+    WHERE site_id = #{ClickHouse.param(site.id)}
+      AND timestamp >= now() - INTERVAL 5 MINUTE
+    GROUP BY visitor_id
+    ORDER BY last_activity DESC
+    LIMIT 30
+    """
+
+    ClickHouse.query(sql)
+  end
+
+  @doc """
   Funnel stats using ClickHouse windowFunnel().
   Steps is a list of event conditions (e.g., event_type/url_path matches).
   """

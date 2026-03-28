@@ -181,6 +181,15 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
                 value={if @visitor.cookie_id, do: "Cookie", else: "Fingerprint"}
               />
               <.field label="GDPR" value={@visitor.gdpr_mode || "on"} />
+              <div :if={@profile["browser_fingerprint"] && @profile["browser_fingerprint"] != ""}>
+                <dt class="text-xs font-medium text-gray-500">Browser Fingerprint</dt>
+                <dd class="mt-0.5 text-xs text-indigo-600 font-mono">
+                  {@profile["browser_fingerprint"]}
+                  <span :if={@fp_visitors != []} class="text-amber-600 ml-1">
+                    ({length(@fp_visitors)} other visitors share this fingerprint)
+                  </span>
+                </dd>
+              </div>
               <div :if={@profile["user_agent"] && @profile["user_agent"] != ""}>
                 <dt class="text-xs font-medium text-gray-500">User Agent</dt>
                 <dd class="mt-0.5 text-xs text-gray-600 font-mono break-all leading-relaxed">
