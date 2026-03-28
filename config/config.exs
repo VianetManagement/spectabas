@@ -91,6 +91,10 @@ config :logger, :console,
   format: "$time $metadata[$level] $message\n",
   metadata: [:request_id, :site_id, :user_id]
 
+config :wax_,
+  origin: "https://www.spectabas.com",
+  rp_id: "spectabas.com"
+
 config :phoenix, :json_library, Jason
 
 import_config "#{config_env()}.exs"

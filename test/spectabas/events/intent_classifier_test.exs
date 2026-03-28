@@ -22,12 +22,38 @@ defmodule Spectabas.Events.IntentClassifierTest do
       assert IntentClassifier.classify(event, %{pageview_count: 0}) == "bot"
     end
 
+    test "datacenter with multiple pageviews is not bot" do
+      event = %{
+        ip_is_bot: 0,
+        ip_is_datacenter: 1,
+        url_path: "/about",
+        referrer_domain: "google.com",
+        utm_medium: "",
+        utm_source: ""
+      }
+
+      assert IntentClassifier.classify(event, %{pageview_count: 5}) != "bot"
+    end
+
     test "classifies buying intent from pricing page" do
       event = %{
         ip_is_bot: 0,
         ip_is_datacenter: 0,
         url_path: "/pricing",
         referrer_domain: "google.com",
+        utm_medium: "",
+        utm_source: ""
+      }
+
+      assert IntentClassifier.classify(event) == "buying"
+    end
+
+    test "classifies buying intent from checkout page" do
+      event = %{
+        ip_is_bot: 0,
+        ip_is_datacenter: 0,
+        url_path: "/checkout/step-1",
+        referrer_domain: "",
         utm_medium: "",
         utm_source: ""
       }
@@ -49,29 +75,35 @@ defmodule Spectabas.Events.IntentClassifierTest do
     end
 
     test "classifies comparison referrer" do
-      event = %{
-        ip_is_bot: 0,
-        ip_is_datacenter: 0,
-        url_path: "/features",
-        referrer_domain: "g2.com",
-        utm_medium: "",
-        utm_source: ""
-      }
+      for site <- ["g2.com", "capterra.com", "trustradius.com", "producthunt.com"] do
+        event = %{
+          ip_is_bot: 0,
+          ip_is_datacenter: 0,
+          url_path: "/features",
+          referrer_domain: site,
+          utm_medium: "",
+          utm_source: ""
+        }
 
-      assert IntentClassifier.classify(event) == "comparing"
+        assert IntentClassifier.classify(event) == "comparing",
+               "Expected comparing for referrer #{site}"
+      end
     end
 
     test "classifies support intent" do
-      event = %{
-        ip_is_bot: 0,
-        ip_is_datacenter: 0,
-        url_path: "/help/getting-started",
-        referrer_domain: "",
-        utm_medium: "",
-        utm_source: ""
-      }
+      for path <- ["/help", "/contact", "/docs/api", "/faq", "/support/tickets"] do
+        event = %{
+          ip_is_bot: 0,
+          ip_is_datacenter: 0,
+          url_path: path,
+          referrer_domain: "",
+          utm_medium: "",
+          utm_source: ""
+        }
 
-      assert IntentClassifier.classify(event) == "support"
+        assert IntentClassifier.classify(event) == "support",
+               "Expected support for path #{path}"
+      end
     end
 
     test "classifies returning visitor" do
@@ -101,6 +133,19 @@ defmodule Spectabas.Events.IntentClassifierTest do
       assert IntentClassifier.classify(event, %{pageview_count: 5}) == "researching"
     end
 
+    test "classifies paid traffic as researching" do
+      event = %{
+        ip_is_bot: 0,
+        ip_is_datacenter: 0,
+        url_path: "/features",
+        referrer_domain: "google.com",
+        utm_medium: "cpc",
+        utm_source: "google"
+      }
+
+      assert IntentClassifier.classify(event, %{pageview_count: 1}) == "researching"
+    end
+
     test "classifies browsing as default" do
       event = %{
         ip_is_bot: 0,
@@ -112,6 +157,24 @@ defmodule Spectabas.Events.IntentClassifierTest do
       }
 
       assert IntentClassifier.classify(event, %{pageview_count: 1}) == "browsing"
+    end
+
+    test "handles string map keys" do
+      event = %{
+        "ip_is_bot" => 0,
+        "ip_is_datacenter" => 0,
+        "url_path" => "/pricing",
+        "referrer_domain" => "",
+        "utm_medium" => "",
+        "utm_source" => ""
+      }
+
+      assert IntentClassifier.classify(event) == "buying"
+    end
+
+    test "handles nil and missing values" do
+      event = %{}
+      assert IntentClassifier.classify(event) == "browsing"
     end
   end
 end

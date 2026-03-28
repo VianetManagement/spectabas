@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.0.1 — 2026-03-29 01:00 UTC",
+       [
+         %{
+           title: "205 automated tests",
+           description:
+             "added WebAuthn, intent classifier (14 cases), security (SQL injection, null bytes, segment validation), and updated docs"
+         }
+       ]},
       {"v1.0.0 — 2026-03-29 00:00 UTC",
        [
          %{

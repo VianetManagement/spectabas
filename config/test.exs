@@ -28,6 +28,10 @@ config :spectabas, Spectabas.Mailer, adapter: Swoosh.Adapters.Test
 
 config :swoosh, :api_client, false
 
+config :wax_,
+  origin: "https://localhost",
+  rp_id: "localhost"
+
 config :logger, level: :warning
 
 config :phoenix, :plug_init_mode, :runtime
