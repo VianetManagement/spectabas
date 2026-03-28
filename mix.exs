@@ -44,6 +44,7 @@ defmodule Spectabas.MixProject do
       {:oban, "~> 2.17"},
       {:bcrypt_elixir, "~> 3.0"},
       {:nimble_totp, "~> 1.0"},
+      {:wax_, "~> 0.7"},
       {:castore, "~> 1.0"},
       {:telemetry_metrics, "~> 1.0"},
       {:telemetry_poller, "~> 1.0"},

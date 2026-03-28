@@ -26,10 +26,58 @@ import topbar from "../vendor/topbar"
 
 import { TimeseriesChart, BarChart, BubbleMap } from "./charts"
 
+// WebAuthn passkey registration hook
+const PasskeyRegister = {
+  mounted() {
+    const options = JSON.parse(this.el.dataset.options)
+
+    // Decode base64url fields for WebAuthn API
+    options.challenge = bufferDecode(options.challenge)
+    options.user.id = bufferDecode(options.user.id)
+    if (options.excludeCredentials) {
+      options.excludeCredentials = options.excludeCredentials.map((c) => ({
+        ...c,
+        id: bufferDecode(c.id),
+      }))
+    }
+
+    navigator.credentials
+      .create({ publicKey: options })
+      .then((credential) => {
+        const name = prompt("Name this security key:", "My Passkey") || "Security Key"
+        this.pushEvent("passkey_registered", {
+          attestation_object: bufferEncode(credential.response.attestationObject),
+          client_data_json: bufferEncode(credential.response.clientDataJSON),
+          name: name,
+        })
+      })
+      .catch((err) => {
+        console.error("Passkey registration failed:", err)
+      })
+  },
+}
+
+function bufferDecode(base64url) {
+  const base64 = base64url.replace(/-/g, "+").replace(/_/g, "/")
+  const pad = base64.length % 4 === 0 ? "" : "=".repeat(4 - (base64.length % 4))
+  const binary = atob(base64 + pad)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return bytes.buffer
+}
+
+function bufferEncode(buffer) {
+  const bytes = new Uint8Array(buffer)
+  let binary = ""
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
+}
+
 const Hooks = {
   TimeseriesChart,
   BarChart,
   BubbleMap,
+  PasskeyRegister,
 }
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")

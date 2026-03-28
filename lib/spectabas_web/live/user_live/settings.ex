@@ -4,6 +4,7 @@ defmodule SpectabasWeb.UserLive.Settings do
   on_mount {SpectabasWeb.UserAuth, :require_sudo_mode}
 
   alias Spectabas.{Accounts, APIKeys}
+  alias Spectabas.Accounts.Webauthn
 
   @impl true
   def render(assigns) do
@@ -159,6 +160,56 @@ defmodule SpectabasWeb.UserLive.Settings do
         </div>
       </div>
 
+      <%!-- Passkeys / Security Keys --%>
+      <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold text-gray-900">Security Keys (Passkeys)</h2>
+          <button
+            phx-click="start_passkey_registration"
+            class="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+          >
+            + Add Key
+          </button>
+        </div>
+        <p class="text-sm text-gray-600 mb-4">
+          Use a passkey (Bitwarden, 1Password, YubiKey, or your device) as a second factor when logging in.
+        </p>
+
+        <div
+          :if={@passkey_challenge}
+          id="passkey-register"
+          phx-hook="PasskeyRegister"
+          data-options={Jason.encode!(@passkey_options)}
+          class="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mb-4"
+        >
+          <p class="text-sm text-indigo-800 font-medium">
+            Follow your browser's prompt to register your security key...
+          </p>
+        </div>
+
+        <div :if={@passkeys == []} class="text-sm text-gray-500">
+          No security keys registered.
+        </div>
+        <div :if={@passkeys != []} class="divide-y divide-gray-100">
+          <div :for={key <- @passkeys} class="flex items-center justify-between py-3">
+            <div>
+              <span class="text-sm font-medium text-gray-900">{key.name}</span>
+              <span class="text-xs text-gray-500 ml-2">
+                Added {Calendar.strftime(key.inserted_at, "%Y-%m-%d")}
+              </span>
+            </div>
+            <button
+              phx-click="delete_passkey"
+              phx-value-id={key.id}
+              data-confirm={"Remove security key \"#{key.name}\"?"}
+              class="text-red-500 hover:text-red-700 text-sm font-medium"
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      </div>
+
       <%!-- API Keys --%>
       <div class="bg-white rounded-lg shadow p-6 mb-6">
         <div class="flex items-center justify-between mb-4">
@@ -265,6 +316,9 @@ defmodule SpectabasWeb.UserLive.Settings do
       |> assign(:show_api_form, false)
       |> assign(:new_api_key, nil)
       |> assign(:api_keys, APIKeys.list_user_keys(user))
+      |> assign(:passkeys, Webauthn.list_credentials(user))
+      |> assign(:passkey_challenge, nil)
+      |> assign(:passkey_options, nil)
 
     {:ok, socket}
   end
@@ -346,6 +400,61 @@ defmodule SpectabasWeb.UserLive.Settings do
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Failed to create API key.")}
+    end
+  end
+
+  def handle_event("start_passkey_registration", _params, socket) do
+    user = socket.assigns.current_scope.user
+    {challenge, options} = Webauthn.registration_challenge(user)
+
+    {:noreply,
+     socket
+     |> assign(:passkey_challenge, challenge)
+     |> assign(:passkey_options, options)}
+  end
+
+  def handle_event(
+        "passkey_registered",
+        %{
+          "attestation_object" => att_obj,
+          "client_data_json" => cdj,
+          "name" => name
+        },
+        socket
+      ) do
+    user = socket.assigns.current_scope.user
+    challenge = socket.assigns.passkey_challenge
+
+    case Webauthn.register(user, challenge, att_obj, cdj, name) do
+      {:ok, _cred} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Security key registered successfully!")
+         |> assign(:passkeys, Webauthn.list_credentials(user))
+         |> assign(:passkey_challenge, nil)
+         |> assign(:passkey_options, nil)}
+
+      {:error, reason} ->
+        {:noreply,
+         socket
+         |> put_flash(:error, "Failed to register key: #{inspect(reason)}")
+         |> assign(:passkey_challenge, nil)
+         |> assign(:passkey_options, nil)}
+    end
+  end
+
+  def handle_event("delete_passkey", %{"id" => id}, socket) do
+    case Webauthn.delete_credential(id) do
+      {:ok, _} ->
+        user = socket.assigns.current_scope.user
+
+        {:noreply,
+         socket
+         |> put_flash(:info, "Security key removed.")
+         |> assign(:passkeys, Webauthn.list_credentials(user))}
+
+      _ ->
+        {:noreply, put_flash(socket, :error, "Failed to remove key.")}
     end
   end
 

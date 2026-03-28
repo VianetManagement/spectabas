@@ -45,6 +45,23 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.0.0 — 2026-03-29 00:00 UTC",
+       [
+         %{
+           title: "WebAuthn/Passkey 2FA support",
+           description:
+             "register security keys (Bitwarden, 1Password, YubiKey, device passkeys) as a second factor. Manage keys in Account Settings."
+         },
+         %{
+           title: "Admin: Force 2FA per user",
+           description:
+             "admins can toggle 'Force 2FA' on individual users in the admin users page. Required/Optional toggle with amber badge."
+         },
+         %{
+           title: "API key management + 2FA setup in settings",
+           description: "generate, view, revoke API keys. 2FA status and setup link."
+         }
+       ]},
       {"v0.9.1 — 2026-03-28 23:30 UTC",
        [
          %{

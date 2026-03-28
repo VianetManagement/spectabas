@@ -89,6 +89,28 @@ defmodule SpectabasWeb.Admin.UsersLive do
     end
   end
 
+  def handle_event("toggle_force_2fa", %{"user-id" => user_id}, socket) do
+    user = Accounts.get_user!(user_id)
+    new_val = !user.force_2fa
+
+    case user
+         |> Accounts.User.profile_changeset(%{force_2fa: new_val})
+         |> Spectabas.Repo.update() do
+      {:ok, _} ->
+        users = Accounts.list_users()
+
+        msg =
+          if new_val,
+            do: "2FA now required for #{user.email}.",
+            else: "2FA requirement removed for #{user.email}."
+
+        {:noreply, socket |> put_flash(:info, msg) |> assign(:users, users)}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to update 2FA requirement.")}
+    end
+  end
+
   def handle_event("change_role", %{"user_id" => user_id, "role" => role}, socket) do
     admin = socket.assigns.current_scope.user
     user = Accounts.get_user!(user_id)
@@ -229,6 +251,9 @@ defmodule SpectabasWeb.Admin.UsersLive do
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Last Sign In
               </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Force 2FA
+              </th>
               <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Actions
               </th>
@@ -276,6 +301,22 @@ defmodule SpectabasWeb.Admin.UsersLive do
                 {if user.last_sign_in_at,
                   do: Calendar.strftime(user.last_sign_in_at, "%Y-%m-%d %H:%M"),
                   else: "Never"}
+              </td>
+              <td class="px-6 py-4">
+                <button
+                  :if={user.id != @current_scope.user.id}
+                  phx-click="toggle_force_2fa"
+                  phx-value-user-id={user.id}
+                  class={[
+                    "text-xs font-medium px-2 py-0.5 rounded",
+                    if(user.force_2fa,
+                      do: "bg-amber-100 text-amber-800",
+                      else: "bg-gray-100 text-gray-500 hover:bg-amber-50"
+                    )
+                  ]}
+                >
+                  {if user.force_2fa, do: "Required", else: "Optional"}
+                </button>
               </td>
               <td class="px-6 py-4 text-right">
                 <button
