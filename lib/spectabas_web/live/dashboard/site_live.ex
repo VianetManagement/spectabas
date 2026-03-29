@@ -37,6 +37,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
        |> assign(:compare, true)
        |> assign(:show_date_picker, false)
        |> assign(:segment, [])
+       |> assign(:override_date_range, nil)
        |> assign(:live_visitors, 0)
        |> assign(:top_pages, [])
        |> assign(:top_sources, [])
@@ -84,22 +85,39 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     {from, to} =
       case range do
         "today" -> {today, today}
-        "24h" -> {Date.add(today, -1), today}
         "7d" -> {Date.add(today, -7), today}
         "30d" -> {Date.add(today, -30), today}
         "90d" -> {Date.add(today, -90), today}
         "ytd" -> {Date.new!(today.year, 1, 1), today}
         "12m" -> {Date.add(today, -365), today}
+        # "24h" is special — rolling 24h window, not date-based
         _ -> {Date.add(today, -7), today}
       end
 
-    {:noreply,
-     socket
-     |> assign(:preset, range)
-     |> assign(:date_from, from)
-     |> assign(:date_to, to)
-     |> assign(:show_date_picker, false)
-     |> load_stats()}
+    # For "24h", override with a rolling 24-hour UTC window
+    socket =
+      if range == "24h" do
+        now = DateTime.utc_now() |> DateTime.truncate(:second)
+        h24_from = DateTime.add(now, -24, :hour)
+
+        socket
+        |> assign(:preset, "24h")
+        |> assign(:date_from, DateTime.to_date(h24_from))
+        |> assign(:date_to, today)
+        |> assign(:show_date_picker, false)
+        |> assign(:override_date_range, %{from: h24_from, to: now})
+        |> load_stats()
+      else
+        socket
+        |> assign(:preset, range)
+        |> assign(:date_from, from)
+        |> assign(:date_to, to)
+        |> assign(:show_date_picker, false)
+        |> assign(:override_date_range, nil)
+        |> load_stats()
+      end
+
+    {:noreply, socket}
   end
 
   def handle_event("toggle_date_picker", _params, socket) do
@@ -154,11 +172,20 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
 
   defp date_range_and_opts(socket) do
     %{date_from: from, date_to: to, segment: segment, site: site} = socket.assigns
-    tz = site.timezone || "UTC"
 
-    {from_dt, to_dt} = dates_to_utc_range(from, to, tz)
+    # "24h" preset uses a precise rolling window override
+    date_range =
+      case Map.get(socket.assigns, :override_date_range) do
+        %{from: _, to: _} = override ->
+          override
 
-    {%{from: from_dt, to: to_dt}, [segment: segment]}
+        _ ->
+          tz = site.timezone || "UTC"
+          {from_dt, to_dt} = dates_to_utc_range(from, to, tz)
+          %{from: from_dt, to: to_dt}
+      end
+
+    {date_range, [segment: segment]}
   end
 
   # Convert local Date range to UTC DateTime range using site timezone

@@ -104,14 +104,14 @@ defmodule Spectabas.Analytics do
 
   defp generate_buckets(from, to, :day, tz) do
     # Hourly buckets in the site's timezone
-    # Shift UTC from/to to the site's timezone for bucket generation
-    offset = tz_offset_hours(tz)
-    from_local = DateTime.add(from, offset, :hour)
+    # Convert UTC boundaries to local time for bucket generation
+    from_local = to_local(from, tz)
+    to_local_dt = to_local(to, tz)
 
     from_hour =
       from_local |> DateTime.truncate(:second) |> Map.put(:minute, 0) |> Map.put(:second, 0)
 
-    hours = max(div(DateTime.diff(to, from, :second), 3600), 1)
+    hours = max(div(DateTime.diff(to_local_dt, from_hour, :second), 3600), 1)
 
     0..hours
     |> Enum.map(fn h ->
@@ -122,13 +122,13 @@ defmodule Spectabas.Analytics do
     end)
   end
 
-  defp generate_buckets(from, to, _period, _tz) do
-    # Daily buckets (date-level, timezone doesn't shift dates much)
-    from_date = DateTime.to_date(from)
-    to_date = DateTime.to_date(to)
+  defp generate_buckets(from, to, _period, tz) do
+    # Daily buckets in site timezone
+    from_date = to_local(from, tz) |> DateTime.to_date()
+    to_date = to_local(to, tz) |> DateTime.to_date()
     days = Date.diff(to_date, from_date)
 
-    0..days
+    0..max(days, 0)
     |> Enum.map(fn d ->
       date = Date.add(from_date, d)
       bucket = Date.to_iso8601(date)
@@ -138,26 +138,13 @@ defmodule Spectabas.Analytics do
     end)
   end
 
-  # Approximate UTC offset for common timezones (DST not handled, close enough for bucket alignment)
-  defp tz_offset_hours("America/New_York"), do: -5
-  defp tz_offset_hours("America/Chicago"), do: -6
-  defp tz_offset_hours("America/Denver"), do: -7
-  defp tz_offset_hours("America/Los_Angeles"), do: -8
-  defp tz_offset_hours("America/Anchorage"), do: -9
-  defp tz_offset_hours("Pacific/Honolulu"), do: -10
-  defp tz_offset_hours("America/Phoenix"), do: -7
-  defp tz_offset_hours("America/Toronto"), do: -5
-  defp tz_offset_hours("America/Vancouver"), do: -8
-  defp tz_offset_hours("Europe/London"), do: 0
-  defp tz_offset_hours("Europe/Paris"), do: 1
-  defp tz_offset_hours("Europe/Berlin"), do: 1
-  defp tz_offset_hours("Europe/Moscow"), do: 3
-  defp tz_offset_hours("Asia/Tokyo"), do: 9
-  defp tz_offset_hours("Asia/Shanghai"), do: 8
-  defp tz_offset_hours("Asia/Kolkata"), do: 5
-  defp tz_offset_hours("Australia/Sydney"), do: 10
-  defp tz_offset_hours("UTC"), do: 0
-  defp tz_offset_hours(_), do: 0
+  # Convert UTC DateTime to site-local DateTime (for bucket label generation)
+  defp to_local(dt, tz) do
+    case DateTime.shift_zone(dt, tz) do
+      {:ok, local} -> local
+      _ -> dt
+    end
+  end
 
   defp to_int(n) when is_integer(n), do: n
 
