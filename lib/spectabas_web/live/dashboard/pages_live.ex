@@ -58,21 +58,11 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
     %{site: site, user: user, date_range: range} = socket.assigns
     period = range_to_period(range)
 
-    pages =
-      case Analytics.top_pages(site, user, period) do
-        {:ok, pages} -> pages
-        _ -> []
-      end
+    pages = safe_query(fn -> Analytics.top_pages(site, user, period) end)
 
     # Fetch per-page RUM vitals summary and merge into page rows
-    vitals_map =
-      case Analytics.rum_vitals_summary(site, user, period) do
-        {:ok, rows} ->
-          Map.new(rows, fn r -> {r["url_path"], r} end)
-
-        _ ->
-          %{}
-      end
+    vitals_rows = safe_query(fn -> Analytics.rum_vitals_summary(site, user, period) end)
+    vitals_map = Map.new(vitals_rows, fn r -> {r["url_path"], r} end)
 
     pages =
       Enum.map(pages, fn page ->

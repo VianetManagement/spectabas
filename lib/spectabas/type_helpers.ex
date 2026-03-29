@@ -1,5 +1,30 @@
 defmodule Spectabas.TypeHelpers do
-  @moduledoc "Shared type conversion helpers for ClickHouse string values."
+  @moduledoc "Shared type conversion and query helpers for ClickHouse string values."
+
+  require Logger
+
+  @doc """
+  Safely execute an analytics query function, returning fallback on error.
+  Logs warnings for non-ok results so errors are observable.
+  """
+  def safe_query(fun, fallback \\ []) do
+    case fun.() do
+      {:ok, data} ->
+        data
+
+      {:error, reason} ->
+        Logger.warning("[Analytics] Query error: #{inspect(reason) |> String.slice(0, 200)}")
+        fallback
+
+      other ->
+        Logger.warning("[Analytics] Unexpected result: #{inspect(other) |> String.slice(0, 200)}")
+        fallback
+    end
+  rescue
+    e ->
+      Logger.warning("[Analytics] Query crashed: #{Exception.message(e) |> String.slice(0, 200)}")
+      fallback
+  end
 
   def to_num(n) when is_integer(n), do: n
   def to_num(n) when is_float(n), do: trunc(n)

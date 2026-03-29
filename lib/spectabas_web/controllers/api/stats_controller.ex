@@ -2,6 +2,7 @@ defmodule SpectabasWeb.API.StatsController do
   use SpectabasWeb, :controller
 
   alias Spectabas.{Sites, Analytics, Accounts}
+  require Logger
 
   def overview(conn, %{"site_id" => site_id} = params) do
     with {:ok, site, user} <- authorize_site(conn, site_id),
@@ -9,14 +10,7 @@ defmodule SpectabasWeb.API.StatsController do
          {:ok, stats} <- Analytics.overview_stats(site, user, date_range) do
       json(conn, %{data: stats})
     else
-      {:error, :not_found} ->
-        conn |> put_status(404) |> json(%{error: "site not found"})
-
-      {:error, :unauthorized} ->
-        conn |> put_status(403) |> json(%{error: "unauthorized"})
-
-      {:error, reason} ->
-        conn |> put_status(500) |> json(%{error: to_string(reason)})
+      error -> handle_error(conn, error)
     end
   end
 
@@ -26,14 +20,7 @@ defmodule SpectabasWeb.API.StatsController do
          {:ok, data} <- Analytics.top_pages(site, user, date_range) do
       json(conn, %{data: data})
     else
-      {:error, :not_found} ->
-        conn |> put_status(404) |> json(%{error: "site not found"})
-
-      {:error, :unauthorized} ->
-        conn |> put_status(403) |> json(%{error: "unauthorized"})
-
-      {:error, reason} ->
-        conn |> put_status(500) |> json(%{error: to_string(reason)})
+      error -> handle_error(conn, error)
     end
   end
 
@@ -43,14 +30,7 @@ defmodule SpectabasWeb.API.StatsController do
          {:ok, data} <- Analytics.top_sources(site, user, date_range) do
       json(conn, %{data: data})
     else
-      {:error, :not_found} ->
-        conn |> put_status(404) |> json(%{error: "site not found"})
-
-      {:error, :unauthorized} ->
-        conn |> put_status(403) |> json(%{error: "unauthorized"})
-
-      {:error, reason} ->
-        conn |> put_status(500) |> json(%{error: to_string(reason)})
+      error -> handle_error(conn, error)
     end
   end
 
@@ -60,14 +40,7 @@ defmodule SpectabasWeb.API.StatsController do
          {:ok, data} <- Analytics.top_countries(site, user, date_range) do
       json(conn, %{data: data})
     else
-      {:error, :not_found} ->
-        conn |> put_status(404) |> json(%{error: "site not found"})
-
-      {:error, :unauthorized} ->
-        conn |> put_status(403) |> json(%{error: "unauthorized"})
-
-      {:error, reason} ->
-        conn |> put_status(500) |> json(%{error: to_string(reason)})
+      error -> handle_error(conn, error)
     end
   end
 
@@ -77,14 +50,7 @@ defmodule SpectabasWeb.API.StatsController do
          {:ok, data} <- Analytics.top_devices(site, user, date_range) do
       json(conn, %{data: data})
     else
-      {:error, :not_found} ->
-        conn |> put_status(404) |> json(%{error: "site not found"})
-
-      {:error, :unauthorized} ->
-        conn |> put_status(403) |> json(%{error: "unauthorized"})
-
-      {:error, reason} ->
-        conn |> put_status(500) |> json(%{error: to_string(reason)})
+      error -> handle_error(conn, error)
     end
   end
 
@@ -93,15 +59,27 @@ defmodule SpectabasWeb.API.StatsController do
          {:ok, data} <- Analytics.realtime_visitors(site) do
       json(conn, %{data: data})
     else
-      {:error, :not_found} ->
-        conn |> put_status(404) |> json(%{error: "site not found"})
-
-      {:error, :unauthorized} ->
-        conn |> put_status(403) |> json(%{error: "unauthorized"})
-
-      {:error, reason} ->
-        conn |> put_status(500) |> json(%{error: to_string(reason)})
+      error -> handle_error(conn, error)
     end
+  end
+
+  # --- Shared error handler ---
+
+  defp handle_error(conn, {:error, :not_found}) do
+    conn |> put_status(404) |> json(%{error: "site not found"})
+  end
+
+  defp handle_error(conn, {:error, :unauthorized}) do
+    conn |> put_status(403) |> json(%{error: "unauthorized"})
+  end
+
+  defp handle_error(conn, {:error, reason}) do
+    Logger.warning("[API] Query error: #{inspect(reason) |> String.slice(0, 200)}")
+    conn |> put_status(500) |> json(%{error: "internal error"})
+  end
+
+  defp handle_error(conn, _) do
+    conn |> put_status(500) |> json(%{error: "internal error"})
   end
 
   # --- Private helpers ---

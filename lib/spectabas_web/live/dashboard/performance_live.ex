@@ -35,29 +35,10 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
     %{site: site, user: user, date_range: range} = socket.assigns
     period = range_to_period(range)
 
-    overview =
-      case Analytics.rum_overview(site, user, period) do
-        {:ok, data} -> data
-        _ -> %{}
-      end
-
-    vitals =
-      case Analytics.rum_web_vitals(site, user, period) do
-        {:ok, data} -> data
-        _ -> %{}
-      end
-
-    by_page =
-      case Analytics.rum_by_page(site, user, period) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
-
-    by_device =
-      case Analytics.rum_by_device(site, user, period) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
+    overview = safe_query(fn -> Analytics.rum_overview(site, user, period) end, %{})
+    vitals = safe_query(fn -> Analytics.rum_web_vitals(site, user, period) end, %{})
+    by_page = safe_query(fn -> Analytics.rum_by_page(site, user, period) end)
+    by_device = safe_query(fn -> Analytics.rum_by_device(site, user, period) end)
 
     socket
     |> assign(:overview, overview)

@@ -47,16 +47,12 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
     period = range_to_period(range)
 
     transitions =
-      case Analytics.page_transitions(site, user, page, period) do
-        {:ok, data} -> data
-        _ -> %{previous: [], next: [], totals: %{}}
-      end
+      safe_query(
+        fn -> Analytics.page_transitions(site, user, page, period) end,
+        %{previous: [], next: [], totals: %{}}
+      )
 
-    page_perf =
-      case Analytics.rum_vitals_by_page(site, user, period, page) do
-        {:ok, data} -> data
-        _ -> %{}
-      end
+    page_perf = safe_query(fn -> Analytics.rum_vitals_by_page(site, user, period, page) end, %{})
 
     socket
     |> assign(:transitions, transitions)

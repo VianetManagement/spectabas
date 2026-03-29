@@ -274,15 +274,18 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     %{site: site, user: user} = socket.assigns
     {date_range, seg_opts} = date_range_and_opts(socket)
 
-    top_pages = safe_query(fn -> Analytics.top_pages(site, user, date_range, seg_opts) end, 5)
-    top_sources = safe_query(fn -> Analytics.top_sources(site, user, date_range) end, 5)
-    top_regions = safe_query(fn -> Analytics.top_regions(site, user, date_range) end, 5)
-    top_browsers = safe_query(fn -> Analytics.top_browsers(site, user, date_range) end, 5)
-    top_os = safe_query(fn -> Analytics.top_os(site, user, date_range) end, 5)
-    entry_pages = safe_query(fn -> Analytics.entry_pages(site, user, date_range) end, 5)
-    locations = safe_query(fn -> Analytics.visitor_locations(site, user, date_range) end, 50)
-    timezones = safe_query(fn -> Analytics.timezone_distribution(site, user, date_range) end, 5)
-    intents = safe_query(fn -> Analytics.intent_breakdown(site, user, date_range) end, 10)
+    top_pages = query_limited(fn -> Analytics.top_pages(site, user, date_range, seg_opts) end, 5)
+    top_sources = query_limited(fn -> Analytics.top_sources(site, user, date_range) end, 5)
+    top_regions = query_limited(fn -> Analytics.top_regions(site, user, date_range) end, 5)
+    top_browsers = query_limited(fn -> Analytics.top_browsers(site, user, date_range) end, 5)
+    top_os = query_limited(fn -> Analytics.top_os(site, user, date_range) end, 5)
+    entry_pages = query_limited(fn -> Analytics.entry_pages(site, user, date_range) end, 5)
+    locations = query_limited(fn -> Analytics.visitor_locations(site, user, date_range) end, 50)
+
+    timezones =
+      query_limited(fn -> Analytics.timezone_distribution(site, user, date_range) end, 5)
+
+    intents = query_limited(fn -> Analytics.intent_breakdown(site, user, date_range) end, 10)
 
     socket
     |> assign(:top_pages, top_pages)
@@ -356,11 +359,8 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     end
   end
 
-  defp safe_query(fun, limit) do
-    case fun.() do
-      {:ok, rows} when is_list(rows) -> Enum.take(rows, limit)
-      _ -> []
-    end
+  defp query_limited(fun, limit) do
+    safe_query(fun) |> Enum.take(limit)
   end
 
   defp preset_label("today"), do: "Today"
