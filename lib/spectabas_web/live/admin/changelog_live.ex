@@ -45,6 +45,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.5.1 — 2026-03-28 12:00 UTC",
+       [
+         %{
+           title: "RUM accuracy fixes",
+           description:
+             "fixed 0ms readings for page load, DOM ready, and FID. Tracker now waits for loadEventEnd before collecting navigation timing, retries up to 5 times. CWV sent on visibilitychange for accurate final values. Queries use quantileIf to exclude zero/empty values. FID correctly omitted when no user interaction occurred."
+         },
+         %{
+           title: "Per-page performance in Pages & Transitions",
+           description:
+             "Pages table now shows a color-coded load time pill (green/amber/red) for each page. Transitions page shows Load, LCP, and FCP stats for the analyzed page. Quick reference without leaving the page you're on."
+         }
+       ]},
       {"v1.5.0 — 2026-03-27 12:00 UTC",
        [
          %{

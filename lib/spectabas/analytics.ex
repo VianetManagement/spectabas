@@ -1257,15 +1257,24 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
+      # Use quantileIf to exclude zero/empty values — metrics can be 0 if
+      # loadEventEnd hadn't fired when the event was sent (now fixed in tracker)
       sql = """
       SELECT
-        round(quantile(0.5)(toFloat64OrZero(JSONExtractString(properties, 'page_load')))) AS median_page_load,
-        round(quantile(0.75)(toFloat64OrZero(JSONExtractString(properties, 'page_load')))) AS p75_page_load,
-        round(quantile(0.5)(toFloat64OrZero(JSONExtractString(properties, 'ttfb')))) AS median_ttfb,
-        round(quantile(0.75)(toFloat64OrZero(JSONExtractString(properties, 'ttfb')))) AS p75_ttfb,
-        round(quantile(0.5)(toFloat64OrZero(JSONExtractString(properties, 'fcp')))) AS median_fcp,
-        round(quantile(0.75)(toFloat64OrZero(JSONExtractString(properties, 'fcp')))) AS p75_fcp,
-        round(quantile(0.5)(toFloat64OrZero(JSONExtractString(properties, 'dom_complete')))) AS median_dom,
+        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'page_load')),
+          toFloat64OrZero(JSONExtractString(properties, 'page_load')) > 0)) AS median_page_load,
+        round(quantileIf(0.75)(toFloat64OrZero(JSONExtractString(properties, 'page_load')),
+          toFloat64OrZero(JSONExtractString(properties, 'page_load')) > 0)) AS p75_page_load,
+        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'ttfb')),
+          toFloat64OrZero(JSONExtractString(properties, 'ttfb')) > 0)) AS median_ttfb,
+        round(quantileIf(0.75)(toFloat64OrZero(JSONExtractString(properties, 'ttfb')),
+          toFloat64OrZero(JSONExtractString(properties, 'ttfb')) > 0)) AS p75_ttfb,
+        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'fcp')),
+          toFloat64OrZero(JSONExtractString(properties, 'fcp')) > 0)) AS median_fcp,
+        round(quantileIf(0.75)(toFloat64OrZero(JSONExtractString(properties, 'fcp')),
+          toFloat64OrZero(JSONExtractString(properties, 'fcp')) > 0)) AS p75_fcp,
+        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'dom_complete')),
+          toFloat64OrZero(JSONExtractString(properties, 'dom_complete')) > 0)) AS median_dom,
         count() AS samples
       FROM events
       WHERE site_id = #{ClickHouse.param(site.id)}
@@ -1284,6 +1293,8 @@ defmodule Spectabas.Analytics do
 
   @doc """
   Core Web Vitals: median and p75 for LCP, CLS, FID.
+  FID requires user interaction and is often absent — use quantileIf to exclude zeros.
+  CLS can legitimately be 0 (no layout shift), so we only filter on non-empty string.
   """
   def rum_web_vitals(%Site{} = site, %User{} = user, date_range) do
     date_range = ensure_date_range(date_range)
@@ -1291,12 +1302,18 @@ defmodule Spectabas.Analytics do
     with :ok <- authorize(site, user) do
       sql = """
       SELECT
-        round(quantile(0.5)(toFloat64OrZero(JSONExtractString(properties, 'lcp')))) AS median_lcp,
-        round(quantile(0.75)(toFloat64OrZero(JSONExtractString(properties, 'lcp')))) AS p75_lcp,
-        round(quantile(0.5)(toFloat64OrZero(JSONExtractString(properties, 'cls')) * 1000) / 1000, 3) AS median_cls,
-        round(quantile(0.75)(toFloat64OrZero(JSONExtractString(properties, 'cls')) * 1000) / 1000, 3) AS p75_cls,
-        round(quantile(0.5)(toFloat64OrZero(JSONExtractString(properties, 'fid')))) AS median_fid,
-        round(quantile(0.75)(toFloat64OrZero(JSONExtractString(properties, 'fid')))) AS p75_fid,
+        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'lcp')),
+          toFloat64OrZero(JSONExtractString(properties, 'lcp')) > 0)) AS median_lcp,
+        round(quantileIf(0.75)(toFloat64OrZero(JSONExtractString(properties, 'lcp')),
+          toFloat64OrZero(JSONExtractString(properties, 'lcp')) > 0)) AS p75_lcp,
+        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'cls')),
+          JSONExtractString(properties, 'cls') != ''), 3) AS median_cls,
+        round(quantileIf(0.75)(toFloat64OrZero(JSONExtractString(properties, 'cls')),
+          JSONExtractString(properties, 'cls') != ''), 3) AS p75_cls,
+        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'fid')),
+          JSONExtractString(properties, 'fid') != '')) AS median_fid,
+        round(quantileIf(0.75)(toFloat64OrZero(JSONExtractString(properties, 'fid')),
+          JSONExtractString(properties, 'fid') != '')) AS p75_fid,
         count() AS samples
       FROM events
       WHERE site_id = #{ClickHouse.param(site.id)}
@@ -1323,10 +1340,14 @@ defmodule Spectabas.Analytics do
       sql = """
       SELECT
         url_path,
-        round(quantile(0.5)(toFloat64OrZero(JSONExtractString(properties, 'page_load')))) AS median_load,
-        round(quantile(0.75)(toFloat64OrZero(JSONExtractString(properties, 'page_load')))) AS p75_load,
-        round(quantile(0.5)(toFloat64OrZero(JSONExtractString(properties, 'ttfb')))) AS median_ttfb,
-        round(avg(toFloat64OrZero(JSONExtractString(properties, 'transfer_size')))) AS avg_size,
+        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'page_load')),
+          toFloat64OrZero(JSONExtractString(properties, 'page_load')) > 0)) AS median_load,
+        round(quantileIf(0.75)(toFloat64OrZero(JSONExtractString(properties, 'page_load')),
+          toFloat64OrZero(JSONExtractString(properties, 'page_load')) > 0)) AS p75_load,
+        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'ttfb')),
+          toFloat64OrZero(JSONExtractString(properties, 'ttfb')) > 0)) AS median_ttfb,
+        round(avgIf(toFloat64OrZero(JSONExtractString(properties, 'transfer_size')),
+          toFloat64OrZero(JSONExtractString(properties, 'transfer_size')) > 0)) AS avg_size,
         count() AS samples
       FROM events
       WHERE site_id = #{ClickHouse.param(site.id)}
@@ -1353,9 +1374,12 @@ defmodule Spectabas.Analytics do
       sql = """
       SELECT
         device_type,
-        round(quantile(0.5)(toFloat64OrZero(JSONExtractString(properties, 'page_load')))) AS median_load,
-        round(quantile(0.75)(toFloat64OrZero(JSONExtractString(properties, 'page_load')))) AS p75_load,
-        round(quantile(0.5)(toFloat64OrZero(JSONExtractString(properties, 'fcp')))) AS median_fcp,
+        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'page_load')),
+          toFloat64OrZero(JSONExtractString(properties, 'page_load')) > 0)) AS median_load,
+        round(quantileIf(0.75)(toFloat64OrZero(JSONExtractString(properties, 'page_load')),
+          toFloat64OrZero(JSONExtractString(properties, 'page_load')) > 0)) AS p75_load,
+        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'fcp')),
+          toFloat64OrZero(JSONExtractString(properties, 'fcp')) > 0)) AS median_fcp,
         count() AS samples
       FROM events
       WHERE site_id = #{ClickHouse.param(site.id)}
@@ -1365,6 +1389,79 @@ defmodule Spectabas.Analytics do
         AND device_type != ''
       GROUP BY device_type
       ORDER BY samples DESC
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
+  Core Web Vitals per page: LCP, CLS, FID medians for a given URL path.
+  Used to surface vitals on Pages and Transitions views.
+  """
+  def rum_vitals_by_page(%Site{} = site, %User{} = user, date_range, url_path) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'lcp')),
+          toFloat64OrZero(JSONExtractString(properties, 'lcp')) > 0)) AS lcp,
+        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'fcp')),
+          toFloat64OrZero(JSONExtractString(properties, 'fcp')) > 0)) AS fcp,
+        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'page_load')),
+          toFloat64OrZero(JSONExtractString(properties, 'page_load')) > 0)) AS page_load,
+        count() AS samples
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND event_name = '_rum'
+        AND url_path = #{ClickHouse.param(url_path)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      """
+
+      case ClickHouse.query(sql) do
+        {:ok, [row]} -> {:ok, row}
+        {:ok, []} -> {:ok, %{}}
+        {:error, reason} -> {:error, reason}
+      end
+    end
+  end
+
+  @doc """
+  Quick CWV summary for top pages — used on the Pages dashboard.
+  Returns LCP + page_load medians grouped by url_path.
+  """
+  def rum_vitals_summary(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        r.url_path,
+        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(r.properties, 'page_load')),
+          toFloat64OrZero(JSONExtractString(r.properties, 'page_load')) > 0)) AS page_load,
+        cw.lcp
+      FROM events r
+      LEFT JOIN (
+        SELECT
+          url_path,
+          round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'lcp')),
+            toFloat64OrZero(JSONExtractString(properties, 'lcp')) > 0)) AS lcp
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND event_name = '_cwv'
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY url_path
+      ) cw ON r.url_path = cw.url_path
+      WHERE r.site_id = #{ClickHouse.param(site.id)}
+        AND r.event_name = '_rum'
+        AND r.timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND r.timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      GROUP BY r.url_path, cw.lcp
+      ORDER BY page_load DESC
+      LIMIT 50
       """
 
       ClickHouse.query(sql)

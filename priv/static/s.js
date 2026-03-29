@@ -353,7 +353,6 @@
 
   function collectRUM() {
     if (rumSent) return;
-    rumSent = true;
 
     var perf = {};
 
@@ -361,6 +360,9 @@
     try {
       var nav = performance.getEntriesByType("navigation")[0];
       if (nav) {
+        // loadEventEnd is 0 until the load event has fully fired — abort and retry
+        if (nav.loadEventEnd === 0) return;
+
         perf.dns = Math.round(nav.domainLookupEnd - nav.domainLookupStart);
         perf.tcp = Math.round(nav.connectEnd - nav.connectStart);
         perf.tls = nav.secureConnectionStart > 0 ? Math.round(nav.connectEnd - nav.secureConnectionStart) : 0;
@@ -384,13 +386,16 @@
       }
     } catch (e) {}
 
-    if (Object.keys(perf).length > 0) {
+    // Only send if we got meaningful data (page_load > 0)
+    if (perf.page_load && perf.page_load > 0) {
+      rumSent = true;
       sendEvent("custom", { n: "_rum", p: mapToStrings(perf) });
     }
   }
 
   // Collect Core Web Vitals via PerformanceObserver (LCP, CLS, FID)
   var cwv = {};
+  var cwvSent = false;
 
   try {
     // Largest Contentful Paint
@@ -422,22 +427,47 @@
     }).observe({ type: "first-input", buffered: true });
   } catch (e) {}
 
-  // Send RUM + CWV after page is fully loaded
+  function sendCWV() {
+    if (cwvSent || !cwv.lcp) return;
+    cwvSent = true;
+    sendEvent("custom", { n: "_cwv", p: mapToStrings(cwv) });
+  }
+
+  // Send CWV on visibilitychange (catches tab close / navigate away — final LCP + CLS values)
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden") {
+      sendCWV();
+    }
+  });
+
+  // Send RUM after page is fully loaded, with retry for loadEventEnd
+  function scheduleRUM() {
+    collectRUM();
+    // If loadEventEnd wasn't ready, retry a few times
+    if (!rumSent) {
+      var retries = 0;
+      var interval = setInterval(function () {
+        collectRUM();
+        retries++;
+        if (rumSent || retries >= 5) clearInterval(interval);
+      }, 1000);
+    }
+  }
+
   if (typeof requestIdleCallback !== "undefined") {
     requestIdleCallback(function () {
-      setTimeout(function () {
-        if (cwv.lcp) sendEvent("custom", { n: "_cwv", p: mapToStrings(cwv) });
-        collectRUM();
-      }, 2000);
+      setTimeout(scheduleRUM, 1000);
     });
   } else {
     window.addEventListener("load", function () {
-      setTimeout(function () {
-        if (cwv.lcp) sendEvent("custom", { n: "_cwv", p: mapToStrings(cwv) });
-        collectRUM();
-      }, 3000);
+      setTimeout(scheduleRUM, 2000);
     });
   }
+
+  // Fallback: send CWV after 10s if visibilitychange hasn't fired
+  setTimeout(function () {
+    sendCWV();
+  }, 10000);
 
   function mapToStrings(obj) {
     var result = {};

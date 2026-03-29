@@ -52,12 +52,34 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
 
   defp load_pages(socket) do
     %{site: site, user: user, date_range: range} = socket.assigns
+    period = range_to_atom(range)
 
     pages =
-      case Analytics.top_pages(site, user, range_to_atom(range)) do
+      case Analytics.top_pages(site, user, period) do
         {:ok, pages} -> pages
         _ -> []
       end
+
+    # Fetch per-page RUM vitals summary and merge into page rows
+    vitals_map =
+      case Analytics.rum_vitals_summary(site, user, period) do
+        {:ok, rows} ->
+          Map.new(rows, fn r -> {r["url_path"], r} end)
+
+        _ ->
+          %{}
+      end
+
+    pages =
+      Enum.map(pages, fn page ->
+        path = page["url_path"]
+        rum = Map.get(vitals_map, path, %{})
+
+        Map.merge(page, %{
+          "page_load" => rum["page_load"],
+          "lcp" => rum["lcp"]
+        })
+      end)
 
     assign(socket, :pages, pages)
   end
@@ -125,11 +147,14 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
                   sort_by={@sort_by}
                   sort_dir={@sort_dir}
                 />
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Load Time
+                </th>
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr :if={@pages == []}>
-                <td colspan="4" class="px-6 py-8 text-center text-gray-500">
+                <td colspan="5" class="px-6 py-8 text-center text-gray-500">
                   No data for this period.
                 </td>
               </tr>
@@ -153,6 +178,9 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right">
                   {format_duration(Map.get(page, "avg_duration", 0))}
+                </td>
+                <td class="px-6 py-4 text-sm text-right tabular-nums">
+                  <.speed_pill ms={to_num(page["page_load"])} />
                 </td>
               </tr>
             </tbody>
@@ -178,6 +206,30 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
     """
   end
 
+  defp speed_pill(assigns) do
+    ms = assigns.ms
+
+    {label, classes} =
+      cond do
+        ms == 0 -> {"—", "text-gray-400"}
+        ms <= 1000 -> {format_ms(ms), "text-green-700 bg-green-50 border border-green-200"}
+        ms <= 3000 -> {format_ms(ms), "text-amber-700 bg-amber-50 border border-amber-200"}
+        true -> {format_ms(ms), "text-red-700 bg-red-50 border border-red-200"}
+      end
+
+    assigns = Map.merge(assigns, %{label: label, classes: classes})
+
+    ~H"""
+    <span :if={@ms > 0} class={"inline-block px-2 py-0.5 rounded text-xs font-medium #{@classes}"}>
+      {@label}
+    </span>
+    <span :if={@ms == 0} class="text-gray-400 text-xs">—</span>
+    """
+  end
+
+  defp format_ms(ms) when ms >= 1000, do: "#{Float.round(ms / 1000, 1)}s"
+  defp format_ms(ms), do: "#{ms}ms"
+
   defp format_duration(seconds) when is_number(seconds) do
     minutes = div(trunc(seconds), 60)
     secs = rem(trunc(seconds), 60)
@@ -185,4 +237,16 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
   end
 
   defp format_duration(_), do: "0m 0s"
+
+  defp to_num(n) when is_integer(n), do: n
+  defp to_num(n) when is_float(n), do: trunc(n)
+
+  defp to_num(n) when is_binary(n) do
+    case Integer.parse(n) do
+      {i, _} -> i
+      :error -> 0
+    end
+  end
+
+  defp to_num(_), do: 0
 end

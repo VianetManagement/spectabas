@@ -40,14 +40,23 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
 
   defp load_data(socket) do
     %{site: site, user: user, date_range: range, current_page: page} = socket.assigns
+    period = range_to_atom(range)
 
     transitions =
-      case Analytics.page_transitions(site, user, page, range_to_atom(range)) do
+      case Analytics.page_transitions(site, user, page, period) do
         {:ok, data} -> data
         _ -> %{previous: [], next: [], totals: %{}}
       end
 
-    assign(socket, :transitions, transitions)
+    page_perf =
+      case Analytics.rum_vitals_by_page(site, user, period, page) do
+        {:ok, data} -> data
+        _ -> %{}
+      end
+
+    socket
+    |> assign(:transitions, transitions)
+    |> assign(:page_perf, page_perf)
   end
 
   defp range_to_atom("24h"), do: :day
@@ -119,6 +128,17 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
             <span>{@transitions.totals["unique_visitors"] || 0} visitors</span>
             <span>{@transitions.totals["sessions"] || 0} sessions</span>
           </div>
+          <div
+            :if={to_num(@page_perf["samples"]) > 0}
+            class="flex justify-center gap-6 mt-3 pt-3 border-t border-indigo-200"
+          >
+            <.perf_stat label="Load" value={to_num(@page_perf["page_load"])} unit="ms" />
+            <.perf_stat label="LCP" value={to_num(@page_perf["lcp"])} unit="ms" />
+            <.perf_stat label="FCP" value={to_num(@page_perf["fcp"])} unit="ms" />
+            <span class="text-xs text-indigo-400 self-end">
+              {to_num(@page_perf["samples"])} RUM samples
+            </span>
+          </div>
         </div>
 
         <%!-- Transition flow --%>
@@ -182,4 +202,38 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
     </.dashboard_layout>
     """
   end
+
+  defp perf_stat(assigns) do
+    ~H"""
+    <div :if={@value > 0} class="text-center">
+      <div class={"text-lg font-bold #{speed_color(@value)}"}>
+        {format_ms(@value)}
+      </div>
+      <div class="text-xs text-indigo-500">{@label}</div>
+    </div>
+    """
+  end
+
+  defp speed_color(ms) do
+    cond do
+      ms <= 1000 -> "text-green-700"
+      ms <= 3000 -> "text-amber-700"
+      true -> "text-red-700"
+    end
+  end
+
+  defp format_ms(ms) when ms >= 1000, do: "#{Float.round(ms / 1000, 1)}s"
+  defp format_ms(ms), do: "#{ms}ms"
+
+  defp to_num(n) when is_integer(n), do: n
+  defp to_num(n) when is_float(n), do: trunc(n)
+
+  defp to_num(n) when is_binary(n) do
+    case Integer.parse(n) do
+      {i, _} -> i
+      :error -> 0
+    end
+  end
+
+  defp to_num(_), do: 0
 end
