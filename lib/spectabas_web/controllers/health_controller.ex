@@ -24,10 +24,36 @@ defmodule SpectabasWeb.HealthController do
       sites: test_sites(),
       write_test: test_write(),
       geoip_status: test_geoip(),
-      geo_sample: test_geo_sample()
+      geo_sample: test_geo_sample(),
+      rum_debug: test_rum_debug()
     }
 
     json(conn, results)
+  end
+
+  defp test_rum_debug do
+    if Process.whereis(Spectabas.ClickHouse) do
+      sql = """
+      SELECT
+        event_name,
+        count() AS total,
+        countIf(JSONExtractString(properties, 'page_load') != '') AS has_page_load,
+        countIf(JSONExtractString(properties, 'ttfb') != '') AS has_ttfb,
+        countIf(JSONExtractString(properties, 'dom_complete') != '') AS has_dom_complete,
+        countIf(JSONExtractString(properties, 'fcp') != '') AS has_fcp
+      FROM events
+      WHERE event_name IN ('_rum', '_cwv')
+        AND timestamp >= now() - INTERVAL 7 DAY
+      GROUP BY event_name
+      """
+
+      case Spectabas.ClickHouse.query(sql) do
+        {:ok, rows} -> rows
+        {:error, e} -> "error: #{inspect(e) |> String.slice(0, 200)}"
+      end
+    else
+      "not_started"
+    end
   end
 
   defp test_clickhouse_ping do
