@@ -297,65 +297,226 @@ defmodule SpectabasWeb.DocsLive do
             id: "js-api",
             title: "JavaScript API",
             body: """
-            The tracker exposes a `window.Spectabas` object for custom tracking:
+            The tracker exposes a global `window.Spectabas` object with methods for custom event tracking, visitor identification, opt-out, and ecommerce. The API is available immediately after the tracker script loads.
 
-            ### Track Custom Events
+            All methods are fire-and-forget — they send data via `navigator.sendBeacon` (with `fetch` fallback) and never block your page. Payloads over 8KB are silently dropped.
+
+            ---
+
+            ### `Spectabas.track(name, props)`
+
+            Send a custom event. Custom events appear in your dashboard under **Goals** and can be used in **Funnels**.
+
+            | Parameter | Type | Required | Description |
+            |-----------|------|----------|-------------|
+            | `name` | string | yes | Event name. Use lowercase with underscores (e.g. `signup_complete`). Names starting with `_` are reserved for internal events. |
+            | `props` | object | no | Key-value pairs of string properties. All values are converted to strings server-side. Max 20 properties per event. |
 
             ```javascript
-            // Track a custom event
-            Spectabas.track("signup", { plan: "pro" });
+            // Basic event
+            Spectabas.track("signup");
+
+            // Event with properties
+            Spectabas.track("signup", { plan: "pro", source: "pricing_page" });
 
             // Track a button click
             document.querySelector("#cta").addEventListener("click", function() {
               Spectabas.track("cta_click", { location: "header" });
             });
+
+            // Track form submission
+            document.querySelector("#contact-form").addEventListener("submit", function() {
+              Spectabas.track("form_submit", {
+                form: "contact",
+                page: window.location.pathname
+              });
+            });
+
+            // Track file downloads
+            document.querySelectorAll("a[href$='.pdf']").forEach(function(link) {
+              link.addEventListener("click", function() {
+                Spectabas.track("download", { file: link.href });
+              });
+            });
             ```
 
-            ### Identify Visitors
+            ---
 
-            Associate the current visitor with user traits:
+            ### `Spectabas.identify(traits)`
+
+            Associate the current visitor with user traits. Traits are stored on the visitor record and visible in the **Visitor Log** and **Visitor Profile** pages. Call this after a user logs in or when you know who they are.
+
+            | Parameter | Type | Required | Description |
+            |-----------|------|----------|-------------|
+            | `traits` | object | yes | Key-value pairs describing the visitor. Common keys: `email`, `user_id`, `name`, `plan`, `company`. All values are converted to strings. |
 
             ```javascript
             // After user logs in
             Spectabas.identify({
-              email: "user@example.com",
+              email: "jane@example.com",
               user_id: "usr_123",
               plan: "enterprise"
             });
+
+            // Identify with any custom traits
+            Spectabas.identify({
+              user_id: "usr_456",
+              company: "Acme Inc",
+              role: "admin",
+              signup_date: "2026-01-15"
+            });
             ```
 
-            ### Opt Out
+            > **Privacy note:** Identify data is sent to your Spectabas analytics subdomain only — never to third parties. In GDPR-on mode, consider whether identifying visitors aligns with your privacy policy.
 
-            Let visitors opt out of tracking:
+            ---
+
+            ### `Spectabas.optOut()`
+
+            Opt the current visitor out of all tracking. Sets a `_sab_optout` cookie (2-year expiry) that prevents the tracker from sending any events on future page loads. No data is sent after calling this method.
 
             ```javascript
-            // Sets a _sab_optout cookie that prevents all tracking
-            Spectabas.optOut();
+            // Add to your privacy settings / cookie banner
+            document.querySelector("#opt-out-btn").addEventListener("click", function() {
+              Spectabas.optOut();
+              alert("You have been opted out of analytics.");
+            });
             ```
 
-            ### Ecommerce Tracking
+            To check if a visitor is opted out (e.g. to update UI state):
 
             ```javascript
-            // Track an order
+            var isOptedOut = document.cookie.indexOf("_sab_optout") !== -1;
+            ```
+
+            > **Note:** There is no `optIn()` method. To reverse an opt-out, delete the `_sab_optout` cookie.
+
+            ---
+
+            ### `Spectabas.ecommerce.addOrder(order)`
+
+            Track a completed order. Order data appears in the **Ecommerce** dashboard with revenue totals, average order value, and top products.
+
+            | Property | Type | Required | Description |
+            |----------|------|----------|-------------|
+            | `order_id` | string | yes | Unique order identifier. Duplicate order IDs are deduplicated. |
+            | `revenue` | string | yes | Total order value (e.g. `"99.99"`). Use strings to avoid floating-point issues. |
+            | `currency` | string | no | ISO 4217 currency code (e.g. `"USD"`, `"EUR"`). Defaults to site currency. |
+
+            ```javascript
             Spectabas.ecommerce.addOrder({
               order_id: "ORD-123",
-              revenue: "99.99",
+              revenue: "149.98",
+              currency: "USD"
+            });
+            ```
+
+            ---
+
+            ### `Spectabas.ecommerce.addItem(item)`
+
+            Track an individual line item within an order. Call once per item, after `addOrder`.
+
+            | Property | Type | Required | Description |
+            |----------|------|----------|-------------|
+            | `order_id` | string | yes | Must match the `order_id` from `addOrder`. |
+            | `sku` | string | yes | Product SKU or identifier. |
+            | `name` | string | yes | Product display name. |
+            | `price` | string | yes | Unit price as a string (e.g. `"49.99"`). |
+            | `quantity` | string | no | Number of units. Defaults to `"1"`. |
+            | `category` | string | no | Product category (e.g. `"Widgets"`). |
+
+            ```javascript
+            // Track each item in the order
+            Spectabas.ecommerce.addItem({
+              order_id: "ORD-123",
+              sku: "WIDGET-BLUE",
+              name: "Blue Widget",
+              price: "49.99",
+              quantity: "2",
+              category: "Widgets"
+            });
+
+            Spectabas.ecommerce.addItem({
+              order_id: "ORD-123",
+              sku: "WIDGET-RED",
+              name: "Red Widget",
+              price: "49.99",
+              quantity: "1",
+              category: "Widgets"
+            });
+            ```
+
+            **Full checkout example:**
+
+            ```javascript
+            // On your order confirmation / thank-you page:
+            var orderId = "ORD-" + Date.now();
+
+            Spectabas.ecommerce.addOrder({
+              order_id: orderId,
+              revenue: "149.97",
               currency: "USD"
             });
 
-            // Track individual items
-            Spectabas.ecommerce.addItem({
-              order_id: "ORD-123",
-              sku: "WIDGET-1",
-              name: "Blue Widget",
-              price: "49.99",
-              quantity: "2"
+            cart.items.forEach(function(item) {
+              Spectabas.ecommerce.addItem({
+                order_id: orderId,
+                sku: item.sku,
+                name: item.name,
+                price: String(item.price),
+                quantity: String(item.qty)
+              });
             });
             ```
 
+            ---
+
             ### SPA Support
 
-            The tracker automatically detects single-page app navigation via `history.pushState` and `popstate` events. No additional configuration needed for React, Vue, Next.js, etc.
+            The tracker automatically detects single-page app navigation by patching `history.pushState` and listening for `popstate` events. A new pageview is fired on each route change with correct duration tracking for the previous page.
+
+            **No additional configuration needed** for React, Vue, Next.js, Nuxt, Svelte, Angular, or any framework that uses the History API.
+
+            ---
+
+            ### Automatic Collection (No Code Required)
+
+            The following data is collected automatically without any API calls:
+
+            | What | How |
+            |------|-----|
+            | **Pageviews** | Sent on every page load and SPA navigation |
+            | **Duration** | Time on page, sent when the tab is hidden or the user navigates away |
+            | **Referrer** | `document.referrer` captured on each pageview |
+            | **Screen size** | `screen.width` and `screen.height` |
+            | **UTM parameters** | Extracted from URL and persisted in sessionStorage (GDPR-off only) |
+            | **Site search** | Queries captured from `q`, `query`, `search`, `s`, `keyword` URL params |
+            | **Performance (RUM)** | Page load timing and Core Web Vitals (LCP, CLS, FID) via PerformanceObserver |
+            | **Bot detection** | WebDriver, headless browser, and interaction signals |
+            | **Form abuse** | Suspicious form submission patterns (rapid submits, paste floods, no interaction) |
+
+            ---
+
+            ### Script Attributes
+
+            Configure the tracker via `data-` attributes on the script tag:
+
+            | Attribute | Values | Default | Description |
+            |-----------|--------|---------|-------------|
+            | `data-id` | string | (required) | Your site's public key. Found in Site Settings. |
+            | `data-gdpr` | `"on"` / `"off"` | `"on"` | GDPR mode. `"on"` uses fingerprint-only identification (no cookies). `"off"` enables cookie-based visitor tracking and UTM persistence. |
+            | `data-xd` | comma-separated domains | (none) | Cross-domain tracking. List domains that share visitor identity (e.g. `"shop.example.com,blog.example.com"`). |
+
+            ```html
+            <!-- Minimal (GDPR-on, no cross-domain) -->
+            <script defer data-id="YOUR_KEY" src="https://b.example.com/assets/v1.js"></script>
+
+            <!-- GDPR-off with cross-domain tracking -->
+            <script defer data-id="YOUR_KEY" data-gdpr="off"
+              data-xd="shop.example.com,blog.example.com"
+              src="https://b.example.com/assets/v1.js"></script>
+            ```
             """
           }
         ]
