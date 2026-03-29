@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.6.3 — 2026-03-29 03:00 UTC",
+       [
+         %{
+           title: "RUM: collect all metrics reliably",
+           description:
+             "fixed bug where sending TTFB early set rumSent=true, preventing page_load/dom_complete from ever being captured. Now polls for loadEventEnd at 0.5s, 1.5s, 3s, 5s, 8s intervals — only sends once page_load is ready. Force-sends on visibilitychange (visitor leaving) or 10s timeout with whatever metrics are available. One event per page load, complete data."
+         }
+       ]},
       {"v1.6.2 — 2026-03-29 02:00 UTC",
        [
          %{

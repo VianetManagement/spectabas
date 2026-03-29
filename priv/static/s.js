@@ -351,10 +351,11 @@
 
   var rumSent = false;
 
-  function collectRUM() {
+  function collectRUM(force) {
     if (rumSent) return;
 
     var perf = {};
+    var hasPageLoad = false;
 
     // Navigation timing — try PerformanceNavigationTiming first, fall back to performance.timing
     try {
@@ -365,11 +366,12 @@
         perf.tls = nav.secureConnectionStart > 0 ? Math.round(nav.connectEnd - nav.secureConnectionStart) : 0;
         perf.ttfb = Math.round(nav.responseStart - nav.requestStart);
         perf.download = Math.round(nav.responseEnd - nav.responseStart);
-        // These may be 0 if the page hasn't fully loaded yet — that's fine,
-        // the server uses quantileIf to exclude zeros from aggregations
         if (nav.domInteractive > 0) perf.dom_interactive = Math.round(nav.domInteractive - nav.navigationStart);
         if (nav.domContentLoadedEventEnd > 0) perf.dom_complete = Math.round(nav.domContentLoadedEventEnd - nav.navigationStart);
-        if (nav.loadEventEnd > 0) perf.page_load = Math.round(nav.loadEventEnd - nav.navigationStart);
+        if (nav.loadEventEnd > 0) {
+          perf.page_load = Math.round(nav.loadEventEnd - nav.navigationStart);
+          hasPageLoad = true;
+        }
         perf.transfer_size = nav.transferSize || 0;
         perf.dom_size = document.getElementsByTagName("*").length;
       } else if (performance.timing) {
@@ -377,7 +379,10 @@
         if (t.requestStart > 0) perf.ttfb = Math.round(t.responseStart - t.requestStart);
         if (t.domInteractive > 0) perf.dom_interactive = Math.round(t.domInteractive - t.navigationStart);
         if (t.domContentLoadedEventEnd > 0) perf.dom_complete = Math.round(t.domContentLoadedEventEnd - t.navigationStart);
-        if (t.loadEventEnd > 0) perf.page_load = Math.round(t.loadEventEnd - t.navigationStart);
+        if (t.loadEventEnd > 0) {
+          perf.page_load = Math.round(t.loadEventEnd - t.navigationStart);
+          hasPageLoad = true;
+        }
         perf.dom_size = document.getElementsByTagName("*").length;
       }
     } catch (e) {}
@@ -392,8 +397,8 @@
       }
     } catch (e) {}
 
-    // Send if we have at least TTFB (available almost immediately)
-    if (perf.ttfb && perf.ttfb > 0) {
+    // Wait for page_load if possible — send early only if forced (timeout/visibilitychange)
+    if (perf.ttfb && perf.ttfb > 0 && (hasPageLoad || force)) {
       rumSent = true;
       sendEvent("custom", { n: "_rum", p: mapToStrings(perf) });
     }
@@ -439,28 +444,36 @@
     sendEvent("custom", { n: "_cwv", p: mapToStrings(cwv) });
   }
 
-  // Send CWV on visibilitychange (catches tab close / navigate away — final LCP + CLS values)
+  // CWV visibilitychange handled in combined RUM+CWV listener below
+
+  // Poll for loadEventEnd at increasing intervals.
+  // Most pages: load fires within 1-3s → caught by early polls.
+  // Heavy pages (WordPress+images): load may take 10-20s → caught by later polls.
+  // Visitor leaves before load: caught by visibilitychange force-send.
+  var rumDelays = [500, 1500, 3000, 5000, 8000];
+  for (var ri = 0; ri < rumDelays.length; ri++) {
+    (function (delay) {
+      setTimeout(function () { collectRUM(false); }, delay);
+    })(rumDelays[ri]);
+  }
+
+  // After load event, loadEventEnd is guaranteed ready
+  window.addEventListener("load", function () {
+    setTimeout(function () { collectRUM(false); }, 200);
+  });
+
+  // Force-send whatever we have if visitor is leaving (tab hidden / navigate away)
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "hidden") {
+      collectRUM(true);
       sendCWV();
     }
   });
 
-  // Collect RUM immediately — TTFB is available right away, no need to wait
-  // for load event. Heavy pages (WordPress + images) may never fire load
-  // before the visitor leaves.
-  setTimeout(function () {
-    collectRUM();
-    // Retry to pick up page_load/dom_complete if they weren't ready yet
-    if (!rumSent) setTimeout(collectRUM, 2000);
-  }, 100);
+  // Final force-send fallback at 10s
+  setTimeout(function () { collectRUM(true); }, 10000);
 
-  // Also try after load event to capture page_load metric
-  window.addEventListener("load", function () {
-    setTimeout(collectRUM, 500);
-  });
-
-  // CWV: try at 5s, on visibilitychange (already registered above), and 10s fallback
+  // CWV: try at 5s and 10s
   setTimeout(sendCWV, 5000);
   setTimeout(sendCWV, 10000);
 
