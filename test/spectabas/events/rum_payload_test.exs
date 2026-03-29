@@ -403,5 +403,29 @@ defmodule Spectabas.Events.RumPayloadTest do
       assert script =~ "v === v",
              "mapToStrings must filter NaN values (v === v is false for NaN)"
     end
+
+    test "uses nav.startTime NOT nav.navigationStart for PerformanceNavigationTiming", %{
+      script: script
+    } do
+      # PerformanceNavigationTiming has startTime (always 0), NOT navigationStart.
+      # navigationStart only exists on the deprecated performance.timing object.
+      # Using nav.navigationStart produces undefined, and number - undefined = NaN.
+      assert script =~ "nav.startTime",
+             "Must use nav.startTime for PerformanceNavigationTiming baseline"
+
+      # Verify we use navStart variable (derived from nav.startTime) for the calculations
+      assert script =~ ~r/nav\.domInteractive - navStart/,
+             "dom_interactive must subtract navStart (from nav.startTime), not nav.navigationStart"
+
+      assert script =~ ~r/nav\.loadEventEnd - navStart/,
+             "page_load must subtract navStart (from nav.startTime), not nav.navigationStart"
+
+      assert script =~ ~r/nav\.domContentLoadedEventEnd - navStart/,
+             "dom_complete must subtract navStart (from nav.startTime), not nav.navigationStart"
+
+      # Ensure the deprecated property name is NOT used on the modern API path
+      refute script =~ ~r/nav\.navigationStart/,
+             "Must NOT use nav.navigationStart — it doesn't exist on PerformanceNavigationTiming"
+    end
   end
 end

@@ -46,7 +46,7 @@ Visit [localhost:4000](http://localhost:4000).
 ## Tests
 
 ```bash
-mix test          # 306 tests, no ClickHouse needed
+mix test          # 319 tests, no ClickHouse needed
 mix format        # code formatting
 mix compile --warnings-as-errors  # strict compilation
 ```

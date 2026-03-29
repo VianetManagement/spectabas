@@ -58,7 +58,7 @@ mix ecto.setup
 mix phx.server
 ```
 
-Tests: `mix test` (306 tests, no ClickHouse needed)
+Tests: `mix test` (319 tests, no ClickHouse needed)
 Format: `mix format`
 Compile check: `mix compile --warnings-as-errors`
 
@@ -185,4 +185,4 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Chart updates**: Use `push_event` to push data to Chart.js hooks (not data attributes)
 - **Visitor dedup**: GDPR-off visitors without cookies are matched by fingerprint via `Visitors.find_by_fingerprint/2` before creating a new record
 - **Timezone handling**: Requires `tzdata` library — without it, `DateTime.shift_zone` silently fails to UTC. All dashboard date boundaries use site timezone via `dates_to_utc_range/3`. Rolling periods (24h, 7d, 30d) are UTC-relative and timezone-independent. Only "Today" and date-picker ranges need timezone conversion.
-- **RUM collection**: Tracker sends `_rum` (nav timing) and `_cwv` (Core Web Vitals) custom events. Uses `performance.getEntriesByType("navigation")` with `performance.timing` fallback. Queries use `quantileIf` to exclude zeros (FID requires user interaction, may be absent).
+- **RUM collection**: Tracker sends `_rum` (nav timing) and `_cwv` (Core Web Vitals) custom events. Uses `performance.getEntriesByType("navigation")` with `performance.timing` fallback. IMPORTANT: PerformanceNavigationTiming uses `nav.startTime` (always 0) for the navigation baseline — NOT `nav.navigationStart` which only exists on the deprecated `performance.timing`. Queries use `quantileIf` to exclude zeros. ClickHouse `quantileIf` returns `nan` when no rows match — `parse_rows` sanitizes `nan`→`null` before JSON parsing.
