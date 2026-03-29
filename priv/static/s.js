@@ -498,25 +498,20 @@
     sendEvent("custom", { n: "_cwv", p: mapToStrings(cwv) });
   }
 
-  // CWV visibilitychange handled in combined RUM+CWV listener below
+  // RUM scheduling: event-driven, no polling.
+  // Primary trigger: load event (when loadEventEnd is guaranteed ready).
+  // Safety net: visibilitychange (visitor leaves before load fires).
+  // Final fallback: 30s timeout (in case load event never fires).
+  // This eliminates the race condition where early force-sends at 10s
+  // block later complete sends when load fires at 12-20s on heavy pages.
 
-  // Poll for loadEventEnd at increasing intervals.
-  // Most pages: load fires within 1-3s → caught by early polls.
-  // Heavy pages (WordPress+images): load may take 10-20s → caught by later polls.
-  // Visitor leaves before load: caught by visibilitychange force-send.
-  var rumDelays = [500, 1500, 3000, 5000, 8000];
-  for (var ri = 0; ri < rumDelays.length; ri++) {
-    (function (delay) {
-      setTimeout(function () { collectRUM(false); }, delay);
-    })(rumDelays[ri]);
-  }
-
-  // After load event, loadEventEnd is guaranteed ready
   window.addEventListener("load", function () {
-    setTimeout(function () { collectRUM(false); }, 200);
+    // After load fires, wait 500ms for loadEventEnd to populate in the
+    // PerformanceNavigationTiming entry, then collect complete metrics.
+    setTimeout(function () { collectRUM(false); }, 500);
   });
 
-  // Force-send whatever we have if visitor is leaving (tab hidden / navigate away)
+  // Safety net: if visitor leaves before load fires, force-send whatever we have
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "hidden") {
       collectRUM(true);
@@ -524,8 +519,9 @@
     }
   });
 
-  // Final force-send fallback at 10s
-  setTimeout(function () { collectRUM(true); }, 10000);
+  // Final fallback: 30s timeout force-sends (covers edge cases where
+  // load event never fires, e.g. streaming pages, broken resources)
+  setTimeout(function () { collectRUM(true); }, 30000);
 
   // CWV: try at 5s and 10s
   setTimeout(sendCWV, 5000);

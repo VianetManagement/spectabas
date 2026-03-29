@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.9.1 — 2026-03-28 02:05 UTC",
+       [
+         %{
+           title: "Fix RUM page load metrics always showing 0",
+           description:
+             "Root cause: the tracker's polling-based RUM scheduling (500ms to 8s polls + 10s force-send) created a race condition on heavy pages. When loadEventEnd was still 0 at the 10s force timeout, the tracker sent TTFB/FCP without page_load and set rumSent=true, blocking the load event handler (which fires at 12-20s on WordPress sites) from ever sending complete data. Fixed by replacing polling with event-driven triggers: load event as primary trigger (with 500ms delay for loadEventEnd to populate), visibilitychange as safety net for early departures, and a 30s final fallback. DOM Ready, Full Load, Median Load, and P75 Load now correctly appear on the Performance dashboard."
+         }
+       ]},
       {"v1.9.0 — 2026-03-29 08:00 UTC",
        [
          %{

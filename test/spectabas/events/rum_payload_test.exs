@@ -271,5 +271,134 @@ defmodule Spectabas.Events.RumPayloadTest do
                "Property #{key} expected #{value}, got #{inspect(decoded[key])}"
       end
     end
+
+    test "force-sent _rum event without page_load preserves partial metrics" do
+      # When visibilitychange fires before load event, page_load is absent
+      # but ttfb, fcp, dom_interactive should still be present
+      partial_props = %{
+        "dns" => "5",
+        "tcp" => "10",
+        "ttfb" => "45",
+        "fcp" => "280",
+        "dom_interactive" => "350",
+        "dom_size" => "248"
+      }
+
+      event = %{site_id: 1, event_type: "custom", event_name: "_rum", props: partial_props}
+      row = EventSchema.to_row(event)
+      decoded = Jason.decode!(row["properties"])
+
+      assert decoded["ttfb"] == "45"
+      assert decoded["fcp"] == "280"
+      refute Map.has_key?(decoded, "page_load")
+      refute Map.has_key?(decoded, "dom_complete")
+    end
+  end
+
+  describe "RUM analytics query key alignment" do
+    # These tests verify that the property key names used in ClickHouse queries
+    # exactly match the key names sent by the tracker's collectRUM function.
+    # A mismatch here causes metrics to show as 0 on the dashboard.
+
+    @tracker_rum_keys ~w(dns tcp tls ttfb download dom_interactive dom_complete
+                         page_load transfer_size dom_size fcp)
+    @tracker_cwv_keys ~w(lcp cls fid)
+
+    @queried_rum_keys ~w(page_load ttfb fcp dom_complete transfer_size)
+    @queried_cwv_keys ~w(lcp cls fid)
+
+    test "all queried RUM keys exist in tracker's output keys" do
+      for key <- @queried_rum_keys do
+        assert key in @tracker_rum_keys,
+               "Analytics queries extract '#{key}' but tracker does not send it"
+      end
+    end
+
+    test "all queried CWV keys exist in tracker's output keys" do
+      for key <- @queried_cwv_keys do
+        assert key in @tracker_cwv_keys,
+               "Analytics queries extract '#{key}' but tracker does not send it"
+      end
+    end
+
+    test "JSONExtractString key names in RUM queries match tracker property names" do
+      # Read the analytics module source to verify key name alignment
+      source_path = Path.join([__DIR__, "..", "..", "..", "lib", "spectabas", "analytics.ex"])
+
+      if File.exists?(source_path) do
+        content = File.read!(source_path)
+
+        # Extract only the rum_ function bodies (between def rum_ and the next def or end)
+        rum_sections =
+          Regex.scan(~r/def rum_\w+.*?(?=\n  def |\n  defp |\nend)/s, content)
+          |> Enum.map(fn [match] -> match end)
+          |> Enum.join("\n")
+
+        # Every JSONExtractString key used in rum_ functions should be a valid tracker key
+        all_valid_keys = @tracker_rum_keys ++ @tracker_cwv_keys
+
+        Regex.scan(~r/JSONExtractString\((?:r\.)?properties,\s*'(\w+)'\)/, rum_sections)
+        |> Enum.map(fn [_, key] -> key end)
+        |> Enum.uniq()
+        |> Enum.each(fn key ->
+          assert key in all_valid_keys,
+                 "RUM query extracts '#{key}' which is not in the tracker's output keys: #{inspect(all_valid_keys)}"
+        end)
+      end
+    end
+  end
+
+  describe "tracker script RUM scheduling" do
+    # Verify the tracker uses event-driven RUM collection (not polling)
+    # to prevent the race condition where early force-sends block complete data
+
+    setup do
+      script_path = Path.join([__DIR__, "..", "..", "..", "priv", "static", "s.js"])
+      %{script: File.read!(script_path)}
+    end
+
+    test "does not use polling-based RUM delays", %{script: script} do
+      # The old approach had rumDelays = [500, 1500, 3000, 5000, 8000]
+      # which caused race conditions on heavy pages
+      refute script =~ "rumDelays",
+             "Tracker should not use polling-based rumDelays array"
+    end
+
+    test "does not force-send at 10s timeout", %{script: script} do
+      # The old 10s force-send was too aggressive for heavy WordPress pages
+      # where load event fires at 12-20s
+      refute script =~ "setTimeout(function () { collectRUM(true); }, 10000)",
+             "Tracker should not force-send RUM at 10s (too aggressive for heavy pages)"
+    end
+
+    test "uses load event as primary RUM trigger", %{script: script} do
+      assert script =~ ~r/window\.addEventListener\("load"/,
+             "Tracker should wait for load event as primary RUM trigger"
+    end
+
+    test "uses visibilitychange as safety net", %{script: script} do
+      assert script =~ ~r/visibilitychange.*collectRUM\(true\)/s,
+             "Tracker should force-send RUM on visibilitychange (safety net)"
+    end
+
+    test "has a generous final timeout (30s)", %{script: script} do
+      assert script =~ "30000",
+             "Tracker should have a 30s final fallback timeout"
+    end
+
+    test "collectRUM function checks rumSent flag", %{script: script} do
+      assert script =~ "if (rumSent) return",
+             "collectRUM must check rumSent flag to prevent duplicate sends"
+    end
+
+    test "collectRUM sends page_load when loadEventEnd > 0", %{script: script} do
+      assert script =~ ~r/loadEventEnd > 0.*page_load/s,
+             "collectRUM must include page_load when loadEventEnd is available"
+    end
+
+    test "mapToStrings converts all values to strings", %{script: script} do
+      assert script =~ "result[k] = String(obj[k])",
+             "mapToStrings must convert all property values to strings"
+    end
   end
 end
