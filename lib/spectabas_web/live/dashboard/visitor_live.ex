@@ -180,7 +180,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
                 label="ID Type"
                 value={if @visitor.cookie_id, do: "Cookie", else: "Fingerprint"}
               />
-              <.field label="GDPR" value={@visitor.gdpr_mode || "on"} />
+              <.field label="GDPR Mode" value={@site.gdpr_mode || "on"} />
               <div :if={@profile["browser_fingerprint"] && @profile["browser_fingerprint"] != ""}>
                 <dt class="text-xs font-medium text-gray-500">Browser Fingerprint</dt>
                 <dd class="mt-0.5 text-xs text-indigo-600 font-mono">
