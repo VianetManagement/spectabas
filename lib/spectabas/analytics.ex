@@ -1527,12 +1527,15 @@ defmodule Spectabas.Analytics do
   defp ensure_date_range(period) when is_atom(period), do: period_to_date_range(period)
   defp ensure_date_range(%{from: _, to: _} = dr), do: dr
 
-  defp period_to_date_range(period) do
+  defp period_to_date_range(period), do: period_to_date_range(period, "UTC")
+
+  @doc false
+  def period_to_date_range(period, timezone) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
     from =
       case period do
-        :today -> DateTime.new!(Date.utc_today(), ~T[00:00:00])
+        :today -> today_start(timezone)
         :day -> DateTime.add(now, -24, :hour)
         :week -> DateTime.add(now, -7, :day)
         :month -> DateTime.add(now, -30, :day)
@@ -1540,6 +1543,21 @@ defmodule Spectabas.Analytics do
       end
 
     %{from: from, to: now}
+  end
+
+  # Get the start of "today" in the given timezone, converted back to UTC
+  defp today_start(tz) do
+    case DateTime.now(tz) do
+      {:ok, local_now} ->
+        local_now
+        |> DateTime.to_date()
+        |> DateTime.new!(~T[00:00:00], tz)
+        |> DateTime.shift_zone!("Etc/UTC")
+
+      _ ->
+        # Fallback to UTC if timezone is invalid
+        DateTime.new!(Date.utc_today(), ~T[00:00:00])
+    end
   end
 
   @doc """

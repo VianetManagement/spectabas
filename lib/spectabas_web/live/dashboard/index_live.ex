@@ -10,8 +10,11 @@ defmodule SpectabasWeb.Dashboard.IndexLive do
 
     site_stats =
       Enum.reduce(sites, %{}, fn site, acc ->
+        tz = site.timezone || "UTC"
+        date_range = Analytics.period_to_date_range(:today, tz)
+
         stats =
-          case Analytics.overview_stats(site, user, :today) do
+          case Analytics.overview_stats(site, user, date_range) do
             {:ok, s} ->
               %{
                 pageviews: to_num(s["pageviews"]),

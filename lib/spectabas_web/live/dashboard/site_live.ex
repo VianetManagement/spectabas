@@ -24,7 +24,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         schedule_refresh()
       end
 
-      today = Date.utc_today()
+      today = site_today(site)
 
       {:ok,
        socket
@@ -79,10 +79,11 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
 
   @impl true
   def handle_event("preset", %{"range" => range}, socket) do
-    today = Date.utc_today()
+    today = site_today(socket.assigns.site)
 
     {from, to} =
       case range do
+        "today" -> {today, today}
         "24h" -> {Date.add(today, -1), today}
         "7d" -> {Date.add(today, -7), today}
         "30d" -> {Date.add(today, -30), today}
@@ -285,6 +286,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     end
   end
 
+  defp preset_to_period("today", _, _), do: :day
   defp preset_to_period("24h", _, _), do: :day
   defp preset_to_period("7d", _, _), do: :week
   defp preset_to_period("30d", _, _), do: :month
@@ -306,12 +308,22 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     end
   end
 
+  defp preset_label("today"), do: "Today"
   defp preset_label("24h"), do: "24h"
   defp preset_label("7d"), do: "7 days"
   defp preset_label("30d"), do: "30 days"
   defp preset_label("90d"), do: "90 days"
   defp preset_label("12m"), do: "12 months"
   defp preset_label(_), do: "period"
+
+  defp site_today(site) do
+    tz = site.timezone || "UTC"
+
+    case DateTime.now(tz) do
+      {:ok, local_now} -> DateTime.to_date(local_now)
+      _ -> Date.utc_today()
+    end
+  end
 
   @impl true
   def render(assigns) do
@@ -330,6 +342,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
             <button
               :for={
                 {id, label} <- [
+                  {"today", "Today"},
                   {"24h", "24h"},
                   {"7d", "7d"},
                   {"30d", "30d"},
