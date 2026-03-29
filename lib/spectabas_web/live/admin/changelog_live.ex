@@ -45,6 +45,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.3.3 — 2026-03-29 11:00 UTC",
+       [
+         %{
+           title: "Time period controls moved back to main content",
+           description:
+             "date presets (24h/7d/30d/90d/12m) and compare toggle back in main content area, accessible on all screen sizes. Removed from sidebar."
+         },
+         %{
+           title: "Mobile dashboard improvements",
+           description:
+             "responsive stat cards (smaller text/padding on mobile), shorter chart height (192px mobile, 280px desktop), smaller intent icons, responsive map height, tighter spacing"
+         }
+       ]},
       {"v1.3.2 — 2026-03-29 10:00 UTC",
        [
          %{

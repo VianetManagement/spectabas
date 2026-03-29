@@ -320,14 +320,53 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
       site={@site}
       active="overview"
       live_visitors={@live_visitors}
-      preset={@preset}
-      date_from={@date_from}
-      date_to={@date_to}
-      compare={@compare}
       page_title="Dashboard"
       page_description="Overview of your site's traffic, visitors, and engagement metrics."
     >
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+        <%!-- Time Period + Compare --%>
+        <div class="flex flex-wrap items-center gap-2 mb-4">
+          <div class="flex gap-1 bg-gray-100 rounded-lg p-1">
+            <button
+              :for={
+                {id, label} <- [
+                  {"24h", "24h"},
+                  {"7d", "7d"},
+                  {"30d", "30d"},
+                  {"90d", "90d"},
+                  {"12m", "12m"}
+                ]
+              }
+              phx-click="preset"
+              phx-value-range={id}
+              class={[
+                "px-2 py-1 text-xs sm:text-sm font-medium rounded-md",
+                if(@preset == id,
+                  do: "bg-white shadow text-gray-900",
+                  else: "text-gray-600 hover:text-gray-900"
+                )
+              ]}
+            >
+              {label}
+            </button>
+          </div>
+          <span class="text-xs text-gray-400 hidden sm:inline">
+            {Calendar.strftime(@date_from, "%b %d")} - {Calendar.strftime(@date_to, "%b %d, %Y")}
+          </span>
+          <button
+            phx-click="toggle_compare"
+            class={[
+              "px-2 py-1 text-xs font-medium rounded-md",
+              if(@compare,
+                do: "bg-indigo-50 text-indigo-700 border border-indigo-200",
+                else: "text-gray-500 border border-gray-200 hover:bg-gray-50"
+              )
+            ]}
+          >
+            Compare
+          </button>
+        </div>
+
         <%!-- Segment Filter --%>
         <.segment_filter segment={@segment} />
 
@@ -378,7 +417,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           id="timeseries-hook"
           phx-hook="TimeseriesChart"
         >
-          <div style="height: 280px; position: relative;">
+          <div class="h-48 sm:h-[280px] relative">
             <canvas></canvas>
           </div>
         </div>
@@ -507,10 +546,10 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
                 }
                 class="text-center group hover:bg-gray-50 rounded-lg p-2 transition-colors"
               >
-                <div class={"inline-flex items-center justify-center w-10 h-10 rounded-full mb-1.5 " <> intent_color(intent["intent"])}>
+                <div class={"inline-flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full mb-1 sm:mb-1.5 " <> intent_color(intent["intent"])}>
                   {raw(intent_icon(intent["intent"]))}
                 </div>
-                <div class="text-lg font-bold text-gray-900 group-hover:text-indigo-600">
+                <div class="text-base sm:text-lg font-bold text-gray-900 group-hover:text-indigo-600">
                   {intent["visitors"]}
                 </div>
                 <div class="text-xs text-gray-500 capitalize">{intent["intent"]}</div>
@@ -535,7 +574,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
               id="map-hook"
               phx-hook="BubbleMap"
             >
-              <div style="height: 300px; position: relative;">
+              <div class="h-48 sm:h-[300px] relative">
                 <canvas></canvas>
               </div>
             </div>
@@ -586,9 +625,9 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
       |> Map.put_new(:period, "")
 
     ~H"""
-    <div class="bg-white rounded-lg shadow p-4">
-      <dt class="text-sm font-medium text-gray-500 truncate">{@label}</dt>
-      <dd class="mt-1 text-2xl font-bold text-gray-900">{@value}</dd>
+    <div class="bg-white rounded-lg shadow p-3 sm:p-4">
+      <dt class="text-xs sm:text-sm font-medium text-gray-500 truncate">{@label}</dt>
+      <dd class="mt-1 text-xl sm:text-2xl font-bold text-gray-900">{@value}</dd>
       <dd :if={@prev != nil} class="mt-1">
         <% delta = compute_delta(@current, @prev, @invert) %>
         <span class={[
