@@ -4,6 +4,8 @@ config :spectabas,
   ecto_repos: [Spectabas.Repo],
   generators: [timestamp_type: :utc_datetime]
 
+config :elixir, :time_zone_database, Tzdata.TimeZoneDatabase
+
 config :spectabas, SpectabasWeb.Endpoint,
   url: [host: "localhost"],
   adapter: Bandit.PhoenixAdapter,
