@@ -109,67 +109,120 @@ defmodule SpectabasWeb.DocsLive do
   end
 
   # Simple markdown-ish rendering (no external dep)
+  # First extracts fenced code blocks (which may contain blank lines),
+  # then splits remaining text on blank lines for block-level parsing.
   defp render_markdown(text) do
     text
-    |> String.split("\n\n")
-    |> Enum.map(fn block ->
-      block = String.trim(block)
-
-      cond do
-        String.starts_with?(block, "### ") ->
-          "<h4 class=\"text-base font-semibold text-gray-900 mt-6 mb-2\">#{render_inline(escape(String.trim_leading(block, "### ")))}</h4>"
-
-        String.starts_with?(block, "## ") ->
-          "<h3 class=\"text-lg font-semibold text-gray-900 mt-6 mb-2\">#{render_inline(escape(String.trim_leading(block, "## ")))}</h3>"
-
-        String.starts_with?(block, "```") ->
-          code =
-            block
-            |> String.trim_leading("```")
-            |> String.trim_leading("elixir")
-            |> String.trim_leading("javascript")
-            |> String.trim_leading("html")
-            |> String.trim_leading("bash")
-            |> String.trim_leading("json")
-            |> String.trim_trailing("```")
-            |> String.trim()
-
-          "<pre class=\"bg-gray-900 text-gray-100 rounded-lg p-4 text-xs overflow-x-auto my-3\"><code>#{escape(code)}</code></pre>"
-
-        String.starts_with?(block, "- ") ->
-          items =
-            block
-            |> String.split("\n")
-            |> Enum.map(fn line ->
-              "<li class=\"ml-4\">#{render_inline(escape(String.trim_leading(line, "- ")))}</li>"
-            end)
-            |> Enum.join()
-
-          "<ul class=\"list-disc space-y-1 my-2 text-gray-700\">#{items}</ul>"
-
-        String.starts_with?(block, "| ") ->
-          render_table(block)
-
-        String.starts_with?(block, "> ") ->
-          content =
-            block
-            |> String.split("\n")
-            |> Enum.map(fn line ->
-              line |> String.trim_leading("> ") |> escape() |> render_inline()
-            end)
-            |> Enum.join("<br/>")
-
-          "<div class=\"border-l-4 border-indigo-400 bg-indigo-50 px-4 py-3 my-3 text-sm text-indigo-800\">#{content}</div>"
-
-        block == "---" ->
-          "<hr class=\"my-6 border-gray-200\" />"
-
-        true ->
-          text = block |> escape() |> render_inline()
-          "<p class=\"text-gray-700 my-2 leading-relaxed\">#{text}</p>"
-      end
-    end)
+    |> extract_blocks()
+    |> Enum.map(&render_block/1)
     |> Enum.join("\n")
+  end
+
+  # Split text into blocks, preserving fenced code blocks intact
+  defp extract_blocks(text) do
+    # Split all lines and walk them, grouping fenced code blocks
+    lines = String.split(text, "\n")
+
+    {blocks, current, in_code} =
+      Enum.reduce(lines, {[], [], false}, fn line, {blocks, current, in_code} ->
+        trimmed = String.trim(line)
+
+        cond do
+          # Opening code fence
+          !in_code && String.starts_with?(trimmed, "```") ->
+            # Flush any accumulated non-code lines as separate blocks
+            blocks = flush_text_blocks(blocks, current)
+            {blocks, [line], true}
+
+          # Closing code fence
+          in_code && trimmed == "```" ->
+            code_block = Enum.reverse([line | current]) |> Enum.join("\n")
+            {[code_block | blocks], [], false}
+
+          # Inside code fence — accumulate (even blank lines)
+          in_code ->
+            {blocks, [line | current], true}
+
+          # Blank line outside code — flush current block
+          trimmed == "" ->
+            blocks = flush_text_blocks(blocks, current)
+            {blocks, [], false}
+
+          # Normal line — accumulate
+          true ->
+            {blocks, [line | current], false}
+        end
+      end)
+
+    # Flush any remaining lines (handles unclosed code blocks too)
+    blocks = flush_text_blocks(blocks, current)
+    _ = in_code
+
+    Enum.reverse(blocks)
+  end
+
+  defp flush_text_blocks(blocks, []), do: blocks
+
+  defp flush_text_blocks(blocks, lines) do
+    block = lines |> Enum.reverse() |> Enum.join("\n") |> String.trim()
+    if block == "", do: blocks, else: [block | blocks]
+  end
+
+  defp render_block(block) do
+    block = String.trim(block)
+
+    cond do
+      String.starts_with?(block, "### ") ->
+        "<h4 class=\"text-base font-semibold text-gray-900 mt-6 mb-2\">#{render_inline(escape(String.trim_leading(block, "### ")))}</h4>"
+
+      String.starts_with?(block, "## ") ->
+        "<h3 class=\"text-lg font-semibold text-gray-900 mt-6 mb-2\">#{render_inline(escape(String.trim_leading(block, "## ")))}</h3>"
+
+      String.starts_with?(block, "```") ->
+        # Extract code: strip opening/closing fences and language tag
+        lines = String.split(block, "\n")
+        # First line is ```language, last line is ```
+        inner = lines |> Enum.drop(1) |> Enum.drop(-1)
+        # Strip common leading whitespace (heredoc indentation)
+        code = dedent(inner)
+
+        "<pre class=\"bg-gray-900 text-gray-100 rounded-lg p-4 text-xs overflow-x-auto my-3\"><code>#{escape(code)}</code></pre>"
+
+      String.starts_with?(block, "- ") ->
+        items =
+          block
+          |> String.split("\n")
+          |> Enum.map(&String.trim/1)
+          |> Enum.reject(&(&1 == ""))
+          |> Enum.map(fn line ->
+            "<li class=\"ml-4\">#{render_inline(escape(String.trim_leading(line, "- ")))}</li>"
+          end)
+          |> Enum.join()
+
+        "<ul class=\"list-disc space-y-1 my-2 text-gray-700\">#{items}</ul>"
+
+      String.starts_with?(block, "| ") ->
+        render_table(block)
+
+      String.starts_with?(block, "> ") ->
+        content =
+          block
+          |> String.split("\n")
+          |> Enum.map(fn line ->
+            line |> String.trim() |> String.trim_leading("> ") |> escape() |> render_inline()
+          end)
+          |> Enum.reject(&(&1 == ""))
+          |> Enum.join("<br/>")
+
+        "<div class=\"border-l-4 border-indigo-400 bg-indigo-50 px-4 py-3 my-3 text-sm text-indigo-800\">#{content}</div>"
+
+      block == "---" ->
+        "<hr class=\"my-6 border-gray-200\" />"
+
+      true ->
+        text = block |> escape() |> render_inline()
+        "<p class=\"text-gray-700 my-2 leading-relaxed\">#{text}</p>"
+    end
   end
 
   defp render_inline(text) do
@@ -182,7 +235,12 @@ defmodule SpectabasWeb.DocsLive do
   end
 
   defp render_table(block) do
-    rows = String.split(block, "\n") |> Enum.reject(&String.starts_with?(&1, "|-"))
+    rows =
+      block
+      |> String.split("\n")
+      |> Enum.map(&String.trim/1)
+      |> Enum.reject(fn row -> String.starts_with?(row, "|-") || row == "" end)
+
     [header | body] = rows
 
     header_cells =
@@ -191,7 +249,7 @@ defmodule SpectabasWeb.DocsLive do
     header_html =
       Enum.map(
         header_cells,
-        &"<th class=\"px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50\">#{escape(&1)}</th>"
+        &"<th class=\"px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50\">#{render_inline(escape(&1))}</th>"
       )
       |> Enum.join()
 
@@ -211,6 +269,24 @@ defmodule SpectabasWeb.DocsLive do
       |> Enum.join()
 
     "<table class=\"min-w-full divide-y divide-gray-200 my-3 rounded-lg overflow-hidden\"><thead><tr>#{header_html}</tr></thead><tbody>#{body_html}</tbody></table>"
+  end
+
+  # Strip common leading whitespace from code block lines
+  defp dedent(lines) do
+    min_indent =
+      lines
+      |> Enum.reject(&(String.trim(&1) == ""))
+      |> Enum.map(fn line ->
+        String.length(line) - String.length(String.trim_leading(line))
+      end)
+      |> Enum.min(fn -> 0 end)
+
+    lines
+    |> Enum.map(fn line ->
+      if String.trim(line) == "", do: "", else: String.slice(line, min_indent..-1//1)
+    end)
+    |> Enum.join("\n")
+    |> String.trim_trailing()
   end
 
   defp escape(text) do
