@@ -13,7 +13,17 @@ defmodule SpectabasWeb.DocsLive do
   end
 
   @impl true
-  def handle_event("search", %{"q" => query}, socket) do
+  def handle_event("search", %{"q" => query}, socket), do: do_search(query, socket)
+  def handle_event("search", %{"value" => query}, socket), do: do_search(query, socket)
+
+  def handle_event("nav", %{"section" => section}, socket) do
+    {:noreply,
+     socket
+     |> assign(:active_section, section)
+     |> push_event("scroll-to", %{id: section})}
+  end
+
+  defp do_search(query, socket) do
     q = String.downcase(String.trim(query))
 
     filtered =
@@ -36,13 +46,6 @@ defmodule SpectabasWeb.DocsLive do
     {:noreply, socket |> assign(:search, query) |> assign(:filtered_sections, filtered)}
   end
 
-  def handle_event("nav", %{"section" => section}, socket) do
-    {:noreply,
-     socket
-     |> assign(:active_section, section)
-     |> push_event("scroll-to", %{id: section})}
-  end
-
   @impl true
   def render(assigns) do
     ~H"""
@@ -51,17 +54,6 @@ defmodule SpectabasWeb.DocsLive do
       <aside class="hidden lg:flex lg:flex-col lg:w-64 bg-white border-r border-gray-200 flex-shrink-0">
         <div class="p-4 border-b border-gray-200">
           <h2 class="text-sm font-semibold text-gray-900">Documentation</h2>
-          <div class="mt-2">
-            <input
-              type="text"
-              phx-keyup="search"
-              phx-debounce="200"
-              name="q"
-              value={@search}
-              placeholder="Search docs..."
-              class="block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 py-1.5"
-            />
-          </div>
         </div>
         <nav class="flex-1 p-3 overflow-y-auto space-y-4">
           <div :for={section <- @filtered_sections}>
@@ -89,6 +81,22 @@ defmodule SpectabasWeb.DocsLive do
       <%!-- Content --%>
       <main class="flex-1 overflow-y-auto bg-gray-50">
         <div class="max-w-4xl mx-auto px-6 py-8">
+          <%!-- Search bar --%>
+          <div class="mb-8">
+            <input
+              type="text"
+              phx-keyup="search"
+              phx-debounce="200"
+              name="q"
+              value={@search}
+              placeholder="Search documentation..."
+              class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 py-2.5 px-4"
+            />
+            <p :if={@search != "" && @filtered_sections == []} class="text-sm text-gray-500 mt-3">
+              No results for "{@search}"
+            </p>
+          </div>
+
           <div :for={section <- @filtered_sections}>
             <div :for={item <- section.items}>
               <article id={item.id} class="mb-12 scroll-mt-8">
