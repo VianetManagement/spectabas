@@ -45,6 +45,24 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.5.2 — 2026-03-28 18:00 UTC",
+       [
+         %{
+           title: "Timezone-aware dashboard",
+           description:
+             "all date boundaries now respect your site's configured timezone. \"Today\" shows midnight-to-now in local time. \"24h\" is a true rolling 24-hour window. Chart bucket labels use proper timezone conversion (replaces approximate offset table, handles DST correctly). \"Your Sites\" overview uses each site's timezone for today's stats."
+         },
+         %{
+           title: "\"Today\" preset button",
+           description:
+             "new time period option on the site dashboard showing today's traffic from midnight in your site's timezone, with hourly chart bars starting at 00:00."
+         },
+         %{
+           title: "RUM collection reliability",
+           description:
+             "replaced requestIdleCallback with load event listener for reliable RUM collection. Added performance.timing fallback for broader browser support. CWV now sent via three triggers (5s delay, visibilitychange, 10s fallback) to ensure data isn't lost."
+         }
+       ]},
       {"v1.5.1 — 2026-03-28 12:00 UTC",
        [
          %{

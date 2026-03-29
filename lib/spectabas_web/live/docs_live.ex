@@ -633,7 +633,13 @@ defmodule SpectabasWeb.DocsLive do
 
             ### Time Period
 
-            Use the sidebar time controls to select: **24h, 7d, 30d, 90d, or 12m**. The timeseries chart displays hourly data for 24h view and daily data for longer periods. All times are shown in your site's configured timezone.
+            Use the time controls to select a period:
+
+            - **Today** — from midnight in your site's timezone to now, with hourly chart bars
+            - **24h** — rolling 24-hour window from now, with hourly chart bars
+            - **7d / 30d / 90d / 12m** — date ranges with daily chart bars
+
+            All times and date boundaries use your site's configured timezone. A site set to `America/New_York` will show "today" starting at midnight Eastern, not midnight UTC. The "Your Sites" overview page also respects each site's timezone.
 
             ### Visitor Intent
 
@@ -1104,7 +1110,7 @@ defmodule SpectabasWeb.DocsLive do
             - **Name** — display name in the dashboard
 
             - **Domain** — the analytics subdomain (e.g., `b.example.com`)
-            - **Timezone** — used for hourly chart display (e.g., `America/New_York`)
+            - **Timezone** — determines "today" boundaries, chart labels, and date ranges across the entire dashboard (e.g., `America/New_York`)
             - **GDPR Mode** — "on" (fingerprint, no cookies) or "off" (cookies, more accurate)
             - **Cookie Domain** — for cross-subdomain cookie sharing
             - **Cross-Domain Tracking** — enable and list domains for cross-site visitor tracking
