@@ -79,7 +79,7 @@ defmodule SpectabasWeb.Dashboard.EntryExitLive do
     ~H"""
     <.dashboard_layout
       site={@site}
-      page_title="Entry <.dashboard_layout site={@site} active=amp; Exit Pages"
+      page_title="Entry & Exit Pages"
       page_description="Where visitors land and where they leave your site."
       active="entry-exit"
       live_visitors={0}
