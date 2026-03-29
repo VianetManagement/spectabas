@@ -45,6 +45,24 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.8.1 — 2026-03-29 07:00 UTC",
+       [
+         %{
+           title: "Fingerprint accuracy improvements",
+           description:
+             "64-bit hash (two MurmurHash3 with different seeds) reduces collision probability from ~50% at 77K visitors to ~50% at 5 billion. Browser family + major version replaces full UA string in fingerprint signals — minor browser updates no longer rotate fingerprints."
+         },
+         %{
+           title: "CLS session window method",
+           description:
+             "CLS now uses Google's recommended session window approach (max session with 1s gap, capped at 5s) instead of cumulative total. Aligns with web-vitals library methodology. Prevents over-reporting CLS on long-lived pages."
+         },
+         %{
+           title: "Ecommerce currency safety",
+           description:
+             "Revenue queries now filter to the site's configured currency, preventing different currencies from being summed together. Orders with mismatched currency are excluded from totals."
+         }
+       ]},
       {"v1.8.0 — 2026-03-29 06:00 UTC",
        [
          %{

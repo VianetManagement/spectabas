@@ -244,8 +244,16 @@
   // Browser fingerprint: canvas + WebGL + navigator signals (~3-5ms)
   // Single consistent fingerprint used for both GDPR-on vid and dedup
   function enhancedFingerprint() {
+    // Use browser family + major version instead of full UA string for stability.
+    // Full UA changes on every minor browser update, causing fingerprint rotation.
+    var uaBrowser = (function () {
+      var ua = navigator.userAgent;
+      var m = ua.match(/(Chrome|Firefox|Safari|Edge|Opera|MSIE|Trident)[\/ ]([\d]+)/);
+      return m ? m[1] + m[2] : "other";
+    })();
+
     var signals = [
-      navigator.userAgent,
+      uaBrowser,
       screen.width + "x" + screen.height + "x" + (screen.colorDepth || 0),
       window.devicePixelRatio || 1,
       Intl.DateTimeFormat().resolvedOptions().timeZone || "",
@@ -299,12 +307,15 @@
       signals.push("no-webgl");
     }
 
-    return "fp_" + murmurHash(signals.join("|||"));
+    // 64-bit hash (two 32-bit hashes with different seeds) — collision probability
+    // drops from ~50% at 77K visitors (32-bit) to ~50% at 5 billion (64-bit)
+    var input = signals.join("|||");
+    return "fp_" + murmurHash(input, 0x12345678) + murmurHash(input, 0x9e3779b9);
   }
 
-  // MurmurHash3 (32-bit) — fast, good distribution
-  function murmurHash(str) {
-    var h = 0x12345678;
+  // MurmurHash3 (32-bit) — fast, good distribution. Seeded for 64-bit output.
+  function murmurHash(str, seed) {
+    var h = seed || 0x12345678;
     for (var i = 0; i < str.length; i++) {
       var k = str.charCodeAt(i);
       k = Math.imul(k, 0xcc9e2d51);
@@ -437,16 +448,39 @@
       }
     }).observe({ type: "largest-contentful-paint", buffered: true });
 
-    // Cumulative Layout Shift
-    var clsValue = 0;
+    // Cumulative Layout Shift — session window method per Google's web-vitals spec:
+    // max session window with 1s gap, capped at 5s duration
+    var clsSessionValue = 0;
+    var clsSessionEntries = [];
+    var clsMaxSessionValue = 0;
+
     new PerformanceObserver(function (list) {
       var entries = list.getEntries();
       for (var i = 0; i < entries.length; i++) {
         if (!entries[i].hadRecentInput) {
-          clsValue += entries[i].value;
+          var entry = entries[i];
+
+          // Start new session if gap > 1s or session > 5s
+          if (clsSessionEntries.length > 0) {
+            var lastEntry = clsSessionEntries[clsSessionEntries.length - 1];
+            var gap = entry.startTime - lastEntry.startTime - lastEntry.duration;
+            var sessionDuration = entry.startTime - clsSessionEntries[0].startTime;
+
+            if (gap > 1000 || sessionDuration > 5000) {
+              clsSessionValue = 0;
+              clsSessionEntries = [];
+            }
+          }
+
+          clsSessionEntries.push(entry);
+          clsSessionValue += entry.value;
+
+          if (clsSessionValue > clsMaxSessionValue) {
+            clsMaxSessionValue = clsSessionValue;
+          }
         }
       }
-      cwv.cls = Math.round(clsValue * 1000) / 1000;
+      cwv.cls = Math.round(clsMaxSessionValue * 1000) / 1000;
     }).observe({ type: "layout-shift", buffered: true });
 
     // First Input Delay

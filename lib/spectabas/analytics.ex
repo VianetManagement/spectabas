@@ -771,6 +771,9 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
+      # Filter to site's configured currency to avoid mixing currencies
+      site_currency = site.currency || "USD"
+
       sql = """
       SELECT
         count() AS total_orders,
@@ -782,6 +785,7 @@ defmodule Spectabas.Analytics do
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND (currency = #{ClickHouse.param(site_currency)} OR currency = '')
       """
 
       case ClickHouse.query(sql) do
