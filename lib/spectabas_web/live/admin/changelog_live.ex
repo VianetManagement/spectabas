@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.9.2 — 2026-03-29 14:00 UTC",
+       [
+         %{
+           title: "Fix RUM dashboard showing 0 — ClickHouse nan crashes JSON parser",
+           description:
+             "Root cause: ClickHouse quantileIf returns 'nan' in JSONEachRow when no rows match the condition. 'nan' is not valid JSON, causing Jason.decode! to crash. The crash was caught by safe_query's rescue clause, which returned an empty map — so the dashboard showed 0 samples. Fixed by sanitizing ClickHouse responses: nan→null and inf→null before JSON parsing. Also filters NaN values in tracker's mapToStrings to avoid storing 'NaN' strings."
+         }
+       ]},
       {"v1.9.1 — 2026-03-28 02:05 UTC",
        [
          %{

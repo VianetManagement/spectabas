@@ -530,7 +530,14 @@
   function mapToStrings(obj) {
     var result = {};
     for (var k in obj) {
-      if (obj.hasOwnProperty(k)) result[k] = String(obj[k]);
+      if (obj.hasOwnProperty(k)) {
+        var v = obj[k];
+        // Skip NaN/undefined/null values — they'd become "NaN"/"undefined"/"null" strings
+        // which ClickHouse's toFloat64OrZero converts to 0 anyway
+        if (v !== null && v !== undefined && v === v) {  // v === v is false for NaN
+          result[k] = String(v);
+        }
+      }
     }
     return result;
   }

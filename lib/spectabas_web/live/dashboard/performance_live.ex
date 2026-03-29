@@ -35,9 +35,6 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
     %{site: site, user: user, date_range: range} = socket.assigns
     period = range_to_period(range)
 
-    require Logger
-    raw_result = Analytics.rum_overview(site, user, period)
-    Logger.info("[RUM_DEBUG] rum_overview raw: #{inspect(raw_result)}")
     overview = safe_query(fn -> Analytics.rum_overview(site, user, period) end, %{})
     vitals = safe_query(fn -> Analytics.rum_web_vitals(site, user, period) end, %{})
     by_page = safe_query(fn -> Analytics.rum_by_page(site, user, period) end)

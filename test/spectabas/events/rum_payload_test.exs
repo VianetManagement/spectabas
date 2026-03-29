@@ -396,9 +396,12 @@ defmodule Spectabas.Events.RumPayloadTest do
              "collectRUM must include page_load when loadEventEnd is available"
     end
 
-    test "mapToStrings converts all values to strings", %{script: script} do
-      assert script =~ "result[k] = String(obj[k])",
-             "mapToStrings must convert all property values to strings"
+    test "mapToStrings converts values to strings and filters NaN", %{script: script} do
+      assert script =~ "result[k] = String(v)",
+             "mapToStrings must convert property values to strings"
+
+      assert script =~ "v === v",
+             "mapToStrings must filter NaN values (v === v is false for NaN)"
     end
   end
 end

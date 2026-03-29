@@ -376,8 +376,18 @@ defmodule Spectabas.ClickHouse do
 
   defp parse_rows(""), do: []
 
-  defp parse_rows(b) when is_binary(b),
-    do: b |> String.split("\n", trim: true) |> Enum.map(&Jason.decode!/1)
+  defp parse_rows(b) when is_binary(b) do
+    b
+    |> String.split("\n", trim: true)
+    |> Enum.map(fn line ->
+      # ClickHouse JSONEachRow can contain nan/inf which are not valid JSON.
+      # Replace them with null before parsing.
+      line
+      |> String.replace(~r/:nan([,}])/, ":null\\1")
+      |> String.replace(~r/:-?inf([,}])/, ":null\\1")
+      |> Jason.decode!()
+    end)
+  end
 
   defp parse_rows(b) when is_list(b), do: b
 end
