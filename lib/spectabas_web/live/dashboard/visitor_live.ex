@@ -1,7 +1,10 @@
 defmodule SpectabasWeb.Dashboard.VisitorLive do
   use SpectabasWeb, :live_view
 
+  @moduledoc "Individual visitor profile — sessions, events, IP details."
+
   import SpectabasWeb.Dashboard.SidebarComponent
+  import Spectabas.TypeHelpers
 
   alias Spectabas.{Accounts, Sites, Visitors, Analytics}
 
@@ -102,17 +105,6 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
     {:noreply, assign(socket, :show_ip_panel, !socket.assigns.show_ip_panel)}
   end
 
-  defp to_num(n) when is_integer(n), do: n
-
-  defp to_num(n) when is_binary(n) do
-    case Integer.parse(n) do
-      {i, _} -> i
-      :error -> 0
-    end
-  end
-
-  defp to_num(_), do: 0
-
   @impl true
   def render(assigns) do
     ~H"""
@@ -149,7 +141,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
           <div class="bg-white rounded-lg shadow p-4">
             <dt class="text-xs font-medium text-gray-500">Duration</dt>
             <dd class="mt-1 text-2xl font-bold text-gray-900">
-              {format_duration(@profile["total_duration"])}
+              {format_duration(to_num(@profile["total_duration"]))}
             </dd>
           </div>
         </div>
@@ -469,7 +461,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
                   :if={to_num(event["duration_s"]) > 0}
                   class="text-gray-500 text-xs"
                 >
-                  {format_duration(event["duration_s"])}
+                  {format_duration(to_num(event["duration_s"]))}
                 </span>
               </div>
               <span class="text-xs text-gray-500 shrink-0 ml-4">{event["timestamp"]}</span>
@@ -493,10 +485,6 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
     </div>
     """
   end
-
-  defp format_duration(s) when is_integer(s) and s > 0, do: "#{div(s, 60)}m #{rem(s, 60)}s"
-  defp format_duration(s) when is_binary(s), do: format_duration(to_num(s))
-  defp format_duration(_), do: "-"
 
   defp event_type_class("pageview"), do: "bg-blue-100 text-blue-800"
   defp event_type_class("duration"), do: "bg-gray-100 text-gray-600"

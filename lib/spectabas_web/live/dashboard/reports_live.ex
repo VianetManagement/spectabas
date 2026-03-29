@@ -1,6 +1,8 @@
 defmodule SpectabasWeb.Dashboard.ReportsLive do
   use SpectabasWeb, :live_view
 
+  @moduledoc "Saved reports management."
+
   alias Spectabas.{Accounts, Sites, Reports}
   import SpectabasWeb.Dashboard.SidebarComponent
 

@@ -513,6 +513,7 @@ defmodule Spectabas.Analytics do
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
         AND ip_lat != 0
         AND ip_lon != 0
+        AND ip_is_bot = 0
       GROUP BY ip_lat, ip_lon, ip_city, ip_region_name, ip_country
       ORDER BY visitors DESC
       LIMIT 200
@@ -1048,6 +1049,7 @@ defmodule Spectabas.Analytics do
           AND event_type = 'pageview'
           AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
           AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+          AND ip_is_bot = 0
       )
       WHERE url_path = #{ClickHouse.param(url_path)}
         AND prev_page != ''
@@ -1072,6 +1074,7 @@ defmodule Spectabas.Analytics do
           AND event_type = 'pageview'
           AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
           AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+          AND ip_is_bot = 0
       )
       WHERE url_path = #{ClickHouse.param(url_path)}
         AND next_page != ''
@@ -1134,6 +1137,7 @@ defmodule Spectabas.Analytics do
           AND event_type = 'pageview'
           AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
           AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+          AND ip_is_bot = 0
         GROUP BY visitor_id
       )
       ARRAY JOIN
@@ -1209,6 +1213,7 @@ defmodule Spectabas.Analytics do
           WHERE site_id = #{ClickHouse.param(site.id)}
             AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
             AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+            AND ip_is_bot = 0
         )
         GROUP BY cohort_week, week_number
       ) AS retention
@@ -1220,6 +1225,7 @@ defmodule Spectabas.Analytics do
         WHERE site_id = #{ClickHouse.param(site.id)}
           AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
           AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+          AND ip_is_bot = 0
         GROUP BY visitor_id
       ) AS sizes USING (cohort_week)
       ORDER BY cohort_week, week_number
@@ -1574,6 +1580,7 @@ defmodule Spectabas.Analytics do
         :day -> DateTime.add(now, -24, :hour)
         :week -> DateTime.add(now, -7, :day)
         :month -> DateTime.add(now, -30, :day)
+        :quarter -> DateTime.add(now, -90, :day)
         _ -> DateTime.add(now, -7, :day)
       end
 

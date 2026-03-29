@@ -1,8 +1,11 @@
 defmodule SpectabasWeb.Dashboard.EcommerceLive do
   use SpectabasWeb, :live_view
 
+  @moduledoc "Ecommerce dashboard — revenue, orders, AOV, and top products."
+
   alias Spectabas.{Accounts, Sites, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
+  import SpectabasWeb.Dashboard.DateHelpers
 
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
@@ -37,7 +40,7 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
     %{site: site, user: user, date_range: range} = socket.assigns
 
     stats =
-      case Analytics.ecommerce_stats(site, user, range_to_atom(range)) do
+      case Analytics.ecommerce_stats(site, user, range_to_period(range)) do
         {:ok, data} ->
           data
 
@@ -52,11 +55,6 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
 
     assign(socket, :ecommerce, stats)
   end
-
-  defp range_to_atom("24h"), do: :day
-  defp range_to_atom("7d"), do: :week
-  defp range_to_atom("30d"), do: :month
-  defp range_to_atom(_), do: :week
 
   @impl true
   def render(assigns) do

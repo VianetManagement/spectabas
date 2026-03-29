@@ -1,8 +1,11 @@
 defmodule SpectabasWeb.Dashboard.CohortLive do
   use SpectabasWeb, :live_view
 
+  @moduledoc "Weekly cohort retention grid showing returning visitor percentages."
+
   alias Spectabas.{Accounts, Sites, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
+  import Spectabas.TypeHelpers
 
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
@@ -73,17 +76,6 @@ defmodule SpectabasWeb.Dashboard.CohortLive do
       )
     end)
   end
-
-  defp to_num(n) when is_integer(n), do: n
-
-  defp to_num(n) when is_binary(n) do
-    case Integer.parse(n) do
-      {i, _} -> i
-      :error -> 0
-    end
-  end
-
-  defp to_num(_), do: 0
 
   @impl true
   def render(assigns) do

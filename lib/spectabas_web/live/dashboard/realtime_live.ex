@@ -1,6 +1,8 @@
 defmodule SpectabasWeb.Dashboard.RealtimeLive do
   use SpectabasWeb, :live_view
 
+  @moduledoc "Realtime visitor dashboard with live event feed."
+
   alias Spectabas.{Accounts, Sites, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
 

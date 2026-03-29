@@ -1,6 +1,8 @@
 defmodule SpectabasWeb.Dashboard.ExportLive do
   use SpectabasWeb, :live_view
 
+  @moduledoc "Data export page — CSV downloads with date range selection."
+
   alias Spectabas.{Accounts, Sites, Reports}
   import SpectabasWeb.Dashboard.SidebarComponent
 

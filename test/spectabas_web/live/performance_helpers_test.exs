@@ -2,6 +2,7 @@ defmodule SpectabasWeb.Dashboard.PerformanceHelpersTest do
   use ExUnit.Case, async: true
 
   alias SpectabasWeb.Dashboard.PerformanceLive
+  alias Spectabas.TypeHelpers
 
   describe "vital_score/3" do
     test "scores as Good when p75 is under good threshold" do
@@ -46,27 +47,27 @@ defmodule SpectabasWeb.Dashboard.PerformanceHelpersTest do
 
   describe "format_ms/1" do
     test "formats sub-second values as milliseconds" do
-      assert PerformanceLive.format_ms(45) == "45ms"
-      assert PerformanceLive.format_ms(999) == "999ms"
+      assert TypeHelpers.format_ms(45) == "45ms"
+      assert TypeHelpers.format_ms(999) == "999ms"
     end
 
     test "formats values >= 1000 as seconds" do
-      assert PerformanceLive.format_ms(1000) == "1.0s"
-      assert PerformanceLive.format_ms(1500) == "1.5s"
-      assert PerformanceLive.format_ms(2345) == "2.3s"
+      assert TypeHelpers.format_ms(1000) == "1.0s"
+      assert TypeHelpers.format_ms(1500) == "1.5s"
+      assert TypeHelpers.format_ms(2345) == "2.3s"
     end
 
     test "handles zero" do
-      assert PerformanceLive.format_ms(0) == "0ms"
+      assert TypeHelpers.format_ms(0) == "0ms"
     end
 
     test "handles string input (ClickHouse returns strings)" do
-      assert PerformanceLive.format_ms("1234") == "1.2s"
-      assert PerformanceLive.format_ms("45") == "45ms"
+      assert TypeHelpers.format_ms("1234") == "1.2s"
+      assert TypeHelpers.format_ms("45") == "45ms"
     end
 
     test "handles nil" do
-      assert PerformanceLive.format_ms(nil) == "0ms"
+      assert TypeHelpers.format_ms(nil) == "0ms"
     end
   end
 
@@ -100,47 +101,47 @@ defmodule SpectabasWeb.Dashboard.PerformanceHelpersTest do
 
   describe "to_num/1" do
     test "passes through integers" do
-      assert PerformanceLive.to_num(42) == 42
+      assert TypeHelpers.to_num(42) == 42
     end
 
     test "truncates floats" do
-      assert PerformanceLive.to_num(42.7) == 42
+      assert TypeHelpers.to_num(42.7) == 42
     end
 
     test "parses string integers" do
-      assert PerformanceLive.to_num("1234") == 1234
+      assert TypeHelpers.to_num("1234") == 1234
     end
 
     test "returns 0 for unparseable strings" do
-      assert PerformanceLive.to_num("abc") == 0
-      assert PerformanceLive.to_num("") == 0
+      assert TypeHelpers.to_num("abc") == 0
+      assert TypeHelpers.to_num("") == 0
     end
 
     test "returns 0 for nil" do
-      assert PerformanceLive.to_num(nil) == 0
+      assert TypeHelpers.to_num(nil) == 0
     end
   end
 
   describe "to_float/1" do
     test "passes through floats" do
-      assert PerformanceLive.to_float(0.05) == 0.05
+      assert TypeHelpers.to_float(0.05) == 0.05
     end
 
     test "converts integers to float" do
-      assert PerformanceLive.to_float(42) == 42.0
+      assert TypeHelpers.to_float(42) == 42.0
     end
 
     test "parses string floats" do
-      assert PerformanceLive.to_float("0.05") == 0.05
-      assert PerformanceLive.to_float("3.14") == 3.14
+      assert TypeHelpers.to_float("0.05") == 0.05
+      assert TypeHelpers.to_float("3.14") == 3.14
     end
 
     test "returns 0.0 for unparseable strings" do
-      assert PerformanceLive.to_float("abc") == 0.0
+      assert TypeHelpers.to_float("abc") == 0.0
     end
 
     test "returns 0.0 for nil" do
-      assert PerformanceLive.to_float(nil) == 0.0
+      assert TypeHelpers.to_float(nil) == 0.0
     end
   end
 end

@@ -1,8 +1,11 @@
 defmodule SpectabasWeb.Dashboard.SourcesLive do
   use SpectabasWeb, :live_view
 
+  @moduledoc "Traffic sources — referrers, UTM source, UTM medium tabs."
+
   alias Spectabas.{Accounts, Sites, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
+  import SpectabasWeb.Dashboard.DateHelpers
 
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
@@ -45,18 +48,13 @@ defmodule SpectabasWeb.Dashboard.SourcesLive do
     %{site: site, user: user, date_range: range} = socket.assigns
 
     sources =
-      case Analytics.top_sources(site, user, range_to_atom(range)) do
+      case Analytics.top_sources(site, user, range_to_period(range)) do
         {:ok, sources} -> sources
         _ -> []
       end
 
     assign(socket, :sources, sources)
   end
-
-  defp range_to_atom("24h"), do: :day
-  defp range_to_atom("7d"), do: :week
-  defp range_to_atom("30d"), do: :month
-  defp range_to_atom(_), do: :week
 
   @impl true
   def render(assigns) do

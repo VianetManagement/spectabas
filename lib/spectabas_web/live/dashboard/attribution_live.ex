@@ -1,8 +1,11 @@
 defmodule SpectabasWeb.Dashboard.AttributionLive do
   use SpectabasWeb, :live_view
 
+  @moduledoc "Channel attribution dashboard — first-touch and last-touch attribution models."
+
   alias Spectabas.{Accounts, Sites, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
+  import SpectabasWeb.Dashboard.DateHelpers
 
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
@@ -31,18 +34,13 @@ defmodule SpectabasWeb.Dashboard.AttributionLive do
     %{site: site, user: user, date_range: range} = socket.assigns
 
     channels =
-      case Analytics.attribution(site, user, range_to_atom(range)) do
+      case Analytics.attribution(site, user, range_to_period(range)) do
         {:ok, rows} -> rows
         _ -> []
       end
 
     assign(socket, :channels, channels)
   end
-
-  defp range_to_atom("7d"), do: :week
-  defp range_to_atom("30d"), do: :month
-  defp range_to_atom("90d"), do: {:custom, 90}
-  defp range_to_atom(_), do: :month
 
   @impl true
   def render(assigns) do

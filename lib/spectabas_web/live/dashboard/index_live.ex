@@ -1,7 +1,10 @@
 defmodule SpectabasWeb.Dashboard.IndexLive do
   use SpectabasWeb, :live_view
 
+  @moduledoc "Your Sites overview — site cards with today's stats."
+
   alias Spectabas.{Accounts, Analytics}
+  import Spectabas.TypeHelpers
 
   @impl true
   def mount(_params, _session, socket) do
@@ -101,19 +104,4 @@ defmodule SpectabasWeb.Dashboard.IndexLive do
   defp get_stat(stats, site_id, key) do
     stats |> Map.get(site_id, %{}) |> Map.get(key, 0)
   end
-
-  defp to_num(n) when is_integer(n), do: n
-
-  defp to_num(n) when is_binary(n) do
-    case Integer.parse(n) do
-      {i, _} -> i
-      :error -> 0
-    end
-  end
-
-  defp to_num(_), do: 0
-
-  defp format_number(n) when n >= 1_000_000, do: "#{Float.round(n / 1_000_000, 1)}M"
-  defp format_number(n) when n >= 1_000, do: "#{Float.round(n / 1_000, 1)}K"
-  defp format_number(n), do: to_string(n)
 end

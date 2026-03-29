@@ -1,9 +1,12 @@
 defmodule SpectabasWeb.Dashboard.JourneysLive do
   use SpectabasWeb, :live_view
 
+  @moduledoc "Visitor journey mapping — common multi-step navigation paths."
+
   alias Spectabas.{Accounts, Sites}
   alias Spectabas.Analytics.JourneyMapper
   import SpectabasWeb.Dashboard.SidebarComponent
+  import SpectabasWeb.Dashboard.DateHelpers
 
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
@@ -30,7 +33,7 @@ defmodule SpectabasWeb.Dashboard.JourneysLive do
 
   defp load_data(socket) do
     %{site: site, user: user, date_range: range} = socket.assigns
-    period = range_to_atom(range)
+    period = range_to_period(range)
 
     journeys =
       case JourneyMapper.top_journeys(site, user, period) do
@@ -48,11 +51,6 @@ defmodule SpectabasWeb.Dashboard.JourneysLive do
     |> assign(:journeys, journeys)
     |> assign(:stats, stats)
   end
-
-  defp range_to_atom("24h"), do: :day
-  defp range_to_atom("7d"), do: :week
-  defp range_to_atom("30d"), do: :month
-  defp range_to_atom(_), do: :week
 
   @impl true
   def render(assigns) do

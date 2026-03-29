@@ -1,6 +1,8 @@
 defmodule SpectabasWeb.Dashboard.FunnelsLive do
   use SpectabasWeb, :live_view
 
+  @moduledoc "Conversion funnels — multi-step visitor flow analysis."
+
   alias Spectabas.{Accounts, Sites, Goals, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
 

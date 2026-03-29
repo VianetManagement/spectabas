@@ -1,6 +1,8 @@
 defmodule SpectabasWeb.Dashboard.GoalsLive do
   use SpectabasWeb, :live_view
 
+  @moduledoc "Goal tracking — pageview and custom event goal completions."
+
   alias Spectabas.{Accounts, Sites, Goals, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
 

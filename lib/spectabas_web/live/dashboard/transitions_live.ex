@@ -1,8 +1,12 @@
 defmodule SpectabasWeb.Dashboard.TransitionsLive do
   use SpectabasWeb, :live_view
 
+  @moduledoc "Page transitions — navigation flow for any page (came from/went to)."
+
   alias Spectabas.{Accounts, Sites, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
+  import Spectabas.TypeHelpers
+  import SpectabasWeb.Dashboard.DateHelpers
 
   @impl true
   def mount(%{"site_id" => site_id} = params, _session, socket) do
@@ -40,7 +44,7 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
 
   defp load_data(socket) do
     %{site: site, user: user, date_range: range, current_page: page} = socket.assigns
-    period = range_to_atom(range)
+    period = range_to_period(range)
 
     transitions =
       case Analytics.page_transitions(site, user, page, period) do
@@ -58,11 +62,6 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
     |> assign(:transitions, transitions)
     |> assign(:page_perf, page_perf)
   end
-
-  defp range_to_atom("24h"), do: :day
-  defp range_to_atom("7d"), do: :week
-  defp range_to_atom("30d"), do: :month
-  defp range_to_atom(_), do: :week
 
   @impl true
   def render(assigns) do
@@ -221,19 +220,4 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
       true -> "text-red-700"
     end
   end
-
-  defp format_ms(ms) when ms >= 1000, do: "#{Float.round(ms / 1000, 1)}s"
-  defp format_ms(ms), do: "#{ms}ms"
-
-  defp to_num(n) when is_integer(n), do: n
-  defp to_num(n) when is_float(n), do: trunc(n)
-
-  defp to_num(n) when is_binary(n) do
-    case Integer.parse(n) do
-      {i, _} -> i
-      :error -> 0
-    end
-  end
-
-  defp to_num(_), do: 0
 end

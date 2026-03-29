@@ -1,8 +1,12 @@
 defmodule SpectabasWeb.Dashboard.PagesLive do
   use SpectabasWeb, :live_view
 
+  @moduledoc "Top pages ranked by pageviews with RUM load time indicators."
+
   alias Spectabas.{Accounts, Sites, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
+  import Spectabas.TypeHelpers
+  import SpectabasWeb.Dashboard.DateHelpers
 
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
@@ -52,7 +56,7 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
 
   defp load_pages(socket) do
     %{site: site, user: user, date_range: range} = socket.assigns
-    period = range_to_atom(range)
+    period = range_to_period(range)
 
     pages =
       case Analytics.top_pages(site, user, period) do
@@ -83,11 +87,6 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
 
     assign(socket, :pages, pages)
   end
-
-  defp range_to_atom("24h"), do: :day
-  defp range_to_atom("7d"), do: :week
-  defp range_to_atom("30d"), do: :month
-  defp range_to_atom(_), do: :week
 
   @impl true
   def render(assigns) do
@@ -226,27 +225,4 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
     <span :if={@ms == 0} class="text-gray-500 text-xs">—</span>
     """
   end
-
-  defp format_ms(ms) when ms >= 1000, do: "#{Float.round(ms / 1000, 1)}s"
-  defp format_ms(ms), do: "#{ms}ms"
-
-  defp format_duration(seconds) when is_number(seconds) do
-    minutes = div(trunc(seconds), 60)
-    secs = rem(trunc(seconds), 60)
-    "#{minutes}m #{secs}s"
-  end
-
-  defp format_duration(_), do: "0m 0s"
-
-  defp to_num(n) when is_integer(n), do: n
-  defp to_num(n) when is_float(n), do: trunc(n)
-
-  defp to_num(n) when is_binary(n) do
-    case Integer.parse(n) do
-      {i, _} -> i
-      :error -> 0
-    end
-  end
-
-  defp to_num(_), do: 0
 end

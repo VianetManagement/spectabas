@@ -1,6 +1,8 @@
 defmodule SpectabasWeb.Dashboard.VisitorsLive do
   use SpectabasWeb, :live_view
 
+  @moduledoc "Visitor list with search and pagination."
+
   alias Spectabas.{Accounts, Sites, Visitors}
   import SpectabasWeb.Dashboard.SidebarComponent
 

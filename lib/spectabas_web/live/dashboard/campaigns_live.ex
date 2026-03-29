@@ -1,6 +1,8 @@
 defmodule SpectabasWeb.Dashboard.CampaignsLive do
   use SpectabasWeb, :live_view
 
+  @moduledoc "Campaign management with UTM URL builder."
+
   alias Spectabas.{Accounts, Sites, Campaigns}
   import SpectabasWeb.Dashboard.SidebarComponent
 

@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.9.0 — 2026-03-29 08:00 UTC",
+       [
+         %{
+           title: "Code quality refactoring",
+           description:
+             "extracted shared TypeHelpers (to_num, to_float, format_ms, format_duration, format_number) and DateHelpers (range_to_period) modules — eliminated 200+ lines of duplication across 20 files. Fixed attribution crash on 90d range (was returning {:custom, 90} tuple). Added bot filtering to 5 more queries (transitions, attribution, cohort, map, search). Added @moduledoc to all 27 dashboard LiveViews."
+         }
+       ]},
       {"v1.8.1 — 2026-03-29 07:00 UTC",
        [
          %{

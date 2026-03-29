@@ -1,8 +1,11 @@
 defmodule SpectabasWeb.Dashboard.SiteLive do
   use SpectabasWeb, :live_view
 
+  @moduledoc "Main site dashboard — overview stats, timeseries chart, top cards."
+
   import SpectabasWeb.Dashboard.SegmentComponent
   import SpectabasWeb.Dashboard.SidebarComponent
+  import Spectabas.TypeHelpers
 
   alias Spectabas.{Accounts, Sites, Analytics}
 
@@ -751,51 +754,6 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   end
 
   defp compute_delta(_, _, _), do: %{label: "", direction: :flat}
-
-  defp to_num(n) when is_integer(n), do: n
-  defp to_num(n) when is_float(n), do: trunc(n)
-
-  defp to_num(n) when is_binary(n) do
-    case Integer.parse(n) do
-      {i, _} -> i
-      :error -> 0
-    end
-  end
-
-  defp to_num(_), do: 0
-
-  defp to_float(n) when is_float(n), do: n
-  defp to_float(n) when is_integer(n), do: n * 1.0
-
-  defp to_float(n) when is_binary(n) do
-    case Float.parse(n) do
-      {f, _} -> f
-      :error -> 0.0
-    end
-  end
-
-  defp to_float(_), do: 0.0
-
-  defp format_duration(seconds) when is_number(seconds) do
-    minutes = div(trunc(seconds), 60)
-    secs = rem(trunc(seconds), 60)
-    "#{minutes}m #{secs}s"
-  end
-
-  defp format_duration(_), do: "0m 0s"
-
-  defp format_number(n) when is_integer(n) and n >= 1_000_000 do
-    "#{Float.round(n / 1_000_000, 1)}M"
-  end
-
-  defp format_number(n) when is_integer(n) and n >= 10_000 do
-    "#{Float.round(n / 1_000, 1)}k"
-  end
-
-  defp format_number(n) when is_integer(n), do: Integer.to_string(n)
-  defp format_number(n) when is_float(n), do: format_number(trunc(n))
-  defp format_number(n) when is_binary(n), do: n
-  defp format_number(_), do: "0"
 
   defp short_tz(tz) when is_binary(tz) do
     case String.split(tz, "/") do

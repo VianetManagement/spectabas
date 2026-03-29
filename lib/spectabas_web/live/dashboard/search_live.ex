@@ -1,8 +1,11 @@
 defmodule SpectabasWeb.Dashboard.SearchLive do
   use SpectabasWeb, :live_view
 
+  @moduledoc "Internal site search queries extracted from URL parameters."
+
   alias Spectabas.{Accounts, Sites, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
+  import SpectabasWeb.Dashboard.DateHelpers
 
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
@@ -31,17 +34,13 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
     %{site: site, user: user, date_range: range} = socket.assigns
 
     searches =
-      case Analytics.site_searches(site, user, range_to_atom(range)) do
+      case Analytics.site_searches(site, user, range_to_period(range)) do
         {:ok, rows} -> rows
         _ -> []
       end
 
     assign(socket, :searches, searches)
   end
-
-  defp range_to_atom("7d"), do: :week
-  defp range_to_atom("30d"), do: :month
-  defp range_to_atom(_), do: :month
 
   @impl true
   def render(assigns) do

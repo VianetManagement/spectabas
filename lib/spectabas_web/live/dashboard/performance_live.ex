@@ -1,8 +1,12 @@
 defmodule SpectabasWeb.Dashboard.PerformanceLive do
   use SpectabasWeb, :live_view
 
+  @moduledoc "Real User Monitoring — Core Web Vitals and page load timing."
+
   alias Spectabas.{Accounts, Sites, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
+  import Spectabas.TypeHelpers
+  import SpectabasWeb.Dashboard.DateHelpers
 
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
@@ -29,7 +33,7 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
 
   defp load_data(socket) do
     %{site: site, user: user, date_range: range} = socket.assigns
-    period = range_to_atom(range)
+    period = range_to_period(range)
 
     overview =
       case Analytics.rum_overview(site, user, period) do
@@ -61,11 +65,6 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
     |> assign(:by_page, by_page)
     |> assign(:by_device, by_device)
   end
-
-  defp range_to_atom("24h"), do: :day
-  defp range_to_atom("7d"), do: :week
-  defp range_to_atom("30d"), do: :month
-  defp range_to_atom(_), do: :week
 
   @impl true
   def render(assigns) do
@@ -315,16 +314,6 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
   end
 
   @doc false
-  def format_ms(ms) do
-    ms = to_num(ms)
-
-    cond do
-      ms >= 1000 -> "#{Float.round(ms / 1000, 1)}s"
-      true -> "#{ms}ms"
-    end
-  end
-
-  @doc false
   def format_bytes(bytes) do
     bytes = to_num(bytes)
 
@@ -335,30 +324,4 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
       true -> "-"
     end
   end
-
-  @doc false
-  def to_num(n) when is_integer(n), do: n
-  def to_num(n) when is_float(n), do: trunc(n)
-
-  def to_num(n) when is_binary(n) do
-    case Integer.parse(n) do
-      {i, _} -> i
-      :error -> 0
-    end
-  end
-
-  def to_num(_), do: 0
-
-  @doc false
-  def to_float(n) when is_float(n), do: n
-  def to_float(n) when is_integer(n), do: n * 1.0
-
-  def to_float(n) when is_binary(n) do
-    case Float.parse(n) do
-      {f, _} -> f
-      :error -> 0.0
-    end
-  end
-
-  def to_float(_), do: 0.0
 end

@@ -5,6 +5,8 @@ defmodule SpectabasWeb.SharedDashboardLive do
   alias Spectabas.Sites
   alias Spectabas.Sites.SharedLink
   import Ecto.Query
+  import Spectabas.TypeHelpers
+  import SpectabasWeb.Dashboard.DateHelpers
 
   @impl true
   def mount(%{"token" => token}, _session, socket) do
@@ -41,18 +43,13 @@ defmodule SpectabasWeb.SharedDashboardLive do
 
     # Shared dashboards use a public query variant that does not require a user.
     stats =
-      case Analytics.overview_stats_public(site, range_to_atom(range)) do
+      case Analytics.overview_stats_public(site, range_to_period(range)) do
         {:ok, data} -> data
         _ -> %{pageviews: 0, unique_visitors: 0, sessions: 0, bounce_rate: 0.0, avg_duration: 0}
       end
 
     assign(socket, :stats, stats)
   end
-
-  defp range_to_atom("24h"), do: :day
-  defp range_to_atom("7d"), do: :week
-  defp range_to_atom("30d"), do: :month
-  defp range_to_atom(_), do: :week
 
   defp get_valid_shared_link(token) when is_binary(token) do
     now = DateTime.utc_now()
@@ -114,12 +111,4 @@ defmodule SpectabasWeb.SharedDashboardLive do
     </div>
     """
   end
-
-  defp format_duration(seconds) when is_number(seconds) do
-    minutes = div(trunc(seconds), 60)
-    secs = rem(trunc(seconds), 60)
-    "#{minutes}m #{secs}s"
-  end
-
-  defp format_duration(_), do: "0m 0s"
 end

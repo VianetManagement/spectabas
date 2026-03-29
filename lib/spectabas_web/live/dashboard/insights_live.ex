@@ -1,6 +1,8 @@
 defmodule SpectabasWeb.Dashboard.InsightsLive do
   use SpectabasWeb, :live_view
 
+  @moduledoc "Automated anomaly detection comparing recent vs prior periods."
+
   alias Spectabas.{Accounts, Sites}
   alias Spectabas.Analytics.AnomalyDetector
   import SpectabasWeb.Dashboard.SidebarComponent

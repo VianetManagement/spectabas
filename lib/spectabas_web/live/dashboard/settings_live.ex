@@ -1,6 +1,8 @@
 defmodule SpectabasWeb.Dashboard.SettingsLive do
   use SpectabasWeb, :live_view
 
+  @moduledoc "Site settings — domain, timezone, GDPR, tracking, ecommerce config."
+
   alias Spectabas.{Accounts, Sites}
   import SpectabasWeb.Dashboard.SidebarComponent
 

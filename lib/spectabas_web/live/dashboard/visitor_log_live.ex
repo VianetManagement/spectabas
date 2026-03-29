@@ -1,8 +1,12 @@
 defmodule SpectabasWeb.Dashboard.VisitorLogLive do
   use SpectabasWeb, :live_view
 
+  @moduledoc "Visitor log — browsable session list with filtering."
+
   alias Spectabas.{Accounts, Sites, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
+  import Spectabas.TypeHelpers
+  import SpectabasWeb.Dashboard.DateHelpers
 
   @impl true
   def mount(%{"site_id" => site_id} = params, _session, socket) do
@@ -52,7 +56,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
     %{site: site, user: user, date_range: range, page: page, segment: segment} = socket.assigns
 
     visitors =
-      case Analytics.visitor_log(site, user, range_to_atom(range),
+      case Analytics.visitor_log(site, user, range_to_period(range),
              page: page,
              per_page: 30,
              segment: segment
@@ -63,11 +67,6 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
 
     assign(socket, :visitors, visitors)
   end
-
-  defp range_to_atom("24h"), do: :day
-  defp range_to_atom("7d"), do: :week
-  defp range_to_atom("30d"), do: :month
-  defp range_to_atom(_), do: :week
 
   @impl true
   def render(assigns) do
@@ -161,7 +160,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-900 tabular-nums">{v["pageviews"]}</td>
                 <td class="px-4 py-3 text-sm text-gray-500 tabular-nums">
-                  {format_duration(v["duration"])}
+                  {format_duration(to_int(v["duration"]))}
                 </td>
                 <td class="px-4 py-3 text-sm">
                   <.link
@@ -238,17 +237,4 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
   defp intent_pill("browsing"), do: "bg-gray-100 text-gray-700"
   defp intent_pill("bot"), do: "bg-red-100 text-red-800"
   defp intent_pill(_), do: "bg-gray-100 text-gray-700"
-
-  defp format_duration(s) when is_integer(s) and s > 0, do: "#{div(s, 60)}m #{rem(s, 60)}s"
-  defp format_duration(s) when is_binary(s), do: format_duration(to_int(s))
-  defp format_duration(_), do: "-"
-
-  defp to_int(s) when is_binary(s) do
-    case Integer.parse(s) do
-      {i, _} -> i
-      :error -> 0
-    end
-  end
-
-  defp to_int(n), do: n
 end

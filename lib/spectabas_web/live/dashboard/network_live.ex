@@ -1,8 +1,12 @@
 defmodule SpectabasWeb.Dashboard.NetworkLive do
   use SpectabasWeb, :live_view
 
+  @moduledoc "Network analysis — ISP, datacenter, VPN, Tor, bot percentages."
+
   alias Spectabas.{Accounts, Sites, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
+  import Spectabas.TypeHelpers
+  import SpectabasWeb.Dashboard.DateHelpers
 
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
@@ -37,7 +41,7 @@ defmodule SpectabasWeb.Dashboard.NetworkLive do
     %{site: site, user: user, date_range: range} = socket.assigns
 
     network =
-      case Analytics.network_stats(site, user, range_to_atom(range)) do
+      case Analytics.network_stats(site, user, range_to_period(range)) do
         {:ok, rows} when is_list(rows) ->
           total_hits = Enum.reduce(rows, 0, fn r, acc -> acc + to_num(r["hits"]) end)
 
@@ -69,34 +73,6 @@ defmodule SpectabasWeb.Dashboard.NetworkLive do
 
     assign(socket, :network, network)
   end
-
-  defp to_num(n) when is_integer(n), do: n
-
-  defp to_num(n) when is_binary(n) do
-    case Integer.parse(n) do
-      {i, _} -> i
-      :error -> 0
-    end
-  end
-
-  defp to_num(_), do: 0
-
-  defp to_float(n) when is_float(n), do: n
-  defp to_float(n) when is_integer(n), do: n * 1.0
-
-  defp to_float(n) when is_binary(n) do
-    case Float.parse(n) do
-      {f, _} -> f
-      :error -> 0.0
-    end
-  end
-
-  defp to_float(_), do: 0.0
-
-  defp range_to_atom("24h"), do: :day
-  defp range_to_atom("7d"), do: :week
-  defp range_to_atom("30d"), do: :month
-  defp range_to_atom(_), do: :week
 
   @impl true
   def render(assigns) do
