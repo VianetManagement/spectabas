@@ -85,7 +85,7 @@ defmodule SpectabasWeb.Dashboard.IndexLive do
               <span class="text-sm text-gray-500 ml-1">visitors</span>
             </div>
           </div>
-          <p class="text-xs text-gray-400 mt-2">today</p>
+          <p class="text-xs text-gray-500 mt-2">today</p>
         </.link>
       </div>
     </div>

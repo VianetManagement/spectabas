@@ -97,11 +97,29 @@ defmodule SpectabasWeb.DocsLive do
             </p>
           </div>
 
+          <%!-- Mobile: jump-to-section selector (hidden on desktop where sidebar handles this) --%>
+          <div :if={@search == ""} class="lg:hidden mb-6">
+            <select
+              phx-change="nav"
+              name="section"
+              class="block w-full rounded-lg border-gray-300 text-sm py-2.5 focus:border-indigo-500 focus:ring-indigo-500"
+            >
+              <option value="" disabled selected>Jump to section...</option>
+              <%= for section <- @filtered_sections do %>
+                <optgroup label={section.category}>
+                  <%= for item <- section.items do %>
+                    <option value={item.id}>{item.title}</option>
+                  <% end %>
+                </optgroup>
+              <% end %>
+            </select>
+          </div>
+
           <div :for={section <- @filtered_sections}>
             <div :for={item <- section.items}>
               <article id={item.id} class="mb-12 scroll-mt-8">
                 <h2 class="text-2xl font-bold text-gray-900 mb-1">{item.title}</h2>
-                <p class="text-xs text-gray-400 uppercase mb-4">{section.category}</p>
+                <p class="text-xs text-gray-500 uppercase mb-4">{section.category}</p>
                 <div class="prose prose-sm prose-indigo max-w-none">
                   <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                     {raw(render_markdown(item.body))}

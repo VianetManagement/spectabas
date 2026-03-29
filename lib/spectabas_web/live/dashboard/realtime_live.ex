@@ -193,7 +193,7 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
                     {v["intent"]}
                   </span>
                 </td>
-                <td class="px-4 py-3 text-xs text-gray-400">
+                <td class="px-4 py-3 text-xs text-gray-500">
                   {time_ago(v["last_activity"])}
                 </td>
               </tr>
@@ -225,7 +225,7 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
                     {event["url_path"] || "/"}
                   </.link>
                 </div>
-                <span class="text-xs text-gray-400 shrink-0 ml-3">{event["timestamp"]}</span>
+                <span class="text-xs text-gray-500 shrink-0 ml-3">{event["timestamp"]}</span>
               </div>
               <div class="flex items-center gap-3 text-xs text-gray-500 mt-1 flex-wrap">
                 <.link
@@ -242,7 +242,7 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
                 </span>
                 <span
                   :if={event["referrer_domain"] && event["referrer_domain"] != ""}
-                  class="text-gray-400"
+                  class="text-gray-500"
                 >
                   via {event["referrer_domain"]}
                 </span>

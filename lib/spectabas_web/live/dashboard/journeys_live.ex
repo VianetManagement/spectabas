@@ -125,7 +125,7 @@ defmodule SpectabasWeb.Dashboard.JourneysLive do
               <div class="flex items-start justify-between gap-4">
                 <div class="min-w-0">
                   <div class="flex items-center gap-1.5 text-sm font-medium text-gray-900 mb-1">
-                    <span class="text-gray-400 text-xs">#{idx + 1}</span>
+                    <span class="text-gray-500 text-xs">#{idx + 1}</span>
                     <span :if={journey.ends_at_conversion} class="text-green-600 text-xs">
                       &#10003;
                     </span>

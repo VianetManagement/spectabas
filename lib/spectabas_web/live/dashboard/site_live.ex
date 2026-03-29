@@ -406,7 +406,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
               {label}
             </button>
           </div>
-          <span class="text-xs text-gray-400 hidden sm:inline">
+          <span class="text-xs text-gray-500 hidden sm:inline">
             {Calendar.strftime(@date_from, "%b %d")} - {Calendar.strftime(@date_to, "%b %d, %Y")}
           </span>
           <button
@@ -647,7 +647,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
                 View all &rarr;
               </.link>
             </div>
-            <div :if={@locations == []} class="py-4 text-center text-sm text-gray-400">
+            <div :if={@locations == []} class="py-4 text-center text-sm text-gray-500">
               No location data yet
             </div>
             <div :if={@locations != []} class="divide-y divide-gray-50">
@@ -690,11 +690,11 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           "text-xs font-medium",
           if(delta.direction == :up, do: "text-green-600", else: ""),
           if(delta.direction == :down, do: "text-red-600", else: ""),
-          if(delta.direction == :flat, do: "text-gray-400", else: "")
+          if(delta.direction == :flat, do: "text-gray-500", else: "")
         ]}>
           {delta.label}
         </span>
-        <span class="text-xs text-gray-400 ml-1">vs prev {@period}</span>
+        <span class="text-xs text-gray-500 ml-1">vs prev {@period}</span>
       </dd>
     </div>
     """
@@ -710,7 +710,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         </.link>
       </div>
       <div class="px-5 py-2 divide-y divide-gray-50">
-        <div :if={@empty} class="py-6 text-center text-sm text-gray-400">
+        <div :if={@empty} class="py-6 text-center text-sm text-gray-500">
           No data yet
         </div>
         {render_slot(@inner_block)}

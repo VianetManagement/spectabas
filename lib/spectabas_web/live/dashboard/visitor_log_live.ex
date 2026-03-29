@@ -119,13 +119,15 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Location
                 </th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
                   Device
                 </th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Source
                 </th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Entry</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
+                  Entry
+                </th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200">
@@ -171,9 +173,9 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
                     |> Enum.reject(&(&1 == "" || is_nil(&1)))
                     |> Enum.join(", ")}
                   </.link>
-                  <span :if={!v["country"] || v["country"] == ""} class="text-gray-400">-</span>
+                  <span :if={!v["country"] || v["country"] == ""} class="text-gray-500">-</span>
                 </td>
-                <td class="px-4 py-3 text-sm text-gray-500">
+                <td class="px-4 py-3 text-sm text-gray-500 hidden md:table-cell">
                   {[v["browser"], v["os"]]
                   |> Enum.reject(&(&1 == "" || is_nil(&1)))
                   |> Enum.join(" / ")}
@@ -188,11 +190,11 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
                   >
                     {v["referrer"]}
                   </.link>
-                  <span :if={!v["referrer"] || v["referrer"] == ""} class="text-gray-400">
+                  <span :if={!v["referrer"] || v["referrer"] == ""} class="text-gray-500">
                     Direct
                   </span>
                 </td>
-                <td class="px-4 py-3 text-sm truncate max-w-[150px]">
+                <td class="px-4 py-3 text-sm truncate max-w-[150px] hidden md:table-cell">
                   <.link
                     :if={v["entry_page"] && v["entry_page"] != ""}
                     navigate={~p"/dashboard/sites/#{@site.id}/transitions?page=#{v["entry_page"]}"}

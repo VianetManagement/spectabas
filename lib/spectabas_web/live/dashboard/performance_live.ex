@@ -96,7 +96,7 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
               {elem(r, 1)}
             </button>
           </nav>
-          <span class="text-xs text-gray-400">
+          <span class="text-xs text-gray-500">
             {to_num(@overview["samples"])} samples
           </span>
         </div>

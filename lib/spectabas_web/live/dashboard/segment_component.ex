@@ -35,12 +35,12 @@ defmodule SpectabasWeb.Dashboard.SegmentComponent do
           </button>
         </div>
 
-        <form phx-submit={@on_change} class="flex items-center gap-1">
+        <form phx-submit={@on_change} class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-1">
           <input type="hidden" name="action" value="add" />
-          <select name="field" class="text-xs rounded border-gray-300 py-1 pr-8">
+          <select name="field" class="text-sm sm:text-xs rounded border-gray-300 py-2 sm:py-1 pr-8">
             <option :for={f <- @fields} value={f.field}>{f.label}</option>
           </select>
-          <select name="op" class="text-xs rounded border-gray-300 py-1 pr-8">
+          <select name="op" class="text-sm sm:text-xs rounded border-gray-300 py-2 sm:py-1 pr-8">
             <option value="is">is</option>
             <option value="is_not">is not</option>
             <option value="contains">contains</option>
@@ -50,11 +50,11 @@ defmodule SpectabasWeb.Dashboard.SegmentComponent do
             type="text"
             name="value"
             placeholder="value"
-            class="text-xs rounded border-gray-300 py-1 w-32"
+            class="text-sm sm:text-xs rounded border-gray-300 py-2 sm:py-1 w-full sm:w-32"
           />
           <button
             type="submit"
-            class="text-xs bg-indigo-600 text-white px-2 py-1 rounded hover:bg-indigo-700"
+            class="text-sm sm:text-xs bg-indigo-600 text-white px-3 py-2 sm:px-2 sm:py-1 rounded hover:bg-indigo-700"
           >
             Add
           </button>
@@ -64,7 +64,7 @@ defmodule SpectabasWeb.Dashboard.SegmentComponent do
           :if={@segment != []}
           phx-click={@on_change}
           phx-value-action="clear"
-          class="text-xs text-gray-400 hover:text-gray-600 ml-2"
+          class="text-xs text-gray-500 hover:text-gray-600 ml-2"
         >
           Clear all
         </button>

@@ -245,7 +245,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
         <div class="lg:hidden">
           <div class="bg-white border-b border-gray-200 px-4 py-2.5 flex items-center justify-between">
             <div class="flex items-center gap-2 min-w-0">
-              <.link navigate={~p"/dashboard"} class="text-gray-400 hover:text-gray-600 shrink-0">
+              <.link navigate={~p"/dashboard"} class="text-gray-500 hover:text-gray-700 shrink-0">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     stroke-linecap="round"
@@ -258,52 +258,60 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
               <span class="text-sm font-medium text-gray-900 truncate">{@page_title || @active}</span>
             </div>
             <%!-- Mobile quick-nav links --%>
-            <div class="flex items-center gap-1 shrink-0">
+            <div class="flex items-center gap-0.5 shrink-0 overflow-x-auto">
               <.link
                 navigate={~p"/dashboard/sites/#{@site.id}"}
-                class={"px-2 py-1 text-xs rounded " <> if(@active == "overview", do: "bg-indigo-50 text-indigo-700 font-medium", else: "text-gray-500")}
+                class={"px-2.5 py-2 sm:px-2 sm:py-1 text-xs rounded whitespace-nowrap " <> if(@active == "overview", do: "bg-indigo-50 text-indigo-700 font-medium", else: "text-gray-600")}
               >
                 Home
               </.link>
               <.link
                 navigate={~p"/dashboard/sites/#{@site.id}/pages"}
-                class={"px-2 py-1 text-xs rounded " <> if(@active == "pages", do: "bg-indigo-50 text-indigo-700 font-medium", else: "text-gray-500")}
+                class={"px-2.5 py-2 sm:px-2 sm:py-1 text-xs rounded whitespace-nowrap " <> if(@active == "pages", do: "bg-indigo-50 text-indigo-700 font-medium", else: "text-gray-600")}
               >
                 Pages
               </.link>
               <.link
                 navigate={~p"/dashboard/sites/#{@site.id}/sources"}
-                class={"px-2 py-1 text-xs rounded " <> if(@active == "sources", do: "bg-indigo-50 text-indigo-700 font-medium", else: "text-gray-500")}
+                class={"px-2.5 py-2 sm:px-2 sm:py-1 text-xs rounded whitespace-nowrap " <> if(@active == "sources", do: "bg-indigo-50 text-indigo-700 font-medium", else: "text-gray-600")}
               >
                 Sources
               </.link>
               <.link
                 navigate={~p"/dashboard/sites/#{@site.id}/visitor-log"}
-                class={"px-2 py-1 text-xs rounded " <> if(@active == "visitor-log", do: "bg-indigo-50 text-indigo-700 font-medium", else: "text-gray-500")}
+                class={"px-2.5 py-2 sm:px-2 sm:py-1 text-xs rounded whitespace-nowrap " <> if(@active == "visitor-log", do: "bg-indigo-50 text-indigo-700 font-medium", else: "text-gray-600")}
               >
                 Visitors
               </.link>
               <.link
                 navigate={~p"/dashboard/sites/#{@site.id}/geo"}
-                class={"px-2 py-1 text-xs rounded " <> if(@active == "geo", do: "bg-indigo-50 text-indigo-700 font-medium", else: "text-gray-500")}
+                class={"px-2.5 py-2 sm:px-2 sm:py-1 text-xs rounded whitespace-nowrap " <> if(@active == "geo", do: "bg-indigo-50 text-indigo-700 font-medium", else: "text-gray-600")}
               >
                 Geo
               </.link>
             </div>
           </div>
-          <%!-- Mobile: scrollable secondary nav for all pages --%>
-          <div class="bg-gray-50 border-b border-gray-200 px-4 py-1.5 overflow-x-auto flex gap-1">
-            <.link
-              :for={{path, label} <- mobile_nav_items(@site.id)}
-              navigate={path}
-              class={"px-2 py-1 text-xs rounded whitespace-nowrap " <>
-                if(String.ends_with?(path, "/" <> @active) || (@active == "overview" && String.ends_with?(path, to_string(@site.id))),
-                  do: "bg-indigo-100 text-indigo-700 font-medium",
-                  else: "text-gray-500 hover:text-gray-700"
-                )}
+          <%!-- Mobile: scrollable secondary nav with scroll indicator --%>
+          <div class="relative">
+            <div
+              class="bg-gray-50 border-b border-gray-200 px-3 py-1 overflow-x-auto flex gap-1"
+              role="navigation"
+              aria-label="Dashboard pages"
             >
-              {label}
-            </.link>
+              <.link
+                :for={{path, label} <- mobile_nav_items(@site.id)}
+                navigate={path}
+                class={"px-2.5 py-2 sm:px-2 sm:py-1 text-xs rounded whitespace-nowrap " <>
+                  if(String.ends_with?(path, "/" <> @active) || (@active == "overview" && String.ends_with?(path, to_string(@site.id))),
+                    do: "bg-indigo-100 text-indigo-700 font-medium",
+                    else: "text-gray-600 hover:text-gray-700"
+                  )}
+              >
+                {label}
+              </.link>
+            </div>
+            <div class="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-gray-50 pointer-events-none lg:hidden">
+            </div>
           </div>
         </div>
 

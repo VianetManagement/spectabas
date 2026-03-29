@@ -211,7 +211,7 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
 
     {label, classes} =
       cond do
-        ms == 0 -> {"—", "text-gray-400"}
+        ms == 0 -> {"—", "text-gray-500"}
         ms <= 1000 -> {format_ms(ms), "text-green-700 bg-green-50 border border-green-200"}
         ms <= 3000 -> {format_ms(ms), "text-amber-700 bg-amber-50 border border-amber-200"}
         true -> {format_ms(ms), "text-red-700 bg-red-50 border border-red-200"}
@@ -223,7 +223,7 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
     <span :if={@ms > 0} class={"inline-block px-2 py-0.5 rounded text-xs font-medium #{@classes}"}>
       {@label}
     </span>
-    <span :if={@ms == 0} class="text-gray-400 text-xs">—</span>
+    <span :if={@ms == 0} class="text-gray-500 text-xs">—</span>
     """
   end
 

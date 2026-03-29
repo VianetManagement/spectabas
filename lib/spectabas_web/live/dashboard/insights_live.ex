@@ -65,7 +65,7 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
                 <div class="min-w-0">
                   <p class="text-sm font-medium text-gray-900">{anomaly.message}</p>
                   <p class="text-sm text-gray-500 mt-1">{anomaly.action}</p>
-                  <div class="flex items-center gap-4 mt-2 text-xs text-gray-400">
+                  <div class="flex items-center gap-4 mt-2 text-xs text-gray-500">
                     <span class="capitalize">{anomaly.category}</span>
                     <span :if={anomaly.change_pct}>
                       {if anomaly.change_pct > 0, do: "+", else: ""}{anomaly.change_pct}%

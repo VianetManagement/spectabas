@@ -198,7 +198,7 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700">
-                  UTM Term <span class="text-gray-400">(optional)</span>
+                  UTM Term <span class="text-gray-500">(optional)</span>
                 </label>
                 <input
                   type="text"
@@ -210,7 +210,7 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700">
-                  UTM Content <span class="text-gray-400">(optional)</span>
+                  UTM Content <span class="text-gray-500">(optional)</span>
                 </label>
                 <input
                   type="text"

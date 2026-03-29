@@ -147,12 +147,12 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
           <div class="bg-white rounded-lg shadow overflow-x-auto">
             <div class="px-5 py-4 border-b border-gray-100">
               <h3 class="font-semibold text-gray-900">Came from</h3>
-              <p class="text-xs text-gray-400">Pages visitors viewed before this one</p>
+              <p class="text-xs text-gray-500">Pages visitors viewed before this one</p>
             </div>
             <div class="divide-y divide-gray-50">
               <div
                 :if={@transitions.previous == []}
-                class="px-5 py-8 text-center text-sm text-gray-400"
+                class="px-5 py-8 text-center text-sm text-gray-500"
               >
                 No previous pages (entry point)
               </div>
@@ -176,10 +176,10 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
           <div class="bg-white rounded-lg shadow overflow-x-auto">
             <div class="px-5 py-4 border-b border-gray-100">
               <h3 class="font-semibold text-gray-900">Went to</h3>
-              <p class="text-xs text-gray-400">Pages visitors viewed after this one</p>
+              <p class="text-xs text-gray-500">Pages visitors viewed after this one</p>
             </div>
             <div class="divide-y divide-gray-50">
-              <div :if={@transitions.next == []} class="px-5 py-8 text-center text-sm text-gray-400">
+              <div :if={@transitions.next == []} class="px-5 py-8 text-center text-sm text-gray-500">
                 No next pages (exit point)
               </div>
               <div

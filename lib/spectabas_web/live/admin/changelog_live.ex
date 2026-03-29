@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.6.2 — 2026-03-29 02:00 UTC",
+       [
+         %{
+           title: "Mobile UI improvements",
+           description:
+             "44px touch targets on mobile nav icons and dashboard nav items. Scroll indicator gradient on horizontally scrollable nav bar. Visitor Log hides Device and Entry columns on mobile (6→4 visible columns). Segment filter form stacks vertically on phones. Docs page gets mobile jump-to-section dropdown. Text contrast upgraded from gray-400 to gray-500 across all 14 dashboard pages for WCAG AA compliance. Log out link hidden on mobile (accessible via Account page)."
+         }
+       ]},
       {"v1.6.1 — 2026-03-29 01:00 UTC",
        [
          %{

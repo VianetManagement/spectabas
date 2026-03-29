@@ -284,7 +284,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
                   else: ""}
               </p>
             </div>
-            <span class="text-gray-400 text-sm">
+            <span class="text-gray-500 text-sm">
               {if @show_ip_panel, do: "Hide", else: "Show details"}
             </span>
           </button>
@@ -461,18 +461,18 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
                 <span class="text-gray-900 truncate font-mono text-xs">{event["url_path"]}</span>
                 <span
                   :if={event["event_name"] && event["event_name"] != ""}
-                  class="text-gray-400 text-xs"
+                  class="text-gray-500 text-xs"
                 >
                   ({event["event_name"]})
                 </span>
                 <span
                   :if={to_num(event["duration_s"]) > 0}
-                  class="text-gray-400 text-xs"
+                  class="text-gray-500 text-xs"
                 >
                   {format_duration(event["duration_s"])}
                 </span>
               </div>
-              <span class="text-xs text-gray-400 shrink-0 ml-4">{event["timestamp"]}</span>
+              <span class="text-xs text-gray-500 shrink-0 ml-4">{event["timestamp"]}</span>
             </li>
           </ul>
         </div>

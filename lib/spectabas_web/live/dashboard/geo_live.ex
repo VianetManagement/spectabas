@@ -142,7 +142,7 @@ defmodule SpectabasWeb.Dashboard.GeoLive do
           <button phx-click="reset_drill" class="text-indigo-600 hover:text-indigo-800">
             All Countries
           </button>
-          <span :if={@drill_country} class="text-gray-400">/</span>
+          <span :if={@drill_country} class="text-gray-500">/</span>
           <span :if={@drill_country && !@drill_region} class="font-medium text-gray-900">
             {@drill_country}
           </span>
@@ -154,7 +154,7 @@ defmodule SpectabasWeb.Dashboard.GeoLive do
           >
             {@drill_country}
           </button>
-          <span :if={@drill_region} class="text-gray-400">/</span>
+          <span :if={@drill_region} class="text-gray-500">/</span>
           <span :if={@drill_region} class="font-medium text-gray-900">{@drill_region}</span>
         </div>
 

@@ -79,14 +79,25 @@
               <.link
                 href={~p"/users/log-out"}
                 method="delete"
-                class="text-gray-600 hover:text-indigo-600 font-medium"
+                class="hidden sm:inline text-gray-600 hover:text-indigo-600 font-medium"
               >
                 Log out
               </.link>
-              <%!-- Mobile: compact icon links --%>
-              <div class="flex sm:hidden items-center gap-3">
-                <a href="/dashboard" class="text-gray-500 hover:text-indigo-600" title="Dashboard">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <%!-- Mobile: icon links with 44px touch targets --%>
+              <div class="flex sm:hidden items-center gap-1">
+                <a
+                  href="/dashboard"
+                  class="p-2.5 text-gray-500 hover:text-indigo-600"
+                  title="Dashboard"
+                  aria-label="Dashboard"
+                >
+                  <svg
+                    class="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
                     <path
                       stroke-linecap="round"
                       stroke-linejoin="round"
@@ -96,8 +107,19 @@
                     </path>
                   </svg>
                 </a>
-                <a href="/docs" class="text-gray-500 hover:text-indigo-600" title="Docs">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <a
+                  href="/docs"
+                  class="p-2.5 text-gray-500 hover:text-indigo-600"
+                  title="Docs"
+                  aria-label="Documentation"
+                >
+                  <svg
+                    class="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
                     <path
                       stroke-linecap="round"
                       stroke-linejoin="round"
@@ -109,10 +131,17 @@
                 </a>
                 <a
                   href="/users/settings"
-                  class="text-gray-500 hover:text-indigo-600"
+                  class="p-2.5 text-gray-500 hover:text-indigo-600"
                   title="Account"
+                  aria-label="Account settings"
                 >
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg
+                    class="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
                     <path
                       stroke-linecap="round"
                       stroke-linejoin="round"
