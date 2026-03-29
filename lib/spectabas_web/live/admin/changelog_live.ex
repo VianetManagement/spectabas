@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.7.1 — 2026-03-29 05:00 UTC",
+       [
+         %{
+           title: "Materialized views for analytics queries",
+           description:
+             "7 analytics queries now use pre-aggregated ClickHouse materialized views instead of scanning raw events: top_sources → source_stats, top_countries/top_regions/top_countries_summary → country_stats, top_devices/top_browsers/top_os/top_device_types → device_stats. These views are SummingMergeTree tables that aggregate on INSERT, making queries 10-100x faster for large datasets. Network stats stays on raw events (needs EU flag not in materialized view)."
+         }
+       ]},
       {"v1.7.0 — 2026-03-29 04:00 UTC",
        [
          %{
