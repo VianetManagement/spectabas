@@ -117,10 +117,10 @@ defmodule SpectabasWeb.DocsLive do
 
       cond do
         String.starts_with?(block, "### ") ->
-          "<h4 class=\"text-base font-semibold text-gray-900 mt-6 mb-2\">#{escape(String.trim_leading(block, "### "))}</h4>"
+          "<h4 class=\"text-base font-semibold text-gray-900 mt-6 mb-2\">#{render_inline(escape(String.trim_leading(block, "### ")))}</h4>"
 
         String.starts_with?(block, "## ") ->
-          "<h3 class=\"text-lg font-semibold text-gray-900 mt-6 mb-2\">#{escape(String.trim_leading(block, "## "))}</h3>"
+          "<h3 class=\"text-lg font-semibold text-gray-900 mt-6 mb-2\">#{render_inline(escape(String.trim_leading(block, "## ")))}</h3>"
 
         String.starts_with?(block, "```") ->
           code =
@@ -141,7 +141,7 @@ defmodule SpectabasWeb.DocsLive do
             block
             |> String.split("\n")
             |> Enum.map(fn line ->
-              "<li class=\"ml-4\">#{escape(String.trim_leading(line, "- "))}</li>"
+              "<li class=\"ml-4\">#{render_inline(escape(String.trim_leading(line, "- ")))}</li>"
             end)
             |> Enum.join()
 
@@ -154,10 +154,15 @@ defmodule SpectabasWeb.DocsLive do
           content =
             block
             |> String.split("\n")
-            |> Enum.map(&String.trim_leading(&1, "> "))
+            |> Enum.map(fn line ->
+              line |> String.trim_leading("> ") |> escape() |> render_inline()
+            end)
             |> Enum.join("<br/>")
 
           "<div class=\"border-l-4 border-indigo-400 bg-indigo-50 px-4 py-3 my-3 text-sm text-indigo-800\">#{content}</div>"
+
+        block == "---" ->
+          "<hr class=\"my-6 border-gray-200\" />"
 
         true ->
           text = block |> escape() |> render_inline()
@@ -195,7 +200,10 @@ defmodule SpectabasWeb.DocsLive do
         cells = row |> String.split("|") |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == ""))
 
         tds =
-          Enum.map(cells, &"<td class=\"px-3 py-2 text-sm text-gray-700\">#{escape(&1)}</td>")
+          Enum.map(
+            cells,
+            &"<td class=\"px-3 py-2 text-sm text-gray-700\">#{render_inline(escape(&1))}</td>"
+          )
           |> Enum.join()
 
         "<tr class=\"border-t border-gray-100\">#{tds}</tr>"
@@ -228,6 +236,7 @@ defmodule SpectabasWeb.DocsLive do
             ## Step 1: Create a Site
 
             Go to **Admin > Sites** and click **New Site**. Enter:
+
             - **Site Name** — a friendly name (e.g., "My Blog")
             - **Domain** — your analytics subdomain (e.g., `b.example.com`)
             - **Timezone** — your site's timezone for accurate hourly charts
@@ -533,6 +542,7 @@ defmodule SpectabasWeb.DocsLive do
             ### Stat Cards
 
             The top row shows five key metrics:
+
             - **Pageviews** — total page loads
             - **Unique Visitors** — distinct visitor count
             - **Sessions** — unique browsing sessions
@@ -548,6 +558,7 @@ defmodule SpectabasWeb.DocsLive do
             ### Visitor Intent
 
             A unique Spectabas feature. Every visitor is automatically classified by their behavior:
+
             - **Buying** — visited pricing, checkout, or signup pages
             - **Researching** — viewed 3+ pages or came from paid ads
             - **Comparing** — came from a comparison site (G2, Capterra, etc.)
@@ -570,6 +581,7 @@ defmodule SpectabasWeb.DocsLive do
             **Click any page URL** to see its **Page Transitions** — where visitors came from before viewing that page, and where they went afterward.
 
             ### Columns
+
             - **Page** — the URL path
             - **Pageviews** — total views
             - **Unique Visitors** — distinct visitors
@@ -647,6 +659,7 @@ defmodule SpectabasWeb.DocsLive do
             - **UTM Source** — the `utm_source` parameter from tagged URLs
             - **UTM Medium** — the `utm_medium` parameter (cpc, email, social, etc.)
 
+
             **Click any source** to see the visitors from that source in the Visitor Log.
 
             Your own site's domain and spectabas.com are automatically filtered out to avoid self-referrals.
@@ -660,6 +673,7 @@ defmodule SpectabasWeb.DocsLive do
 
             - **First Touch** — credits the channel that first brought the visitor to your site
             - **Last Touch** — credits the most recent channel before the visitor's latest activity
+
 
             > **Example:** A visitor first finds you via Google Ads, then returns a week later via an email newsletter. First touch credits Google Ads; last touch credits the newsletter.
 
@@ -716,6 +730,7 @@ defmodule SpectabasWeb.DocsLive do
             - **Browser** — Chrome, Firefox, Safari, Edge, etc.
             - **OS** — Windows, macOS, Linux, iOS, Android, etc.
 
+
             Each is a separate, deduplicated view (no duplicate "smartphone" entries).
             """
           },
@@ -730,6 +745,7 @@ defmodule SpectabasWeb.DocsLive do
             - **Tor %** — traffic through the Tor network
             - **Bot %** — detected bot traffic
             - **EU Visitors %** — traffic from EU countries (useful for GDPR awareness)
+
 
             **Click any ASN number** to see the visitors from that network in the Visitor Log.
 
@@ -748,6 +764,7 @@ defmodule SpectabasWeb.DocsLive do
             - **Device** — browser and OS
             - **Source** — referrer domain
             - **Entry Page** — first page visited
+
 
             **Click a visitor ID** to see their full profile. **Click a referrer** to filter by that source. **Click an entry page** to see its transitions.
 
@@ -771,6 +788,7 @@ defmodule SpectabasWeb.DocsLive do
 
             ### IP Cross-Referencing
             Click the IP address to expand a panel showing:
+
             - Full IP enrichment data (postal code, lat/lon, ASN details)
             - **Other visitors from the same IP** — useful for identifying shared networks, offices, or potential fraud
 
@@ -986,6 +1004,7 @@ defmodule SpectabasWeb.DocsLive do
             Each site has these configurable options:
 
             - **Name** — display name in the dashboard
+
             - **Domain** — the analytics subdomain (e.g., `b.example.com`)
             - **Timezone** — used for hourly chart display (e.g., `America/New_York`)
             - **GDPR Mode** — "on" (fingerprint, no cookies) or "off" (cookies, more accurate)
@@ -1002,6 +1021,7 @@ defmodule SpectabasWeb.DocsLive do
             ### Goals
 
             Track specific visitor actions:
+
             - **Pageview goals** — triggered when a visitor views a specific page (supports wildcards: `/blog/*`)
             - **Custom event goals** — triggered when your JavaScript calls `Spectabas.track("event_name")`
 
