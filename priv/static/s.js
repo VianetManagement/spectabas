@@ -83,29 +83,44 @@
   }
 
   // Send initial pageview immediately (non-blocking)
+  var lastSentUrl = window.location.href;
   sendEvent("pageview");
 
-  // No async fingerprint update needed — single consistent fingerprint used
-
-  // SPA support
+  // SPA support — only fire pageview if URL actually changed
   var origPushState = history.pushState;
   history.pushState = function () {
     origPushState.apply(this, arguments);
-    sendDuration();
-    pageStart = Date.now();
-    sendEvent("pageview");
+    var newUrl = window.location.href;
+    if (newUrl !== lastSentUrl) {
+      sendDuration();
+      pageStart = Date.now();
+      lastSentUrl = newUrl;
+      sendEvent("pageview");
+    }
   };
 
   window.addEventListener("popstate", function () {
-    sendDuration();
-    pageStart = Date.now();
-    sendEvent("pageview");
+    var newUrl = window.location.href;
+    if (newUrl !== lastSentUrl) {
+      sendDuration();
+      pageStart = Date.now();
+      lastSentUrl = newUrl;
+      sendEvent("pageview");
+    }
   });
 
-  // Duration on visibility change
+  // Track foreground time, not wall-clock time
+  var foregroundStart = Date.now();
+  var accumulatedForeground = 0;
+
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "hidden") {
+      // Accumulate foreground time and send duration
+      accumulatedForeground += Date.now() - foregroundStart;
       sendDuration();
+    } else {
+      // Resuming foreground — reset the timer
+      foregroundStart = Date.now();
     }
   });
 
@@ -175,8 +190,13 @@
   }
 
   function sendDuration() {
-    var duration = Math.round((Date.now() - pageStart) / 1000);
+    // Use accumulated foreground time, not wall-clock time
+    var currentForeground = document.visibilityState === "visible" ? Date.now() - foregroundStart : 0;
+    var duration = Math.round((accumulatedForeground + currentForeground) / 1000);
     if (duration < 1) return;
+    // Reset for next SPA page
+    accumulatedForeground = 0;
+    foregroundStart = Date.now();
 
     send(endpoint + "/c/e?s=" + encodeURIComponent(site), {
       t: "duration",

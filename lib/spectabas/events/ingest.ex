@@ -40,9 +40,12 @@ defmodule Spectabas.Events.Ingest do
     visitor_id = resolve_visitor(site, payload, gdpr_mode, client_ip, ua_string)
     session = resolve_session(site.id, visitor_id, payload, ua_data, ip_data)
 
-    {url_parsed, url_path, url_host, url_scheme} = normalize_url(payload.u, gdpr_mode)
+    # Extract UTMs and search query from the ORIGINAL URL before GDPR stripping
+    utms = extract_utms(payload.u, payload)
+    search_query = extract_search_query(payload.u)
+
+    {_url_parsed, url_path, url_host, url_scheme} = normalize_url(payload.u, gdpr_mode)
     referrer_domain = parse_referrer_domain(payload.r)
-    utms = extract_utms(url_parsed, payload)
 
     now = DateTime.utc_now()
 
@@ -56,7 +59,7 @@ defmodule Spectabas.Events.Ingest do
         event_name: payload.n,
         timestamp: now,
         url: payload.u,
-        url_path: url_path,
+        url_path: normalize_path(url_path),
         url_host: url_host,
         url_scheme: url_scheme,
         referrer: payload.r,
@@ -74,7 +77,7 @@ defmodule Spectabas.Events.Ingest do
         screen_width: payload.sw,
         screen_height: payload.sh,
         duration: payload.d,
-        props: payload.p || %{},
+        props: merge_search_query(payload.p || %{}, search_query),
         user_agent: ua_string,
         browser_fingerprint:
           cond do
@@ -396,6 +399,39 @@ defmodule Spectabas.Events.Ingest do
     new_query = if cleaned == [], do: nil, else: URI.encode_query(cleaned)
     %{uri | query: new_query}
   end
+
+  # Normalize URL path: lowercase, strip trailing slash (unless root)
+  defp normalize_path("/"), do: "/"
+
+  defp normalize_path(path) when is_binary(path) do
+    path
+    |> String.downcase()
+    |> String.trim_trailing("/")
+    |> case do
+      "" -> "/"
+      p -> p
+    end
+  end
+
+  defp normalize_path(_), do: "/"
+
+  # Extract internal site search query from page URL query params
+  @search_params ~w(q query search s keyword)
+  defp extract_search_query(url) when is_binary(url) do
+    case URI.parse(url) do
+      %URI{query: query} when is_binary(query) ->
+        params = URI.decode_query(query)
+        Enum.find_value(@search_params, "", fn key -> params[key] end)
+
+      _ ->
+        ""
+    end
+  end
+
+  defp extract_search_query(_), do: ""
+
+  defp merge_search_query(props, ""), do: props
+  defp merge_search_query(props, query), do: Map.put(props, "_search_query", query)
 
   defp parse_referrer_domain(nil), do: ""
   defp parse_referrer_domain(""), do: ""

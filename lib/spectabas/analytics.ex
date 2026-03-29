@@ -28,20 +28,23 @@ defmodule Spectabas.Analytics do
         sum(pv) AS pageviews,
         uniqExact(visitor_id) AS unique_visitors,
         count() AS total_sessions,
-        round(countIf(pv = 1 AND dur = 0) / greatest(count(), 1) * 100, 1) AS bounce_rate,
+        round(countIf(pv = 1 AND dur = 0 AND ce = 0) / greatest(count(), 1) * 100, 1) AS bounce_rate,
         round(avgIf(dur, dur > 0), 0) AS avg_duration
       FROM (
         SELECT
           session_id,
           any(visitor_id) AS visitor_id,
           countIf(event_type = 'pageview') AS pv,
-          maxIf(duration_s, event_type = 'duration') AS dur
+          maxIf(duration_s, event_type = 'duration') AS dur,
+          countIf(event_type = 'custom' AND event_name NOT LIKE '\\_%') AS ce
         FROM events
         WHERE site_id = #{ClickHouse.param(site.id)}
           AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
           AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+          AND ip_is_bot = 0
           #{seg}
         GROUP BY session_id
+        HAVING pv > 0
       )
       """
 
@@ -75,6 +78,7 @@ defmodule Spectabas.Analytics do
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
       GROUP BY bucket
       ORDER BY bucket ASC
       """
@@ -301,17 +305,18 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
-      # Use country_stats materialized view
+      # Use raw events — uniqExact across multi-day ranges can't use SummingMergeTree
       sql = """
       SELECT
         ip_country,
-        sum(pageviews) AS pageviews,
-        sum(unique_visitors) AS unique_visitors
-      FROM country_stats
+        countIf(event_type = 'pageview') AS pageviews,
+        uniq(visitor_id) AS unique_visitors
+      FROM events
       WHERE site_id = #{ClickHouse.param(site.id)}
-        AND date >= #{ClickHouse.param(format_date(date_range.from))}
-        AND date <= #{ClickHouse.param(format_date(date_range.to))}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
         AND ip_country != ''
+        AND ip_is_bot = 0
       GROUP BY ip_country
       ORDER BY unique_visitors DESC
       LIMIT 100
@@ -328,18 +333,18 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
-      # Use country_stats materialized view (has region + city granularity)
       sql = """
       SELECT
         ip_region_name,
         ip_country,
-        sum(pageviews) AS pageviews,
-        sum(unique_visitors) AS unique_visitors
-      FROM country_stats
+        countIf(event_type = 'pageview') AS pageviews,
+        uniq(visitor_id) AS unique_visitors
+      FROM events
       WHERE site_id = #{ClickHouse.param(site.id)}
-        AND date >= #{ClickHouse.param(format_date(date_range.from))}
-        AND date <= #{ClickHouse.param(format_date(date_range.to))}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
         AND ip_region_name != ''
+        AND ip_is_bot = 0
       GROUP BY ip_region_name, ip_country
       ORDER BY unique_visitors DESC
       LIMIT 100
@@ -356,19 +361,19 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
-      # Use country_stats materialized view
       sql = """
       SELECT
         ip_country,
         ip_region_name,
         ip_city,
-        sum(pageviews) AS pageviews,
-        sum(unique_visitors) AS unique_visitors
-      FROM country_stats
+        countIf(event_type = 'pageview') AS pageviews,
+        uniq(visitor_id) AS unique_visitors
+      FROM events
       WHERE site_id = #{ClickHouse.param(site.id)}
-        AND date >= #{ClickHouse.param(format_date(date_range.from))}
-        AND date <= #{ClickHouse.param(format_date(date_range.to))}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
         AND ip_country != ''
+        AND ip_is_bot = 0
       GROUP BY ip_country, ip_region_name, ip_city
       ORDER BY pageviews DESC
       LIMIT 100
@@ -385,18 +390,18 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
-      # Use device_stats materialized view
       sql = """
       SELECT
         device_type,
         browser,
         os,
-        sum(pageviews) AS pageviews,
-        sum(unique_visitors) AS unique_visitors
-      FROM device_stats
+        countIf(event_type = 'pageview') AS pageviews,
+        uniq(visitor_id) AS unique_visitors
+      FROM events
       WHERE site_id = #{ClickHouse.param(site.id)}
-        AND date >= #{ClickHouse.param(format_date(date_range.from))}
-        AND date <= #{ClickHouse.param(format_date(date_range.to))}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
       GROUP BY device_type, browser, os
       ORDER BY pageviews DESC
       LIMIT 100
@@ -413,17 +418,17 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
-      # Use device_stats materialized view
       sql = """
       SELECT
         device_type,
-        sum(pageviews) AS pageviews,
-        sum(unique_visitors) AS unique_visitors
-      FROM device_stats
+        countIf(event_type = 'pageview') AS pageviews,
+        uniq(visitor_id) AS unique_visitors
+      FROM events
       WHERE site_id = #{ClickHouse.param(site.id)}
-        AND date >= #{ClickHouse.param(format_date(date_range.from))}
-        AND date <= #{ClickHouse.param(format_date(date_range.to))}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
         AND device_type != ''
+        AND ip_is_bot = 0
       GROUP BY device_type
       ORDER BY unique_visitors DESC
       LIMIT 100
@@ -440,17 +445,17 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
-      # Use device_stats materialized view
       sql = """
       SELECT
         browser AS name,
-        sum(pageviews) AS pageviews,
-        sum(unique_visitors) AS unique_visitors
-      FROM device_stats
+        countIf(event_type = 'pageview') AS pageviews,
+        uniq(visitor_id) AS unique_visitors
+      FROM events
       WHERE site_id = #{ClickHouse.param(site.id)}
-        AND date >= #{ClickHouse.param(format_date(date_range.from))}
-        AND date <= #{ClickHouse.param(format_date(date_range.to))}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
         AND browser != ''
+        AND ip_is_bot = 0
       GROUP BY browser
       ORDER BY unique_visitors DESC
       LIMIT 100
@@ -467,17 +472,17 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
-      # Use device_stats materialized view
       sql = """
       SELECT
         os AS name,
-        sum(pageviews) AS pageviews,
-        sum(unique_visitors) AS unique_visitors
-      FROM device_stats
+        countIf(event_type = 'pageview') AS pageviews,
+        uniq(visitor_id) AS unique_visitors
+      FROM events
       WHERE site_id = #{ClickHouse.param(site.id)}
-        AND date >= #{ClickHouse.param(format_date(date_range.from))}
-        AND date <= #{ClickHouse.param(format_date(date_range.to))}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
         AND os != ''
+        AND ip_is_bot = 0
       GROUP BY os
       ORDER BY unique_visitors DESC
       LIMIT 100
@@ -1149,34 +1154,18 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
+      # Extract search query from properties._search_query (set during ingest)
       sql = """
       SELECT
-        search_term,
+        JSONExtractString(properties, '_search_query') AS search_term,
         count() AS searches,
         uniq(visitor_id) AS unique_searchers
-      FROM (
-        SELECT
-          visitor_id,
-          extractURLParameter(referrer_url, 'q') AS q1,
-          extractURLParameter(referrer_url, 'query') AS q2,
-          extractURLParameter(referrer_url, 'search') AS q3,
-          extractURLParameter(referrer_url, 's') AS q4,
-          extractURLParameter(referrer_url, 'keyword') AS q5,
-          multiIf(
-            q1 != '', q1,
-            q2 != '', q2,
-            q3 != '', q3,
-            q4 != '', q4,
-            q5 != '', q5,
-            ''
-          ) AS search_term
-        FROM events
-        WHERE site_id = #{ClickHouse.param(site.id)}
-          AND event_type = 'pageview'
-          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-      )
-      WHERE search_term != ''
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND event_type = 'pageview'
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND JSONExtractString(properties, '_search_query') != ''
       GROUP BY search_term
       ORDER BY searches DESC
       LIMIT 100

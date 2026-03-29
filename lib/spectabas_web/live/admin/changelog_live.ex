@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.8.0 — 2026-03-29 06:00 UTC",
+       [
+         %{
+           title: "Data accuracy fixes — 8 issues",
+           description:
+             "Site Search fixed (was querying external referrer URLs instead of internal page URLs). Bot traffic now filtered from all analytics queries (ip_is_bot=0). Unique visitor counts reverted from materialized views to raw events (MVs were overcounting across multi-day ranges). Bounce rate now considers custom events (active visitors with 1 pageview no longer counted as bounces). UTMs extracted before GDPR URL stripping (were being lost in GDPR-on mode). Duration tracks foreground time instead of wall-clock (no more background-tab inflation). URL paths normalized (lowercase, trailing slash stripped). SPA duplicate pageviews prevented (URL-change check before sending)."
+         }
+       ]},
       {"v1.7.1 — 2026-03-29 05:00 UTC",
        [
          %{
