@@ -135,6 +135,12 @@ defmodule SpectabasWeb.DashboardPagesTest do
       {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/visitors")
       assert html =~ "Visitors"
     end
+
+    test "performance", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/performance")
+      assert html =~ "Performance"
+      assert html =~ "Core Web Vitals"
+    end
   end
 
   describe "sidebar is present on all pages" do
@@ -148,7 +154,7 @@ defmodule SpectabasWeb.DashboardPagesTest do
 
     test "sub-pages have sidebar", %{conn: conn, site: site} do
       pages =
-        ~w(pages sources geo devices network entry-exit map visitor-log transitions attribution search cohort campaigns goals funnels ecommerce reports exports settings)
+        ~w(pages sources geo devices network entry-exit map visitor-log transitions attribution search cohort campaigns goals funnels ecommerce reports exports settings performance)
 
       for page <- pages do
         {:ok, _view, html} = live(conn, "/dashboard/sites/#{site.id}/#{page}")
@@ -196,6 +202,79 @@ defmodule SpectabasWeb.DashboardPagesTest do
       {:ok, _view, html} = live(conn, ~p"/dashboard")
       assert html =~ site.name
       assert html =~ "Add Site"
+    end
+  end
+
+  describe "performance page" do
+    test "renders core web vitals section", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/performance")
+      assert html =~ "Core Web Vitals"
+      assert html =~ "Page Load Timing"
+    end
+
+    test "renders time range buttons", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/performance")
+      assert html =~ "24h"
+      assert html =~ "7 days"
+      assert html =~ "30 days"
+    end
+
+    test "handles time range change", %{conn: conn, site: site} do
+      {:ok, view, _html} = live(conn, ~p"/dashboard/sites/#{site.id}/performance")
+      html = render_click(view, "change_range", %{"range" => "30d"})
+      assert html =~ "30 days"
+    end
+
+    test "shows empty state when no data", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/performance")
+      assert html =~ "No Core Web Vitals data yet" || html =~ "No performance data yet"
+    end
+  end
+
+  describe "pages table" do
+    test "renders load time column header", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/pages")
+      assert html =~ "Load Time"
+    end
+  end
+
+  describe "transitions page" do
+    test "renders page selector", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/transitions")
+      assert html =~ "Page path"
+      assert html =~ "Analyze"
+    end
+
+    test "handles page navigation", %{conn: conn, site: site} do
+      {:ok, view, _html} = live(conn, ~p"/dashboard/sites/#{site.id}/transitions")
+      html = render_submit(view, "change_page", %{"page" => "/about"})
+      assert html =~ "/about"
+    end
+  end
+
+  describe "docs page" do
+    test "renders documentation", %{conn: conn} do
+      {:ok, _view, html} = live(conn, ~p"/docs")
+      assert html =~ "Documentation"
+      assert html =~ "Quick Start Guide"
+    end
+
+    test "renders JavaScript API section", %{conn: conn} do
+      {:ok, _view, html} = live(conn, ~p"/docs")
+      assert html =~ "JavaScript API"
+      assert html =~ "Spectabas.track"
+    end
+
+    test "renders Performance RUM section", %{conn: conn} do
+      {:ok, _view, html} = live(conn, ~p"/docs")
+      assert html =~ "Performance (RUM)"
+      assert html =~ "Core Web Vitals"
+    end
+
+    test "search filters articles", %{conn: conn} do
+      {:ok, view, _html} = live(conn, ~p"/docs")
+      html = render_keyup(view, "search", %{"q" => "ecommerce"})
+      assert html =~ "Ecommerce"
     end
   end
 end

@@ -108,6 +108,10 @@ defmodule SpectabasWeb.DocsLive do
     """
   end
 
+  @doc false
+  # Public for testing
+  def render_markdown_public(text), do: render_markdown(text)
+
   # Simple markdown-ish rendering (no external dep)
   # First extracts fenced code blocks (which may contain blank lines),
   # then splits remaining text on blank lines for block-level parsing.
