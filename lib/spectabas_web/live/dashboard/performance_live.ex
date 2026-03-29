@@ -284,7 +284,9 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
     """
   end
 
-  defp vital_score(p75, good, poor) do
+  # Public for testing
+  @doc false
+  def vital_score(p75, good, poor) do
     cond do
       p75 <= good -> "Good"
       p75 <= poor -> "Needs Work"
@@ -312,7 +314,8 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
     end
   end
 
-  defp format_ms(ms) do
+  @doc false
+  def format_ms(ms) do
     ms = to_num(ms)
 
     cond do
@@ -321,7 +324,8 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
     end
   end
 
-  defp format_bytes(bytes) do
+  @doc false
+  def format_bytes(bytes) do
     bytes = to_num(bytes)
 
     cond do
@@ -332,27 +336,29 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
     end
   end
 
-  defp to_num(n) when is_integer(n), do: n
-  defp to_num(n) when is_float(n), do: trunc(n)
+  @doc false
+  def to_num(n) when is_integer(n), do: n
+  def to_num(n) when is_float(n), do: trunc(n)
 
-  defp to_num(n) when is_binary(n) do
+  def to_num(n) when is_binary(n) do
     case Integer.parse(n) do
       {i, _} -> i
       :error -> 0
     end
   end
 
-  defp to_num(_), do: 0
+  def to_num(_), do: 0
 
-  defp to_float(n) when is_float(n), do: n
-  defp to_float(n) when is_integer(n), do: n * 1.0
+  @doc false
+  def to_float(n) when is_float(n), do: n
+  def to_float(n) when is_integer(n), do: n * 1.0
 
-  defp to_float(n) when is_binary(n) do
+  def to_float(n) when is_binary(n) do
     case Float.parse(n) do
       {f, _} -> f
       :error -> 0.0
     end
   end
 
-  defp to_float(_), do: 0.0
+  def to_float(_), do: 0.0
 end
