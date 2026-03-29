@@ -356,13 +356,10 @@
 
     var perf = {};
 
-    // Navigation timing
+    // Navigation timing — try PerformanceNavigationTiming first, fall back to performance.timing
     try {
       var nav = performance.getEntriesByType("navigation")[0];
-      if (nav) {
-        // loadEventEnd is 0 until the load event has fully fired — abort and retry
-        if (nav.loadEventEnd === 0) return;
-
+      if (nav && nav.loadEventEnd > 0) {
         perf.dns = Math.round(nav.domainLookupEnd - nav.domainLookupStart);
         perf.tcp = Math.round(nav.connectEnd - nav.connectStart);
         perf.tls = nav.secureConnectionStart > 0 ? Math.round(nav.connectEnd - nav.secureConnectionStart) : 0;
@@ -372,6 +369,19 @@
         perf.dom_complete = Math.round(nav.domContentLoadedEventEnd - nav.navigationStart);
         perf.page_load = Math.round(nav.loadEventEnd - nav.navigationStart);
         perf.transfer_size = nav.transferSize || 0;
+        perf.dom_size = document.getElementsByTagName("*").length;
+      } else if (performance.timing && performance.timing.loadEventEnd > 0) {
+        // Fallback to deprecated but widely-supported performance.timing
+        var t = performance.timing;
+        perf.dns = Math.round(t.domainLookupEnd - t.domainLookupStart);
+        perf.tcp = Math.round(t.connectEnd - t.connectStart);
+        perf.tls = t.secureConnectionStart > 0 ? Math.round(t.connectEnd - t.secureConnectionStart) : 0;
+        perf.ttfb = Math.round(t.responseStart - t.requestStart);
+        perf.download = Math.round(t.responseEnd - t.responseStart);
+        perf.dom_interactive = Math.round(t.domInteractive - t.navigationStart);
+        perf.dom_complete = Math.round(t.domContentLoadedEventEnd - t.navigationStart);
+        perf.page_load = Math.round(t.loadEventEnd - t.navigationStart);
+        perf.transfer_size = 0;
         perf.dom_size = document.getElementsByTagName("*").length;
       }
     } catch (e) {}
@@ -440,7 +450,7 @@
     }
   });
 
-  // Send RUM after page is fully loaded, with retry for loadEventEnd
+  // Send RUM + CWV after page is fully loaded
   function scheduleRUM() {
     collectRUM();
     // If loadEventEnd wasn't ready, retry a few times
@@ -452,22 +462,22 @@
         if (rumSent || retries >= 5) clearInterval(interval);
       }, 1000);
     }
+    // Also try sending CWV after a delay (LCP needs time to finalize)
+    setTimeout(sendCWV, 5000);
   }
 
-  if (typeof requestIdleCallback !== "undefined") {
-    requestIdleCallback(function () {
-      setTimeout(scheduleRUM, 1000);
-    });
+  // Wait for load event, then schedule RUM collection
+  if (document.readyState === "complete") {
+    // Page already loaded (script loaded late)
+    setTimeout(scheduleRUM, 1000);
   } else {
     window.addEventListener("load", function () {
-      setTimeout(scheduleRUM, 2000);
+      setTimeout(scheduleRUM, 1000);
     });
   }
 
-  // Fallback: send CWV after 10s if visibilitychange hasn't fired
-  setTimeout(function () {
-    sendCWV();
-  }, 10000);
+  // Fallback: send CWV after 10s if nothing else triggered it
+  setTimeout(sendCWV, 10000);
 
   function mapToStrings(obj) {
     var result = {};
