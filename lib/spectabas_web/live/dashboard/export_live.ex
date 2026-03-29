@@ -17,7 +17,12 @@ defmodule SpectabasWeb.Dashboard.ExportLive do
        |> put_flash(:error, "Unauthorized")
        |> redirect(to: ~p"/")}
     else
-      today = Date.utc_today()
+      today =
+        case DateTime.now(site.timezone || "UTC") do
+          {:ok, local_now} -> DateTime.to_date(local_now)
+          _ -> Date.utc_today()
+        end
+
       from = Date.add(today, -30)
 
       {:ok,

@@ -153,10 +153,27 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   defp schedule_refresh, do: Process.send_after(self(), :refresh, @refresh_interval_ms)
 
   defp date_range_and_opts(socket) do
-    %{date_from: from, date_to: to, segment: segment} = socket.assigns
+    %{date_from: from, date_to: to, segment: segment, site: site} = socket.assigns
+    tz = site.timezone || "UTC"
 
-    {%{from: DateTime.new!(from, ~T[00:00:00]), to: DateTime.new!(to, ~T[23:59:59])},
-     [segment: segment]}
+    {from_dt, to_dt} = dates_to_utc_range(from, to, tz)
+
+    {%{from: from_dt, to: to_dt}, [segment: segment]}
+  end
+
+  # Convert local Date range to UTC DateTime range using site timezone
+  defp dates_to_utc_range(from, to, tz) do
+    case DateTime.now(tz) do
+      {:ok, _} ->
+        from_dt = DateTime.new!(from, ~T[00:00:00], tz) |> DateTime.shift_zone!("Etc/UTC")
+        # End of day: 23:59:59 in site timezone
+        to_dt = DateTime.new!(to, ~T[23:59:59], tz) |> DateTime.shift_zone!("Etc/UTC")
+        {from_dt, to_dt}
+
+      _ ->
+        # Invalid timezone — fall back to UTC
+        {DateTime.new!(from, ~T[00:00:00]), DateTime.new!(to, ~T[23:59:59])}
+    end
   end
 
   # Full reload — used on period/segment change and refresh
@@ -179,13 +196,12 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     prev_stats =
       if compare do
         days = Date.diff(to, from)
+        tz = site.timezone || "UTC"
 
-        prev_range = %{
-          from: DateTime.new!(Date.add(from, -(days + 1)), ~T[00:00:00]),
-          to: DateTime.new!(Date.add(from, -1), ~T[23:59:59])
-        }
+        {prev_from, prev_to} =
+          dates_to_utc_range(Date.add(from, -(days + 1)), Date.add(from, -1), tz)
 
-        fetch_overview(site, user, prev_range, [])
+        fetch_overview(site, user, %{from: prev_from, to: prev_to}, [])
       else
         nil
       end
