@@ -45,6 +45,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.4.0 — 2026-03-29 12:00 UTC",
+       [
+         %{
+           title: "Insights & Anomaly Alerts",
+           description:
+             "automated analysis comparing last 7 days vs prior 7 days. Detects: traffic drops/spikes, bounce rate increases, referrer sources gained/lost, page traffic drops, high exit rate pages. Color-coded severity (alert/warning/notice/info) with actionable recommendations."
+         },
+         %{
+           title: "Visitor Journey Mapping",
+           description:
+             "shows the most common multi-step paths visitors take through the site. Each journey is a sequence of page pills with arrows. Conversion pages highlighted in green. Stats: total sessions, multi-page sessions, avg pages/session, converting sessions."
+         }
+       ]},
       {"v1.3.3 — 2026-03-29 11:00 UTC",
        [
          %{

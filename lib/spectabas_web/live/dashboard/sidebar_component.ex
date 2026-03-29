@@ -98,6 +98,16 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
               active={@active == "overview"}
             />
             <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/insights"}
+              label="Insights"
+              active={@active == "insights"}
+            />
+            <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/journeys"}
+              label="Journeys"
+              active={@active == "journeys"}
+            />
+            <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/realtime"}
               label="Realtime"
               active={@active == "realtime"}
@@ -303,6 +313,8 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
   defp mobile_nav_items(site_id) do
     [
       {~p"/dashboard/sites/#{site_id}", "Dashboard"},
+      {~p"/dashboard/sites/#{site_id}/insights", "Insights"},
+      {~p"/dashboard/sites/#{site_id}/journeys", "Journeys"},
       {~p"/dashboard/sites/#{site_id}/realtime", "Realtime"},
       {~p"/dashboard/sites/#{site_id}/pages", "Pages"},
       {~p"/dashboard/sites/#{site_id}/entry-exit", "Entry/Exit"},

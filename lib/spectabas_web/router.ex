@@ -147,6 +147,8 @@ defmodule SpectabasWeb.Router do
       live "/sites/:site_id/attribution", Dashboard.AttributionLive, :index
       live "/sites/:site_id/search", Dashboard.SearchLive, :index
       live "/sites/:site_id/cohort", Dashboard.CohortLive, :index
+      live "/sites/:site_id/insights", Dashboard.InsightsLive, :index
+      live "/sites/:site_id/journeys", Dashboard.JourneysLive, :index
       live "/sites/:site_id/devices", Dashboard.DevicesLive, :index
       live "/sites/:site_id/network", Dashboard.NetworkLive, :index
       live "/sites/:site_id/campaigns", Dashboard.CampaignsLive, :index
