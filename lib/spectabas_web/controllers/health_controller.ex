@@ -2,17 +2,13 @@ defmodule SpectabasWeb.HealthController do
   use SpectabasWeb, :controller
 
   def show(conn, _params) do
-    case Spectabas.Health.check() do
-      :ok ->
-        conn
-        |> put_status(200)
-        |> json(%{status: "ok"})
+    details = Spectabas.Health.detailed()
 
-      {:error, reason} ->
-        conn
-        |> put_status(503)
-        |> json(%{status: "error", reason: reason})
-    end
+    status_code = if details.overall == "ok", do: 200, else: 503
+
+    conn
+    |> put_status(status_code)
+    |> json(details)
   end
 
   def diag(conn, _params) do
