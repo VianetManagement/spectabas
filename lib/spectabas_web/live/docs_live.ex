@@ -662,6 +662,7 @@ defmodule SpectabasWeb.DocsLive do
             - **Pageviews** — total views
             - **Unique Visitors** — distinct visitors
             - **Avg Duration** — average time on page
+            - **Load Time** — median page load from Real User Monitoring data, color-coded: green (under 1s), amber (1-3s), red (over 3s). Shows "—" if no RUM data is available for that page yet.
             """
           },
           %{
@@ -686,6 +687,10 @@ defmodule SpectabasWeb.DocsLive do
 
             Enter a page path (e.g., `/pricing`) and click **Analyze**. Click any page in the results to follow the flow and explore how visitors navigate your site.
 
+            ### Performance Stats
+
+            When RUM data is available for the analyzed page, the current page card shows real load times: **Load** (full page load), **LCP** (Largest Contentful Paint), and **FCP** (First Contentful Paint), color-coded by speed. This lets you spot slow pages without leaving the transitions view.
+
             > **Example:** Analyzing `/pricing` might show that 40% came from `/features` and 25% went to `/signup` — telling you your features page effectively drives pricing exploration, and pricing converts to signup.
             """
           },
@@ -693,25 +698,38 @@ defmodule SpectabasWeb.DocsLive do
             id: "performance",
             title: "Performance (RUM)",
             body: """
-            Real User Monitoring measures actual page load times and Core Web Vitals from your visitors' browsers. Data is collected passively with zero impact on user experience.
+            Real User Monitoring measures actual page load times and Core Web Vitals from your visitors' browsers. Data is collected passively with zero impact on user experience — the tracker uses `requestIdleCallback` and `PerformanceObserver` APIs, and waits for the page to fully load before collecting.
 
             ### Core Web Vitals
-            Google's key metrics for page experience, scored as **Good**, **Needs Work**, or **Poor**:
 
-            - **LCP (Largest Contentful Paint)** — how fast the main content loads. Good: under 2.5s
-            - **CLS (Cumulative Layout Shift)** — visual stability. Good: under 0.1
-            - **FID (First Input Delay)** — interactivity responsiveness. Good: under 100ms
+            Google's key metrics for page experience, scored as **Good**, **Needs Work**, or **Poor** using Google's official thresholds:
+
+            - **LCP (Largest Contentful Paint)** — how fast the main content loads. Good: under 2.5s, Poor: over 4s
+            - **CLS (Cumulative Layout Shift)** — visual stability. Good: under 0.1, Poor: over 0.25
+            - **FID (First Input Delay)** — interactivity responsiveness. Good: under 100ms, Poor: over 300ms
+
+            FID requires a user interaction (click, tap, keypress) to measure. If no visitors interact before navigating away, FID data will be absent for that period — this is normal.
 
             ### Page Load Timing
-            Median values for: **TTFB** (time to first byte), **First Paint**, **DOM Ready**, and **Full Load**.
+
+            Median values for: **TTFB** (time to first byte), **First Paint** (first contentful paint), **DOM Ready** (DOMContentLoaded), and **Full Load** (load event complete).
 
             ### Performance by Device
-            Compare load times across desktop, mobile, and tablet visitors.
+
+            Compare load times across desktop, mobile, and tablet visitors. Useful for identifying if mobile users have a significantly worse experience.
 
             ### Slowest Pages
+
             Pages ranked by median load time (slowest first), with TTFB and transfer size. Click any page to see its transition flow.
 
-            > **Tip:** Focus on pages with high traffic AND slow load times for the biggest impact.
+            ### Performance Across the Dashboard
+
+            Performance data is also surfaced in other dashboard views for quick reference:
+
+            - **Pages** — each page row shows a color-coded load time pill (green under 1s, amber 1-3s, red over 3s)
+            - **Transitions** — the current page card shows Load, LCP, and FCP stats when RUM data is available
+
+            > **Tip:** Focus on pages with high traffic AND slow load times for the biggest impact. Use the Pages view to quickly spot which popular pages need optimization.
             """
           },
           %{
