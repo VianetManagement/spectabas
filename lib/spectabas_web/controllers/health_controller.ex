@@ -33,9 +33,10 @@ defmodule SpectabasWeb.HealthController do
 
   defp test_rum_debug do
     if Process.whereis(Spectabas.ClickHouse) do
-      sql = """
+      # Summary by event_name
+      summary_sql = """
       SELECT
-        event_name,
+        event_name, site_id,
         count() AS total,
         countIf(JSONExtractString(properties, 'page_load') != '') AS has_page_load,
         countIf(JSONExtractString(properties, 'ttfb') != '') AS has_ttfb,
@@ -44,13 +45,57 @@ defmodule SpectabasWeb.HealthController do
       FROM events
       WHERE event_name IN ('_rum', '_cwv')
         AND timestamp >= now() - INTERVAL 7 DAY
-      GROUP BY event_name
+      GROUP BY event_name, site_id
+      ORDER BY site_id, event_name
       """
 
-      case Spectabas.ClickHouse.query(sql) do
-        {:ok, rows} -> rows
-        {:error, e} -> "error: #{inspect(e) |> String.slice(0, 200)}"
-      end
+      # Actual query result for site 2 (beverlyonmain)
+      query_sql = """
+      SELECT
+        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'page_load')),
+          toFloat64OrZero(JSONExtractString(properties, 'page_load')) > 0)) AS median_page_load,
+        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'ttfb')),
+          toFloat64OrZero(JSONExtractString(properties, 'ttfb')) > 0)) AS median_ttfb,
+        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'dom_complete')),
+          toFloat64OrZero(JSONExtractString(properties, 'dom_complete')) > 0)) AS median_dom,
+        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'fcp')),
+          toFloat64OrZero(JSONExtractString(properties, 'fcp')) > 0)) AS median_fcp,
+        count() AS samples
+      FROM events
+      WHERE event_name = '_rum'
+        AND timestamp >= now() - INTERVAL 7 DAY
+      """
+
+      # Sample raw properties
+      sample_sql = """
+      SELECT
+        site_id,
+        properties,
+        timestamp
+      FROM events
+      WHERE event_name = '_rum'
+        AND timestamp >= now() - INTERVAL 1 DAY
+      ORDER BY timestamp DESC
+      LIMIT 3
+      """
+
+      %{
+        summary:
+          case Spectabas.ClickHouse.query(summary_sql) do
+            {:ok, rows} -> rows
+            {:error, e} -> "error: #{inspect(e) |> String.slice(0, 200)}"
+          end,
+        query_result:
+          case Spectabas.ClickHouse.query(query_sql) do
+            {:ok, rows} -> rows
+            {:error, e} -> "error: #{inspect(e) |> String.slice(0, 200)}"
+          end,
+        sample_events:
+          case Spectabas.ClickHouse.query(sample_sql) do
+            {:ok, rows} -> rows
+            {:error, e} -> "error: #{inspect(e) |> String.slice(0, 200)}"
+          end
+      }
     else
       "not_started"
     end
