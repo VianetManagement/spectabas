@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.9.3 — 2026-03-29 15:00 UTC",
+       [
+         %{
+           title: "Fix RUM page_load/dom_complete always NaN — wrong API property",
+           description:
+             "Root cause: the tracker used nav.navigationStart which doesn't exist on PerformanceNavigationTiming (the modern API). It only exists on the deprecated performance.timing. So nav.loadEventEnd - undefined = NaN for page_load, dom_complete, and dom_interactive. Fixed by using nav.startTime (which is 0 for navigation entries) instead of nav.navigationStart. TTFB/FCP/DNS worked because they subtract from other PerformanceNavigationTiming properties, not navigationStart."
+         }
+       ]},
       {"v1.9.2 — 2026-03-29 14:00 UTC",
        [
          %{

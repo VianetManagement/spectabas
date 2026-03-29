@@ -392,15 +392,18 @@
     try {
       var nav = performance.getEntriesByType("navigation")[0];
       if (nav) {
+        // PerformanceNavigationTiming uses startTime (always 0) not navigationStart
+        // navigationStart only exists on the deprecated performance.timing object
+        var navStart = nav.startTime || 0;
         perf.dns = Math.round(nav.domainLookupEnd - nav.domainLookupStart);
         perf.tcp = Math.round(nav.connectEnd - nav.connectStart);
         perf.tls = nav.secureConnectionStart > 0 ? Math.round(nav.connectEnd - nav.secureConnectionStart) : 0;
         perf.ttfb = Math.round(nav.responseStart - nav.requestStart);
         perf.download = Math.round(nav.responseEnd - nav.responseStart);
-        if (nav.domInteractive > 0) perf.dom_interactive = Math.round(nav.domInteractive - nav.navigationStart);
-        if (nav.domContentLoadedEventEnd > 0) perf.dom_complete = Math.round(nav.domContentLoadedEventEnd - nav.navigationStart);
+        if (nav.domInteractive > 0) perf.dom_interactive = Math.round(nav.domInteractive - navStart);
+        if (nav.domContentLoadedEventEnd > 0) perf.dom_complete = Math.round(nav.domContentLoadedEventEnd - navStart);
         if (nav.loadEventEnd > 0) {
-          perf.page_load = Math.round(nav.loadEventEnd - nav.navigationStart);
+          perf.page_load = Math.round(nav.loadEventEnd - navStart);
           hasPageLoad = true;
         }
         perf.transfer_size = nav.transferSize || 0;
