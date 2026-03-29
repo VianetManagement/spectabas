@@ -1,7 +1,7 @@
 defmodule SpectabasWeb.ScriptController do
   use SpectabasWeb, :controller
 
-  @cache_control "public, max-age=86400, stale-while-revalidate=3600"
+  @cache_control "public, max-age=3600, stale-while-revalidate=600"
 
   def show(conn, _params) do
     script_path = Application.app_dir(:spectabas, "priv/static/s.js")

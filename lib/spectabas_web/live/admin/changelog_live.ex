@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.6.1 — 2026-03-29 01:00 UTC",
+       [
+         %{
+           title: "RUM collection reliability fix",
+           description:
+             "RUM data no longer requires the load event to fire — sends immediately when TTFB is available (100ms after script load). Fixes RUM not collecting on heavy WordPress/Elementor sites where visitors leave before the load event fires. Missing metrics (page_load, dom_complete) are excluded server-side via quantileIf. Script cache reduced from 24h to 1h for faster tracker updates."
+         }
+       ]},
       {"v1.6.0 — 2026-03-29 00:00 UTC",
        [
          %{

@@ -359,29 +359,25 @@
     // Navigation timing — try PerformanceNavigationTiming first, fall back to performance.timing
     try {
       var nav = performance.getEntriesByType("navigation")[0];
-      if (nav && nav.loadEventEnd > 0) {
+      if (nav) {
         perf.dns = Math.round(nav.domainLookupEnd - nav.domainLookupStart);
         perf.tcp = Math.round(nav.connectEnd - nav.connectStart);
         perf.tls = nav.secureConnectionStart > 0 ? Math.round(nav.connectEnd - nav.secureConnectionStart) : 0;
         perf.ttfb = Math.round(nav.responseStart - nav.requestStart);
         perf.download = Math.round(nav.responseEnd - nav.responseStart);
-        perf.dom_interactive = Math.round(nav.domInteractive - nav.navigationStart);
-        perf.dom_complete = Math.round(nav.domContentLoadedEventEnd - nav.navigationStart);
-        perf.page_load = Math.round(nav.loadEventEnd - nav.navigationStart);
+        // These may be 0 if the page hasn't fully loaded yet — that's fine,
+        // the server uses quantileIf to exclude zeros from aggregations
+        if (nav.domInteractive > 0) perf.dom_interactive = Math.round(nav.domInteractive - nav.navigationStart);
+        if (nav.domContentLoadedEventEnd > 0) perf.dom_complete = Math.round(nav.domContentLoadedEventEnd - nav.navigationStart);
+        if (nav.loadEventEnd > 0) perf.page_load = Math.round(nav.loadEventEnd - nav.navigationStart);
         perf.transfer_size = nav.transferSize || 0;
         perf.dom_size = document.getElementsByTagName("*").length;
-      } else if (performance.timing && performance.timing.loadEventEnd > 0) {
-        // Fallback to deprecated but widely-supported performance.timing
+      } else if (performance.timing) {
         var t = performance.timing;
-        perf.dns = Math.round(t.domainLookupEnd - t.domainLookupStart);
-        perf.tcp = Math.round(t.connectEnd - t.connectStart);
-        perf.tls = t.secureConnectionStart > 0 ? Math.round(t.connectEnd - t.secureConnectionStart) : 0;
-        perf.ttfb = Math.round(t.responseStart - t.requestStart);
-        perf.download = Math.round(t.responseEnd - t.responseStart);
-        perf.dom_interactive = Math.round(t.domInteractive - t.navigationStart);
-        perf.dom_complete = Math.round(t.domContentLoadedEventEnd - t.navigationStart);
-        perf.page_load = Math.round(t.loadEventEnd - t.navigationStart);
-        perf.transfer_size = 0;
+        if (t.requestStart > 0) perf.ttfb = Math.round(t.responseStart - t.requestStart);
+        if (t.domInteractive > 0) perf.dom_interactive = Math.round(t.domInteractive - t.navigationStart);
+        if (t.domContentLoadedEventEnd > 0) perf.dom_complete = Math.round(t.domContentLoadedEventEnd - t.navigationStart);
+        if (t.loadEventEnd > 0) perf.page_load = Math.round(t.loadEventEnd - t.navigationStart);
         perf.dom_size = document.getElementsByTagName("*").length;
       }
     } catch (e) {}
@@ -396,8 +392,8 @@
       }
     } catch (e) {}
 
-    // Only send if we got meaningful data (page_load > 0)
-    if (perf.page_load && perf.page_load > 0) {
+    // Send if we have at least TTFB (available almost immediately)
+    if (perf.ttfb && perf.ttfb > 0) {
       rumSent = true;
       sendEvent("custom", { n: "_rum", p: mapToStrings(perf) });
     }
@@ -450,33 +446,22 @@
     }
   });
 
-  // Send RUM + CWV after page is fully loaded
-  function scheduleRUM() {
+  // Collect RUM immediately — TTFB is available right away, no need to wait
+  // for load event. Heavy pages (WordPress + images) may never fire load
+  // before the visitor leaves.
+  setTimeout(function () {
     collectRUM();
-    // If loadEventEnd wasn't ready, retry a few times
-    if (!rumSent) {
-      var retries = 0;
-      var interval = setInterval(function () {
-        collectRUM();
-        retries++;
-        if (rumSent || retries >= 5) clearInterval(interval);
-      }, 1000);
-    }
-    // Also try sending CWV after a delay (LCP needs time to finalize)
-    setTimeout(sendCWV, 5000);
-  }
+    // Retry to pick up page_load/dom_complete if they weren't ready yet
+    if (!rumSent) setTimeout(collectRUM, 2000);
+  }, 100);
 
-  // Wait for load event, then schedule RUM collection
-  if (document.readyState === "complete") {
-    // Page already loaded (script loaded late)
-    setTimeout(scheduleRUM, 1000);
-  } else {
-    window.addEventListener("load", function () {
-      setTimeout(scheduleRUM, 1000);
-    });
-  }
+  // Also try after load event to capture page_load metric
+  window.addEventListener("load", function () {
+    setTimeout(collectRUM, 500);
+  });
 
-  // Fallback: send CWV after 10s if nothing else triggered it
+  // CWV: try at 5s, on visibilitychange (already registered above), and 10s fallback
+  setTimeout(sendCWV, 5000);
   setTimeout(sendCWV, 10000);
 
   function mapToStrings(obj) {
