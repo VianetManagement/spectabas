@@ -11,6 +11,7 @@ Spectabas is a multi-tenant, privacy-first web analytics SaaS platform built wit
 - **ClickHouse** — event storage and analytics queries (Render private service, Ohio region)
 - **Chart.js** — interactive charts (vendored UMD build, no CDN)
 - **wax_** — WebAuthn/passkey 2FA support (FIDO2 hardware keys, platform authenticators)
+- **tzdata** — timezone database for Elixir (required for site timezone support)
 - **Render** — deployment platform (Docker-based)
 
 ## Architecture
@@ -57,7 +58,7 @@ mix ecto.setup
 mix phx.server
 ```
 
-Tests: `mix test` (211 tests, no ClickHouse needed)
+Tests: `mix test` (306 tests, no ClickHouse needed)
 Format: `mix format`
 Compile check: `mix compile --warnings-as-errors`
 
@@ -110,7 +111,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - Visitor intent breakdown
 
 ### Analytics Pages (sidebar navigation)
-- **Behavior**: Pages, Entry/Exit, Page Transitions, Site Search
+- **Behavior**: Pages, Entry/Exit, Page Transitions, Site Search, Performance (RUM)
 - **Acquisition**: Sources, Attribution, Campaigns (UTM builder)
 - **Audience**: Geography, Visitor Map, Devices, Network, Visitor Log, Cohort Retention
 - **Conversions**: Goals, Funnels, Ecommerce
@@ -118,6 +119,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 
 ### Unique Features
 - **Visitor Intent Detection** — auto-classifies visitors as buying/researching/comparing/support/returning/browsing/bot
+- **Real User Monitoring** — Core Web Vitals (LCP, CLS, FID), page load timing, per-page and per-device performance
 - **Cross-linking** — click any dimension to navigate to filtered views (ASN→visitors, page→transitions, source→visitor log)
 - **IP Cross-referencing** — visitor profiles show other visitors sharing the same IP
 - **EU Flag** — GDPR compliance indicator from MaxMind
@@ -179,3 +181,5 @@ A comprehensive security audit identified and fixed 10 findings:
 - **Async dashboard**: Mount loads critical stats only; deferred stats load via `handle_info(:load_deferred)`
 - **Chart updates**: Use `push_event` to push data to Chart.js hooks (not data attributes)
 - **Visitor dedup**: GDPR-off visitors without cookies are matched by fingerprint via `Visitors.find_by_fingerprint/2` before creating a new record
+- **Timezone handling**: Requires `tzdata` library — without it, `DateTime.shift_zone` silently fails to UTC. All dashboard date boundaries use site timezone via `dates_to_utc_range/3`. Rolling periods (24h, 7d, 30d) are UTC-relative and timezone-independent. Only "Today" and date-picker ranges need timezone conversion.
+- **RUM collection**: Tracker sends `_rum` (nav timing) and `_cwv` (Core Web Vitals) custom events. Uses `performance.getEntriesByType("navigation")` with `performance.timing` fallback. Queries use `quantileIf` to exclude zeros (FID requires user interaction, may be absent).
