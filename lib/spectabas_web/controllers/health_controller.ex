@@ -66,6 +66,21 @@ defmodule SpectabasWeb.HealthController do
         AND timestamp >= now() - INTERVAL 7 DAY
       """
 
+      # Check how many page_load values are "NaN" vs real numbers
+      nan_sql = """
+      SELECT
+        site_id,
+        count() AS total,
+        countIf(JSONExtractString(properties, 'page_load') = 'NaN') AS page_load_nan,
+        countIf(toFloat64OrZero(JSONExtractString(properties, 'page_load')) > 0) AS page_load_real,
+        countIf(JSONExtractString(properties, 'dom_complete') = 'NaN') AS dom_complete_nan,
+        countIf(toFloat64OrZero(JSONExtractString(properties, 'dom_complete')) > 0) AS dom_complete_real
+      FROM events
+      WHERE event_name = '_rum'
+        AND timestamp >= now() - INTERVAL 7 DAY
+      GROUP BY site_id
+      """
+
       # Sample raw properties
       sample_sql = """
       SELECT
@@ -76,7 +91,7 @@ defmodule SpectabasWeb.HealthController do
       WHERE event_name = '_rum'
         AND timestamp >= now() - INTERVAL 1 DAY
       ORDER BY timestamp DESC
-      LIMIT 3
+      LIMIT 5
       """
 
       %{
@@ -87,6 +102,11 @@ defmodule SpectabasWeb.HealthController do
           end,
         query_result:
           case Spectabas.ClickHouse.query(query_sql) do
+            {:ok, rows} -> rows
+            {:error, e} -> "error: #{inspect(e) |> String.slice(0, 200)}"
+          end,
+        nan_analysis:
+          case Spectabas.ClickHouse.query(nan_sql) do
             {:ok, rows} -> rows
             {:error, e} -> "error: #{inspect(e) |> String.slice(0, 200)}"
           end,
