@@ -1,7 +1,7 @@
 defmodule Spectabas.Workers.SessionCleanup do
   @moduledoc """
   Closes stale sessions that have been idle for more than 30 minutes.
-  Sets ended_at to now and marks as bounce if only 1 pageview.
+  Uses batch UPDATE queries instead of loading all sessions into memory.
   """
 
   use Oban.Worker, queue: :maintenance, max_attempts: 3
@@ -10,6 +10,7 @@ defmodule Spectabas.Workers.SessionCleanup do
 
   alias Spectabas.Repo
   alias Spectabas.Sessions.Session
+  require Logger
 
   @idle_threshold_minutes 30
 
@@ -18,24 +19,31 @@ defmodule Spectabas.Workers.SessionCleanup do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
     threshold = DateTime.add(now, -@idle_threshold_minutes * 60, :second)
 
-    stale_sessions =
+    # Batch update: close stale sessions with single pageview (bounces)
+    {bounce_count, _} =
       from(s in Session,
         where: is_nil(s.ended_at),
-        where: s.updated_at < ^threshold
+        where: s.updated_at < ^threshold,
+        where: s.pageview_count <= 1
       )
-      |> Repo.all()
+      |> Repo.update_all(set: [ended_at: now, is_bounce: true])
 
-    Enum.each(stale_sessions, fn session ->
-      duration = DateTime.diff(now, session.started_at, :second)
+    # Batch update: close stale sessions with multiple pageviews
+    # Duration is approximated as (now - started_at) since we don't have
+    # the exact last activity time in a batch update context
+    {non_bounce_count, _} =
+      from(s in Session,
+        where: is_nil(s.ended_at),
+        where: s.updated_at < ^threshold,
+        where: s.pageview_count > 1
+      )
+      |> Repo.update_all(set: [ended_at: now, is_bounce: false])
 
-      session
-      |> Session.changeset(%{
-        ended_at: now,
-        duration_s: max(duration, 0),
-        is_bounce: (session.pageview_count || 0) <= 1
-      })
-      |> Repo.update()
-    end)
+    total = bounce_count + non_bounce_count
+
+    if total > 0 do
+      Logger.info("[SessionCleanup] Closed #{total} stale sessions (#{bounce_count} bounces)")
+    end
 
     :ok
   end

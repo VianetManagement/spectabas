@@ -33,9 +33,8 @@ defmodule Spectabas.Events.Ingest do
 
     client_ip = extract_client_ip(conn)
     ua_string = get_user_agent(conn)
-    ua_data = parse_user_agent(ua_string)
-    client_bot_hint = payload._bot == 1
-    is_bot = detect_bot(ua_string) || client_bot_hint
+    # Parse UA once — reuse for both data extraction and bot detection
+    {ua_data, is_bot} = parse_and_detect(ua_string, payload._bot == 1)
     ip_data = enrich_ip(client_ip, gdpr_mode, is_bot)
 
     visitor_id = resolve_visitor(site, payload, gdpr_mode, client_ip, ua_string)
@@ -123,13 +122,19 @@ defmodule Spectabas.Events.Ingest do
     end
   end
 
-  defp parse_user_agent(""),
-    do: %{device_type: "", browser: "", browser_version: "", os: "", os_version: ""}
+  # Single UA parse for both data extraction and bot detection (was 2-3 parses before)
+  defp parse_and_detect("", client_bot_hint),
+    do:
+      {%{device_type: "", browser: "", browser_version: "", os: "", os_version: ""},
+       client_bot_hint}
 
-  defp parse_user_agent(ua_string) do
+  defp parse_and_detect(ua_string, client_bot_hint) do
     case UAInspector.parse(ua_string) do
+      %UAInspector.Result.Bot{} ->
+        {%{device_type: "", browser: "", browser_version: "", os: "", os_version: ""}, true}
+
       %UAInspector.Result{} = result ->
-        %{
+        data = %{
           device_type: get_in_result(result, [:device, :type]) || "",
           browser: get_in_result(result, [:client, :name]) || "",
           browser_version: get_in_result(result, [:client, :version]) || "",
@@ -137,8 +142,11 @@ defmodule Spectabas.Events.Ingest do
           os_version: get_in_result(result, [:os, :version]) || ""
         }
 
+        {data, client_bot_hint}
+
       _ ->
-        %{device_type: "", browser: "", browser_version: "", os: "", os_version: ""}
+        {%{device_type: "", browser: "", browser_version: "", os: "", os_version: ""},
+         client_bot_hint}
     end
   end
 
@@ -161,13 +169,6 @@ defmodule Spectabas.Events.Ingest do
       val when is_binary(val) -> val
       val when is_atom(val) and val != nil -> to_string(val)
       _ -> nil
-    end
-  end
-
-  defp detect_bot(ua_string) do
-    case UAInspector.parse(ua_string) do
-      %UAInspector.Result.Bot{} -> true
-      _ -> UAInspector.bot?(ua_string)
     end
   end
 

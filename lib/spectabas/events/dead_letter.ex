@@ -9,27 +9,31 @@ defmodule Spectabas.Events.DeadLetter do
 
   @doc """
   Enqueue a list of ClickHouse rows (maps) that failed to insert,
-  along with the error reason.
+  along with the error reason. Uses bulk insert (was row-by-row before).
   """
   def enqueue(rows, reason) when is_list(rows) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
     error_str = inspect(reason, limit: 500)
+    retry_at = DateTime.add(now, 300, :second)
 
-    Enum.each(rows, fn row ->
-      %FailedEvent{}
-      |> FailedEvent.changeset(%{
-        payload: Jason.encode!(row),
-        error: error_str,
-        attempts: 0,
-        retry_after: DateTime.add(now, 300, :second),
-        inserted_at: now
-      })
-      |> Repo.insert()
-      |> case do
-        {:ok, _} -> :ok
-        {:error, err} -> Logger.error("[DeadLetter] Failed to persist: #{inspect(err)}")
-      end
-    end)
+    entries =
+      Enum.map(rows, fn row ->
+        %{
+          payload: Jason.encode!(row),
+          error: error_str,
+          attempts: 0,
+          retry_after: retry_at,
+          inserted_at: now,
+          updated_at: now
+        }
+      end)
+
+    try do
+      {count, _} = Repo.insert_all(FailedEvent, entries)
+      Logger.info("[DeadLetter] Persisted #{count} failed events")
+    rescue
+      e -> Logger.error("[DeadLetter] Bulk persist failed: #{Exception.message(e)}")
+    end
   end
 
   def enqueue(row, reason) when is_map(row), do: enqueue([row], reason)

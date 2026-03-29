@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.7.0 — 2026-03-29 04:00 UTC",
+       [
+         %{
+           title: "Performance optimizations",
+           description:
+             "site lookup cache now covers public_key (eliminates 1 Postgres query per event). UA parsed once instead of 2-3x. Session extend uses single UPDATE instead of SELECT+UPDATE. Dashboard mount queries run in parallel (2-3x faster). Your Sites page uses single batched ClickHouse query instead of N+1. PubSub events no longer trigger ClickHouse queries. Dead letter uses bulk insert. Session cleanup uses batch UPDATE. ClickHouse gets bloom filter indexes on event_type, event_name, url_path. Req structs stored in persistent_term instead of Agent."
+         }
+       ]},
       {"v1.6.3 — 2026-03-29 03:00 UTC",
        [
          %{

@@ -15,7 +15,10 @@ defmodule Spectabas.ClickHouse do
     ensure_schema!(cfg)
     write_req = build_req(cfg[:url], cfg[:username], cfg[:password], cfg[:database])
     read_req = build_req(cfg[:url], cfg[:read_username], cfg[:read_password], cfg[:database])
-    Agent.start_link(fn -> %{write: write_req, read: read_req} end, name: __MODULE__)
+    # Store in persistent_term for lock-free concurrent reads (was Agent before)
+    :persistent_term.put({__MODULE__, :write}, write_req)
+    :persistent_term.put({__MODULE__, :read}, read_req)
+    Agent.start_link(fn -> :ok end, name: __MODULE__)
   end
 
   defp ensure_schema!(cfg) do
@@ -199,7 +202,10 @@ defmodule Spectabas.ClickHouse do
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_visitor visitor_id TYPE bloom_filter GRANULARITY 4",
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_country ip_country TYPE bloom_filter GRANULARITY 4",
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_browser browser TYPE bloom_filter GRANULARITY 4",
-      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_referrer referrer_domain TYPE bloom_filter GRANULARITY 4"
+      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_referrer referrer_domain TYPE bloom_filter GRANULARITY 4",
+      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_event_type event_type TYPE bloom_filter GRANULARITY 4",
+      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_event_name event_name TYPE bloom_filter GRANULARITY 4",
+      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_url_path url_path TYPE bloom_filter GRANULARITY 4"
     ]
 
     if connected do
@@ -269,8 +275,8 @@ defmodule Spectabas.ClickHouse do
     |> Req.merge(@default_opts)
   end
 
-  defp write_req, do: Agent.get(__MODULE__, & &1.write)
-  defp read_req, do: Agent.get(__MODULE__, & &1.read)
+  defp write_req, do: :persistent_term.get({__MODULE__, :write})
+  defp read_req, do: :persistent_term.get({__MODULE__, :read})
 
   @doc """
   Execute a SELECT query using the read-only credentials.

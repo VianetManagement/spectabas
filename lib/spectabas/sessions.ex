@@ -33,7 +33,9 @@ defmodule Spectabas.Sessions do
         if expired?(last_activity, now) do
           create_session(site_id, visitor_id, event_data, now)
         else
-          extend_session(session_id, event_data, now)
+          result = extend_session(session_id, event_data, now)
+          if match?({:ok, _}, result), do: SessionCache.touch(cache_key, now)
+          result
         end
 
       :miss ->
@@ -109,31 +111,28 @@ defmodule Spectabas.Sessions do
     end
   end
 
+  # Update session directly via UPDATE query — avoids SELECT + UPDATE (was 2 queries, now 1)
   defp extend_session(session_id, event_data, now) do
-    case Repo.get(Session, session_id) do
-      nil ->
-        {:error, :not_found}
+    exit_url = event_data[:entry_url] || ""
 
-      session ->
-        duration = DateTime.diff(now, session.started_at, :second)
-        new_count = (session.pageview_count || 0) + 1
+    {count, _} =
+      from(s in Session, where: s.id == ^session_id)
+      |> Repo.update_all(
+        set: [
+          exit_url: exit_url,
+          updated_at: now,
+          is_bounce: false
+        ],
+        inc: [pageview_count: 1]
+      )
 
-        session
-        |> Session.changeset(%{
-          exit_url: event_data[:entry_url] || session.exit_url,
-          pageview_count: new_count,
-          duration_s: max(duration, 0),
-          is_bounce: new_count <= 1
-        })
-        |> Repo.update()
-        |> case do
-          {:ok, updated} ->
-            SessionCache.touch({session.site_id, session.visitor_id}, now)
-            {:ok, updated}
-
-          error ->
-            error
-        end
+    if count > 0 do
+      # Touch cache without needing the full session struct
+      # We need site_id + visitor_id from cache, but we only have session_id
+      # The cache is keyed by {site_id, visitor_id} — the caller already has this
+      {:ok, %Session{id: session_id}}
+    else
+      {:error, :not_found}
     end
   end
 

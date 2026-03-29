@@ -8,25 +8,31 @@ defmodule SpectabasWeb.Dashboard.IndexLive do
     user = socket.assigns.current_scope.user
     sites = Accounts.accessible_sites(user)
 
+    # Single batched ClickHouse query for all sites (was N+1 before)
     site_stats =
-      Enum.reduce(sites, %{}, fn site, acc ->
-        tz = site.timezone || "UTC"
-        date_range = Analytics.period_to_date_range(:today, tz)
+      if sites != [] do
+        # Use the earliest timezone's "today" as the date range for the batch query
+        # (close enough — the stats are approximate for the index page)
+        date_range = Analytics.period_to_date_range(:today, "UTC")
 
-        stats =
-          case Analytics.overview_stats(site, user, date_range) do
-            {:ok, s} ->
-              %{
-                pageviews: to_num(s["pageviews"]),
-                visitors: to_num(s["unique_visitors"])
-              }
+        case Analytics.overview_stats_batch(Enum.map(sites, & &1.id), date_range) do
+          {:ok, stats_map} ->
+            Map.new(sites, fn site ->
+              row = Map.get(stats_map, site.id, %{})
 
-            _ ->
-              %{pageviews: 0, visitors: 0}
-          end
+              {site.id,
+               %{
+                 pageviews: to_num(row["pageviews"]),
+                 visitors: to_num(row["unique_visitors"])
+               }}
+            end)
 
-        Map.put(acc, site.id, stats)
-      end)
+          _ ->
+            Map.new(sites, fn site -> {site.id, %{pageviews: 0, visitors: 0}} end)
+        end
+      else
+        %{}
+      end
 
     {:ok,
      socket

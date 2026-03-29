@@ -1511,6 +1511,48 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  @doc """
+  Batched overview stats for multiple sites in a single ClickHouse query.
+  Returns %{site_id => %{"pageviews" => ..., "unique_visitors" => ...}}.
+  """
+  def overview_stats_batch(site_ids, date_range) when is_list(site_ids) do
+    with :ok <- check_clickhouse() do
+      ids = Enum.map_join(site_ids, ",", &ClickHouse.param/1)
+
+      sql = """
+      SELECT
+        site_id,
+        sum(pv) AS pageviews,
+        uniqExact(visitor_id) AS unique_visitors
+      FROM (
+        SELECT
+          site_id,
+          any(visitor_id) AS visitor_id,
+          countIf(event_type = 'pageview') AS pv
+        FROM events
+        WHERE site_id IN (#{ids})
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY site_id, session_id
+      )
+      GROUP BY site_id
+      """
+
+      case ClickHouse.query(sql) do
+        {:ok, rows} ->
+          map =
+            Map.new(rows, fn row ->
+              {to_int(row["site_id"]), row}
+            end)
+
+          {:ok, map}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
+  end
+
   defp ensure_date_range(period) when is_atom(period), do: period_to_date_range(period)
   defp ensure_date_range(%{from: _, to: _} = dr), do: dr
 

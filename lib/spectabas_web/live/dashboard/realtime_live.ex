@@ -35,7 +35,10 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
   end
 
   def handle_info({:new_event, _event}, socket) do
-    {:noreply, load_data(socket)}
+    # Don't re-query ClickHouse on every PubSub message — the 5-second
+    # refresh timer handles periodic updates. Just increment a local counter.
+    count = Map.get(socket.assigns, :pending_events, 0) + 1
+    {:noreply, assign(socket, :pending_events, count)}
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}

@@ -231,21 +231,32 @@ defmodule SpectabasWeb.CollectController do
   end
 
   defp resolve_site(conn, params) do
+    alias Spectabas.Sites.DomainCache
+
     key = params["s"] || params["site"]
 
     site =
       cond do
-        # Try public key lookup first (opaque ID)
+        # Try public key lookup — ETS cache first, then DB fallback
         key && !String.contains?(key, ".") ->
-          Spectabas.Repo.get_by(Spectabas.Sites.Site, public_key: key)
+          case DomainCache.lookup_by_key(key) do
+            {:ok, site} -> site
+            :error -> Spectabas.Repo.get_by(Spectabas.Sites.Site, public_key: key)
+          end
 
-        # Domain-based lookup
+        # Domain-based lookup — ETS cache first, then DB fallback
         key ->
-          Spectabas.Sites.get_site_by_domain(key)
+          case DomainCache.lookup(key) do
+            {:ok, site} -> site
+            :error -> Spectabas.Sites.get_site_by_domain(key)
+          end
 
         # Fallback to host header
         true ->
-          Spectabas.Sites.get_site_by_domain(conn.host)
+          case DomainCache.lookup(conn.host) do
+            {:ok, site} -> site
+            :error -> Spectabas.Sites.get_site_by_domain(conn.host)
+          end
       end
 
     case site do

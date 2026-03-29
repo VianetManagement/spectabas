@@ -1,12 +1,13 @@
 defmodule Spectabas.Sites.DomainCache do
   @moduledoc """
-  ETS-backed cache for domain -> site lookups.
-  Warms from the database on startup.
+  ETS-backed cache for domain -> site and public_key -> site lookups.
+  Warms from the database on startup. Both caches are updated together.
   """
 
   use GenServer
 
-  @table :spectabas_domain_cache
+  @domain_table :spectabas_domain_cache
+  @key_table :spectabas_key_cache
 
   # Client API
 
@@ -18,25 +19,42 @@ defmodule Spectabas.Sites.DomainCache do
   Look up a site by domain. Returns `{:ok, site}` or `:error`.
   """
   def lookup(domain) when is_binary(domain) do
-    case :ets.lookup(@table, domain) do
+    case :ets.lookup(@domain_table, domain) do
       [{^domain, site}] -> {:ok, site}
       [] -> :error
     end
   end
 
   @doc """
-  Insert or update a site in the cache.
+  Look up a site by public_key. Returns `{:ok, site}` or `:error`.
+  Used by the collection endpoint hot path.
   """
-  def put(%{domain: domain} = site) do
-    :ets.insert(@table, {domain, site})
+  def lookup_by_key(key) when is_binary(key) do
+    case :ets.lookup(@key_table, key) do
+      [{^key, site}] -> {:ok, site}
+      [] -> :error
+    end
+  end
+
+  @doc """
+  Insert or update a site in both caches.
+  """
+  def put(%{domain: domain, public_key: key} = site) do
+    :ets.insert(@domain_table, {domain, site})
+    if key, do: :ets.insert(@key_table, {key, site})
     :ok
   end
 
   @doc """
-  Remove a domain from the cache.
+  Remove a site from both caches.
   """
   def delete(domain) when is_binary(domain) do
-    :ets.delete(@table, domain)
+    case :ets.lookup(@domain_table, domain) do
+      [{_, %{public_key: key}}] when not is_nil(key) -> :ets.delete(@key_table, key)
+      _ -> :ok
+    end
+
+    :ets.delete(@domain_table, domain)
     :ok
   end
 
@@ -51,8 +69,9 @@ defmodule Spectabas.Sites.DomainCache do
 
   @impl true
   def init(_opts) do
-    table = :ets.new(@table, [:named_table, :set, :public, read_concurrency: true])
-    {:ok, %{table: table}, {:continue, :warm}}
+    :ets.new(@domain_table, [:named_table, :set, :public, read_concurrency: true])
+    :ets.new(@key_table, [:named_table, :set, :public, read_concurrency: true])
+    {:ok, %{}, {:continue, :warm}}
   end
 
   @impl true
@@ -75,7 +94,8 @@ defmodule Spectabas.Sites.DomainCache do
     sites = Repo.all(from s in Site, where: s.active == true)
 
     Enum.each(sites, fn site ->
-      :ets.insert(@table, {site.domain, site})
+      :ets.insert(@domain_table, {site.domain, site})
+      if site.public_key, do: :ets.insert(@key_table, {site.public_key, site})
     end)
   end
 end
