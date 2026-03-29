@@ -135,6 +135,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
               label="Site Search"
               active={@active == "search"}
             />
+            <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/performance"}
+              label="Performance"
+              active={@active == "performance"}
+            />
           </.nav_section>
 
           <.nav_section label="Acquisition" color="text-emerald-500">
@@ -320,6 +325,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
       {~p"/dashboard/sites/#{site_id}/entry-exit", "Entry/Exit"},
       {~p"/dashboard/sites/#{site_id}/transitions", "Transitions"},
       {~p"/dashboard/sites/#{site_id}/search", "Search"},
+      {~p"/dashboard/sites/#{site_id}/performance", "Performance"},
       {~p"/dashboard/sites/#{site_id}/sources", "Sources"},
       {~p"/dashboard/sites/#{site_id}/attribution", "Attribution"},
       {~p"/dashboard/sites/#{site_id}/campaigns", "Campaigns"},

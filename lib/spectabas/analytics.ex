@@ -1248,6 +1248,129 @@ defmodule Spectabas.Analytics do
     Segment.to_sql(segment)
   end
 
+  # ---- Real User Monitoring ----
+
+  @doc """
+  Performance overview: median and p75 for key metrics across all pages.
+  """
+  def rum_overview(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        round(quantile(0.5)(toFloat64OrZero(JSONExtractString(properties, 'page_load')))) AS median_page_load,
+        round(quantile(0.75)(toFloat64OrZero(JSONExtractString(properties, 'page_load')))) AS p75_page_load,
+        round(quantile(0.5)(toFloat64OrZero(JSONExtractString(properties, 'ttfb')))) AS median_ttfb,
+        round(quantile(0.75)(toFloat64OrZero(JSONExtractString(properties, 'ttfb')))) AS p75_ttfb,
+        round(quantile(0.5)(toFloat64OrZero(JSONExtractString(properties, 'fcp')))) AS median_fcp,
+        round(quantile(0.75)(toFloat64OrZero(JSONExtractString(properties, 'fcp')))) AS p75_fcp,
+        round(quantile(0.5)(toFloat64OrZero(JSONExtractString(properties, 'dom_complete')))) AS median_dom,
+        count() AS samples
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND event_name = '_rum'
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      """
+
+      case ClickHouse.query(sql) do
+        {:ok, [row]} -> {:ok, row}
+        {:ok, []} -> {:ok, %{}}
+        {:error, reason} -> {:error, reason}
+      end
+    end
+  end
+
+  @doc """
+  Core Web Vitals: median and p75 for LCP, CLS, FID.
+  """
+  def rum_web_vitals(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        round(quantile(0.5)(toFloat64OrZero(JSONExtractString(properties, 'lcp')))) AS median_lcp,
+        round(quantile(0.75)(toFloat64OrZero(JSONExtractString(properties, 'lcp')))) AS p75_lcp,
+        round(quantile(0.5)(toFloat64OrZero(JSONExtractString(properties, 'cls')) * 1000) / 1000, 3) AS median_cls,
+        round(quantile(0.75)(toFloat64OrZero(JSONExtractString(properties, 'cls')) * 1000) / 1000, 3) AS p75_cls,
+        round(quantile(0.5)(toFloat64OrZero(JSONExtractString(properties, 'fid')))) AS median_fid,
+        round(quantile(0.75)(toFloat64OrZero(JSONExtractString(properties, 'fid')))) AS p75_fid,
+        count() AS samples
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND event_name = '_cwv'
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      """
+
+      case ClickHouse.query(sql) do
+        {:ok, [row]} -> {:ok, row}
+        {:ok, []} -> {:ok, %{}}
+        {:error, reason} -> {:error, reason}
+      end
+    end
+  end
+
+  @doc """
+  Performance by page: slowest pages by median page load time.
+  """
+  def rum_by_page(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        url_path,
+        round(quantile(0.5)(toFloat64OrZero(JSONExtractString(properties, 'page_load')))) AS median_load,
+        round(quantile(0.75)(toFloat64OrZero(JSONExtractString(properties, 'page_load')))) AS p75_load,
+        round(quantile(0.5)(toFloat64OrZero(JSONExtractString(properties, 'ttfb')))) AS median_ttfb,
+        round(avg(toFloat64OrZero(JSONExtractString(properties, 'transfer_size')))) AS avg_size,
+        count() AS samples
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND event_name = '_rum'
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      GROUP BY url_path
+      HAVING samples >= 3
+      ORDER BY median_load DESC
+      LIMIT 20
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
+  Performance by device type: compare mobile vs desktop load times.
+  """
+  def rum_by_device(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        device_type,
+        round(quantile(0.5)(toFloat64OrZero(JSONExtractString(properties, 'page_load')))) AS median_load,
+        round(quantile(0.75)(toFloat64OrZero(JSONExtractString(properties, 'page_load')))) AS p75_load,
+        round(quantile(0.5)(toFloat64OrZero(JSONExtractString(properties, 'fcp')))) AS median_fcp,
+        count() AS samples
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND event_name = '_rum'
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND device_type != ''
+      GROUP BY device_type
+      ORDER BY samples DESC
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
   defp check_clickhouse do
     if Process.whereis(Spectabas.ClickHouse) do
       :ok

@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.5.0 — 2026-03-27 12:00 UTC",
+       [
+         %{
+           title: "Real User Monitoring (RUM)",
+           description:
+             "measures actual page load times and Core Web Vitals (LCP, CLS, FID) from real visitor browsers. Zero performance impact — uses requestIdleCallback and PerformanceObserver APIs. New Performance dashboard page shows: Core Web Vitals with Good/Needs Work/Poor scoring per Google thresholds, page load timing breakdown (TTFB, FCP, DOM Ready, Full Load), performance by device type, and slowest pages ranked by median load time."
+         }
+       ]},
       {"v1.4.0 — 2026-03-29 12:00 UTC",
        [
          %{

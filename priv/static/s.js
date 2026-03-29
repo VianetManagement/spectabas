@@ -345,6 +345,108 @@
     );
   }, 100);
 
+  // ---- Real User Monitoring ----
+  // Collects Core Web Vitals + page load timing after page is fully loaded.
+  // Uses requestIdleCallback to avoid any impact on user experience.
+
+  var rumSent = false;
+
+  function collectRUM() {
+    if (rumSent) return;
+    rumSent = true;
+
+    var perf = {};
+
+    // Navigation timing
+    try {
+      var nav = performance.getEntriesByType("navigation")[0];
+      if (nav) {
+        perf.dns = Math.round(nav.domainLookupEnd - nav.domainLookupStart);
+        perf.tcp = Math.round(nav.connectEnd - nav.connectStart);
+        perf.tls = nav.secureConnectionStart > 0 ? Math.round(nav.connectEnd - nav.secureConnectionStart) : 0;
+        perf.ttfb = Math.round(nav.responseStart - nav.requestStart);
+        perf.download = Math.round(nav.responseEnd - nav.responseStart);
+        perf.dom_interactive = Math.round(nav.domInteractive - nav.navigationStart);
+        perf.dom_complete = Math.round(nav.domContentLoadedEventEnd - nav.navigationStart);
+        perf.page_load = Math.round(nav.loadEventEnd - nav.navigationStart);
+        perf.transfer_size = nav.transferSize || 0;
+        perf.dom_size = document.getElementsByTagName("*").length;
+      }
+    } catch (e) {}
+
+    // First Contentful Paint
+    try {
+      var paints = performance.getEntriesByType("paint");
+      for (var i = 0; i < paints.length; i++) {
+        if (paints[i].name === "first-contentful-paint") {
+          perf.fcp = Math.round(paints[i].startTime);
+        }
+      }
+    } catch (e) {}
+
+    if (Object.keys(perf).length > 0) {
+      sendEvent("custom", { n: "_rum", p: mapToStrings(perf) });
+    }
+  }
+
+  // Collect Core Web Vitals via PerformanceObserver (LCP, CLS, FID)
+  var cwv = {};
+
+  try {
+    // Largest Contentful Paint
+    new PerformanceObserver(function (list) {
+      var entries = list.getEntries();
+      if (entries.length > 0) {
+        cwv.lcp = Math.round(entries[entries.length - 1].startTime);
+      }
+    }).observe({ type: "largest-contentful-paint", buffered: true });
+
+    // Cumulative Layout Shift
+    var clsValue = 0;
+    new PerformanceObserver(function (list) {
+      var entries = list.getEntries();
+      for (var i = 0; i < entries.length; i++) {
+        if (!entries[i].hadRecentInput) {
+          clsValue += entries[i].value;
+        }
+      }
+      cwv.cls = Math.round(clsValue * 1000) / 1000;
+    }).observe({ type: "layout-shift", buffered: true });
+
+    // First Input Delay
+    new PerformanceObserver(function (list) {
+      var entries = list.getEntries();
+      if (entries.length > 0) {
+        cwv.fid = Math.round(entries[0].processingStart - entries[0].startTime);
+      }
+    }).observe({ type: "first-input", buffered: true });
+  } catch (e) {}
+
+  // Send RUM + CWV after page is fully loaded
+  if (typeof requestIdleCallback !== "undefined") {
+    requestIdleCallback(function () {
+      setTimeout(function () {
+        if (cwv.lcp) sendEvent("custom", { n: "_cwv", p: mapToStrings(cwv) });
+        collectRUM();
+      }, 2000);
+    });
+  } else {
+    window.addEventListener("load", function () {
+      setTimeout(function () {
+        if (cwv.lcp) sendEvent("custom", { n: "_cwv", p: mapToStrings(cwv) });
+        collectRUM();
+      }, 3000);
+    });
+  }
+
+  function mapToStrings(obj) {
+    var result = {};
+    for (var k in obj) {
+      if (obj.hasOwnProperty(k)) result[k] = String(obj[k]);
+    }
+    return result;
+  }
+
   // ---- Utilities ----
 
   function getCookie(name) {

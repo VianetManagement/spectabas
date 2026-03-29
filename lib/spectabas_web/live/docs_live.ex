@@ -441,6 +441,31 @@ defmodule SpectabasWeb.DocsLive do
             """
           },
           %{
+            id: "performance",
+            title: "Performance (RUM)",
+            body: """
+            Real User Monitoring measures actual page load times and Core Web Vitals from your visitors' browsers. Data is collected passively with zero impact on user experience.
+
+            ### Core Web Vitals
+            Google's key metrics for page experience, scored as **Good**, **Needs Work**, or **Poor**:
+
+            - **LCP (Largest Contentful Paint)** — how fast the main content loads. Good: under 2.5s
+            - **CLS (Cumulative Layout Shift)** — visual stability. Good: under 0.1
+            - **FID (First Input Delay)** — interactivity responsiveness. Good: under 100ms
+
+            ### Page Load Timing
+            Median values for: **TTFB** (time to first byte), **First Paint**, **DOM Ready**, and **Full Load**.
+
+            ### Performance by Device
+            Compare load times across desktop, mobile, and tablet visitors.
+
+            ### Slowest Pages
+            Pages ranked by median load time (slowest first), with TTFB and transfer size. Click any page to see its transition flow.
+
+            > **Tip:** Focus on pages with high traffic AND slow load times for the biggest impact.
+            """
+          },
+          %{
             id: "site-search",
             title: "Site Search",
             body: """
