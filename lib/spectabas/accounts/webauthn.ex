@@ -146,7 +146,7 @@ defmodule Spectabas.Accounts.Webauthn do
       )
 
     if cred do
-      public_key = :erlang.binary_to_term(cred.public_key)
+      public_key = :erlang.binary_to_term(cred.public_key, [:safe])
 
       case Wax.authenticate(
              credential_id,
@@ -184,8 +184,11 @@ defmodule Spectabas.Accounts.Webauthn do
   @doc """
   Delete a credential.
   """
-  def delete_credential(credential_id) do
-    case Repo.get(WebauthnCredential, credential_id) do
+  def delete_credential(user, credential_id) do
+    case Repo.one(
+           from c in WebauthnCredential,
+             where: c.id == ^credential_id and c.user_id == ^user.id
+         ) do
       nil -> {:error, :not_found}
       cred -> Repo.delete(cred)
     end

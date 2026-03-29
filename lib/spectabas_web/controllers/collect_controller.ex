@@ -128,6 +128,22 @@ defmodule SpectabasWeb.CollectController do
                0, 0, 0, 0, 0, 44, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 2, 68, 1, 0, 59>>
 
   def pixel(conn, params) do
+    # Respect opt-out cookie (same as /c/e endpoint)
+    if conn.cookies[@optout_cookie] do
+      return_pixel(conn)
+    else
+      do_pixel(conn, params)
+    end
+  end
+
+  defp return_pixel(conn) do
+    conn
+    |> put_resp_content_type("image/gif")
+    |> put_resp_header("cache-control", "no-store, no-cache, must-revalidate, max-age=0")
+    |> send_resp(200, @gif_pixel)
+  end
+
+  defp do_pixel(conn, params) do
     site =
       cond do
         # Lookup by public key (obfuscated)
@@ -167,10 +183,7 @@ defmodule SpectabasWeb.CollectController do
       end
     end
 
-    conn
-    |> put_resp_content_type("image/gif")
-    |> put_resp_header("cache-control", "no-store, no-cache, must-revalidate, max-age=0")
-    |> send_resp(200, @gif_pixel)
+    return_pixel(conn)
   end
 
   def options(conn, _params) do
@@ -254,10 +267,14 @@ defmodule SpectabasWeb.CollectController do
 
       allowed = allowed_domains(site)
 
-      if origin_host in allowed or referer_host in allowed or origin_host == "" do
-        :ok
-      else
-        {:error, :origin_not_allowed}
+      cond do
+        # Origin header present and matches
+        origin_host != "" and origin_host in allowed -> :ok
+        # No Origin but Referer matches (e.g., sendBeacon, img tags)
+        origin_host == "" and referer_host in allowed -> :ok
+        # No Origin and no Referer (shouldn't reach here due to outer check, but be safe)
+        origin_host == "" and referer_host == "" -> :ok
+        true -> {:error, :origin_not_allowed}
       end
     end
   end

@@ -444,7 +444,9 @@ defmodule SpectabasWeb.UserLive.Settings do
   end
 
   def handle_event("delete_passkey", %{"id" => id}, socket) do
-    case Webauthn.delete_credential(id) do
+    user = socket.assigns.current_scope.user
+
+    case Webauthn.delete_credential(user, id) do
       {:ok, _} ->
         user = socket.assigns.current_scope.user
 

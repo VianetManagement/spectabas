@@ -143,19 +143,22 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 
 ## Security
 
-### Audit Completed
-A comprehensive security audit identified and fixed 10 findings:
+### Audit v1 (v0.8.0) — 10 findings fixed
+1. Auth on health endpoints 2. Opt-out cookie check 3. Login rate limiting
+4. Invitation email verification 5. Null byte sanitization 6. Buffer overflow protection
+7. ClickHouse TTL 8. MMDB integrity checks 9. Input validation 10. Session fixation
 
-1. **Auth on health endpoints** — `/health/diag` and other diagnostic endpoints now require admin authentication
-2. **Opt-out cookie check** — collection endpoint respects the opt-out cookie before processing events
-3. **Login rate limiting** — brute-force protection on login attempts
-4. **Invitation email verification** — invitations verify the email matches the intended recipient
-5. **Null byte sanitization** — all user input sanitized against null byte injection
-6. **Buffer overflow protection** — IngestBuffer has size limits to prevent memory exhaustion
-7. **ClickHouse TTL** — events table has TTL for automatic data expiration
-8. **MMDB integrity checks** — GeoIP database files validated on load to prevent corrupt data
-9. **Input validation** — strengthened across all collection endpoints
-10. **Session fixation** — session tokens regenerated on authentication state changes
+### Audit v2 (v1.6.0) — 10 findings fixed
+1. **WebAuthn binary_to_term :safe** — prevents code execution if DB is compromised
+2. **WebAuthn credential ownership** — deletion requires user_id match, prevents cross-user deletion
+3. **Pixel opt-out** — `/c/p` noscript pixel now respects `_sab_optout` cookie (GDPR regression)
+4. **Origin validation** — fixed bypass when Origin empty but Referer present
+5. **API date range cap** — custom ranges capped at 12 months to prevent ClickHouse DoS
+6. **Config secrets** — removed default ClickHouse passwords from committed config
+7. **CSP object-src** — added `object-src 'none'` to Content-Security-Policy
+8. **Cookie security** — remember-me cookie gets `secure` and `http_only` flags
+9. **Health endpoint** — public `/health` returns only `ok/degraded`, no internal details
+10. **SQL parameterization** — backfill-geo lat/lon/asn use `ClickHouse.param/1`
 
 ## UI/UX
 

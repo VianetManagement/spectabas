@@ -41,9 +41,17 @@ defmodule Spectabas.Accounts.WebauthnTest do
     end
   end
 
-  describe "delete_credential/1" do
+  describe "delete_credential/2" do
     test "returns error for non-existent credential" do
-      assert {:error, :not_found} = Webauthn.delete_credential(999_999)
+      user = user_fixture()
+      assert {:error, :not_found} = Webauthn.delete_credential(user, 999_999)
+    end
+
+    test "cannot delete another user's credential" do
+      user1 = user_fixture()
+      user2 = user_fixture()
+      # user2 tries to delete a credential ID that doesn't belong to them
+      assert {:error, :not_found} = Webauthn.delete_credential(user2, 999_999)
     end
   end
 end

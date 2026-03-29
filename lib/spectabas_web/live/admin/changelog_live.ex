@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v1.6.0 — 2026-03-29 00:00 UTC",
+       [
+         %{
+           title: "Security audit v2 — 10 findings fixed",
+           description:
+             "WebAuthn binary_to_term now uses :safe option (prevents code execution). Passkey deletion requires user ownership. Pixel endpoint respects opt-out cookie (GDPR regression fixed). Origin validation no longer bypassed when Origin header is empty. API custom date ranges capped at 12 months. Default ClickHouse passwords removed from config. CSP adds object-src 'none'. Remember-me cookie gets secure + http_only flags. Health endpoint no longer leaks internal architecture. Backfill-geo uses param/1 for all interpolated values."
+         }
+       ]},
       {"v1.5.2 — 2026-03-28 18:00 UTC",
        [
          %{

@@ -29,9 +29,9 @@ config :spectabas, Spectabas.ClickHouse,
   url: "http://localhost:8123",
   database: "spectabas",
   username: "spectabas_writer",
-  password: "CHANGE_ME_WRITER",
+  password: "",
   read_username: "spectabas_reader",
-  read_password: "CHANGE_ME_READER"
+  read_password: ""
 
 config :spectabas, Spectabas.Events.IngestBuffer,
   flush_interval_ms: 500,

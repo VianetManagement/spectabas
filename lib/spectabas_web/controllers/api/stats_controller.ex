@@ -156,6 +156,9 @@ defmodule SpectabasWeb.API.StatsController do
       "custom" ->
         from = parse_datetime(params["from"]) || DateTime.add(now, -7, :day)
         to = parse_datetime(params["to"]) || now
+        # Cap custom ranges at 12 months to prevent expensive full-table scans
+        max_from = DateTime.add(now, -366, :day)
+        from = if DateTime.compare(from, max_from) == :lt, do: max_from, else: from
         %{from: from, to: to}
 
       _ ->

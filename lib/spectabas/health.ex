@@ -12,7 +12,14 @@ defmodule Spectabas.Health do
     end
   end
 
-  @doc "Detailed status for JSON health endpoint"
+  @doc "Minimal public status — no internal details"
+  def status do
+    pg = check_postgres()
+    ch = check_clickhouse()
+    if pg == :ok and ch == :ok, do: "ok", else: "degraded"
+  end
+
+  @doc "Detailed status for authenticated admin endpoints only"
   def detailed do
     pg = check_postgres()
     ch = check_clickhouse()

@@ -2,17 +2,17 @@ defmodule SpectabasWeb.HealthController do
   use SpectabasWeb, :controller
 
   def show(conn, _params) do
-    details = Spectabas.Health.detailed()
-
-    status_code = if details.overall == "ok", do: 200, else: 503
+    status = Spectabas.Health.status()
+    status_code = if status == "ok", do: 200, else: 503
 
     conn
     |> put_status(status_code)
-    |> json(details)
+    |> json(%{status: status})
   end
 
   def diag(conn, _params) do
     results = %{
+      service_health: Spectabas.Health.detailed(),
       clickhouse_process: Process.whereis(Spectabas.ClickHouse) != nil,
       ingest_buffer_process: Process.whereis(Spectabas.Events.IngestBuffer) != nil,
       clickhouse_ping: test_clickhouse_ping(),
@@ -248,10 +248,10 @@ defmodule SpectabasWeb.HealthController do
             ip_region_code = #{ClickHouse.param(region_code)},
             ip_region_name = #{ClickHouse.param(region_name)},
             ip_city = #{ClickHouse.param(city_name)},
-            ip_lat = #{lat},
-            ip_lon = #{lon},
+            ip_lat = #{ClickHouse.param(lat)},
+            ip_lon = #{ClickHouse.param(lon)},
             ip_timezone = #{ClickHouse.param(tz)},
-            ip_asn = #{asn_num},
+            ip_asn = #{ClickHouse.param(asn_num)},
             ip_asn_org = #{ClickHouse.param(asn_org)},
             ip_org = #{ClickHouse.param(if(asn_num > 0, do: "AS#{asn_num} #{asn_org}", else: ""))}
           WHERE ip_address = #{ClickHouse.param(ip_str)}
