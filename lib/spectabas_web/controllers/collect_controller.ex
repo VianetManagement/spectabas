@@ -144,6 +144,8 @@ defmodule SpectabasWeb.CollectController do
   end
 
   defp do_pixel(conn, params) do
+    require Logger
+
     site =
       cond do
         # Lookup by public key (obfuscated)
@@ -175,8 +177,13 @@ defmodule SpectabasWeb.CollectController do
 
       case CollectPayload.validate(payload_params) do
         {:ok, payload} ->
-          {:ok, event} = Ingest.process(payload, conn)
-          IngestBuffer.push(event)
+          try do
+            {:ok, event} = Ingest.process(payload, conn)
+            IngestBuffer.push(event)
+          rescue
+            e ->
+              Logger.error("[Collect:pixel] Ingest.process crashed: #{Exception.message(e)}")
+          end
 
         _ ->
           :ok

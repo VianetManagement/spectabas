@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v2.0.0 — 2026-03-29 16:00 UTC",
+       [
+         %{
+           title: "Resilience improvements — 10 fixes",
+           description:
+             "DeadLetterRetry now scheduled (events no longer lost on ClickHouse outages). IngestBuffer flushes on shutdown (no data loss on deploys), catches per-event errors (single bad event can't crash batch), dead-letters overflows instead of dropping. Pixel endpoint has try/rescue. Dashboard uses Task.yield (no more LiveView crashes on timeout). Unique constraints on visitors table (prevents race condition duplicates). ClickHouse errors now include query SQL. Dead letter queue monitoring alerts when queue grows."
+         }
+       ]},
       {"v1.9.3 — 2026-03-29 15:00 UTC",
        [
          %{

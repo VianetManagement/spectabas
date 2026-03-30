@@ -6,6 +6,8 @@ defmodule Spectabas.Events.IngestBuffer do
 
   On ClickHouse failure, events are sent to DeadLetter.
   On success, broadcasts to PubSub "site:{id}" topics grouped by site_id.
+
+  Traps exits for graceful shutdown — flushes remaining buffer on terminate.
   """
 
   use GenServer
@@ -16,6 +18,7 @@ defmodule Spectabas.Events.IngestBuffer do
 
   @default_flush_interval_ms 500
   @default_max_batch_size 200
+  @max_buffer_size 10_000
 
   # --- Public API ---
 
@@ -37,6 +40,9 @@ defmodule Spectabas.Events.IngestBuffer do
 
   @impl true
   def init(_opts) do
+    # Trap exits so we can flush remaining buffer on shutdown
+    Process.flag(:trap_exit, true)
+
     cfg = Application.get_env(:spectabas, __MODULE__, [])
     flush_interval = cfg[:flush_interval_ms] || @default_flush_interval_ms
     max_batch = cfg[:max_batch_size] || @default_max_batch_size
@@ -52,13 +58,18 @@ defmodule Spectabas.Events.IngestBuffer do
      }}
   end
 
-  @max_buffer_size 10_000
-
   @impl true
   def handle_cast({:push, event}, state) do
-    # Drop events if buffer is too large (prevents OOM if ClickHouse is down)
     if state.size >= @max_buffer_size do
-      Logger.warning("[IngestBuffer] Buffer full (#{@max_buffer_size}), dropping event")
+      # Dead-letter instead of silently dropping
+      Logger.warning("[IngestBuffer] Buffer full (#{@max_buffer_size}), dead-lettering event")
+
+      try do
+        DeadLetter.enqueue([EventSchema.to_row(event)], "buffer_full")
+      rescue
+        _ -> :ok
+      end
+
       {:noreply, state}
     else
       new_buffer = [event | state.buffer]
@@ -91,6 +102,20 @@ defmodule Spectabas.Events.IngestBuffer do
     end
   end
 
+  # Graceful shutdown — flush remaining buffer before dying
+  @impl true
+  def terminate(reason, state) do
+    if state.size > 0 do
+      Logger.info(
+        "[IngestBuffer] Shutting down (#{reason}), flushing #{state.size} buffered events"
+      )
+
+      do_flush(state.buffer)
+    end
+
+    :ok
+  end
+
   # --- Private ---
 
   defp schedule_flush(interval) do
@@ -100,20 +125,43 @@ defmodule Spectabas.Events.IngestBuffer do
   defp do_flush([]), do: :ok
 
   defp do_flush(events) do
-    rows = Enum.map(events, &EventSchema.to_row/1)
-    Logger.info("[IngestBuffer] Flushing #{length(rows)} events")
+    # Convert events to rows individually — catch per-event errors so one
+    # malformed event doesn't crash the entire batch
+    {rows, failed} =
+      Enum.reduce(events, {[], 0}, fn event, {acc, fails} ->
+        try do
+          {[EventSchema.to_row(event) | acc], fails}
+        rescue
+          e ->
+            Logger.warning(
+              "[IngestBuffer] EventSchema.to_row failed: #{Exception.message(e) |> String.slice(0, 200)}"
+            )
 
-    case ClickHouse.insert("events", rows) do
-      :ok ->
-        broadcast_events(events)
-        Logger.info("[IngestBuffer] Flushed #{length(rows)} events OK")
+            {acc, fails + 1}
+        end
+      end)
 
-      {:error, reason} ->
-        Logger.error(
-          "[IngestBuffer] ClickHouse insert FAILED: #{inspect(String.slice(to_string(reason), 0, 500))}"
-        )
+    rows = Enum.reverse(rows)
 
-        DeadLetter.enqueue(rows, reason)
+    if failed > 0 do
+      Logger.warning("[IngestBuffer] Skipped #{failed} malformed events in batch")
+    end
+
+    if rows != [] do
+      Logger.info("[IngestBuffer] Flushing #{length(rows)} events")
+
+      case ClickHouse.insert("events", rows) do
+        :ok ->
+          broadcast_events(events)
+          Logger.info("[IngestBuffer] Flushed #{length(rows)} events OK")
+
+        {:error, reason} ->
+          Logger.error(
+            "[IngestBuffer] ClickHouse insert FAILED: #{inspect(String.slice(to_string(reason), 0, 500))}"
+          )
+
+          DeadLetter.enqueue(rows, reason)
+      end
     end
   end
 

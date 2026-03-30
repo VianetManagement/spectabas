@@ -251,11 +251,11 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         nil
       end
 
-    # Collect results (timeout 10s per query)
-    stats = Task.await(stats_task, 10_000)
-    timeseries = Task.await(timeseries_task, 10_000)
-    live_visitors = Task.await(realtime_task, 10_000)
-    prev_stats = if prev_task, do: Task.await(prev_task, 10_000), else: nil
+    # Collect results with safe yields — timeouts degrade gracefully, not crash
+    stats = safe_yield(stats_task, empty_overview())
+    timeseries = safe_yield(timeseries_task, [])
+    live_visitors = safe_yield(realtime_task, 0)
+    prev_stats = if prev_task, do: safe_yield(prev_task, nil), else: nil
 
     socket
     |> assign(:stats, stats)
@@ -361,6 +361,29 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
 
   defp query_limited(fun, limit) do
     safe_query(fun) |> Enum.take(limit)
+  end
+
+  # Yield a Task result with fallback on timeout — never crashes the LiveView
+  defp safe_yield(task, fallback) do
+    case Task.yield(task, 10_000) || Task.shutdown(task) do
+      {:ok, result} ->
+        result
+
+      _ ->
+        require Logger
+        Logger.warning("[Dashboard] Query task timed out or crashed")
+        fallback
+    end
+  end
+
+  defp empty_overview do
+    %{
+      "pageviews" => 0,
+      "unique_visitors" => 0,
+      "total_sessions" => 0,
+      "bounce_rate" => 0,
+      "avg_duration" => 0
+    }
   end
 
   defp preset_label("today"), do: "Today"

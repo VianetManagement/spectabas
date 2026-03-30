@@ -290,11 +290,11 @@ defmodule Spectabas.ClickHouse do
         {:ok, parse_rows(body)}
 
       {:ok, %{status: s, body: b}} ->
-        Logger.error("[CH:r] #{s}: #{inspect(b)}")
+        Logger.error("[CH:r] #{s}: #{inspect(b)} — query: #{String.slice(sql, 0, 300)}")
         {:error, b}
 
       {:error, r} ->
-        Logger.error("[CH:r] #{inspect(r)}")
+        Logger.error("[CH:r] #{inspect(r)} — query: #{String.slice(sql, 0, 300)}")
         {:error, r}
     end
   end

@@ -56,8 +56,13 @@ config :spectabas, Oban,
     {Oban.Plugins.Cron,
      crontab: [
        # 1st and 15th of each month at 06:00 UTC — refresh GeoIP databases
-       # DB-IP updates monthly, MaxMind updates biweekly
-       {"0 6 1,15 * *", Spectabas.Workers.GeoIPRefresh}
+       {"0 6 1,15 * *", Spectabas.Workers.GeoIPRefresh},
+       # Every 5 minutes — retry dead-lettered events when ClickHouse recovers
+       {"*/5 * * * *", Spectabas.Workers.DeadLetterRetry},
+       # Every 5 minutes — close stale sessions (idle > 30 minutes)
+       {"*/5 * * * *", Spectabas.Workers.SessionCleanup},
+       # Every 10 minutes — alert if dead letter queue is growing
+       {"*/10 * * * *", Spectabas.Workers.DeadLetterMonitor}
      ]}
   ]
 
