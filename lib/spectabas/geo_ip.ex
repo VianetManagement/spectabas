@@ -16,27 +16,46 @@ defmodule Spectabas.GeoIP do
   def init(_opts) do
     priv_dir = :code.priv_dir(:spectabas) |> to_string()
     geoip_dir = Path.join(priv_dir, "geoip")
-    File.mkdir_p!(geoip_dir)
+    # Use persistent disk if available (survives deploys), fall back to priv
+    persistent_dir = System.get_env("PERSISTENT_DIR")
+    cache_dir = if persistent_dir, do: Path.join(persistent_dir, "geoip"), else: geoip_dir
+    File.mkdir_p!(cache_dir)
 
-    # Load DB-IP databases
+    # Load DB-IP databases (from priv, baked into Docker image)
     load_db(geoip_dir, "dbip-city-lite.mmdb", :city)
     load_db(geoip_dir, "dbip-asn-lite.mmdb", :asn)
 
-    # Download and load MaxMind if key is available
-    maxmind_path = Path.join(geoip_dir, "GeoLite2-City.mmdb")
+    # MaxMind: check persistent cache first, then priv, then download
+    maxmind_priv = Path.join(geoip_dir, "GeoLite2-City.mmdb")
+    maxmind_cache = Path.join(cache_dir, "GeoLite2-City.mmdb")
 
-    if !File.exists?(maxmind_path) do
-      case System.get_env("MAXMIND_LICENSE_KEY") do
-        key when is_binary(key) and key != "" ->
-          Logger.info("[GeoIP] Downloading MaxMind GeoLite2-City...")
-          download_maxmind(key, maxmind_path)
+    maxmind_path =
+      cond do
+        File.exists?(maxmind_cache) ->
+          Logger.info("[GeoIP] Loaded MaxMind from persistent cache")
+          maxmind_cache
 
-        _ ->
-          Logger.info("[GeoIP] MAXMIND_LICENSE_KEY not set, skipping MaxMind")
+        File.exists?(maxmind_priv) ->
+          # Copy to persistent cache for next deploy
+          if persistent_dir, do: File.cp(maxmind_priv, maxmind_cache)
+          maxmind_priv
+
+        true ->
+          case System.get_env("MAXMIND_LICENSE_KEY") do
+            key when is_binary(key) and key != "" ->
+              Logger.info("[GeoIP] Downloading MaxMind GeoLite2-City...")
+              # Download to persistent cache if available, otherwise priv
+              target = if persistent_dir, do: maxmind_cache, else: maxmind_priv
+              download_maxmind(key, target)
+              target
+
+            _ ->
+              Logger.info("[GeoIP] MAXMIND_LICENSE_KEY not set, skipping MaxMind")
+              maxmind_priv
+          end
       end
-    end
 
-    load_db(geoip_dir, "GeoLite2-City.mmdb", :maxmind_city)
+    load_db(Path.dirname(maxmind_path), Path.basename(maxmind_path), :maxmind_city)
 
     {:ok, %{}}
   end
