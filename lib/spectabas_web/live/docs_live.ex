@@ -945,6 +945,23 @@ defmodule SpectabasWeb.DocsLive do
             """
           },
           %{
+            id: "bot-traffic",
+            title: "Bot Traffic",
+            body: """
+            Dedicated bot analysis page showing:
+
+            - **Bot Events** — total events from detected bots with percentage of all traffic
+            - **Bot Visitors** — unique bot visitor count vs human visitors
+            - **Bot Types** — breakdown by datacenter, VPN, and Tor traffic
+            - **Most Targeted Pages** — which pages bots hit most frequently
+            - **Top Bot User Agents** — the actual bot signatures (Googlebot, Bingbot, SEMrush, etc.)
+
+            Bot detection uses multiple signals: UA-based detection (UAInspector), client-side signals (`navigator.webdriver`, headless browser), datacenter IP detection (ASN blocklists), and the `_bot` flag from the tracker.
+
+            This page intentionally shows bot-only data. All other analytics pages (dashboard, channels, sources, geography, etc.) automatically exclude bot traffic from their counts.
+            """
+          },
+          %{
             id: "visitor-log",
             title: "Visitor Log",
             body: """
@@ -1240,6 +1257,27 @@ defmodule SpectabasWeb.DocsLive do
             ### For Admins
 
             The Settings page shows a "Report Subscribers" table listing all users who have active email reports for the site, including their frequency, send time, and when they last received a report.
+            """
+          },
+          %{
+            id: "spam-filter",
+            title: "Spam Filter",
+            body: """
+            Referrer spam — fake traffic from domains like semalt.com and darodar.com — is automatically filtered from your analytics. The spam filter has three layers:
+
+            ### Built-in Blocklist
+
+            20+ known spam domains are blocked by default. These are maintained in the codebase and apply to all sites automatically.
+
+            ### Custom Blocklist
+
+            Admins can add or remove custom spam domains via **Admin > Spam Filter**. Custom domains are stored in the database and apply across all sites.
+
+            ### Auto-Detection
+
+            A daily background job scans ClickHouse for suspicious referrer domains — those with high bot percentage (>50%), high hit counts (>100), or appearing across multiple sites. Candidates are presented on the admin page for review. They are NOT auto-blocked — an admin must approve each one.
+
+            Spam domains are excluded from the Sources page, All Channels page, and attribution calculations. They are still visible in the Network and Bot Traffic pages for analysis purposes.
             """
           },
           %{
