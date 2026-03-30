@@ -15,8 +15,10 @@ RUN mix deps.get --only $MIX_ENV
 COPY config/config.exs config/prod.exs config/runtime.exs config/
 RUN mix deps.compile
 
-# Pre-install esbuild + tailwind binaries (cached with deps)
-RUN mix esbuild.install --if-missing && mix tailwind.install --if-missing
+# Pre-install esbuild + tailwind binaries and UA parser data (cached with deps)
+RUN mix esbuild.install --if-missing && \
+    mix tailwind.install --if-missing && \
+    mix ua_inspector.download --force
 
 # --- Layer 2: GeoIP databases ---
 # DB-IP downloaded at build time (free, no key needed)
@@ -49,7 +51,6 @@ COPY priv/clickhouse priv/clickhouse
 COPY rel rel
 
 RUN mix compile && \
-    mix ua_inspector.download --force && \
     mix esbuild spectabas --minify && \
     mix tailwind spectabas --minify && \
     mix phx.digest && \

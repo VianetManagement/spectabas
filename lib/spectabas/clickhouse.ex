@@ -12,12 +12,13 @@ defmodule Spectabas.ClickHouse do
 
   def start_link(_opts) do
     cfg = Application.get_env(:spectabas, __MODULE__)
-    ensure_schema!(cfg)
+    # Set up Req structs immediately so queries can work as soon as CH is ready
     write_req = build_req(cfg[:url], cfg[:username], cfg[:password], cfg[:database])
     read_req = build_req(cfg[:url], cfg[:read_username], cfg[:read_password], cfg[:database])
-    # Store in persistent_term for lock-free concurrent reads (was Agent before)
     :persistent_term.put({__MODULE__, :write}, write_req)
     :persistent_term.put({__MODULE__, :read}, read_req)
+    # Run schema init in background — don't block app startup
+    Task.start(fn -> ensure_schema!(cfg) end)
     Agent.start_link(fn -> :ok end, name: __MODULE__)
   end
 
