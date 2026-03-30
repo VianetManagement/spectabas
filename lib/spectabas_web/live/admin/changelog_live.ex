@@ -45,6 +45,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v2.4.1 — 2026-03-30 23:00 UTC",
+       [
+         %{
+           title: "IP Address Search",
+           description:
+             "search visitors by IP address on the Visitor Log page. Enter any IP to find all visitors who used it, with links to full profiles. Also supports direct URL: /visitor-log?ip=x.x.x.x"
+         },
+         %{
+           title: "System Diagnostics link",
+           description:
+             "added System Diagnostics card to the admin dashboard, linking to /health/diag for ClickHouse, Postgres, GeoIP, RUM, and visitor breakdown diagnostics."
+         }
+       ]},
       {"v2.4.0 — 2026-03-30 22:00 UTC",
        [
          %{

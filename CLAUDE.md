@@ -58,7 +58,7 @@ mix ecto.setup
 mix phx.server
 ```
 
-Tests: `mix test` (383 tests, no ClickHouse needed)
+Tests: `mix test` (390 tests, no ClickHouse needed)
 Format: `mix format`
 Compile check: `mix compile --warnings-as-errors`
 

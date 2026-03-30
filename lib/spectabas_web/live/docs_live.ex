@@ -985,6 +985,14 @@ defmodule SpectabasWeb.DocsLive do
 
             **Click a visitor ID** to see their full profile. **Click a referrer** to filter by that source. **Click an entry page** to see its transitions.
 
+            ### IP Address Search
+
+            Use the search bar at the top to find all visitors who used a specific IP address. Enter an IP and click Search to see matching visitors with their first/last seen timestamps, pageview counts, and browser info. Each result links to the full visitor profile.
+
+            You can also link directly: `/dashboard/sites/:id/visitor-log?ip=192.168.1.1`
+
+            ### Filtering
+
             The visitor log accepts filters from other pages — when you click an ASN on the Network page or a source on the Sources page, you're taken here with that filter pre-applied.
             """
           },
