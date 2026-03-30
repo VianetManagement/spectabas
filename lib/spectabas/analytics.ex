@@ -377,6 +377,7 @@ defmodule Spectabas.Analytics do
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
         AND ip_is_bot = 0
+        AND event_type = 'pageview'
         #{exclude_clause}
       GROUP BY channel
       ORDER BY pageviews DESC
@@ -417,6 +418,7 @@ defmodule Spectabas.Analytics do
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
         AND ip_is_bot = 0
+        AND event_type = 'pageview'
         AND (#{channel_sql}) = #{ClickHouse.param(channel_name)}
         #{exclude_clause}
       GROUP BY source
