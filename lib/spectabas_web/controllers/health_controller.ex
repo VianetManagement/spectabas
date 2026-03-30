@@ -28,7 +28,36 @@ defmodule SpectabasWeb.HealthController do
       rum_debug: test_rum_debug()
     }
 
+    results = Map.put(results, :visitor_breakdown, test_visitor_breakdown())
     json(conn, results)
+  end
+
+  defp test_visitor_breakdown do
+    if Process.whereis(Spectabas.ClickHouse) do
+      sql = """
+      SELECT
+        site_id,
+        uniq(visitor_id) AS total_visitors,
+        uniqIf(visitor_id, ip_is_bot = 0) AS human_visitors,
+        uniqIf(visitor_id, ip_is_bot = 1) AS bot_visitors,
+        count() AS total_events,
+        countIf(ip_is_bot = 1) AS bot_events,
+        countIf(ip_is_datacenter = 1) AS datacenter_events,
+        countIf(event_type = 'pageview') AS pageviews,
+        countIf(event_type = 'pageview' AND ip_is_bot = 0) AS human_pageviews
+      FROM events
+      WHERE toDate(timestamp) = today()
+      GROUP BY site_id
+      ORDER BY total_events DESC
+      """
+
+      case Spectabas.ClickHouse.query(sql) do
+        {:ok, rows} -> rows
+        {:error, e} -> "error: #{inspect(e) |> String.slice(0, 200)}"
+      end
+    else
+      "not_started"
+    end
   end
 
   defp test_rum_debug do
