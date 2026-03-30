@@ -82,6 +82,43 @@ const AutoDismiss = {
   }
 }
 
+const PieChart = {
+  mounted() {
+    this.handleEvent("pie-data", ({labels, values}) => {
+      const canvas = this.el.querySelector("canvas")
+      if (!canvas) return
+      if (this._chart) this._chart.destroy()
+      const colors = [
+        "#6366f1", "#ec4899", "#f59e0b", "#10b981", "#8b5cf6",
+        "#ef4444", "#3b82f6", "#14b8a6", "#f97316", "#6b7280"
+      ]
+      this._chart = new Chart(canvas, {
+        type: "doughnut",
+        data: {
+          labels: labels,
+          datasets: [{
+            data: values,
+            backgroundColor: colors.slice(0, values.length),
+            borderWidth: 2,
+            borderColor: "#fff"
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: "bottom", labels: { boxWidth: 12, padding: 12, font: { size: 11 } } }
+          },
+          cutout: "55%"
+        }
+      })
+    })
+  },
+  destroyed() {
+    if (this._chart) this._chart.destroy()
+  }
+}
+
 const Sparkline = {
   mounted() {
     this.handleEvent("sparkline-data", ({labels, values, id}) => {
@@ -127,6 +164,7 @@ const Hooks = {
   PasskeyRegister,
   AutoDismiss,
   Sparkline,
+  PieChart,
 }
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")

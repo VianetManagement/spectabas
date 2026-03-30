@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v2.4.4 — 2026-03-30 23:55 UTC",
+       [
+         %{
+           title: "Device pie charts and percentages",
+           description:
+             "Devices page now shows a doughnut pie chart alongside the table. Each row includes a percentage column. Chart updates when switching tabs (Device Type, Browser, OS) or date range. Top 8 items shown in chart, all items in table."
+         }
+       ]},
       {"v2.4.3 — 2026-03-30 23:45 UTC",
        [
          %{

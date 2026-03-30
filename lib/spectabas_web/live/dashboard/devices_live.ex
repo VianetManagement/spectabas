@@ -1,10 +1,11 @@
 defmodule SpectabasWeb.Dashboard.DevicesLive do
   use SpectabasWeb, :live_view
 
-  @moduledoc "Device type, browser, and OS breakdown with tabs."
+  @moduledoc "Device type, browser, and OS breakdown with tabs and pie chart."
 
   alias Spectabas.{Accounts, Sites, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
+  import Spectabas.TypeHelpers
   import SpectabasWeb.Dashboard.DateHelpers
 
   @impl true
@@ -69,7 +70,24 @@ defmodule SpectabasWeb.Dashboard.DevicesLive do
           end
       end
 
-    assign(socket, :devices, devices)
+    # Compute percentages
+    total = Enum.reduce(devices, 0, fn d, acc -> acc + to_num(d["unique_visitors"]) end)
+
+    devices =
+      Enum.map(devices, fn d ->
+        visitors = to_num(d["unique_visitors"])
+        pct = if total > 0, do: Float.round(visitors / total * 100, 1), else: 0.0
+        Map.put(d, "pct", pct)
+      end)
+
+    # Push pie chart data
+    labels = Enum.map(devices, &(Map.get(&1, tab, "Unknown") || "Unknown"))
+    values = Enum.map(devices, &to_num(&1["unique_visitors"]))
+
+    socket
+    |> assign(:devices, devices)
+    |> assign(:total_visitors, total)
+    |> push_event("pie-data", %{labels: Enum.take(labels, 8), values: Enum.take(values, 8)})
   end
 
   @impl true
@@ -125,40 +143,59 @@ defmodule SpectabasWeb.Dashboard.DevicesLive do
           </button>
         </div>
 
-        <div class="bg-white rounded-lg shadow overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {String.replace(@tab, "_", " ") |> String.capitalize()}
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Visitors
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Pageviews
-                </th>
-              </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
-              <tr :if={@devices == []}>
-                <td colspan="3" class="px-6 py-8 text-center text-gray-500">
-                  No data for this period.
-                </td>
-              </tr>
-              <tr :for={device <- @devices} class="hover:bg-gray-50">
-                <td class="px-6 py-4 text-sm text-gray-900">
-                  {Map.get(device, @tab, "Unknown")}
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-900 text-right">
-                  {Map.get(device, "unique_visitors", 0)}
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-900 text-right">
-                  {Map.get(device, "pageviews", 0)}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <%!-- Pie Chart --%>
+          <div :if={@devices != []} class="bg-white rounded-lg shadow p-6">
+            <div id="pie-chart" phx-hook="PieChart" class="h-64">
+              <canvas></canvas>
+            </div>
+          </div>
+
+          <%!-- Table --%>
+          <div class={[
+            "bg-white rounded-lg shadow overflow-x-auto",
+            if(@devices != [], do: "lg:col-span-2", else: "lg:col-span-3")
+          ]}>
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    {String.replace(@tab, "_", " ") |> String.capitalize()}
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Visitors
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    %
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Pageviews
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr :if={@devices == []}>
+                  <td colspan="4" class="px-6 py-8 text-center text-gray-500">
+                    No data for this period.
+                  </td>
+                </tr>
+                <tr :for={device <- @devices} class="hover:bg-gray-50">
+                  <td class="px-6 py-4 text-sm text-gray-900 font-medium">
+                    {Map.get(device, @tab, "Unknown") || "Unknown"}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                    {format_number(to_num(device["unique_visitors"]))}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-500 text-right tabular-nums">
+                    {device["pct"]}%
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                    {format_number(to_num(device["pageviews"]))}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </.dashboard_layout>
