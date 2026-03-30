@@ -99,13 +99,17 @@ defmodule Spectabas.Reports do
       |> Map.put("user_id", user.id)
       |> Map.put("site_id", site.id)
 
-    %EmailReportSubscription{}
-    |> EmailReportSubscription.changeset(attrs)
-    |> Repo.insert(
-      on_conflict: {:replace, [:frequency, :send_hour, :updated_at]},
-      conflict_target: [:user_id, :site_id],
-      returning: true
-    )
+    case get_email_subscription(user, site) do
+      nil ->
+        %EmailReportSubscription{}
+        |> EmailReportSubscription.changeset(attrs)
+        |> Repo.insert()
+
+      existing ->
+        existing
+        |> EmailReportSubscription.changeset(attrs)
+        |> Repo.update()
+    end
   end
 
   @doc "Get a user's email report subscription for a site."

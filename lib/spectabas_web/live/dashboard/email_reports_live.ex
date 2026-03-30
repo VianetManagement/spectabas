@@ -27,6 +27,13 @@ defmodule SpectabasWeb.Dashboard.EmailReportsLive do
   end
 
   @impl true
+  def handle_event("preview_report", %{"report" => params}, socket) do
+    {:noreply,
+     socket
+     |> assign(:report_frequency, params["frequency"] || "off")
+     |> assign(:report_hour, String.to_integer(params["send_hour"] || "9"))}
+  end
+
   def handle_event("save_report", %{"report" => params}, socket) do
     user = socket.assigns.user
     site = socket.assigns.site
@@ -86,7 +93,7 @@ defmodule SpectabasWeb.Dashboard.EmailReportsLive do
           <p class="text-sm text-gray-500 mb-6">
             Configure your personal email report for this site. Each user can have their own settings.
           </p>
-          <form phx-submit="save_report" class="space-y-4">
+          <form phx-submit="save_report" phx-change="preview_report" class="space-y-4">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Frequency</label>
@@ -112,6 +119,15 @@ defmodule SpectabasWeb.Dashboard.EmailReportsLive do
                 </select>
                 <p class="mt-1 text-xs text-gray-500">
                   In the site's timezone ({@site.timezone || "UTC"})
+                </p>
+                <p :if={@report_frequency == "weekly"} class="mt-1 text-xs text-gray-500">
+                  Sent every Monday
+                </p>
+                <p :if={@report_frequency == "monthly"} class="mt-1 text-xs text-gray-500">
+                  Sent on the 1st of each month
+                </p>
+                <p :if={@report_frequency == "daily"} class="mt-1 text-xs text-gray-500">
+                  Sent every day
                 </p>
               </div>
             </div>
