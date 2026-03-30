@@ -99,7 +99,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 ### GeoIP Database Updates
 - DB-IP + MaxMind refresh via Oban cron on 1st and 15th of each month at 06:00 UTC
 - DB-IP downloaded during Docker build (cached layer, update monthly by bumping cache key)
-- MaxMind downloaded at runtime on first startup if MAXMIND_LICENSE_KEY is set
+- MaxMind downloaded at Docker build time if MAXMIND_LICENSE_KEY is set as build arg; falls back to runtime download on first startup
 - To update DB-IP manually: bump the date in the Dockerfile RUN command
 
 ## Dashboard Features
