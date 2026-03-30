@@ -76,6 +76,7 @@ defmodule SpectabasWeb.Dashboard.EntryExitLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       page_title="Entry & Exit Pages"
       page_description="Where visitors land and where they leave your site."

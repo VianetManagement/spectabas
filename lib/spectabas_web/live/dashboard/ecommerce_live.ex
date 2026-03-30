@@ -60,6 +60,7 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       page_title="Ecommerce"
       page_description="Revenue, orders, and product analytics."

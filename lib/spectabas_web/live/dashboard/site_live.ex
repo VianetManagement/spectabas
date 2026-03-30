@@ -407,6 +407,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       active="overview"
       live_visitors={@live_visitors}

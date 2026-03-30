@@ -69,6 +69,7 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       active="campaigns"
       page_title="Campaigns"

@@ -107,6 +107,7 @@ defmodule SpectabasWeb.Dashboard.GeoLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       page_title="Geography"
       page_description="Visitor locations by country, region, and city. Click a country to drill down."

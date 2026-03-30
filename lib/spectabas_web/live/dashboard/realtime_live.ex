@@ -83,6 +83,7 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       page_title="Realtime"
       page_description="Live visitor activity — updates every 5 seconds."

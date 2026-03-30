@@ -60,6 +60,7 @@ defmodule SpectabasWeb.Dashboard.SourcesLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       page_title="Sources"
       page_description="Where your visitors come from — referrer domains and UTM parameters."

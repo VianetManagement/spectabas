@@ -78,6 +78,7 @@ defmodule SpectabasWeb.Dashboard.NetworkLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       page_title="Network"
       page_description="ISP and network analysis — datacenter, VPN, Tor, and bot traffic."

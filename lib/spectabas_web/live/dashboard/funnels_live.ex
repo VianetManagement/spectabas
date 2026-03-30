@@ -108,6 +108,7 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       page_title="Funnels"
       page_description="Conversion funnels showing drop-off at each step."

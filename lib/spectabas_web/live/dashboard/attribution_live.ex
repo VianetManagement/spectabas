@@ -46,6 +46,7 @@ defmodule SpectabasWeb.Dashboard.AttributionLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       page_title="Channel Attribution"
       page_description="First-touch vs last-touch attribution by traffic channel."

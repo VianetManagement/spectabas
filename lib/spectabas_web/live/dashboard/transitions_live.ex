@@ -63,6 +63,7 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       page_title="Page Transitions"
       page_description="See where visitors came from and went to for any page."

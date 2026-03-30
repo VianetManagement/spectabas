@@ -92,6 +92,7 @@ defmodule SpectabasWeb.Dashboard.EmailReportsLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       page_title="Email Reports"
       page_description="Receive periodic analytics digests by email."

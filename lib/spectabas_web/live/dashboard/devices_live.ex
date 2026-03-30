@@ -76,6 +76,7 @@ defmodule SpectabasWeb.Dashboard.DevicesLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       page_title="Devices"
       page_description="Browser, OS, and device type breakdown."

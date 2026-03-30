@@ -81,6 +81,7 @@ defmodule SpectabasWeb.Dashboard.CohortLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       page_title="Cohort Retention"
       page_description="Weekly retention grid showing returning visitor percentages."

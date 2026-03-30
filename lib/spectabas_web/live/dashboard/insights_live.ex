@@ -33,6 +33,7 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       page_title="Insights & Alerts"
       page_description="Automated analysis of your traffic patterns. Detects significant changes and suggests actions."

@@ -69,6 +69,7 @@ defmodule SpectabasWeb.Dashboard.ReportsLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       page_title="Reports"
       page_description="Scheduled and on-demand analytics reports."

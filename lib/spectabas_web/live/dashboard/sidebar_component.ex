@@ -14,6 +14,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
   attr :compare, :boolean, default: false
   attr :page_title, :string, default: nil
   attr :page_description, :string, default: nil
+  attr :flash, :map, default: %{}
   slot :inner_block, required: true
 
   def dashboard_layout(assigns) do
@@ -321,6 +322,22 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
         </div>
 
         <main class="flex-1 overflow-y-auto bg-gray-50">
+          <div
+            :if={@flash["info"]}
+            class="mx-4 mt-4 rounded-lg bg-green-50 border border-green-200 p-4 text-sm text-green-800 flex items-center justify-between"
+            phx-click={Phoenix.LiveView.JS.push("lv:clear-flash", value: %{key: "info"})}
+          >
+            <span>{@flash["info"]}</span>
+            <button type="button" class="text-green-600 hover:text-green-800 ml-4">&times;</button>
+          </div>
+          <div
+            :if={@flash["error"]}
+            class="mx-4 mt-4 rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-800 flex items-center justify-between"
+            phx-click={Phoenix.LiveView.JS.push("lv:clear-flash", value: %{key: "error"})}
+          >
+            <span>{@flash["error"]}</span>
+            <button type="button" class="text-red-600 hover:text-red-800 ml-4">&times;</button>
+          </div>
           {render_slot(@inner_block)}
         </main>
       </div>

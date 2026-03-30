@@ -56,6 +56,7 @@ defmodule SpectabasWeb.Dashboard.JourneysLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       page_title="Visitor Journeys"
       page_description="Most common paths visitors take through your site. Shows which routes lead to conversions."

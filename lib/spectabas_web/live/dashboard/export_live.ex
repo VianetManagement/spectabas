@@ -102,6 +102,7 @@ defmodule SpectabasWeb.Dashboard.ExportLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       page_title="Exports"
       page_description="Export your analytics data."

@@ -108,6 +108,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       page_title="Settings"
       page_description="Configure tracking, GDPR mode, and custom domains."

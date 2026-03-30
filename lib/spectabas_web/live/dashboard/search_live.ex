@@ -46,6 +46,7 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       page_title="Site Search"
       page_description="Internal search queries from URL parameters."

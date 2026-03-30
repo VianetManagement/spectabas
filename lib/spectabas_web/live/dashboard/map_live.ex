@@ -80,6 +80,7 @@ defmodule SpectabasWeb.Dashboard.MapLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       page_title="Visitor Map"
       page_description="Geographic visualization of visitor locations with timezone distribution."

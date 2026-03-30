@@ -94,6 +94,7 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       page_title="Goals"
       page_description="Track pageview and custom event goal completions."

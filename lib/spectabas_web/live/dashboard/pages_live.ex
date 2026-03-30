@@ -82,6 +82,7 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       page_title="Pages"
       page_description="Top pages ranked by pageviews and unique visitors."

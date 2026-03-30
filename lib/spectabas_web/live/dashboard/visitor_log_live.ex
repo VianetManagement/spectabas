@@ -72,6 +72,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       page_title="Visitor Log"
       page_description="Browse individual visitor sessions with location, device, and traffic source."

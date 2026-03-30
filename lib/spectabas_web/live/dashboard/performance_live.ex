@@ -51,6 +51,7 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       page_title="Performance"
       page_description="Real User Monitoring — actual page load times and Core Web Vitals from your visitors' browsers."

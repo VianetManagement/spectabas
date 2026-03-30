@@ -75,6 +75,7 @@ defmodule SpectabasWeb.Dashboard.VisitorsLive do
   def render(assigns) do
     ~H"""
     <.dashboard_layout
+      flash={@flash}
       site={@site}
       page_title="Visitors"
       page_description="Browse and search visitor records."
