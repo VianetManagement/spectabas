@@ -1164,6 +1164,29 @@ defmodule Spectabas.Analytics do
   def visitors_by_ip(_, _), do: {:ok, []}
 
   @doc """
+  Top pages visited from a specific IP address.
+  """
+  def ip_page_hits(%Site{} = site, ip_address)
+      when is_binary(ip_address) and ip_address != "" do
+    sql = """
+    SELECT
+      url_path,
+      count() AS hits
+    FROM events
+    WHERE site_id = #{ClickHouse.param(site.id)}
+      AND ip_address = #{ClickHouse.param(ip_address)}
+      AND event_type = 'pageview'
+    GROUP BY url_path
+    ORDER BY hits DESC
+    LIMIT 20
+    """
+
+    ClickHouse.query(sql)
+  end
+
+  def ip_page_hits(_, _), do: {:ok, []}
+
+  @doc """
   Find other visitors who share the same browser fingerprint.
   Useful for detecting alt accounts, ban evasion, and fraud.
   """

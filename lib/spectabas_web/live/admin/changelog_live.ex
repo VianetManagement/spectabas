@@ -45,6 +45,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v2.5.0 — 2026-03-30 UTC",
+       [
+         %{
+           title: "IP Profile page",
+           description:
+             "dedicated page for any IP address showing geo details (city, country, org, ASN, timezone), datacenter/VPN/Tor/bot/EU badges, all visitors who used the IP (linked to profiles), and top pages visited from that IP. Accessible from visitor log search, visitor profiles, and direct URL."
+         },
+         %{
+           title: "Zoomable visitor map",
+           description:
+             "visitor map now has region preset buttons — World, N. America, S. America, Europe, Asia, Africa, Oceania, USA. Click to zoom the map to that region. Also made the map responsive (250px mobile, 350px tablet, 450px desktop)."
+         }
+       ]},
       {"v2.4.5 — 2026-03-30 23:59 UTC",
        [
          %{

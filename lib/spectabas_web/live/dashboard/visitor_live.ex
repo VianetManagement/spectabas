@@ -373,7 +373,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
               <tr :for={ip <- @visitor_ips} class="hover:bg-gray-50">
                 <td class="px-4 py-2">
                   <.link
-                    navigate={~p"/dashboard/sites/#{@site.id}/visitor-log?ip=#{ip["ip_address"]}"}
+                    navigate={~p"/dashboard/sites/#{@site.id}/ip/#{ip["ip_address"]}"}
                     class="font-mono text-xs text-indigo-600 hover:text-indigo-800"
                   >
                     {ip["ip_address"]}

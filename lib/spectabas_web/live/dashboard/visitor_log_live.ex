@@ -172,16 +172,12 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
           <div class="px-6 py-4 border-b border-gray-100">
             <h3 class="font-semibold text-gray-900">
               IP:
-              <a
-                href={"https://ipinfo.io/#{@ip_search}"}
-                target="_blank"
-                rel="noopener"
+              <.link
+                navigate={~p"/dashboard/sites/#{@site.id}/ip/#{@ip_search}"}
                 class="font-mono text-indigo-600 hover:text-indigo-800 hover:underline"
-                title="View IP details on ipinfo.io"
               >
                 {@ip_search}
-                <span class="text-xs text-gray-400 ml-1">&nearr;</span>
-              </a>
+              </.link>
             </h3>
             <div :if={@ip_info} class="flex flex-wrap gap-3 mt-2 text-sm text-gray-600">
               <span :if={@ip_info["city"] && @ip_info["city"] != ""}>
