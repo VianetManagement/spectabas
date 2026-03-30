@@ -45,7 +45,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
-      {"v2.3.1 — 2026-03-28 18:00 UTC",
+      {"v2.3.1 — 2026-03-30 18:00 UTC",
        [
          %{
            title: "Spam Filter Admin Page",
@@ -53,7 +53,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "admin page at /admin/spam-filter for managing referrer spam blocklist. Custom domains can be added/removed via DB. Auto-detection queries ClickHouse for suspicious referrer domains (high bot %, multi-site hits) and presents candidates for review. Daily Oban worker runs detection at 7am UTC. Builtin domains remain hardcoded."
          }
        ]},
-      {"v2.3.0 — 2026-03-28 12:00 UTC",
+      {"v2.3.0 — 2026-03-30 15:00 UTC",
        [
          %{
            title: "Outbound Link Tracking",
