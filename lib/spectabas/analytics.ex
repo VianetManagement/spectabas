@@ -361,11 +361,54 @@ defmodule Spectabas.Analytics do
           "AND referrer_domain NOT IN (#{domains})"
         end
 
+      # Classify channels in SQL so uniq(visitor_id) is correct per channel
+      # (Elixir-side summing of uniq counts across groups overcounts visitors)
+      channel_sql = channel_case_expression()
+
       sql = """
       SELECT
-        referrer_domain,
-        utm_source,
-        utm_medium,
+        (#{channel_sql}) AS channel,
+        countIf(event_type = 'pageview') AS pageviews,
+        uniq(visitor_id) AS visitors,
+        uniq(session_id) AS sessions,
+        uniq(referrer_domain) AS sources
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+        #{exclude_clause}
+      GROUP BY channel
+      ORDER BY pageviews DESC
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
+  Drill down into a specific channel — shows individual sources within that channel.
+  """
+  def channel_detail(%Site{} = site, %User{} = user, date_range, channel_name) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      excluded = self_referrer_domains(site)
+
+      exclude_clause =
+        if excluded == [] do
+          ""
+        else
+          domains = Enum.map_join(excluded, ", ", &ClickHouse.param/1)
+          "AND referrer_domain NOT IN (#{domains})"
+        end
+
+      # Same channel classification as channel_breakdown
+      channel_sql = channel_case_expression()
+
+      sql = """
+      SELECT
+        if(referrer_domain != '', referrer_domain, if(utm_source != '', utm_source, 'Direct')) AS source,
         countIf(event_type = 'pageview') AS pageviews,
         uniq(visitor_id) AS visitors,
         uniq(session_id) AS sessions
@@ -374,43 +417,35 @@ defmodule Spectabas.Analytics do
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
         AND ip_is_bot = 0
+        AND (#{channel_sql}) = #{ClickHouse.param(channel_name)}
         #{exclude_clause}
-      GROUP BY referrer_domain, utm_source, utm_medium
+      GROUP BY source
       ORDER BY pageviews DESC
-      LIMIT 500
+      LIMIT 50
       """
 
-      case ClickHouse.query(sql) do
-        {:ok, rows} ->
-          channels =
-            rows
-            |> Enum.group_by(fn row ->
-              Spectabas.Analytics.ChannelClassifier.classify(
-                row["referrer_domain"] || "",
-                row["utm_source"] || "",
-                row["utm_medium"] || ""
-              )
-            end)
-            |> Enum.map(fn {channel, rows} ->
-              %{
-                "channel" => channel,
-                "pageviews" =>
-                  Enum.sum(Enum.map(rows, &Spectabas.TypeHelpers.to_int(&1["pageviews"]))),
-                "visitors" =>
-                  Enum.sum(Enum.map(rows, &Spectabas.TypeHelpers.to_int(&1["visitors"]))),
-                "sessions" =>
-                  Enum.sum(Enum.map(rows, &Spectabas.TypeHelpers.to_int(&1["sessions"]))),
-                "sources" => length(rows)
-              }
-            end)
-            |> Enum.sort_by(& &1["pageviews"], :desc)
-
-          {:ok, channels}
-
-        {:error, reason} ->
-          {:error, reason}
-      end
+      ClickHouse.query(sql)
     end
+  end
+
+  # Shared ClickHouse CASE expression for channel classification
+  defp channel_case_expression do
+    """
+    multiIf(
+      lower(utm_medium) IN ('paid_social', 'paidsocial'), 'Paid Social',
+      lower(utm_medium) IN ('cpc', 'ppc', 'paidsearch', 'paid'), 'Paid Search',
+      lower(utm_medium) = 'email', 'Email',
+      lower(utm_medium) = 'social', 'Social Networks',
+      referrer_domain = '' AND utm_source = '', 'Direct',
+      multiSearchAnyCaseInsensitive(referrer_domain, ['chatgpt.com', 'chat.openai.com', 'claude.ai', 'perplexity.ai', 'gemini.google.com', 'copilot.microsoft.com', 'poe.com', 'you.com', 'phind.com']) > 0, 'AI Assistants',
+      multiSearchAnyCaseInsensitive(referrer_domain, ['mail.google.com', 'outlook.live.com', 'mail.yahoo.com', 'webmail']) > 0, 'Email',
+      multiSearchAnyCaseInsensitive(referrer_domain, ['google.com', 'google.co', 'bing.com', 'duckduckgo.com', 'yahoo.com', 'baidu.com', 'yandex.ru', 'yandex.com', 'ecosia.org', 'brave.com', 'search.brave.com']) > 0, 'Search Engines',
+      multiSearchAnyCaseInsensitive(referrer_domain, ['facebook.com', 'fb.com', 'instagram.com', 'twitter.com', 'x.com', 'linkedin.com', 'reddit.com', 'tiktok.com', 'youtube.com', 'pinterest.com', 'threads.net', 'mastodon.social']) > 0, 'Social Networks',
+      referrer_domain != '', 'Websites',
+      utm_source != '', 'Other Campaigns',
+      'Direct'
+    )
+    """
   end
 
   @doc """
