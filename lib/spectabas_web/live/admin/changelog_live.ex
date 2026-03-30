@@ -100,7 +100,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "clicking a channel now shows its individual sources (e.g., Search Engines → google.com, bing.com). Fixed visitor overcounting — channel breakdown now uses SQL-level classification with uniq(visitor_id) per channel instead of summing across groups. Shared ClickHouse CASE expression for channel classification."
          }
        ]},
-      {"v2.2.0 — 2026-03-28 12:00 UTC",
+      {"v2.2.0 — 2026-03-30 11:00 UTC",
        [
          %{
            title: "All Channels page",
