@@ -351,8 +351,8 @@ defmodule Spectabas.Events.Ingest do
 
   defp resolve_session(site_id, visitor_id, payload, ua_data, ip_data) do
     event_data = %{
-      entry_url: payload.u,
-      referrer: payload.r,
+      entry_url: String.slice(payload.u || "", 0, 2048),
+      referrer: String.slice(payload.r || "", 0, 2048),
       country: ip_data[:ip_country] || "",
       city: ip_data[:ip_city] || "",
       device_type: ua_data[:device_type] || "",
