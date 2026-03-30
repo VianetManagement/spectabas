@@ -26,6 +26,8 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
             []
         end
 
+      ip_search = params["ip"] || ""
+
       {:ok,
        socket
        |> assign(:page_title, "Visitor Log - #{site.name}")
@@ -34,6 +36,8 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
        |> assign(:date_range, "7d")
        |> assign(:page, 1)
        |> assign(:segment, segment)
+       |> assign(:ip_search, ip_search)
+       |> assign(:ip_results, nil)
        |> load_data()}
     end
   end
@@ -50,6 +54,26 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
   def handle_event("prev_page", _params, socket) do
     page = max(socket.assigns.page - 1, 1)
     {:noreply, socket |> assign(:page, page) |> load_data()}
+  end
+
+  def handle_event("search_ip", %{"ip" => ip}, socket) do
+    ip = String.trim(ip)
+
+    if ip == "" do
+      {:noreply, socket |> assign(:ip_search, "") |> assign(:ip_results, nil)}
+    else
+      results =
+        case Analytics.visitors_by_ip(socket.assigns.site, ip) do
+          {:ok, rows} -> rows
+          _ -> []
+        end
+
+      {:noreply, socket |> assign(:ip_search, ip) |> assign(:ip_results, results)}
+    end
+  end
+
+  def handle_event("clear_ip", _params, socket) do
+    {:noreply, socket |> assign(:ip_search, "") |> assign(:ip_results, nil)}
   end
 
   defp load_data(socket) do
@@ -102,6 +126,90 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
           </nav>
         </div>
 
+        <%!-- IP Search --%>
+        <div class="bg-white rounded-lg shadow p-4 mb-6">
+          <form phx-submit="search_ip" class="flex items-center gap-3">
+            <label class="text-sm font-medium text-gray-700">Search by IP</label>
+            <input
+              type="text"
+              name="ip"
+              value={@ip_search}
+              placeholder="e.g., 192.168.1.1"
+              class="rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 py-2 px-3 w-48"
+              inputmode="decimal"
+            />
+            <button
+              type="submit"
+              class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
+            >
+              Search
+            </button>
+            <button
+              :if={@ip_search != ""}
+              type="button"
+              phx-click="clear_ip"
+              class="text-sm text-gray-500 hover:text-gray-700"
+            >
+              Clear
+            </button>
+          </form>
+        </div>
+
+        <%!-- IP Search Results --%>
+        <div :if={@ip_results != nil} class="bg-white rounded-lg shadow overflow-x-auto mb-6">
+          <div class="px-6 py-4 border-b border-gray-100">
+            <h3 class="font-semibold text-gray-900">
+              Visitors from IP: <span class="font-mono text-indigo-600">{@ip_search}</span>
+            </h3>
+            <p class="text-xs text-gray-500 mt-0.5">{length(@ip_results)} visitor(s) found</p>
+          </div>
+          <table :if={@ip_results != []} class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Visitor
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  First Seen
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Last Seen
+                </th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                  Pageviews
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Browser / OS
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr :for={v <- @ip_results} class="hover:bg-gray-50">
+                <td class="px-6 py-3 text-sm">
+                  <.link
+                    navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{v["visitor_id"]}"}
+                    class="text-indigo-600 hover:text-indigo-800 font-mono text-xs"
+                  >
+                    {String.slice(v["visitor_id"] || "", 0, 12)}...
+                  </.link>
+                </td>
+                <td class="px-6 py-3 text-sm text-gray-500">{v["first_seen"]}</td>
+                <td class="px-6 py-3 text-sm text-gray-500">{v["last_seen"]}</td>
+                <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
+                  {v["pageviews"]}
+                </td>
+                <td class="px-6 py-3 text-sm text-gray-500">
+                  {v["browser"]} / {v["os"]}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div :if={@ip_results == []} class="px-6 py-8 text-center text-gray-500 text-sm">
+            No visitors found for this IP address.
+          </div>
+        </div>
+
+        <%!-- Main Visitor Log --%>
         <div class="bg-white rounded-lg shadow overflow-x-auto">
           <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
