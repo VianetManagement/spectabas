@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v2.4.5 — 2026-03-30 23:59 UTC",
+       [
+         %{
+           title: "Fingerprint uniqueness fix",
+           description:
+             "restored full User-Agent string in fingerprint signals. Removing it (for stability) caused massive false merges — all users with the same device model, browser major version, screen size, and timezone shared one fingerprint. One 'visitor' was showing 50+ IP addresses. The full UA adds OS build, minor version, and patch info that differentiates otherwise-identical devices."
+         }
+       ]},
       {"v2.4.4 — 2026-03-30 23:55 UTC",
        [
          %{

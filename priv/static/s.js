@@ -265,6 +265,7 @@
     })();
 
     var signals = [
+      navigator.userAgent,
       uaBrowser,
       screen.width + "x" + screen.height + "x" + (screen.colorDepth || 0),
       window.devicePixelRatio || 1,
