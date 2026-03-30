@@ -137,6 +137,21 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
               active={@active == "search"}
             />
             <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/outbound-links"}
+              label="Outbound Links"
+              active={@active == "outbound-links"}
+            />
+            <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/downloads"}
+              label="Downloads"
+              active={@active == "downloads"}
+            />
+            <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/events"}
+              label="Events"
+              active={@active == "events"}
+            />
+            <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/performance"}
               label="Performance"
               active={@active == "performance"}
@@ -374,6 +389,9 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
       {~p"/dashboard/sites/#{site_id}/entry-exit", "Entry/Exit"},
       {~p"/dashboard/sites/#{site_id}/transitions", "Transitions"},
       {~p"/dashboard/sites/#{site_id}/search", "Search"},
+      {~p"/dashboard/sites/#{site_id}/outbound-links", "Outbound Links"},
+      {~p"/dashboard/sites/#{site_id}/downloads", "Downloads"},
+      {~p"/dashboard/sites/#{site_id}/events", "Events"},
       {~p"/dashboard/sites/#{site_id}/performance", "Performance"},
       {~p"/dashboard/sites/#{site_id}/channels", "Channels"},
       {~p"/dashboard/sites/#{site_id}/sources", "Sources"},

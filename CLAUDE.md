@@ -111,7 +111,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - Visitor intent breakdown
 
 ### Analytics Pages (sidebar navigation)
-- **Behavior**: Pages, Entry/Exit, Page Transitions, Site Search, Performance (RUM)
+- **Behavior**: Pages, Entry/Exit, Page Transitions, Site Search, Outbound Links, Downloads, Events, Performance (RUM)
 - **Acquisition**: All Channels, Sources (6 UTM tabs), Attribution, Campaigns (UTM builder)
 - **Audience**: Geography, Visitor Map, Devices, Network, Bot Traffic, Visitor Log, Cohort Retention
 - **Conversions**: Goals, Funnels, Ecommerce
@@ -185,6 +185,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Geolix name maps**: Use both atom and string keys — `Map.get(names, "en") || Map.get(names, :en)`
 - **Origin validation**: Auto-allows parent domain of analytics subdomain
 - **Tracking subdomain plug**: Blocks all UI routes on analytics subdomains, only allows `/c/*`, `/assets/v1.js`, `/health`
+- **Spam filter**: `Spectabas.Analytics.SpamFilter` maintains a list of known referrer spam domains, auto-excluded from Sources/Channels queries
 - **Ad blocker evasion**: Script at `/assets/v1.js`, beacon uses public_key not domain, endpoints obfuscated
 - **Cloudflare support**: Checks `CF-Connecting-IP` header before `x-forwarded-for`
 - **Sidebar layout**: All dashboard pages use `<.dashboard_layout>` from SidebarComponent

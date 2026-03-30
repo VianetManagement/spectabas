@@ -1429,6 +1429,92 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  # ---- Outbound Links ----
+
+  @doc "Outbound links clicked by visitors, grouped by domain."
+  def outbound_links(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        JSONExtractString(properties, 'domain') AS domain,
+        JSONExtractString(properties, 'url') AS url,
+        count() AS hits,
+        uniq(visitor_id) AS visitors
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND event_type = 'custom'
+        AND event_name = '_outbound'
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+      GROUP BY domain, url
+      ORDER BY hits DESC
+      LIMIT 50
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  # ---- File Downloads ----
+
+  @doc "File downloads tracked automatically, grouped by filename."
+  def file_downloads(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        JSONExtractString(properties, 'filename') AS filename,
+        JSONExtractString(properties, 'url') AS url,
+        count() AS hits,
+        uniq(visitor_id) AS visitors
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND event_type = 'custom'
+        AND event_name = '_download'
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+      GROUP BY filename, url
+      ORDER BY hits DESC
+      LIMIT 50
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  # ---- Custom Events ----
+
+  @doc "Custom events (excluding internal _ prefixed events), grouped by event name."
+  def custom_events(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        event_name,
+        count() AS hits,
+        uniq(visitor_id) AS visitors
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND event_type = 'custom'
+        AND event_name NOT LIKE '\\_%'
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+      GROUP BY event_name
+      ORDER BY hits DESC
+      LIMIT 50
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
   # ---- Cohort Retention ----
 
   @doc """
@@ -1888,8 +1974,10 @@ defmodule Spectabas.Analytics do
 
     [domain, "www.spectabas.com", "spectabas.com"]
     |> then(fn list -> if parent, do: [parent, "www.#{parent}" | list], else: list end)
+    |> Kernel.++(Spectabas.Analytics.SpamFilter.spam_domains())
     |> Enum.uniq()
   end
 
-  defp self_referrer_domains(_), do: ["www.spectabas.com", "spectabas.com"]
+  defp self_referrer_domains(_),
+    do: ["www.spectabas.com", "spectabas.com"] ++ Spectabas.Analytics.SpamFilter.spam_domains()
 end

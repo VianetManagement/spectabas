@@ -607,6 +607,8 @@ defmodule SpectabasWeb.DocsLive do
             | **Screen size** | `screen.width` and `screen.height` |
             | **UTM parameters** | Extracted from URL and persisted in sessionStorage (GDPR-off only) |
             | **Site search** | Queries captured from `q`, `query`, `search`, `s`, `keyword` URL params |
+            | **Outbound links** | Clicks on links to external domains |
+            | **File downloads** | Clicks on links to downloadable files (PDF, ZIP, DOC, XLS, CSV, MP3, MP4, etc.) |
             | **Performance (RUM)** | Page load timing and Core Web Vitals (LCP, CLS, FID) via PerformanceObserver |
             | **Bot detection** | WebDriver, headless browser, and interaction signals |
             | **Form abuse** | Suspicious form submission patterns (rapid submits, paste floods, no interaction) |
@@ -777,6 +779,43 @@ defmodule SpectabasWeb.DocsLive do
             **No code changes needed** — if your site's search results page uses a URL like `/search?q=widgets`, Spectabas automatically captures "widgets" as a search term.
 
             This tells you what visitors are looking for on your site, which can inform content creation and navigation improvements.
+            """
+          },
+          %{
+            id: "outbound-links",
+            title: "Outbound Links",
+            body: """
+            Automatically tracks clicks on external links. When a visitor clicks a link that goes to a different domain, Spectabas records the destination domain and full URL.
+
+            **No code changes needed** — the tracker detects outbound links automatically by comparing the link hostname against the current page hostname.
+
+            Shows which external sites your visitors click through to, helping you understand where traffic flows after leaving your site.
+            """
+          },
+          %{
+            id: "downloads",
+            title: "File Downloads",
+            body: """
+            Automatically tracks clicks on links to downloadable files. Supported file extensions: PDF, ZIP, DOC, DOCX, XLS, XLSX, CSV, MP3, MP4, AVI, MOV, DMG, EXE, ISO.
+
+            **No code changes needed** — the tracker detects file download links by checking the file extension in the URL path.
+
+            Shows which files your visitors download most, with hit counts and unique visitor counts per file.
+            """
+          },
+          %{
+            id: "custom-events",
+            title: "Custom Events",
+            body: """
+            Browse all custom events fired via `Spectabas.track()`. Internal events (prefixed with `_`) are hidden from this view — they power features like outbound link tracking, file downloads, RUM, and form abuse detection.
+
+            Use this page to verify your custom event implementation and see which events are most popular across your visitors.
+
+            ```javascript
+            // Events fired with Spectabas.track() appear here
+            Spectabas.track("signup", { plan: "pro" });
+            Spectabas.track("add_to_cart", { product: "widget" });
+            ```
             """
           },
           %{

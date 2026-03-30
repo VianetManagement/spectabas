@@ -376,6 +376,29 @@
     );
   }, 100);
 
+  // ---- Outbound Link & File Download Tracking ----
+  // Intercepts clicks on <a> elements to auto-track external links and file downloads
+
+  document.addEventListener("click", function(e) {
+    var link = e.target.closest("a");
+    if (!link || !link.href) return;
+    try {
+      var url = new URL(link.href);
+      if (url.protocol.indexOf("http") !== 0) return;
+
+      // Outbound link tracking
+      if (url.hostname && url.hostname !== window.location.hostname) {
+        sendEvent("custom", { n: "_outbound", p: { url: link.href, domain: url.hostname } });
+      }
+
+      // File download tracking
+      var downloadExts = /\.(pdf|zip|doc|docx|xls|xlsx|csv|mp3|mp4|avi|mov|dmg|exe|iso)$/i;
+      if (downloadExts.test(url.pathname)) {
+        sendEvent("custom", { n: "_download", p: { url: link.href, filename: url.pathname.split("/").pop() } });
+      }
+    } catch(e) {}
+  }, true);
+
   // ---- Real User Monitoring ----
   // Collects Core Web Vitals + page load timing after page is fully loaded.
   // Uses requestIdleCallback to avoid any impact on user experience.

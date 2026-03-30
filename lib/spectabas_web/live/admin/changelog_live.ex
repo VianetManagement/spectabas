@@ -45,6 +45,29 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v2.3.0 — 2026-03-28 12:00 UTC",
+       [
+         %{
+           title: "Outbound Link Tracking",
+           description:
+             "auto-tracks clicks on external links — shows destination domains, full URLs, hit counts, and unique visitors. No code changes needed."
+         },
+         %{
+           title: "File Download Tracking",
+           description:
+             "auto-tracks clicks on downloadable files (PDF, ZIP, DOC, XLS, CSV, MP3, MP4, etc.) with filename, URL, hits, and visitors."
+         },
+         %{
+           title: "Custom Events Browser",
+           description:
+             "new Events page under Behavior showing all custom events fired via Spectabas.track(), with internal events hidden."
+         },
+         %{
+           title: "Referrer Spam Filtering",
+           description:
+             "known spam domains (semalt.com, darodar.com, etc.) are automatically excluded from Sources and Channels analytics."
+         }
+       ]},
       {"v2.2.3 — 2026-03-30 14:00 UTC",
        [
          %{

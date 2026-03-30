@@ -154,6 +154,21 @@ defmodule SpectabasWeb.DashboardPagesTest do
       assert html =~ "Performance"
       assert html =~ "Core Web Vitals"
     end
+
+    test "outbound links", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/outbound-links")
+      assert html =~ "Outbound Links"
+    end
+
+    test "downloads", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/downloads")
+      assert html =~ "File Downloads"
+    end
+
+    test "custom events", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/events")
+      assert html =~ "Custom Events"
+    end
   end
 
   describe "sidebar is present on all pages" do
@@ -167,7 +182,7 @@ defmodule SpectabasWeb.DashboardPagesTest do
 
     test "sub-pages have sidebar", %{conn: conn, site: site} do
       pages =
-        ~w(pages sources channels geo devices network bot-traffic entry-exit map visitor-log transitions attribution search cohort campaigns goals funnels ecommerce reports email-reports exports settings performance)
+        ~w(pages sources channels geo devices network bot-traffic entry-exit map visitor-log transitions attribution search outbound-links downloads events cohort campaigns goals funnels ecommerce reports email-reports exports settings performance)
 
       for page <- pages do
         {:ok, _view, html} = live(conn, "/dashboard/sites/#{site.id}/#{page}")

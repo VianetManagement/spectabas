@@ -12,6 +12,10 @@ Privacy-first web analytics platform built with Elixir/Phoenix and ClickHouse.
 - **Traffic sources** — referrer domains, UTM tracking, multi-channel attribution
 - **Page flow analysis** — entry/exit pages, page transitions (came from / went to)
 - **Site search tracking** — captures internal search queries from URL parameters
+- **Outbound link tracking** — auto-tracks clicks on external links with destination domains and URLs
+- **File download tracking** — auto-tracks downloads of PDF, ZIP, DOC, XLS, CSV, MP3, MP4, and more
+- **Custom events browser** — browse all custom events fired via Spectabas.track()
+- **Referrer spam filtering** — known spam domains automatically excluded from analytics
 - **Cohort retention** — weekly retention grid showing returning visitor percentages
 - **Visitor profiles** — individual session history, IP cross-referencing, full event timeline
 - **Bot detection** — UA-based, client-side signals, datacenter IP, headless browser detection
