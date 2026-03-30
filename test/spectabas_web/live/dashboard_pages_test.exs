@@ -121,6 +121,14 @@ defmodule SpectabasWeb.DashboardPagesTest do
       assert html =~ "All Channels"
     end
 
+    test "bot traffic", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/bot-traffic")
+      assert html =~ "Bot Traffic"
+      assert html =~ "Bot Events"
+      assert html =~ "Most Targeted Pages"
+      assert html =~ "Top Bot User Agents"
+    end
+
     test "campaigns", %{conn: conn, site: site} do
       {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/campaigns")
       assert html =~ "Campaigns"
@@ -159,7 +167,7 @@ defmodule SpectabasWeb.DashboardPagesTest do
 
     test "sub-pages have sidebar", %{conn: conn, site: site} do
       pages =
-        ~w(pages sources channels geo devices network entry-exit map visitor-log transitions attribution search cohort campaigns goals funnels ecommerce reports email-reports exports settings performance)
+        ~w(pages sources channels geo devices network bot-traffic entry-exit map visitor-log transitions attribution search cohort campaigns goals funnels ecommerce reports email-reports exports settings performance)
 
       for page <- pages do
         {:ok, _view, html} = live(conn, "/dashboard/sites/#{site.id}/#{page}")

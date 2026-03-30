@@ -707,6 +707,91 @@ defmodule Spectabas.Analytics do
   end
 
   @doc """
+  Bot traffic overview: total events, bot vs human breakdown, bot types.
+  """
+  def bot_stats(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        count() AS total_events,
+        countIf(ip_is_bot = 1) AS bot_events,
+        countIf(ip_is_bot = 0) AS human_events,
+        round(countIf(ip_is_bot = 1) / greatest(count(), 1) * 100, 1) AS bot_pct,
+        uniqIf(visitor_id, ip_is_bot = 1) AS bot_visitors,
+        uniqIf(visitor_id, ip_is_bot = 0) AS human_visitors,
+        countIf(ip_is_bot = 1 AND ip_is_datacenter = 1) AS datacenter_bots,
+        countIf(ip_is_bot = 1 AND ip_is_vpn = 1) AS vpn_bots,
+        countIf(ip_is_bot = 1 AND ip_is_tor = 1) AS tor_bots
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      """
+
+      case ClickHouse.query(sql) do
+        {:ok, [row]} -> {:ok, row}
+        {:ok, []} -> {:ok, %{}}
+        {:error, reason} -> {:error, reason}
+      end
+    end
+  end
+
+  @doc """
+  Top bot sources: which user agents, IPs, and pages bots hit most.
+  """
+  def bot_top_pages(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        url_path,
+        count() AS hits,
+        uniq(visitor_id) AS bots
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 1
+        AND event_type = 'pageview'
+      GROUP BY url_path
+      ORDER BY hits DESC
+      LIMIT 20
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
+  Top bot user agents.
+  """
+  def bot_top_user_agents(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        user_agent,
+        count() AS hits,
+        uniq(visitor_id) AS bots
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 1
+      GROUP BY user_agent
+      ORDER BY hits DESC
+      LIMIT 20
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
   Network stats: top ASNs, orgs, datacenter/VPN/Tor/bot percentages.
   """
   def network_stats(%Site{} = site, %User{} = user, date_range) do

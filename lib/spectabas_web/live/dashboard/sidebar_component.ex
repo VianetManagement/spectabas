@@ -188,6 +188,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
               active={@active == "network"}
             />
             <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/bot-traffic"}
+              label="Bot Traffic"
+              active={@active == "bot-traffic"}
+            />
+            <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/visitor-log"}
               label="Visitor Log"
               active={@active == "visitor-log"}
@@ -378,6 +383,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
       {~p"/dashboard/sites/#{site_id}/map", "Map"},
       {~p"/dashboard/sites/#{site_id}/devices", "Devices"},
       {~p"/dashboard/sites/#{site_id}/network", "Network"},
+      {~p"/dashboard/sites/#{site_id}/bot-traffic", "Bots"},
       {~p"/dashboard/sites/#{site_id}/visitor-log", "Visitors"},
       {~p"/dashboard/sites/#{site_id}/cohort", "Retention"},
       {~p"/dashboard/sites/#{site_id}/goals", "Goals"},

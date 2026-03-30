@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v2.2.3 — 2026-03-30 14:00 UTC",
+       [
+         %{
+           title: "Bot Traffic page",
+           description:
+             "dedicated bot analysis under Audience: bot vs human event/visitor counts, bot percentage, breakdown by type (datacenter/VPN/Tor), most targeted pages by bots, and top bot user agent strings."
+         }
+       ]},
       {"v2.2.2 — 2026-03-30 13:00 UTC",
        [
          %{
