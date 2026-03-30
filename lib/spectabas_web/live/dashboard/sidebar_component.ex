@@ -325,18 +325,12 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
           <div
             :if={@flash["info"]}
             id="flash-info"
-            class="mx-4 mt-4 rounded-lg bg-green-50 border border-green-200 p-4 text-sm text-green-800 flex items-center justify-between"
+            class="mx-4 mt-4 rounded-lg bg-green-50 border border-green-200 p-4 text-sm text-green-800 flex items-center justify-between transition-opacity duration-500"
             phx-click={
               Phoenix.LiveView.JS.push("lv:clear-flash", value: %{key: "info"})
               |> Phoenix.LiveView.JS.hide(to: "#flash-info")
             }
-            phx-mounted={
-              Phoenix.LiveView.JS.hide(
-                to: "#flash-info",
-                transition: {"transition-opacity duration-500", "opacity-100", "opacity-0"},
-                time: 5000
-              )
-            }
+            phx-hook="AutoDismiss"
           >
             <span>{@flash["info"]}</span>
             <button type="button" class="text-green-600 hover:text-green-800 ml-4">&times;</button>

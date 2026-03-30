@@ -73,11 +73,21 @@ function bufferEncode(buffer) {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
 }
 
+const AutoDismiss = {
+  mounted() {
+    setTimeout(() => {
+      this.el.style.opacity = "0"
+      setTimeout(() => this.el.remove(), 500)
+    }, 5000)
+  }
+}
+
 const Hooks = {
   TimeseriesChart,
   BarChart,
   BubbleMap,
   PasskeyRegister,
+  AutoDismiss,
 }
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
