@@ -21,43 +21,57 @@ defmodule Spectabas.GeoIP do
     cache_dir = if persistent_dir, do: Path.join(persistent_dir, "geoip"), else: geoip_dir
     File.mkdir_p!(cache_dir)
 
-    # Load DB-IP databases (from priv, baked into Docker image)
-    load_db(geoip_dir, "dbip-city-lite.mmdb", :city)
-    load_db(geoip_dir, "dbip-asn-lite.mmdb", :asn)
+    # Load DB-IP databases: prefer persistent cache, fall back to priv (Docker image)
+    load_from_cache_or_priv(cache_dir, geoip_dir, "dbip-city-lite.mmdb", :city, persistent_dir)
+    load_from_cache_or_priv(cache_dir, geoip_dir, "dbip-asn-lite.mmdb", :asn, persistent_dir)
 
-    # MaxMind: check persistent cache first, then priv, then download
-    maxmind_priv = Path.join(geoip_dir, "GeoLite2-City.mmdb")
-    maxmind_cache = Path.join(cache_dir, "GeoLite2-City.mmdb")
+    # MaxMind: check persistent cache, then priv, then download
+    maxmind_file = "GeoLite2-City.mmdb"
+    maxmind_priv = Path.join(geoip_dir, maxmind_file)
+    maxmind_cache = Path.join(cache_dir, maxmind_file)
 
-    maxmind_path =
-      cond do
-        File.exists?(maxmind_cache) ->
-          Logger.info("[GeoIP] Loaded MaxMind from persistent cache")
-          maxmind_cache
+    cond do
+      File.exists?(maxmind_cache) ->
+        Logger.info("[GeoIP] Loaded MaxMind from persistent cache")
+        load_db(cache_dir, maxmind_file, :maxmind_city)
 
-        File.exists?(maxmind_priv) ->
-          # Copy to persistent cache for next deploy
-          if persistent_dir, do: File.cp(maxmind_priv, maxmind_cache)
-          maxmind_priv
+      File.exists?(maxmind_priv) ->
+        if persistent_dir, do: File.cp(maxmind_priv, maxmind_cache)
+        load_db(geoip_dir, maxmind_file, :maxmind_city)
 
-        true ->
-          case System.get_env("MAXMIND_LICENSE_KEY") do
-            key when is_binary(key) and key != "" ->
-              Logger.info("[GeoIP] Downloading MaxMind GeoLite2-City...")
-              # Download to persistent cache if available, otherwise priv
-              target = if persistent_dir, do: maxmind_cache, else: maxmind_priv
-              download_maxmind(key, target)
-              target
+      true ->
+        case System.get_env("MAXMIND_LICENSE_KEY") do
+          key when is_binary(key) and key != "" ->
+            Logger.info("[GeoIP] Downloading MaxMind GeoLite2-City...")
+            target = if persistent_dir, do: maxmind_cache, else: maxmind_priv
+            download_maxmind(key, target)
+            load_db(Path.dirname(target), maxmind_file, :maxmind_city)
 
-            _ ->
-              Logger.info("[GeoIP] MAXMIND_LICENSE_KEY not set, skipping MaxMind")
-              maxmind_priv
-          end
-      end
-
-    load_db(Path.dirname(maxmind_path), Path.basename(maxmind_path), :maxmind_city)
+          _ ->
+            Logger.info("[GeoIP] MAXMIND_LICENSE_KEY not set, skipping MaxMind")
+        end
+    end
 
     {:ok, %{}}
+  end
+
+  # Load from persistent cache if available, otherwise from priv (Docker image)
+  defp load_from_cache_or_priv(cache_dir, priv_dir, filename, id, persistent_dir) do
+    cache_path = Path.join(cache_dir, filename)
+    priv_path = Path.join(priv_dir, filename)
+
+    cond do
+      File.exists?(cache_path) ->
+        load_db(cache_dir, filename, id)
+
+      File.exists?(priv_path) ->
+        # Copy to persistent cache for next deploy
+        if persistent_dir, do: File.cp(priv_path, cache_path)
+        load_db(priv_dir, filename, id)
+
+      true ->
+        Logger.info("[GeoIP] #{filename} not found in cache or priv")
+    end
   end
 
   defp load_db(dir, filename, id) do

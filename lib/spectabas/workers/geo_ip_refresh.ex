@@ -13,8 +13,11 @@ defmodule Spectabas.Workers.GeoIPRefresh do
   def perform(_job) do
     priv_dir = :code.priv_dir(:spectabas)
     geoip_dir = Path.join(priv_dir, "geoip")
+    # Write to persistent storage if available (survives deploys)
+    persistent_dir = System.get_env("PERSISTENT_DIR")
+    target_dir = if persistent_dir, do: Path.join(persistent_dir, "geoip"), else: geoip_dir
 
-    File.mkdir_p!(geoip_dir)
+    File.mkdir_p!(target_dir)
 
     now = Date.utc_today()
     year = now.year
@@ -26,8 +29,8 @@ defmodule Spectabas.Workers.GeoIPRefresh do
     asn_url =
       "https://download.db-ip.com/free/dbip-asn-lite-#{year}-#{month}.mmdb.gz"
 
-    city_path = Path.join(geoip_dir, "dbip-city-lite.mmdb")
-    asn_path = Path.join(geoip_dir, "dbip-asn-lite.mmdb")
+    city_path = Path.join(target_dir, "dbip-city-lite.mmdb")
+    asn_path = Path.join(target_dir, "dbip-asn-lite.mmdb")
 
     with :ok <- download_and_decompress(city_url, city_path),
          :ok <- download_and_decompress(asn_url, asn_path) do
@@ -43,7 +46,7 @@ defmodule Spectabas.Workers.GeoIPRefresh do
         maxmind_url =
           "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=#{maxmind_key}&suffix=tar.gz"
 
-        maxmind_path = Path.join(geoip_dir, "GeoLite2-City.mmdb")
+        maxmind_path = Path.join(target_dir, "GeoLite2-City.mmdb")
 
         case download_maxmind(maxmind_url, maxmind_path) do
           :ok ->
