@@ -175,6 +175,7 @@ defmodule SpectabasWeb.Router do
       live "/sites", Admin.SitesLive, :index
       live "/audit", Admin.AuditLive, :index
       live "/changelog", Admin.ChangelogLive, :index
+      live "/competitive", Admin.CompetitiveLive, :index
     end
   end
 
