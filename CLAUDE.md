@@ -115,7 +115,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Acquisition**: Sources, Attribution, Campaigns (UTM builder)
 - **Audience**: Geography, Visitor Map, Devices, Network, Visitor Log, Cohort Retention
 - **Conversions**: Goals, Funnels, Ecommerce
-- **Tools**: Reports, Exports, Email Reports, Settings
+- **Tools**: Reports, Email Reports, Exports, Settings
 
 ### Email Reports
 - Per-user, per-site email digest subscriptions (daily/weekly/monthly)

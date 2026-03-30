@@ -154,7 +154,7 @@ defmodule SpectabasWeb.DashboardPagesTest do
 
     test "sub-pages have sidebar", %{conn: conn, site: site} do
       pages =
-        ~w(pages sources geo devices network entry-exit map visitor-log transitions attribution search cohort campaigns goals funnels ecommerce reports exports settings performance)
+        ~w(pages sources geo devices network entry-exit map visitor-log transitions attribution search cohort campaigns goals funnels ecommerce reports email-reports exports settings performance)
 
       for page <- pages do
         {:ok, _view, html} = live(conn, "/dashboard/sites/#{site.id}/#{page}")
@@ -275,6 +275,52 @@ defmodule SpectabasWeb.DashboardPagesTest do
       {:ok, view, _html} = live(conn, ~p"/docs")
       html = render_keyup(view, "search", %{"q" => "ecommerce"})
       assert html =~ "Ecommerce"
+    end
+  end
+
+  describe "email reports page" do
+    test "renders email reports page", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/email-reports")
+      assert html =~ "Email Reports"
+      assert html =~ "Your Preferences"
+      assert html =~ "Frequency"
+    end
+
+    test "renders what's included section", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/email-reports")
+      assert html =~ "Included"
+      assert html =~ "Summary Stats"
+      assert html =~ "Top Content"
+    end
+
+    test "frequency dropdown has all options", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/email-reports")
+      assert html =~ "Off"
+      assert html =~ "Daily"
+      assert html =~ "Weekly"
+      assert html =~ "Monthly"
+    end
+
+    test "preview updates schedule info on frequency change", %{conn: conn, site: site} do
+      {:ok, view, _html} = live(conn, ~p"/dashboard/sites/#{site.id}/email-reports")
+
+      html =
+        render_change(view, "preview_report", %{
+          "report" => %{"frequency" => "weekly", "send_hour" => "9"}
+        })
+
+      assert html =~ "Sent every Monday"
+    end
+
+    test "shows monthly schedule info", %{conn: conn, site: site} do
+      {:ok, view, _html} = live(conn, ~p"/dashboard/sites/#{site.id}/email-reports")
+
+      html =
+        render_change(view, "preview_report", %{
+          "report" => %{"frequency" => "monthly", "send_hour" => "9"}
+        })
+
+      assert html =~ "1st of each month"
     end
   end
 end

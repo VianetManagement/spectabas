@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v2.1.1 — 2026-03-29 19:00 UTC",
+       [
+         %{
+           title: "Email Reports moved to own page",
+           description:
+             "email reports now have a dedicated page under Tools in the sidebar (was embedded in Settings). Shows schedule info — 'Sent every Monday' for weekly, '1st of each month' for monthly. Fixed save not persisting. Live preview updates schedule as you change frequency."
+         }
+       ]},
       {"v2.1.0 — 2026-03-29 18:00 UTC",
        [
          %{
