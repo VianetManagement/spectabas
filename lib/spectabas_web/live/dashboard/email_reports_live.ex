@@ -35,18 +35,36 @@ defmodule SpectabasWeb.Dashboard.EmailReportsLive do
   end
 
   def handle_event("save_report", %{"report" => params}, socket) do
+    require Logger
     user = socket.assigns.user
     site = socket.assigns.site
 
-    case Reports.upsert_email_subscription(user, site, params) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Email report preferences saved.")
-         |> load_subscription()}
+    try do
+      case Reports.upsert_email_subscription(user, site, params) do
+        {:ok, sub} ->
+          Logger.info(
+            "[EmailReports] Saved: user=#{user.id} site=#{site.id} freq=#{sub.frequency}"
+          )
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to save report preferences.")}
+          {:noreply,
+           socket
+           |> put_flash(:info, "Email report preferences saved.")
+           |> load_subscription()}
+
+        {:error, changeset} ->
+          Logger.error("[EmailReports] Changeset error: #{inspect(changeset.errors)}")
+          {:noreply, put_flash(socket, :error, "Failed to save report preferences.")}
+      end
+    rescue
+      e ->
+        Logger.error("[EmailReports] Save crashed: #{Exception.message(e)}")
+
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "Email reports not available yet. The database migration may be pending."
+         )}
     end
   end
 
