@@ -35,15 +35,25 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   defp load_report_subscription(socket) do
     user = socket.assigns.user
     site = socket.assigns.site
-    sub = Spectabas.Reports.get_email_subscription(user, site)
 
-    report_freq = if sub, do: to_string(sub.frequency), else: "off"
-    report_hour = if sub, do: sub.send_hour, else: 9
+    try do
+      sub = Spectabas.Reports.get_email_subscription(user, site)
 
-    socket
-    |> assign(:report_frequency, report_freq)
-    |> assign(:report_hour, report_hour)
-    |> assign(:report_subscribers, Spectabas.Reports.list_email_subscriptions_for_site(site))
+      report_freq = if sub, do: to_string(sub.frequency), else: "off"
+      report_hour = if sub, do: sub.send_hour, else: 9
+
+      socket
+      |> assign(:report_frequency, report_freq)
+      |> assign(:report_hour, report_hour)
+      |> assign(:report_subscribers, Spectabas.Reports.list_email_subscriptions_for_site(site))
+    rescue
+      _ ->
+        # Table may not exist yet (migration pending)
+        socket
+        |> assign(:report_frequency, "off")
+        |> assign(:report_hour, 9)
+        |> assign(:report_subscribers, [])
+    end
   end
 
   @impl true
