@@ -107,7 +107,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 ### Overview
 - Time-series chart (Chart.js, pageviews + visitors)
 - Stat cards with period comparison (vs previous equivalent period)
-- Segment filters (filter by any dimension)
+- Segment filters (filter by any dimension) with saved segment presets
 - Visitor intent breakdown
 
 ### Analytics Pages (sidebar navigation)
@@ -126,6 +126,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 
 ### Unique Features
 - **Visitor Intent Detection** — auto-classifies visitors as buying/researching/comparing/support/returning/browsing/bot
+- **Row Evolution Sparklines** — click any row in the Pages table to see an inline trend chart for that page
 - **Real User Monitoring** — Core Web Vitals (LCP, CLS, FID), page load timing, per-page and per-device performance
 - **Cross-linking** — click any dimension to navigate to filtered views (ASN→visitors, page→transitions, source→visitor log)
 - **IP Cross-referencing** — visitor profiles show other visitors sharing the same IP

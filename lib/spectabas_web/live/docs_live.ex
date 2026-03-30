@@ -684,6 +684,10 @@ defmodule SpectabasWeb.DocsLive do
             ### Segment Filters
 
             Filter all dashboard data by any dimension. Click **Add** in the filter bar and choose a field, operator, and value. For example: `browser is Chrome` or `ip_country is US`.
+
+            ### Saved Segments
+
+            Save your frequently used filter combinations as named presets. When you have active filters, click **Save current** in the filter bar, enter a name, and the segment is saved. Click a saved segment name to instantly reload those filters. Each user has their own saved segments per site. Delete a saved segment with the **x** button.
             """
           },
           %{
@@ -701,6 +705,10 @@ defmodule SpectabasWeb.DocsLive do
             - **Unique Visitors** — distinct visitors
             - **Avg Duration** — average time on page
             - **Load Time** — median page load from Real User Monitoring data, color-coded: green (under 1s), amber (1-3s), red (over 3s). Shows "—" if no RUM data is available for that page yet.
+
+            ### Row Sparklines
+
+            Click any row in the Pages table to expand an inline sparkline chart showing that page's pageview trend over the selected time period. Click again to collapse. This lets you quickly spot trending or declining pages without leaving the table view.
             """
           },
           %{

@@ -27,6 +27,7 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
        |> assign(:date_range, "7d")
        |> assign(:sort_by, "pageviews")
        |> assign(:sort_dir, "desc")
+       |> assign(:expanded_row, nil)
        |> load_pages()}
     end
   end
@@ -36,6 +37,7 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
     {:noreply,
      socket
      |> assign(:date_range, range)
+     |> assign(:expanded_row, nil)
      |> load_pages()}
   end
 
@@ -52,6 +54,34 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
      |> assign(:sort_by, field)
      |> assign(:sort_dir, dir)
      |> load_pages()}
+  end
+
+  def handle_event("toggle_row", %{"path" => path}, socket) do
+    if socket.assigns.expanded_row == path do
+      {:noreply, assign(socket, :expanded_row, nil)}
+    else
+      site = socket.assigns.site
+      user = socket.assigns.user
+      period = range_to_period(socket.assigns.date_range)
+
+      case Analytics.row_timeseries(site, user, period, "url_path", path) do
+        {:ok, rows} ->
+          labels = Enum.map(rows, & &1["bucket"])
+          values = Enum.map(rows, &to_num(&1["pageviews"]))
+
+          {:noreply,
+           socket
+           |> assign(:expanded_row, path)
+           |> push_event("sparkline-data", %{
+             id: "sparkline-#{Base.encode16(path)}",
+             labels: labels,
+             values: values
+           })}
+
+        _ ->
+          {:noreply, assign(socket, :expanded_row, path)}
+      end
+    end
   end
 
   defp load_pages(socket) do
@@ -148,31 +178,60 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
                   No data for this period.
                 </td>
               </tr>
-              <tr :for={page <- @pages} class="hover:bg-gray-50">
-                <td class="px-6 py-4 text-sm truncate max-w-md">
-                  <.link
-                    navigate={
-                      ~p"/dashboard/sites/#{@site.id}/transitions?page=#{Map.get(page, "url_path", "/")}"
-                    }
-                    class="text-indigo-600 hover:text-indigo-800 font-mono"
-                    title="View page transitions"
-                  >
-                    {Map.get(page, "url_path", "/")}
-                  </.link>
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-900 text-right">
-                  {Map.get(page, "pageviews", 0)}
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-900 text-right">
-                  {Map.get(page, "unique_visitors", 0)}
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-900 text-right">
-                  {format_duration(Map.get(page, "avg_duration", 0))}
-                </td>
-                <td class="px-6 py-4 text-sm text-right tabular-nums">
-                  <.speed_pill ms={to_num(page["page_load"])} />
-                </td>
-              </tr>
+              <%= for page <- @pages do %>
+                <tr
+                  phx-click="toggle_row"
+                  phx-value-path={Map.get(page, "url_path", "/")}
+                  class={[
+                    "hover:bg-gray-50 cursor-pointer",
+                    if(@expanded_row == Map.get(page, "url_path", "/"),
+                      do: "bg-indigo-50",
+                      else: ""
+                    )
+                  ]}
+                >
+                  <td class="px-6 py-4 text-sm truncate max-w-md">
+                    <.link
+                      navigate={
+                        ~p"/dashboard/sites/#{@site.id}/transitions?page=#{Map.get(page, "url_path", "/")}"
+                      }
+                      class="text-indigo-600 hover:text-indigo-800 font-mono"
+                      title="View page transitions"
+                    >
+                      {Map.get(page, "url_path", "/")}
+                    </.link>
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-900 text-right">
+                    {Map.get(page, "pageviews", 0)}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-900 text-right">
+                    {Map.get(page, "unique_visitors", 0)}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-900 text-right">
+                    {format_duration(Map.get(page, "avg_duration", 0))}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-right tabular-nums">
+                    <.speed_pill ms={to_num(page["page_load"])} />
+                  </td>
+                </tr>
+                <tr :if={@expanded_row == Map.get(page, "url_path", "/")}>
+                  <td colspan="5" class="px-6 py-4 bg-gray-50">
+                    <div class="flex items-center gap-4">
+                      <span class="text-sm text-gray-500 font-mono">
+                        {Map.get(page, "url_path", "/")}
+                      </span>
+                      <span class="text-xs text-gray-400">Pageview trend</span>
+                    </div>
+                    <div
+                      id={"sparkline-#{Base.encode16(Map.get(page, "url_path", "/"))}"}
+                      phx-hook="Sparkline"
+                      class="h-20 mt-2"
+                    >
+                      <canvas></canvas>
+                    </div>
+                  </td>
+                </tr>
+              <% end %>
             </tbody>
           </table>
         </div>

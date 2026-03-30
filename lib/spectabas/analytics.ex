@@ -1964,6 +1964,50 @@ defmodule Spectabas.Analytics do
     }
   end
 
+  @doc """
+  Row-level timeseries: pageviews and visitors for a specific dimension value over time.
+  Used for sparkline charts when clicking a table row.
+  """
+  def row_timeseries(%Site{} = site, %User{} = user, date_range, field, value) do
+    date_range = ensure_date_range(date_range)
+
+    allowed_fields =
+      ~w(url_path referrer_domain ip_country ip_region_name browser os device_type)
+
+    unless field in allowed_fields do
+      {:error, :invalid_field}
+    else
+      with :ok <- authorize(site, user),
+           :ok <- check_clickhouse() do
+        tz = site.timezone || "UTC"
+
+        period =
+          if Date.diff(DateTime.to_date(date_range.to), DateTime.to_date(date_range.from)) <= 2,
+            do: :day,
+            else: :week
+
+        trunc_fn = if period == :day, do: "toStartOfHour", else: "toDate"
+
+        sql = """
+        SELECT
+          #{trunc_fn}(toTimezone(timestamp, #{ClickHouse.param(tz)})) AS bucket,
+          countIf(event_type = 'pageview') AS pageviews,
+          uniq(visitor_id) AS visitors
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+          AND ip_is_bot = 0
+          AND #{field} = #{ClickHouse.param(value)}
+        GROUP BY bucket
+        ORDER BY bucket ASC
+        """
+
+        ClickHouse.query(sql)
+      end
+    end
+  end
+
   defp self_referrer_domains(%Site{domain: domain}) when is_binary(domain) and domain != "" do
     # The site's analytics subdomain (e.g. b.example.com) and its parent domain
     parent =

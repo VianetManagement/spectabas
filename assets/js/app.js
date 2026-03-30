@@ -82,12 +82,51 @@ const AutoDismiss = {
   }
 }
 
+const Sparkline = {
+  mounted() {
+    this.handleEvent("sparkline-data", ({labels, values, id}) => {
+      if (this.el.id !== id) return
+      const canvas = this.el.querySelector("canvas")
+      if (!canvas) return
+      if (this._chart) this._chart.destroy()
+      this._chart = new Chart(canvas, {
+        type: "line",
+        data: {
+          labels: labels,
+          datasets: [{
+            data: values,
+            borderColor: "#6366f1",
+            borderWidth: 2,
+            fill: true,
+            backgroundColor: "rgba(99, 102, 241, 0.1)",
+            pointRadius: 0,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { enabled: true } },
+          scales: {
+            x: { display: false },
+            y: { display: false, beginAtZero: true }
+          }
+        }
+      })
+    })
+  },
+  destroyed() {
+    if (this._chart) this._chart.destroy()
+  }
+}
+
 const Hooks = {
   TimeseriesChart,
   BarChart,
   BubbleMap,
   PasskeyRegister,
   AutoDismiss,
+  Sparkline,
 }
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")

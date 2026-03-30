@@ -45,6 +45,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v2.4.0 — 2026-03-28 22:00 UTC",
+       [
+         %{
+           title: "Saved Segments",
+           description:
+             "Save, load, and manage segment filter presets. Current filter combinations can be saved with a name and reloaded instantly from the filter bar. Presets are per-user and per-site."
+         },
+         %{
+           title: "Row Evolution Sparklines",
+           description:
+             "Click any row in the Pages table to expand an inline sparkline chart showing the pageview trend for that specific page over the selected time period. Uses Chart.js for rendering."
+         }
+       ]},
       {"v2.3.1 — 2026-03-30 18:00 UTC",
        [
          %{

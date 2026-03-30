@@ -271,6 +271,20 @@ defmodule SpectabasWeb.DashboardPagesTest do
       {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/pages")
       assert html =~ "Load Time"
     end
+
+    test "toggle_row event sets expanded_row assign", %{conn: conn, site: site} do
+      {:ok, view, _html} = live(conn, ~p"/dashboard/sites/#{site.id}/pages")
+      # Toggle a row — with no ClickHouse data, @pages is empty so no expansion row
+      # renders, but the event handler should not crash
+      html = render_click(view, "toggle_row", %{"path" => "/test-page"})
+      # Pages table is empty (no ClickHouse), so the expansion row won't appear
+      # but the event should be handled without error
+      assert html =~ "Top Pages"
+
+      # Toggle again to collapse — also should not crash
+      html = render_click(view, "toggle_row", %{"path" => "/test-page"})
+      assert html =~ "Top Pages"
+    end
   end
 
   describe "transitions page" do

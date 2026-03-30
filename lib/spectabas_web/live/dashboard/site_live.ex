@@ -7,7 +7,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers
 
-  alias Spectabas.{Accounts, Sites, Analytics}
+  alias Spectabas.{Accounts, Sites, Analytics, Segments}
 
   @refresh_interval_ms 60_000
 
@@ -40,6 +40,8 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
        |> assign(:compare, true)
        |> assign(:show_date_picker, false)
        |> assign(:segment, [])
+       |> assign(:saved_segments, Segments.list_saved_segments(user, site))
+       |> assign(:show_save_input, false)
        |> assign(:override_date_range, nil)
        |> assign(:live_visitors, 0)
        |> assign(:top_pages, [])
@@ -157,6 +159,47 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
 
   def handle_event("update_segment", %{"action" => "clear"}, socket) do
     {:noreply, socket |> assign(:segment, []) |> load_stats()}
+  end
+
+  def handle_event("update_segment", %{"action" => "show_save"}, socket) do
+    {:noreply, assign(socket, :show_save_input, true)}
+  end
+
+  def handle_event("update_segment", %{"action" => "hide_save"}, socket) do
+    {:noreply, assign(socket, :show_save_input, false)}
+  end
+
+  def handle_event(
+        "update_segment",
+        %{"action" => "save", "segment_name" => name},
+        socket
+      )
+      when name != "" do
+    %{user: user, site: site, segment: segment} = socket.assigns
+
+    case Segments.save_segment(user, site, name, segment) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> assign(:saved_segments, Segments.list_saved_segments(user, site))
+         |> assign(:show_save_input, false)}
+
+      _ ->
+        {:noreply, assign(socket, :show_save_input, false)}
+    end
+  end
+
+  def handle_event("update_segment", %{"action" => "load", "segment_id" => id}, socket) do
+    saved = Segments.get_segment!(id)
+    filters = normalize_filters(saved.filters)
+    {:noreply, socket |> assign(:segment, filters) |> load_stats()}
+  end
+
+  def handle_event("update_segment", %{"action" => "delete_saved", "segment_id" => id}, socket) do
+    %{user: user, site: site} = socket.assigns
+    Segments.delete_segment(user, id)
+
+    {:noreply, assign(socket, :saved_segments, Segments.list_saved_segments(user, site))}
   end
 
   def handle_event("update_segment", _params, socket), do: {:noreply, socket}
@@ -363,6 +406,19 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     safe_query(fun) |> Enum.take(limit)
   end
 
+  # Normalize saved segment filters from Postgres JSON (may have atom or string keys)
+  defp normalize_filters(filters) when is_list(filters) do
+    Enum.map(filters, fn f ->
+      %{
+        "field" => Map.get(f, "field") || Map.get(f, :field, ""),
+        "op" => Map.get(f, "op") || Map.get(f, :op, "is"),
+        "value" => Map.get(f, "value") || Map.get(f, :value, "")
+      }
+    end)
+  end
+
+  defp normalize_filters(_), do: []
+
   # Yield a Task result with fallback on timeout — never crashes the LiveView
   defp safe_yield(task, fallback) do
     case Task.yield(task, 10_000) || Task.shutdown(task) do
@@ -460,7 +516,11 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         </div>
 
         <%!-- Segment Filter --%>
-        <.segment_filter segment={@segment} />
+        <.segment_filter
+          segment={@segment}
+          saved_segments={@saved_segments}
+          show_save_input={@show_save_input}
+        />
 
         <%!-- Stat Cards with Comparison --%>
         <% period_label = preset_label(@preset) %>
