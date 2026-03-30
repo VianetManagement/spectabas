@@ -22,6 +22,7 @@ defmodule SpectabasWeb.Dashboard.MapLive do
        |> assign(:site, site)
        |> assign(:user, user)
        |> assign(:date_range, "7d")
+       |> assign(:map_region, "world")
        |> load_data()}
     end
   end
@@ -29,6 +30,13 @@ defmodule SpectabasWeb.Dashboard.MapLive do
   @impl true
   def handle_event("change_range", %{"range" => range}, socket) do
     {:noreply, socket |> assign(:date_range, range) |> load_data()}
+  end
+
+  def handle_event("zoom_map", %{"region" => region}, socket) do
+    {:noreply,
+     socket
+     |> assign(:map_region, region)
+     |> push_event("map-zoom", %{region: region})}
   end
 
   defp load_data(socket) do
@@ -112,9 +120,38 @@ defmodule SpectabasWeb.Dashboard.MapLive do
 
         <%!-- Visitor Map --%>
         <div class="bg-white rounded-lg shadow p-5 mb-6">
-          <h3 class="text-sm font-medium text-gray-500 mb-4">Visitor Locations</h3>
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-medium text-gray-500">Visitor Locations</h3>
+            <div class="flex gap-1 flex-wrap">
+              <button
+                :for={
+                  {id, label} <- [
+                    {"world", "World"},
+                    {"north_america", "N. America"},
+                    {"south_america", "S. America"},
+                    {"europe", "Europe"},
+                    {"asia", "Asia"},
+                    {"africa", "Africa"},
+                    {"oceania", "Oceania"},
+                    {"us", "USA"}
+                  ]
+                }
+                phx-click="zoom_map"
+                phx-value-region={id}
+                class={[
+                  "px-2 py-1 text-xs rounded-md",
+                  if(@map_region == id,
+                    do: "bg-indigo-600 text-white",
+                    else: "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  )
+                ]}
+              >
+                {label}
+              </button>
+            </div>
+          </div>
           <div id="fullpage-map-hook" phx-hook="BubbleMap">
-            <div style="height: 450px; position: relative;">
+            <div class="h-[250px] sm:h-[350px] lg:h-[450px]" style="position: relative;">
               <canvas></canvas>
             </div>
           </div>

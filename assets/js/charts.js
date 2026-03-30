@@ -165,10 +165,32 @@ export const BarChart = {
 }
 
 // --- Bubble/Scatter Map ---
+// Region presets for map zoom
+const MAP_REGIONS = {
+  world:   { x: { min: -180, max: 180 }, y: { min: -70, max: 85 } },
+  north_america: { x: { min: -170, max: -50 }, y: { min: 10, max: 75 } },
+  south_america: { x: { min: -90, max: -30 }, y: { min: -60, max: 15 } },
+  europe:  { x: { min: -15, max: 45 }, y: { min: 35, max: 72 } },
+  asia:    { x: { min: 40, max: 150 }, y: { min: 0, max: 65 } },
+  africa:  { x: { min: -20, max: 55 }, y: { min: -40, max: 40 } },
+  oceania: { x: { min: 100, max: 180 }, y: { min: -50, max: 5 } },
+  us:      { x: { min: -130, max: -65 }, y: { min: 24, max: 50 } },
+}
+
 export const BubbleMap = {
   mounted() {
     this.chart = null
     this.handleEvent("map-data", (data) => this.setData(data))
+    this.handleEvent("map-zoom", ({region}) => this.zoomTo(region))
+  },
+  zoomTo(region) {
+    if (!this.chart) return
+    const r = MAP_REGIONS[region] || MAP_REGIONS.world
+    this.chart.options.scales.x.min = r.x.min
+    this.chart.options.scales.x.max = r.x.max
+    this.chart.options.scales.y.min = r.y.min
+    this.chart.options.scales.y.max = r.y.max
+    this.chart.update("none")
   },
   setData(data) {
     if (!data || !data.points || data.points.length === 0) return
