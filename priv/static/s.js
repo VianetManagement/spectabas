@@ -82,30 +82,42 @@
     decorateLinks();
   }
 
-  // Send initial pageview immediately (non-blocking)
+  // Rate-limited pageview sending — prevents overcounting from rapid refreshes,
+  // auto-refresh, or iframes reloading. Max 1 pageview per URL per 5 seconds.
   var lastSentUrl = window.location.href;
-  sendEvent("pageview");
+  var pvMinInterval = 5000;
+
+  function sendPageview() {
+    var url = window.location.href;
+    var now = Date.now();
+    try {
+      var key = "_sab_pv_" + url;
+      var lastSent = parseInt(sessionStorage.getItem(key) || "0", 10);
+      if (now - lastSent < pvMinInterval) return;
+      sessionStorage.setItem(key, String(now));
+    } catch (e) {}
+    lastSentUrl = url;
+    sendEvent("pageview");
+  }
+
+  sendPageview();
 
   // SPA support — only fire pageview if URL actually changed
   var origPushState = history.pushState;
   history.pushState = function () {
     origPushState.apply(this, arguments);
-    var newUrl = window.location.href;
-    if (newUrl !== lastSentUrl) {
+    if (window.location.href !== lastSentUrl) {
       sendDuration();
       pageStart = Date.now();
-      lastSentUrl = newUrl;
-      sendEvent("pageview");
+      sendPageview();
     }
   };
 
   window.addEventListener("popstate", function () {
-    var newUrl = window.location.href;
-    if (newUrl !== lastSentUrl) {
+    if (window.location.href !== lastSentUrl) {
       sendDuration();
       pageStart = Date.now();
-      lastSentUrl = newUrl;
-      sendEvent("pageview");
+      sendPageview();
     }
   });
 

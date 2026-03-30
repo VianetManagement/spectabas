@@ -601,7 +601,7 @@ defmodule SpectabasWeb.DocsLive do
 
             | What | How |
             |------|-----|
-            | **Pageviews** | Sent on every page load and SPA navigation |
+            | **Pageviews** | Sent on every page load and SPA navigation, rate-limited to 1 per URL per 5 seconds to prevent overcounting from rapid refreshes |
             | **Duration** | Time on page, sent when the tab is hidden or the user navigates away |
             | **Referrer** | `document.referrer` captured on each pageview |
             | **Screen size** | `screen.width` and `screen.height` |

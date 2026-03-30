@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v2.4.3 — 2026-03-30 23:45 UTC",
+       [
+         %{
+           title: "Pageview rate limiting",
+           description:
+             "prevents overcounting from rapid page refreshes, auto-refresh, or iframe reloads. Uses sessionStorage to enforce a 5-second minimum interval between pageviews for the same URL. Fixes cases where a single visitor showed hundreds of views for one page in minutes."
+         }
+       ]},
       {"v2.4.2 — 2026-03-30 23:30 UTC",
        [
          %{

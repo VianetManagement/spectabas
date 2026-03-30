@@ -386,6 +386,17 @@ defmodule Spectabas.Events.RumPayloadTest do
              "Tracker should have a 30s final fallback timeout"
     end
 
+    test "pageview rate limiting via sessionStorage", %{script: script} do
+      assert script =~ "pvMinInterval",
+             "Tracker should have a minimum interval between pageviews"
+
+      assert script =~ "sessionStorage",
+             "Tracker should use sessionStorage for pageview rate limiting"
+
+      assert script =~ "sendPageview",
+             "Tracker should use sendPageview wrapper (not raw sendEvent for pageviews)"
+    end
+
     test "collectRUM function checks rumSent flag", %{script: script} do
       assert script =~ "if (rumSent) return",
              "collectRUM must check rumSent flag to prevent duplicate sends"
