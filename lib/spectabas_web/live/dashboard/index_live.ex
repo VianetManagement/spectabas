@@ -12,11 +12,10 @@ defmodule SpectabasWeb.Dashboard.IndexLive do
     sites = Accounts.accessible_sites(user)
 
     # Single batched ClickHouse query for all sites (was N+1 before)
+    # Use a 24h rolling window to approximate "today" across all timezones
     site_stats =
       if sites != [] do
-        # Use the earliest timezone's "today" as the date range for the batch query
-        # (close enough — the stats are approximate for the index page)
-        date_range = Analytics.period_to_date_range(:today, "UTC")
+        date_range = Analytics.period_to_date_range(:day, "UTC")
 
         case Analytics.overview_stats_batch(Enum.map(sites, & &1.id), date_range) do
           {:ok, stats_map} ->
@@ -94,7 +93,7 @@ defmodule SpectabasWeb.Dashboard.IndexLive do
               <span class="text-sm text-gray-500 ml-1">visitors</span>
             </div>
           </div>
-          <p class="text-xs text-gray-500 mt-2">today</p>
+          <p class="text-xs text-gray-500 mt-2">last 24h</p>
         </.link>
       </div>
     </div>

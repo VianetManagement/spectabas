@@ -1545,7 +1545,9 @@ defmodule Spectabas.Analytics do
         WHERE site_id IN (#{ids})
           AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
           AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+          AND ip_is_bot = 0
         GROUP BY site_id, session_id
+        HAVING pv > 0
       )
       GROUP BY site_id
       """
