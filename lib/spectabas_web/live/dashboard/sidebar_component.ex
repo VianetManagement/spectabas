@@ -324,16 +324,38 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
         <main class="flex-1 overflow-y-auto bg-gray-50">
           <div
             :if={@flash["info"]}
+            id="flash-info"
             class="mx-4 mt-4 rounded-lg bg-green-50 border border-green-200 p-4 text-sm text-green-800 flex items-center justify-between"
-            phx-click={Phoenix.LiveView.JS.push("lv:clear-flash", value: %{key: "info"})}
+            phx-click={
+              Phoenix.LiveView.JS.push("lv:clear-flash", value: %{key: "info"})
+              |> Phoenix.LiveView.JS.hide(to: "#flash-info")
+            }
+            phx-mounted={
+              Phoenix.LiveView.JS.hide(
+                to: "#flash-info",
+                transition: {"transition-opacity duration-500", "opacity-100", "opacity-0"},
+                time: 5000
+              )
+            }
           >
             <span>{@flash["info"]}</span>
             <button type="button" class="text-green-600 hover:text-green-800 ml-4">&times;</button>
           </div>
           <div
             :if={@flash["error"]}
+            id="flash-error"
             class="mx-4 mt-4 rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-800 flex items-center justify-between"
-            phx-click={Phoenix.LiveView.JS.push("lv:clear-flash", value: %{key: "error"})}
+            phx-click={
+              Phoenix.LiveView.JS.push("lv:clear-flash", value: %{key: "error"})
+              |> Phoenix.LiveView.JS.hide(to: "#flash-error")
+            }
+            phx-mounted={
+              Phoenix.LiveView.JS.hide(
+                to: "#flash-error",
+                transition: {"transition-opacity duration-500", "opacity-100", "opacity-0"},
+                time: 5000
+              )
+            }
           >
             <span>{@flash["error"]}</span>
             <button type="button" class="text-red-600 hover:text-red-800 ml-4">&times;</button>
