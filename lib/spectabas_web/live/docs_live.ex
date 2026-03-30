@@ -1011,6 +1011,9 @@ defmodule SpectabasWeb.DocsLive do
             ### Acquisition & Behavior
             Original referrer, first and last pages, UTM sources, top pages visited.
 
+            ### IP Address History
+            Shows all IP addresses the visitor has used, with location, organization, datacenter/VPN badges, event count, and last seen timestamp. Each IP is clickable — takes you to the IP search on the Visitor Log to see all other visitors who used that IP.
+
             ### IP Cross-Referencing
             Click the IP address to expand a panel showing:
 

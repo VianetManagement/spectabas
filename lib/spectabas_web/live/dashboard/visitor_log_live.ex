@@ -38,6 +38,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
        |> assign(:segment, segment)
        |> assign(:ip_search, ip_search)
        |> assign(:ip_results, nil)
+       |> assign(:ip_info, nil)
        |> load_data()}
     end
   end
@@ -60,7 +61,8 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
     ip = String.trim(ip)
 
     if ip == "" do
-      {:noreply, socket |> assign(:ip_search, "") |> assign(:ip_results, nil)}
+      {:noreply,
+       socket |> assign(:ip_search, "") |> assign(:ip_results, nil) |> assign(:ip_info, nil)}
     else
       results =
         case Analytics.visitors_by_ip(socket.assigns.site, ip) do
@@ -68,7 +70,17 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
           _ -> []
         end
 
-      {:noreply, socket |> assign(:ip_search, ip) |> assign(:ip_results, results)}
+      ip_info =
+        case Analytics.ip_details(socket.assigns.site, ip) do
+          {:ok, info} -> info
+          _ -> nil
+        end
+
+      {:noreply,
+       socket
+       |> assign(:ip_search, ip)
+       |> assign(:ip_results, results)
+       |> assign(:ip_info, ip_info)}
     end
   end
 
@@ -159,9 +171,37 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
         <div :if={@ip_results != nil} class="bg-white rounded-lg shadow overflow-x-auto mb-6">
           <div class="px-6 py-4 border-b border-gray-100">
             <h3 class="font-semibold text-gray-900">
-              Visitors from IP: <span class="font-mono text-indigo-600">{@ip_search}</span>
+              IP: <span class="font-mono text-indigo-600">{@ip_search}</span>
             </h3>
-            <p class="text-xs text-gray-500 mt-0.5">{length(@ip_results)} visitor(s) found</p>
+            <div :if={@ip_info} class="flex flex-wrap gap-3 mt-2 text-sm text-gray-600">
+              <span :if={@ip_info["city"] && @ip_info["city"] != ""}>
+                {[@ip_info["city"], @ip_info["region"], @ip_info["country"]]
+                |> Enum.reject(&(&1 == "" || is_nil(&1)))
+                |> Enum.join(", ")}
+              </span>
+              <span :if={@ip_info["org"] && @ip_info["org"] != ""} class="text-xs text-gray-500">
+                {@ip_info["org"]}
+              </span>
+              <span
+                :if={@ip_info["is_datacenter"] == "1"}
+                class="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded"
+              >
+                Datacenter
+              </span>
+              <span
+                :if={@ip_info["is_vpn"] == "1"}
+                class="text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded"
+              >
+                VPN
+              </span>
+              <span
+                :if={@ip_info["is_bot"] == "1"}
+                class="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded"
+              >
+                Bot
+              </span>
+            </div>
+            <p class="text-xs text-gray-500 mt-1">{length(@ip_results)} visitor(s) found</p>
           </div>
           <table :if={@ip_results != []} class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">

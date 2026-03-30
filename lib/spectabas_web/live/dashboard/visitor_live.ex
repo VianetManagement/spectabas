@@ -99,7 +99,8 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
        |> assign(:ip_info, ip_info)
        |> assign(:ip_visitors, ip_visitors)
        |> assign(:fp_visitors, fp_visitors)
-       |> assign(:show_ip_panel, false)}
+       |> assign(:show_ip_panel, false)
+       |> assign(:visitor_ips, load_visitor_ips(site, visitor_id))}
     end
   end
 
@@ -351,6 +352,58 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
           </div>
         </div>
 
+        <%!-- IP Address History --%>
+        <div :if={@visitor_ips != []} class="bg-white rounded-lg shadow mb-6">
+          <div class="px-5 py-4 border-b border-gray-100">
+            <h3 class="text-sm font-semibold text-gray-700">
+              IP Addresses Used ({length(@visitor_ips)})
+            </h3>
+          </div>
+          <table class="min-w-full divide-y divide-gray-200 text-sm">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-2 text-left text-xs text-gray-500">IP Address</th>
+                <th class="px-4 py-2 text-left text-xs text-gray-500">Location</th>
+                <th class="px-4 py-2 text-left text-xs text-gray-500">Organization</th>
+                <th class="px-4 py-2 text-right text-xs text-gray-500">Events</th>
+                <th class="px-4 py-2 text-left text-xs text-gray-500">Last Seen</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr :for={ip <- @visitor_ips} class="hover:bg-gray-50">
+                <td class="px-4 py-2">
+                  <.link
+                    navigate={~p"/dashboard/sites/#{@site.id}/visitor-log?ip=#{ip["ip_address"]}"}
+                    class="font-mono text-xs text-indigo-600 hover:text-indigo-800"
+                  >
+                    {ip["ip_address"]}
+                  </.link>
+                  <span
+                    :if={ip["is_datacenter"] == "1" || ip["is_datacenter"] == 1}
+                    class="ml-1 text-[10px] bg-orange-100 text-orange-700 px-1 rounded"
+                  >
+                    DC
+                  </span>
+                  <span
+                    :if={ip["is_vpn"] == "1" || ip["is_vpn"] == 1}
+                    class="ml-1 text-[10px] bg-yellow-100 text-yellow-700 px-1 rounded"
+                  >
+                    VPN
+                  </span>
+                </td>
+                <td class="px-4 py-2 text-gray-600">
+                  {[ip["city"], ip["country"]]
+                  |> Enum.reject(&(&1 == "" || is_nil(&1)))
+                  |> Enum.join(", ")}
+                </td>
+                <td class="px-4 py-2 text-gray-500 text-xs">{ip["org"]}</td>
+                <td class="px-4 py-2 text-gray-900 text-right tabular-nums">{ip["events"]}</td>
+                <td class="px-4 py-2 text-gray-500 text-xs">{ip["last_seen"]}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
         <%!-- Session History --%>
         <div class="bg-white rounded-lg shadow mb-6">
           <div class="px-5 py-4 border-b border-gray-100">
@@ -494,4 +547,11 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
   defp event_type_class("custom"), do: "bg-purple-100 text-purple-800"
   defp event_type_class("ecommerce_order"), do: "bg-green-100 text-green-800"
   defp event_type_class(_), do: "bg-gray-100 text-gray-800"
+
+  defp load_visitor_ips(site, visitor_id) do
+    case Analytics.visitor_ips(site, visitor_id) do
+      {:ok, rows} -> rows
+      _ -> []
+    end
+  end
 end

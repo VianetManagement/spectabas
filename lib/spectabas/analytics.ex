@@ -1110,6 +1110,33 @@ defmodule Spectabas.Analytics do
   end
 
   @doc """
+  All IP addresses used by a specific visitor, with first/last seen and event counts.
+  """
+  def visitor_ips(%Site{} = site, visitor_id) when is_binary(visitor_id) do
+    sql = """
+    SELECT
+      ip_address,
+      min(timestamp) AS first_seen,
+      max(timestamp) AS last_seen,
+      count() AS events,
+      any(ip_country) AS country,
+      any(ip_city) AS city,
+      any(ip_org) AS org,
+      any(ip_is_datacenter) AS is_datacenter,
+      any(ip_is_vpn) AS is_vpn
+    FROM events
+    WHERE site_id = #{ClickHouse.param(site.id)}
+      AND visitor_id = #{ClickHouse.param(visitor_id)}
+      AND ip_address != ''
+    GROUP BY ip_address
+    ORDER BY last_seen DESC
+    LIMIT 50
+    """
+
+    ClickHouse.query(sql)
+  end
+
+  @doc """
   Find other visitors who share the same IP address.
   """
   def visitors_by_ip(%Site{} = site, ip_address)

@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v2.4.2 — 2026-03-30 23:30 UTC",
+       [
+         %{
+           title: "IP Address Investigation Tools",
+           description:
+             "IP search results now show full geo info (city, country, org) with datacenter/VPN/bot badges. Visitor profiles show all IP addresses the visitor has used with location, org, event count, and last seen. Each IP links back to search. Clicking from IP search to a visitor profile preserves the searched IP context."
+         }
+       ]},
       {"v2.4.1 — 2026-03-30 23:00 UTC",
        [
          %{
