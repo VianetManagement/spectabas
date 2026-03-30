@@ -88,6 +88,13 @@ defmodule SpectabasWeb.Admin.DashboardLive do
           <h3 class="font-semibold text-gray-900 mb-1">Changelog</h3>
           <p class="text-sm text-gray-500">Recent changes and new features</p>
         </.link>
+        <.link
+          navigate={~p"/admin/competitive"}
+          class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+        >
+          <h3 class="font-semibold text-gray-900 mb-1">Competitive Analysis</h3>
+          <p class="text-sm text-gray-500">Feature gaps, positioning, and roadmap</p>
+        </.link>
       </div>
     </div>
     """
