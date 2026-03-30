@@ -60,6 +60,12 @@ defmodule Spectabas.Analytics.ChannelClassifier do
     Enum.any?(patterns, fn p -> String.contains?(domain, p) end)
   end
 
+  # Tailwind CSS safelist — these classes must be scannable at build time.
+  # Without this, Tailwind's JIT purges dynamically-referenced classes.
+  # bg-blue-100 text-blue-800 bg-pink-100 text-pink-800 bg-purple-100 text-purple-800
+  # bg-gray-100 text-gray-800 bg-amber-100 text-amber-800 bg-green-100 text-green-800
+  # bg-rose-100 text-rose-800 bg-indigo-100 text-indigo-800 bg-teal-100 text-teal-800
+
   def channel_color(channel) do
     case channel do
       "Search Engines" -> "bg-blue-100 text-blue-800"
