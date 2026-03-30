@@ -160,6 +160,7 @@ defmodule SpectabasWeb.Router do
       live "/sites/:site_id/ecommerce", Dashboard.EcommerceLive, :index
       live "/sites/:site_id/reports", Dashboard.ReportsLive, :index
       live "/sites/:site_id/performance", Dashboard.PerformanceLive, :index
+      live "/sites/:site_id/email-reports", Dashboard.EmailReportsLive, :index
       live "/sites/:site_id/exports", Dashboard.ExportLive, :index
       live "/sites/:site_id/settings", Dashboard.SettingsLive, :edit
     end

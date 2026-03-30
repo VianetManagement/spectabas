@@ -218,6 +218,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
               active={@active == "reports"}
             />
             <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/email-reports"}
+              label="Email Reports"
+              active={@active == "email-reports"}
+            />
+            <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/exports"}
               label="Exports"
               active={@active == "exports"}
@@ -346,6 +351,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
       {~p"/dashboard/sites/#{site_id}/goals", "Goals"},
       {~p"/dashboard/sites/#{site_id}/funnels", "Funnels"},
       {~p"/dashboard/sites/#{site_id}/ecommerce", "Ecommerce"},
+      {~p"/dashboard/sites/#{site_id}/email-reports", "Email Reports"},
       {~p"/dashboard/sites/#{site_id}/settings", "Settings"}
     ]
   end

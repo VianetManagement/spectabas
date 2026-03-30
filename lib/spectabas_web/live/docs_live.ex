@@ -1142,7 +1142,7 @@ defmodule SpectabasWeb.DocsLive do
             - **Cross-Domain Tracking** — enable and list domains for cross-site visitor tracking
             - **IP Blocklist** — block specific IPs from being tracked
             - **Ecommerce** — enable ecommerce tracking with currency setting
-            - **Email Reports** — personal email digest preferences (see Email Reports section below)
+            - **Email Reports** — configured on a separate page under Tools in the sidebar
             """
           },
           %{
