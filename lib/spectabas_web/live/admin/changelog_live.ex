@@ -45,7 +45,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
-      {"v2.4.0 — 2026-03-28 22:00 UTC",
+      {"v2.4.0 — 2026-03-30 22:00 UTC",
        [
          %{
            title: "Saved Segments",
