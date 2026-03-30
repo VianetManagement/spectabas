@@ -27,8 +27,23 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
        |> assign(:form, to_form(changeset))
        |> assign(:snippet, Sites.snippet_code(site))
        |> assign(:render_domain_status, check_render_domain(site.domain))
-       |> assign(:example_html, example_html(site))}
+       |> assign(:example_html, example_html(site))
+       |> load_report_subscription()}
     end
+  end
+
+  defp load_report_subscription(socket) do
+    user = socket.assigns.user
+    site = socket.assigns.site
+    sub = Spectabas.Reports.get_email_subscription(user, site)
+
+    report_freq = if sub, do: to_string(sub.frequency), else: "off"
+    report_hour = if sub, do: sub.send_hour, else: 9
+
+    socket
+    |> assign(:report_frequency, report_freq)
+    |> assign(:report_hour, report_hour)
+    |> assign(:report_subscribers, Spectabas.Reports.list_email_subscriptions_for_site(site))
   end
 
   @impl true
@@ -39,6 +54,22 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
       |> Map.put(:action, :validate)
 
     {:noreply, assign(socket, :form, to_form(changeset))}
+  end
+
+  def handle_event("save_report", %{"report" => params}, socket) do
+    user = socket.assigns.user
+    site = socket.assigns.site
+
+    case Spectabas.Reports.upsert_email_subscription(user, site, params) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Email report preferences saved.")
+         |> load_report_subscription()}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to save report preferences.")}
+    end
   end
 
   def handle_event("save", %{"site" => params}, socket) do
@@ -425,6 +456,76 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
               </button>
             </div>
           </.form>
+        </div>
+      </div>
+
+      <%!-- Email Reports --%>
+      <div class="bg-white rounded-lg shadow p-6 mt-8">
+        <h2 class="text-lg font-semibold text-gray-900 mb-2">Email Reports</h2>
+        <p class="text-sm text-gray-500 mb-6">
+          Receive periodic analytics summaries for this site by email. This is a personal preference for your account.
+        </p>
+        <form phx-submit="save_report" class="space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Frequency</label>
+              <select
+                name="report[frequency]"
+                class="block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+              >
+                <option value="off" selected={@report_frequency == "off"}>Off</option>
+                <option value="daily" selected={@report_frequency == "daily"}>Daily</option>
+                <option value="weekly" selected={@report_frequency == "weekly"}>Weekly</option>
+                <option value="monthly" selected={@report_frequency == "monthly"}>Monthly</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Send Time</label>
+              <select
+                name="report[send_hour]"
+                class="block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+              >
+                <option :for={h <- 0..23} value={h} selected={@report_hour == h}>
+                  {String.pad_leading(to_string(h), 2, "0")}:00
+                </option>
+              </select>
+              <p class="mt-1 text-xs text-gray-500">
+                In the site's timezone ({@site.timezone || "UTC"})
+              </p>
+            </div>
+          </div>
+          <div class="flex justify-end">
+            <button
+              type="submit"
+              class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
+            >
+              Save Report Preferences
+            </button>
+          </div>
+        </form>
+
+        <div :if={@report_subscribers != []} class="mt-8 border-t border-gray-200 pt-6">
+          <h3 class="text-sm font-medium text-gray-900 mb-3">Report Subscribers</h3>
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="text-left text-xs font-medium text-gray-500 uppercase">
+                <th class="py-2">User</th>
+                <th class="py-2">Frequency</th>
+                <th class="py-2">Send Time</th>
+                <th class="py-2">Last Sent</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr :for={sub <- @report_subscribers}>
+                <td class="py-2 text-gray-900">{sub.user.email}</td>
+                <td class="py-2 text-gray-600 capitalize">{sub.frequency}</td>
+                <td class="py-2 text-gray-600">
+                  {String.pad_leading(to_string(sub.send_hour), 2, "0")}:00
+                </td>
+                <td class="py-2 text-gray-500">{sub.last_sent_at || "Never"}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </.dashboard_layout>

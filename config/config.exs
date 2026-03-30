@@ -62,7 +62,9 @@ config :spectabas, Oban,
        # Every 5 minutes — close stale sessions (idle > 30 minutes)
        {"*/5 * * * *", Spectabas.Workers.SessionCleanup},
        # Every 10 minutes — alert if dead letter queue is growing
-       {"*/10 * * * *", Spectabas.Workers.DeadLetterMonitor}
+       {"*/10 * * * *", Spectabas.Workers.DeadLetterMonitor},
+       # Every 15 minutes — check for email reports due for sending
+       {"*/15 * * * *", Spectabas.Workers.EmailReportDispatcher}
      ]}
   ]
 

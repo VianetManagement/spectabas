@@ -18,6 +18,21 @@ defmodule Spectabas.Accounts.UserNotifier do
     end
   end
 
+  @doc "Deliver an HTML email report with text fallback."
+  def deliver_report_email(recipient, subject, html_body, text_body) do
+    email =
+      new()
+      |> to(recipient)
+      |> from({"Spectabas", "noreply@spectabas.com"})
+      |> subject(subject)
+      |> html_body(html_body)
+      |> text_body(text_body)
+
+    with {:ok, _metadata} <- Mailer.deliver(email) do
+      {:ok, email}
+    end
+  end
+
   @doc """
   Deliver instructions to update a user email.
   """

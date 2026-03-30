@@ -70,6 +70,7 @@ defmodule SpectabasWeb.Router do
     get "/pricing", PageController, :pricing
     get "/privacy", PageController, :privacy
     get "/terms", PageController, :terms
+    get "/email-reports/unsubscribe/:token", EmailReportController, :unsubscribe
   end
 
   # Invitation acceptance (public)

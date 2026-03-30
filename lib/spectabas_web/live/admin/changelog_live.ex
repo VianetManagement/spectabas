@@ -45,6 +45,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v2.1.0 — 2026-03-29 18:00 UTC",
+       [
+         %{
+           title: "Email Reports",
+           description:
+             "configurable email report digests per site: daily, weekly, or monthly. Reports include pageview/visitor summary with period comparison, top 5 pages, sources, and countries. HTML emails with inline styles. Settings in site Settings page with frequency and send hour (in site timezone). One-click unsubscribe from email. Admin view shows all subscribers. Dispatched via Oban cron every 15 minutes with period-key idempotency."
+         },
+         %{
+           title: "Competitive Analysis page",
+           description:
+             "internal strategy reference at /admin/competitive — feature gap matrix, unique advantages, positioning vs 7 competitors, 6-month roadmap, and market trends."
+         }
+       ]},
       {"v2.0.0 — 2026-03-29 16:00 UTC",
        [
          %{
