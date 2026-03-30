@@ -64,7 +64,9 @@ config :spectabas, Oban,
        # Every 10 minutes — alert if dead letter queue is growing
        {"*/10 * * * *", Spectabas.Workers.DeadLetterMonitor},
        # Every 15 minutes — check for email reports due for sending
-       {"*/15 * * * *", Spectabas.Workers.EmailReportDispatcher}
+       {"*/15 * * * *", Spectabas.Workers.EmailReportDispatcher},
+       # Daily at 7am UTC — detect potential spam referrer domains
+       {"0 7 * * *", Spectabas.Workers.SpamDetector}
      ]}
   ]
 

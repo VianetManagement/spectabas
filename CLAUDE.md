@@ -185,7 +185,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Geolix name maps**: Use both atom and string keys — `Map.get(names, "en") || Map.get(names, :en)`
 - **Origin validation**: Auto-allows parent domain of analytics subdomain
 - **Tracking subdomain plug**: Blocks all UI routes on analytics subdomains, only allows `/c/*`, `/assets/v1.js`, `/health`
-- **Spam filter**: `Spectabas.Analytics.SpamFilter` maintains a list of known referrer spam domains, auto-excluded from Sources/Channels queries
+- **Spam filter**: `Spectabas.Analytics.SpamFilter` maintains builtin + DB-stored spam domains, auto-excluded from Sources/Channels queries. Admin page at `/admin/spam-filter` for managing blocklist with auto-detection of suspicious referrer domains. Daily Oban worker (`SpamDetector`) scans for candidates.
 - **Ad blocker evasion**: Script at `/assets/v1.js`, beacon uses public_key not domain, endpoints obfuscated
 - **Cloudflare support**: Checks `CF-Connecting-IP` header before `x-forwarded-for`
 - **Sidebar layout**: All dashboard pages use `<.dashboard_layout>` from SidebarComponent

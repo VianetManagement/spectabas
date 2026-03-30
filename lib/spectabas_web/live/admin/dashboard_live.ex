@@ -95,6 +95,13 @@ defmodule SpectabasWeb.Admin.DashboardLive do
           <h3 class="font-semibold text-gray-900 mb-1">Competitive Analysis</h3>
           <p class="text-sm text-gray-500">Feature gaps, positioning, and roadmap</p>
         </.link>
+        <.link
+          navigate={~p"/admin/spam-filter"}
+          class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+        >
+          <h3 class="font-semibold text-gray-900 mb-1">Spam Filter</h3>
+          <p class="text-sm text-gray-500">Manage referrer spam blocklist and auto-detection</p>
+        </.link>
       </div>
     </div>
     """

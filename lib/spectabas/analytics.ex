@@ -1974,10 +1974,10 @@ defmodule Spectabas.Analytics do
 
     [domain, "www.spectabas.com", "spectabas.com"]
     |> then(fn list -> if parent, do: [parent, "www.#{parent}" | list], else: list end)
-    |> Kernel.++(Spectabas.Analytics.SpamFilter.spam_domains())
+    |> Kernel.++(Spectabas.Analytics.SpamFilter.all_domains())
     |> Enum.uniq()
   end
 
   defp self_referrer_domains(_),
-    do: ["www.spectabas.com", "spectabas.com"] ++ Spectabas.Analytics.SpamFilter.spam_domains()
+    do: ["www.spectabas.com", "spectabas.com"] ++ Spectabas.Analytics.SpamFilter.all_domains()
 end

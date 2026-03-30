@@ -223,6 +223,13 @@ defmodule SpectabasWeb.DashboardPagesTest do
       {:ok, _view, html} = live(conn, ~p"/admin/audit")
       assert html =~ "Audit"
     end
+
+    test "admin spam filter", %{conn: conn} do
+      {:ok, _view, html} = live(conn, ~p"/admin/spam-filter")
+      assert html =~ "Spam Filter"
+      assert html =~ "Active Blocklist"
+      assert html =~ "Add Domain"
+    end
   end
 
   describe "dashboard index" do

@@ -183,6 +183,7 @@ defmodule SpectabasWeb.Router do
       live "/audit", Admin.AuditLive, :index
       live "/changelog", Admin.ChangelogLive, :index
       live "/competitive", Admin.CompetitiveLive, :index
+      live "/spam-filter", Admin.SpamFilterLive, :index
     end
   end
 
