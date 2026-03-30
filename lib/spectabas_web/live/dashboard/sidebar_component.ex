@@ -349,13 +349,6 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
               Phoenix.LiveView.JS.push("lv:clear-flash", value: %{key: "error"})
               |> Phoenix.LiveView.JS.hide(to: "#flash-error")
             }
-            phx-mounted={
-              Phoenix.LiveView.JS.hide(
-                to: "#flash-error",
-                transition: {"transition-opacity duration-500", "opacity-100", "opacity-0"},
-                time: 5000
-              )
-            }
           >
             <span>{@flash["error"]}</span>
             <button type="button" class="text-red-600 hover:text-red-800 ml-4">&times;</button>
