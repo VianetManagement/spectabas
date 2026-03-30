@@ -1142,6 +1142,42 @@ defmodule SpectabasWeb.DocsLive do
             - **Cross-Domain Tracking** — enable and list domains for cross-site visitor tracking
             - **IP Blocklist** — block specific IPs from being tracked
             - **Ecommerce** — enable ecommerce tracking with currency setting
+            - **Email Reports** — personal email digest preferences (see Email Reports section below)
+            """
+          },
+          %{
+            id: "email-reports",
+            title: "Email Reports",
+            body: """
+            Receive periodic analytics digests by email. Each user can configure their own report preferences per site.
+
+            ### Setting Up
+
+            Go to any site's **Settings** page and scroll to the "Email Reports" section. Choose:
+
+            - **Frequency** — Daily, Weekly, or Monthly (or Off to disable)
+            - **Send Time** — hour of day in the site's timezone (e.g., 9:00 AM)
+
+            Reports are personal — each user with access to the site can set their own frequency and time.
+
+            ### What's Included
+
+            Each report email contains:
+
+            - **Summary stats** — pageviews, visitors, sessions, bounce rate, and average duration with percentage change vs the previous equivalent period
+            - **Top 5 pages** — ranked by pageviews
+            - **Top 5 sources** — referrer domains ranked by pageviews
+            - **Top 5 countries** — ranked by unique visitors
+
+            Daily reports compare today vs yesterday. Weekly reports compare the last 7 days vs the prior 7 days. Monthly reports compare this month vs last month.
+
+            ### Unsubscribing
+
+            Every report email includes an **Unsubscribe** link at the bottom. Clicking it immediately disables reports without requiring login. You can also set frequency to "Off" in site settings at any time.
+
+            ### For Admins
+
+            The Settings page shows a "Report Subscribers" table listing all users who have active email reports for the site, including their frequency, send time, and when they last received a report.
             """
           },
           %{

@@ -22,6 +22,7 @@ Privacy-first web analytics platform built with Elixir/Phoenix and ClickHouse.
 - **Interactive charts** — Chart.js time-series, visitor map, bar charts
 - **Custom date ranges** — presets (Today/24h/7d/30d/90d/12m) + custom picker, timezone-aware
 - **Real User Monitoring** — Core Web Vitals (LCP, CLS, FID), page load timing, per-page speed indicators
+- **Email reports** — daily/weekly/monthly analytics digests with period comparison, one-click unsubscribe
 
 ## Tech Stack
 
@@ -46,7 +47,7 @@ Visit [localhost:4000](http://localhost:4000).
 ## Tests
 
 ```bash
-mix test          # 319 tests, no ClickHouse needed
+mix test          # 327 tests, no ClickHouse needed
 mix format        # code formatting
 mix compile --warnings-as-errors  # strict compilation
 ```

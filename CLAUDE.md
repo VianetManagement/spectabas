@@ -58,7 +58,7 @@ mix ecto.setup
 mix phx.server
 ```
 
-Tests: `mix test` (319 tests, no ClickHouse needed)
+Tests: `mix test` (327 tests, no ClickHouse needed)
 Format: `mix format`
 Compile check: `mix compile --warnings-as-errors`
 
@@ -115,7 +115,14 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Acquisition**: Sources, Attribution, Campaigns (UTM builder)
 - **Audience**: Geography, Visitor Map, Devices, Network, Visitor Log, Cohort Retention
 - **Conversions**: Goals, Funnels, Ecommerce
-- **Tools**: Reports, Exports, Settings
+- **Tools**: Reports, Exports, Email Reports, Settings
+
+### Email Reports
+- Per-user, per-site email digest subscriptions (daily/weekly/monthly)
+- HTML emails with period comparison, top pages/sources/countries
+- Oban cron dispatcher (every 15 min) + delivery worker with period-key idempotency
+- One-click unsubscribe via signed Phoenix.Token (30-day validity)
+- Settings UI on site settings page, admin subscriber view
 
 ### Unique Features
 - **Visitor Intent Detection** — auto-classifies visitors as buying/researching/comparing/support/returning/browsing/bot
