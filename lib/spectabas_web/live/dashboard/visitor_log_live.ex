@@ -187,7 +187,9 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
               <tr :for={v <- @ip_results} class="hover:bg-gray-50">
                 <td class="px-6 py-3 text-sm">
                   <.link
-                    navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{v["visitor_id"]}"}
+                    navigate={
+                      ~p"/dashboard/sites/#{@site.id}/visitors/#{v["visitor_id"]}?ip=#{@ip_search}"
+                    }
                     class="text-indigo-600 hover:text-indigo-800 font-mono text-xs"
                   >
                     {String.slice(v["visitor_id"] || "", 0, 12)}...

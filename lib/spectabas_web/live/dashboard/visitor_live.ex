@@ -9,7 +9,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
   alias Spectabas.{Accounts, Sites, Visitors, Analytics}
 
   @impl true
-  def mount(%{"site_id" => site_id, "visitor_id" => visitor_id}, _session, socket) do
+  def mount(%{"site_id" => site_id, "visitor_id" => visitor_id} = params, _session, socket) do
     user = socket.assigns.current_scope.user
     site = Sites.get_site!(site_id)
 
@@ -30,8 +30,11 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
           _ -> %{}
         end
 
-      # Get IP details and co-visitors for the last known IP
-      last_ip = visitor.last_ip || get_in(List.first(timeline) || %{}, ["ip_address"])
+      # Use the IP from the search context if provided, otherwise fall back to last known IP
+      last_ip =
+        params["ip"] ||
+          visitor.last_ip ||
+          get_in(List.first(timeline) || %{}, ["ip_address"])
 
       {ip_info, ip_visitors} =
         if last_ip && last_ip != "" do
