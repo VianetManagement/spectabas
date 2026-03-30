@@ -112,7 +112,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 
 ### Analytics Pages (sidebar navigation)
 - **Behavior**: Pages, Entry/Exit, Page Transitions, Site Search, Performance (RUM)
-- **Acquisition**: Sources, Attribution, Campaigns (UTM builder)
+- **Acquisition**: All Channels, Sources (6 UTM tabs), Attribution, Campaigns (UTM builder)
 - **Audience**: Geography, Visitor Map, Devices, Network, Visitor Log, Cohort Retention
 - **Conversions**: Goals, Funnels, Ecommerce
 - **Tools**: Reports, Email Reports, Exports, Settings

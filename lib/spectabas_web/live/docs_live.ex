@@ -780,15 +780,38 @@ defmodule SpectabasWeb.DocsLive do
             """
           },
           %{
+            id: "channels",
+            title: "All Channels",
+            body: """
+            Groups all traffic into marketing channels automatically based on referrer domains and UTM parameters:
+
+            - **Search Engines** — Google, Bing, DuckDuckGo, Yahoo, Baidu, Yandex, Ecosia, Brave
+            - **Social Networks** — Facebook, Instagram, Twitter/X, LinkedIn, Reddit, TikTok, YouTube, Pinterest, Threads, Mastodon
+            - **AI Assistants** — ChatGPT, Claude, Perplexity, Gemini, Copilot, Poe, You.com, Phind
+            - **Email** — Gmail, Outlook, Yahoo Mail, or utm_medium=email
+            - **Paid Search** — utm_medium contains cpc, ppc, paid, or paidsearch
+            - **Paid Social** — utm_medium contains paid_social or paidsocial
+            - **Websites** — any referrer domain not in the above categories
+            - **Direct** — no referrer and no UTM parameters
+            - **Other Campaigns** — UTM source set but no referrer domain
+
+            Each channel shows pageviews, visitors, sessions, and how many distinct sources contributed. Click a channel to drill into the Sources page.
+            """
+          },
+          %{
             id: "sources",
             title: "Sources",
             body: """
-            Shows where your traffic comes from, organized in three tabs:
+            Shows where your traffic comes from, organized in six tabs:
 
             - **Referrers** — domains that link to your site (google.com, twitter.com, etc.)
             - **UTM Source** — the `utm_source` parameter from tagged URLs
             - **UTM Medium** — the `utm_medium` parameter (cpc, email, social, etc.)
+            - **UTM Campaign** — the `utm_campaign` parameter (spring_sale, product_launch, etc.)
+            - **UTM Term** — the `utm_term` parameter (paid search keywords)
+            - **UTM Content** — the `utm_content` parameter (ad variations, A/B test labels)
 
+            Each UTM tab only shows entries where that parameter was set — no blank rows.
 
             **Click any source** to see the visitors from that source in the Visitor Log.
 

@@ -1,11 +1,20 @@
 defmodule SpectabasWeb.Dashboard.SourcesLive do
   use SpectabasWeb, :live_view
 
-  @moduledoc "Traffic sources — referrers, UTM source, UTM medium tabs."
+  @moduledoc "Traffic sources — referrers and UTM parameter breakdowns."
 
   alias Spectabas.{Accounts, Sites, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
   import SpectabasWeb.Dashboard.DateHelpers
+
+  @tabs [
+    {"referrers", "Referrers"},
+    {"utm_source", "UTM Source"},
+    {"utm_medium", "UTM Medium"},
+    {"utm_campaign", "UTM Campaign"},
+    {"utm_term", "UTM Term"},
+    {"utm_content", "UTM Content"}
+  ]
 
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
@@ -45,12 +54,49 @@ defmodule SpectabasWeb.Dashboard.SourcesLive do
   end
 
   defp load_sources(socket) do
-    %{site: site, user: user, date_range: range} = socket.assigns
+    %{site: site, user: user, date_range: range, tab: tab} = socket.assigns
+    period = range_to_period(range)
 
     sources =
-      case Analytics.top_sources(site, user, range_to_period(range)) do
-        {:ok, sources} -> sources
-        _ -> []
+      case tab do
+        "referrers" ->
+          case Analytics.top_sources(site, user, period) do
+            {:ok, data} -> data
+            _ -> []
+          end
+
+        "utm_source" ->
+          case Analytics.top_utm_sources(site, user, period) do
+            {:ok, data} -> data
+            _ -> []
+          end
+
+        "utm_medium" ->
+          case Analytics.top_utm_mediums(site, user, period) do
+            {:ok, data} -> data
+            _ -> []
+          end
+
+        "utm_campaign" ->
+          case Analytics.top_utm_campaigns(site, user, period) do
+            {:ok, data} -> data
+            _ -> []
+          end
+
+        "utm_term" ->
+          case Analytics.top_utm_terms(site, user, period) do
+            {:ok, data} -> data
+            _ -> []
+          end
+
+        "utm_content" ->
+          case Analytics.top_utm_content(site, user, period) do
+            {:ok, data} -> data
+            _ -> []
+          end
+
+        _ ->
+          []
       end
 
     assign(socket, :sources, sources)
@@ -58,6 +104,8 @@ defmodule SpectabasWeb.Dashboard.SourcesLive do
 
   @impl true
   def render(assigns) do
+    assigns = assign(assigns, :tabs, @tabs)
+
     ~H"""
     <.dashboard_layout
       flash={@flash}
@@ -90,15 +138,9 @@ defmodule SpectabasWeb.Dashboard.SourcesLive do
           </nav>
         </div>
 
-        <div class="mb-6 flex gap-2">
+        <div class="mb-6 flex flex-wrap gap-2">
           <button
-            :for={
-              {id, label} <- [
-                {"referrers", "Referrers"},
-                {"utm_source", "UTM Source"},
-                {"utm_medium", "UTM Medium"}
-              ]
-            }
+            :for={{id, label} <- @tabs}
             phx-click="change_tab"
             phx-value-tab={id}
             class={[
@@ -159,9 +201,7 @@ defmodule SpectabasWeb.Dashboard.SourcesLive do
   end
 
   defp source_name(source, "referrers"), do: Map.get(source, "referrer_domain", "Direct / None")
-  defp source_name(source, "utm_source"), do: Map.get(source, "utm_source", "(none)")
-  defp source_name(source, "utm_medium"), do: Map.get(source, "utm_medium", "(none)")
-  defp source_name(source, _), do: Map.get(source, "referrer_domain", "Direct / None")
+  defp source_name(source, _tab), do: Map.get(source, "value", "")
 
   defp source_link(site_id, source, "referrers") do
     domain = Map.get(source, "referrer_domain", "")
@@ -169,17 +209,8 @@ defmodule SpectabasWeb.Dashboard.SourcesLive do
     ~p"/dashboard/sites/#{site_id}/visitor-log?filter_field=referrer_domain&filter_value=#{domain}"
   end
 
-  defp source_link(site_id, source, "utm_source") do
-    val = Map.get(source, "utm_source", "")
-    ~p"/dashboard/sites/#{site_id}/visitor-log?filter_field=utm_source&filter_value=#{val}"
-  end
-
-  defp source_link(site_id, source, "utm_medium") do
-    val = Map.get(source, "utm_medium", "")
-    ~p"/dashboard/sites/#{site_id}/visitor-log?filter_field=utm_medium&filter_value=#{val}"
-  end
-
-  defp source_link(site_id, _source, _) do
-    ~p"/dashboard/sites/#{site_id}/visitor-log"
+  defp source_link(site_id, source, tab) do
+    val = Map.get(source, "value", "")
+    ~p"/dashboard/sites/#{site_id}/visitor-log?filter_field=#{tab}&filter_value=#{val}"
   end
 end

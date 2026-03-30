@@ -45,6 +45,24 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v2.2.0 — 2026-03-28 12:00 UTC",
+       [
+         %{
+           title: "All Channels page",
+           description:
+             "new Acquisition page that automatically groups traffic into marketing channels — Search Engines, Social Networks, AI Assistants, Email, Paid Search, Paid Social, Websites, Direct, and Other Campaigns. Shows pageviews, visitors, sessions, and source count per channel."
+         },
+         %{
+           title: "Sources page — 6 UTM tabs",
+           description:
+             "Sources page now has six tabs: Referrers, UTM Source, UTM Medium, UTM Campaign, UTM Term, UTM Content. Each UTM tab queries only entries with that parameter set (no blank rows). Blank UTMs no longer appear."
+         },
+         %{
+           title: "Session overcounting fix",
+           description:
+             "top_sources query now uses uniq(session_id) from raw events instead of sum(sessions) from the SummingMergeTree MV, fixing overcounting across multi-day ranges."
+         }
+       ]},
       {"v2.1.1 — 2026-03-29 19:00 UTC",
        [
          %{

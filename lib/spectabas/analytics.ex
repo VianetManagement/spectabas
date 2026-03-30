@@ -259,7 +259,8 @@ defmodule Spectabas.Analytics do
   end
 
   @doc """
-  Top traffic sources: referrer_domain, utm_source, utm_medium.
+  Top traffic sources: referrer_domain with unique session counts.
+  Uses raw events table with uniq(session_id) to avoid overcounting.
   """
   def top_sources(%Site{} = site, %User{} = user, date_range) do
     date_range = ensure_date_range(date_range)
@@ -275,26 +276,140 @@ defmodule Spectabas.Analytics do
           "AND referrer_domain NOT IN (#{domains})"
         end
 
-      # Use source_stats materialized view (SummingMergeTree, pre-aggregated)
       sql = """
       SELECT
         referrer_domain,
-        utm_source,
-        utm_medium,
-        sum(pageviews) AS pageviews,
-        sum(sessions) AS sessions
-      FROM source_stats
+        countIf(event_type = 'pageview') AS pageviews,
+        uniq(session_id) AS sessions
+      FROM events
       WHERE site_id = #{ClickHouse.param(site.id)}
-        AND date >= #{ClickHouse.param(format_date(date_range.from))}
-        AND date <= #{ClickHouse.param(format_date(date_range.to))}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
         AND referrer_domain != ''
+        AND ip_is_bot = 0
         #{exclude_clause}
-      GROUP BY referrer_domain, utm_source, utm_medium
+      GROUP BY referrer_domain
       ORDER BY pageviews DESC
       LIMIT 100
       """
 
       ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Top UTM sources grouped by utm_source only."
+  def top_utm_sources(%Site{} = site, %User{} = user, date_range) do
+    top_utm_dimension(site, user, date_range, "utm_source")
+  end
+
+  @doc "Top UTM mediums grouped by utm_medium only."
+  def top_utm_mediums(%Site{} = site, %User{} = user, date_range) do
+    top_utm_dimension(site, user, date_range, "utm_medium")
+  end
+
+  @doc "Top UTM campaigns grouped by utm_campaign only."
+  def top_utm_campaigns(%Site{} = site, %User{} = user, date_range) do
+    top_utm_dimension(site, user, date_range, "utm_campaign")
+  end
+
+  @doc "Top UTM terms grouped by utm_term only."
+  def top_utm_terms(%Site{} = site, %User{} = user, date_range) do
+    top_utm_dimension(site, user, date_range, "utm_term")
+  end
+
+  @doc "Top UTM content grouped by utm_content only."
+  def top_utm_content(%Site{} = site, %User{} = user, date_range) do
+    top_utm_dimension(site, user, date_range, "utm_content")
+  end
+
+  defp top_utm_dimension(%Site{} = site, %User{} = user, date_range, dimension) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        #{dimension} AS value,
+        countIf(event_type = 'pageview') AS pageviews,
+        uniq(session_id) AS sessions
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND #{dimension} != ''
+        AND ip_is_bot = 0
+      GROUP BY #{dimension}
+      ORDER BY pageviews DESC
+      LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Channel breakdown: groups raw sources into marketing channels."
+  def channel_breakdown(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      excluded = self_referrer_domains(site)
+
+      exclude_clause =
+        if excluded == [] do
+          ""
+        else
+          domains = Enum.map_join(excluded, ", ", &ClickHouse.param/1)
+          "AND referrer_domain NOT IN (#{domains})"
+        end
+
+      sql = """
+      SELECT
+        referrer_domain,
+        utm_source,
+        utm_medium,
+        countIf(event_type = 'pageview') AS pageviews,
+        uniq(visitor_id) AS visitors,
+        uniq(session_id) AS sessions
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+        #{exclude_clause}
+      GROUP BY referrer_domain, utm_source, utm_medium
+      ORDER BY pageviews DESC
+      LIMIT 500
+      """
+
+      case ClickHouse.query(sql) do
+        {:ok, rows} ->
+          channels =
+            rows
+            |> Enum.group_by(fn row ->
+              Spectabas.Analytics.ChannelClassifier.classify(
+                row["referrer_domain"] || "",
+                row["utm_source"] || "",
+                row["utm_medium"] || ""
+              )
+            end)
+            |> Enum.map(fn {channel, rows} ->
+              %{
+                "channel" => channel,
+                "pageviews" =>
+                  Enum.sum(Enum.map(rows, &Spectabas.TypeHelpers.to_int(&1["pageviews"]))),
+                "visitors" =>
+                  Enum.sum(Enum.map(rows, &Spectabas.TypeHelpers.to_int(&1["visitors"]))),
+                "sessions" =>
+                  Enum.sum(Enum.map(rows, &Spectabas.TypeHelpers.to_int(&1["sessions"]))),
+                "sources" => length(rows)
+              }
+            end)
+            |> Enum.sort_by(& &1["pageviews"], :desc)
+
+          {:ok, channels}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
     end
   end
 
@@ -1477,11 +1592,6 @@ defmodule Spectabas.Analytics do
       {:error, :unauthorized}
     end
   end
-
-  # Format DateTime as Date string for materialized view queries
-  defp format_date(%DateTime{} = dt), do: Date.to_iso8601(DateTime.to_date(dt))
-  defp format_date(%Date{} = d), do: Date.to_iso8601(d)
-  defp format_date(s) when is_binary(s), do: s
 
   defp format_datetime(%DateTime{} = dt) do
     Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S")
