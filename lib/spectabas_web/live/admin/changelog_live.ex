@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v2.2.2 — 2026-03-30 13:00 UTC",
+       [
+         %{
+           title: "Consistent visitor/pageview counting across all pages",
+           description:
+             "added ip_is_bot=0 filter to 11 queries that were missing it: entry_pages, exit_pages, top_pages, visitor_locations, timezone_distribution, visitor_log, page_transitions totals, site_searches, overview_stats_public, intent_breakdown. Bot traffic excluded from all standard analytics views. Network page intentionally keeps bot stats for traffic quality analysis."
+         }
+       ]},
       {"v2.2.1 — 2026-03-30 12:00 UTC",
        [
          %{

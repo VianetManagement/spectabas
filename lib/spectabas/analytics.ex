@@ -182,6 +182,7 @@ defmodule Spectabas.Analytics do
         WHERE site_id = #{ClickHouse.param(site.id)}
           AND event_type = 'pageview'
           AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND ip_is_bot = 0
           AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
         GROUP BY session_id
       )
@@ -216,6 +217,7 @@ defmodule Spectabas.Analytics do
           AND event_type = 'pageview'
           AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
           AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+          AND ip_is_bot = 0
         GROUP BY session_id
       )
       GROUP BY url_path
@@ -248,6 +250,7 @@ defmodule Spectabas.Analytics do
         AND event_type = 'pageview'
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
         #{seg}
       GROUP BY url_path
       ORDER BY pageviews DESC
@@ -663,6 +666,7 @@ defmodule Spectabas.Analytics do
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
         AND ip_lat != 0
         AND ip_lon != 0
         AND ip_is_bot = 0
@@ -691,6 +695,7 @@ defmodule Spectabas.Analytics do
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
         AND ip_timezone != ''
       GROUP BY ip_timezone
       ORDER BY visitors DESC
@@ -1121,6 +1126,7 @@ defmodule Spectabas.Analytics do
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
         AND visitor_intent != ''
       GROUP BY visitor_intent
       ORDER BY visitors DESC
@@ -1166,6 +1172,7 @@ defmodule Spectabas.Analytics do
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
         #{seg}
       GROUP BY visitor_id
       ORDER BY last_seen DESC
@@ -1246,6 +1253,7 @@ defmodule Spectabas.Analytics do
         AND url_path = #{ClickHouse.param(url_path)}
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
       """
 
       with {:ok, prev} <- ClickHouse.query(prev_sql),
@@ -1325,6 +1333,7 @@ defmodule Spectabas.Analytics do
         AND event_type = 'pageview'
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
         AND JSONExtractString(properties, '_search_query') != ''
       GROUP BY search_term
       ORDER BY searches DESC
@@ -1660,6 +1669,7 @@ defmodule Spectabas.Analytics do
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
       GROUP BY session_id
+        AND ip_is_bot = 0
     )
     """
 
