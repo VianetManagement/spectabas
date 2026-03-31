@@ -45,6 +45,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v2.7.0 — 2026-03-31 UTC",
+       [
+         %{
+           title: "API: server-side visitor identification",
+           description:
+             "New POST /api/v1/sites/:id/identify endpoint. Link email addresses to anonymous visitors from your server when users log in. Read the _sab cookie and send it with the email."
+         },
+         %{
+           title: "Fix: client-side identify was broken",
+           description:
+             "The /c/i endpoint was passing site_id as the visitor lookup key instead of using cookie_id + site_id. Now correctly looks up visitors by cookie_id scoped to the site."
+         }
+       ]},
       {"v2.6.1 — 2026-03-31 UTC",
        [
          %{

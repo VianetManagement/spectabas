@@ -1204,6 +1204,130 @@ defmodule SpectabasWeb.DocsLive do
             }
             ```
             """
+          },
+          %{
+            id: "api-identify",
+            title: "Server-Side Identify",
+            body: """
+            `POST /api/v1/sites/:site_id/identify`
+
+            Links an email address or user ID to an existing Spectabas visitor. Use this from your server when a user logs in to associate their identity with the anonymous visitor created by the tracker script.
+
+            **Request body:**
+
+            | Field | Type | Required | Description |
+            |-------|------|----------|-------------|
+            | `visitor_id` | string | yes | The value of the `_sab` cookie set by the tracker |
+            | `email` | string | no | User's email address (stored as SHA-256 hash) |
+            | `user_id` | string | no | Your internal user ID |
+            | `ip` | string | no | User's real IP address (for geo enrichment) |
+
+            ### How It Works
+
+            1. A visitor browses your site. The Spectabas tracker script sets a `_sab` cookie with a unique visitor ID.
+            2. When the visitor logs in, your server reads the `_sab` cookie from the HTTP request.
+            3. Your server sends a POST to Spectabas with the cookie value + the user's email.
+            4. Spectabas links the email to the anonymous visitor record, so you can see who that visitor is in the visitor log.
+
+            ### Example (Elixir/Phoenix)
+
+            ```elixir
+            # In your SessionController or login pipeline:
+            def create(conn, %{"email" => email, "password" => password}) do
+              case Accounts.authenticate(email, password) do
+                {:ok, user} ->
+                  # After successful login, identify the visitor in Spectabas
+                  sab_cookie = conn.cookies["_sab"]
+
+                  if sab_cookie do
+                    Task.start(fn ->
+                      Req.post!("https://www.spectabas.com/api/v1/sites/4/identify",
+                        headers: [{"authorization", "Bearer YOUR_API_KEY"}],
+                        json: %{
+                          visitor_id: sab_cookie,
+                          email: user.email,
+                          user_id: to_string(user.id),
+                          ip: to_string(:inet.ntoa(conn.remote_ip))
+                        }
+                      )
+                    end)
+                  end
+
+                  conn
+                  |> put_session(:user_id, user.id)
+                  |> redirect(to: "/dashboard")
+
+                {:error, _} ->
+                  # ...
+              end
+            end
+            ```
+
+            ### Example (Ruby/Rails)
+
+            ```ruby
+            # In your sessions controller, after login:
+            sab_cookie = cookies["_sab"]
+            if sab_cookie.present?
+              Thread.new do
+                HTTParty.post(
+                  "https://www.spectabas.com/api/v1/sites/4/identify",
+                  headers: { "Authorization" => "Bearer YOUR_API_KEY",
+                             "Content-Type" => "application/json" },
+                  body: { visitor_id: sab_cookie,
+                          email: current_user.email,
+                          user_id: current_user.id.to_s,
+                          ip: request.remote_ip }.to_json
+                )
+              end
+            end
+            ```
+
+            ### Example (Node.js/Express)
+
+            ```javascript
+            // After login middleware:
+            const sabCookie = req.cookies._sab;
+            if (sabCookie) {
+              fetch("https://www.spectabas.com/api/v1/sites/4/identify", {
+                method: "POST",
+                headers: {
+                  "Authorization": "Bearer YOUR_API_KEY",
+                  "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                  visitor_id: sabCookie,
+                  email: req.user.email,
+                  user_id: String(req.user.id),
+                  ip: req.ip
+                })
+              }).catch(() => {}); // Fire and forget
+            }
+            ```
+
+            ### Example (curl)
+
+            ```bash
+            curl -X POST https://www.spectabas.com/api/v1/sites/4/identify \\
+              -H "Authorization: Bearer YOUR_API_KEY" \\
+              -H "Content-Type: application/json" \\
+              -d '{"visitor_id": "abc123...", "email": "user@example.com", "user_id": "42"}'
+            ```
+
+            ### Response
+
+            ```json
+            {"ok": true, "visitor_id": "uuid-...", "email_hash": "abc123..."}
+            ```
+
+            ### Important Notes
+
+            - **The `visitor_id` is the value of the `_sab` cookie**, set automatically by the tracker script. Read it from the HTTP request cookies on your server.
+            - **Email is hashed** — stored as a SHA-256 hash for privacy. The original email is kept for display in the visitor log but never exposed via the read API.
+            - **Fire and forget** — wrap the API call in an async task (Task.start, Thread.new, etc.) so it doesn't block your login flow.
+            - **Call on every login** — the `_sab` cookie may change (new browser, cleared cookies), so always identify on login to keep the association current.
+            - **IP is optional** — if provided, it updates the visitor's geo data and known IPs list.
+            """
           }
         ]
       },

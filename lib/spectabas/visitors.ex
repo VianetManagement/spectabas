@@ -85,8 +85,17 @@ defmodule Spectabas.Visitors do
 
   Returns `{:ok, %Visitor{}}` or `{:error, reason}`.
   """
-  def identify(visitor_id, traits, client_ip \\ nil) do
-    case Repo.get(Visitor, visitor_id) do
+  def identify(site_id, visitor_id, traits, client_ip \\ nil) do
+    # Look up by cookie_id (what the tracker sets in _sab cookie) scoped to site
+    visitor =
+      Repo.one(
+        from(v in Visitor,
+          where: v.site_id == ^site_id and v.cookie_id == ^visitor_id,
+          limit: 1
+        )
+      )
+
+    case visitor do
       nil ->
         {:error, :not_found}
 

@@ -104,9 +104,9 @@ defmodule SpectabasWeb.CollectController do
 
       true ->
         visitor_id = params["vid"]
-        traits = Map.drop(params, ["vid"])
+        traits = Map.drop(params, ["vid", "s"])
 
-        case Visitors.identify(site.id, visitor_id, traits) do
+        case Visitors.identify(site.id, visitor_id, traits, client_ip(conn)) do
           {:ok, _visitor} -> send_resp(conn, 204, "")
           {:error, _reason} -> send_resp(conn, 204, "")
         end

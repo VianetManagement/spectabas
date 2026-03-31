@@ -1,7 +1,7 @@
 defmodule SpectabasWeb.API.StatsController do
   use SpectabasWeb, :controller
 
-  alias Spectabas.{Sites, Analytics, Accounts}
+  alias Spectabas.{Sites, Analytics, Accounts, Visitors}
   require Logger
 
   def overview(conn, %{"site_id" => site_id} = params) do
@@ -67,6 +67,45 @@ defmodule SpectabasWeb.API.StatsController do
     with {:ok, site, _user} <- authorize_site(conn, site_id),
          {:ok, data} <- Analytics.realtime_visitors_grouped(site) do
       json(conn, %{data: data})
+    else
+      error -> handle_error(conn, error)
+    end
+  end
+
+  @doc """
+  Server-side visitor identification.
+
+  POST /api/v1/sites/:site_id/identify
+  Body: {"visitor_id": "<_sab cookie value>", "email": "user@example.com", "user_id": "123"}
+
+  Links an email/user_id to an existing Spectabas visitor. The visitor_id
+  is the value of the _sab cookie set by the tracker script.
+  """
+  def identify(conn, %{"site_id" => site_id} = params) do
+    with {:ok, site, _user} <- authorize_site(conn, site_id) do
+      visitor_id = params["visitor_id"]
+
+      if is_nil(visitor_id) or visitor_id == "" do
+        conn |> put_status(400) |> json(%{error: "visitor_id required"})
+      else
+        traits = Map.take(params, ["email", "user_id"])
+        ip = params["ip"]
+
+        case Visitors.identify(site.id, visitor_id, traits, ip) do
+          {:ok, visitor} ->
+            json(conn, %{
+              ok: true,
+              visitor_id: visitor.id,
+              email_hash: visitor.email_hash
+            })
+
+          {:error, :not_found} ->
+            conn |> put_status(404) |> json(%{error: "visitor not found"})
+
+          {:error, reason} ->
+            conn |> put_status(422) |> json(%{error: inspect(reason)})
+        end
+      end
     else
       error -> handle_error(conn, error)
     end

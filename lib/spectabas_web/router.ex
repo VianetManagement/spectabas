@@ -199,6 +199,7 @@ defmodule SpectabasWeb.Router do
     get "/sites/:site_id/devices", StatsController, :devices
     get "/sites/:site_id/realtime", StatsController, :realtime
     get "/sites/:site_id/realtime/visitors", StatsController, :realtime_visitors
+    post "/sites/:site_id/identify", StatsController, :identify
   end
 
   # Dev routes
