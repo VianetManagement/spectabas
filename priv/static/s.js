@@ -246,7 +246,21 @@
         body: body,
         headers: { "Content-Type": "application/json" },
         keepalive: true,
-      });
+      }).then(function (r) {
+        if (r && r.status >= 500) {
+          // Server error (e.g. backpressure 503) — retry once after 2s
+          setTimeout(function () {
+            try {
+              fetch(url, {
+                method: "POST",
+                body: body,
+                headers: { "Content-Type": "application/json" },
+                keepalive: true,
+              });
+            } catch (e) {}
+          }, 2000);
+        }
+      }).catch(function () {});
     } catch (e) {}
   }
 

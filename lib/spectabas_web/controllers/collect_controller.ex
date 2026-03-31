@@ -289,17 +289,29 @@ defmodule SpectabasWeb.CollectController do
       origin_host = extract_host(origin)
       referer_host = extract_host(referer)
 
-      allowed = allowed_domains(site)
-
       cond do
         # Origin header present and matches
-        origin_host != "" and origin_host in allowed -> :ok
+        origin_host != "" and domain_allowed?(origin_host, site) -> :ok
         # No Origin but Referer matches (e.g., sendBeacon, img tags)
-        origin_host == "" and referer_host in allowed -> :ok
+        origin_host == "" and domain_allowed?(referer_host, site) -> :ok
         # No Origin and no Referer (shouldn't reach here due to outer check, but be safe)
         origin_host == "" and referer_host == "" -> :ok
         true -> {:error, :origin_not_allowed}
       end
+    end
+  end
+
+  defp domain_allowed?(host, site) do
+    allowed = allowed_domains(site)
+    host in allowed or subdomain_of_parent?(host, site.domain)
+  end
+
+  # Allow any subdomain of the parent domain (e.g., app.example.com when
+  # analytics domain is b.example.com → parent is example.com)
+  defp subdomain_of_parent?(host, analytics_domain) do
+    case parent_domain(analytics_domain) do
+      nil -> false
+      parent -> host == parent or String.ends_with?(host, ".#{parent}")
     end
   end
 

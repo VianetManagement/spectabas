@@ -45,6 +45,34 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v2.5.5 — 2026-03-31 UTC",
+       [
+         %{
+           title: "Fix: datacenter IPs no longer auto-flagged as bots",
+           description:
+             "VPN, corporate proxy, and cloud-hosted browser visitors were being permanently excluded from all analytics. Bot flag now only comes from UA detection."
+         },
+         %{
+           title: "Fix: broken SQL in public dashboard overview_stats",
+           description:
+             "ip_is_bot filter was placed after GROUP BY instead of in the WHERE clause, causing incorrect visitor counts on shared dashboards."
+         },
+         %{
+           title: "Fix: origin check allows all subdomains",
+           description:
+             "Events from non-www subdomains (e.g. app.example.com) were being rejected. Now any subdomain of the parent domain is allowed."
+         },
+         %{
+           title: "Improvement: tracker retries on server error",
+           description:
+             "Failed event sends (e.g. during backpressure 503) are now retried once after 2 seconds."
+         },
+         %{
+           title: "Improvement: realtime visitor list increased to 100",
+           description:
+             "Realtime visitor grouped view was capped at 30 results, missing active visitors. Increased to 100."
+         }
+       ]},
       {"v2.5.4 — 2026-03-31 UTC",
        [
          %{

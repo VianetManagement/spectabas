@@ -891,7 +891,7 @@ defmodule Spectabas.Analytics do
       AND timestamp >= now() - INTERVAL 5 MINUTE
     GROUP BY visitor_id
     ORDER BY last_activity DESC
-    LIMIT 30
+    LIMIT 100
     """
 
     ClickHouse.query(sql)
@@ -1906,8 +1906,9 @@ defmodule Spectabas.Analytics do
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-      GROUP BY session_id
         AND ip_is_bot = 0
+      GROUP BY session_id
+      HAVING pv > 0
     )
     """
 

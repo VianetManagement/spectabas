@@ -179,9 +179,9 @@ defmodule Spectabas.Events.Ingest do
     if Code.ensure_loaded?(Spectabas.IPEnricher) do
       case Spectabas.IPEnricher.enrich(client_ip, gdpr_mode) do
         data when is_map(data) ->
-          # Mark as bot if UA detection or datacenter IP
-          bot_flag = if is_bot || data[:ip_is_datacenter] == 1, do: 1, else: 0
-          Map.put(data, :ip_is_bot, bot_flag)
+          # Mark as bot only from UA detection — datacenter IPs are tracked
+          # separately via ip_is_datacenter (VPN/corporate proxy users are real)
+          Map.put(data, :ip_is_bot, if(is_bot, do: 1, else: 0))
 
         _ ->
           default_ip_data() |> Map.put(:ip_is_bot, if(is_bot, do: 1, else: 0))
