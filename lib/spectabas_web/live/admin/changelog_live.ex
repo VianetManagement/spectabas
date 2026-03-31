@@ -45,6 +45,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v2.5.3 — 2026-03-31 UTC",
+       [
+         %{
+           title: "Fix: snippet now includes data-gdpr and data-xd attributes",
+           description:
+             "The tracking snippet shown in site settings now includes data-gdpr=\"off\" when GDPR mode is disabled, and data-xd when cross-domain sites are configured. Previously these attributes were always omitted, causing the tracker to default to fingerprint-only mode regardless of settings."
+         },
+         %{
+           title: "Fix: health check no longer requires ClickHouse",
+           description:
+             "The /health endpoint now returns 200 as long as Postgres is reachable. ClickHouse starting asynchronously no longer causes deploy failures."
+         }
+       ]},
       {"v2.5.2 — 2026-03-28 UTC",
        [
          %{
