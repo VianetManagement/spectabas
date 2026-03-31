@@ -191,6 +191,12 @@ export const BubbleMap = {
     this.chart.options.scales.y.min = r.y.min
     this.chart.options.scales.y.max = r.y.max
     this.chart.update("none")
+    // Style active button
+    document.querySelectorAll(".map-zoom-btn").forEach(btn => {
+      btn.className = "px-2 py-1 text-xs rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200 map-zoom-btn"
+    })
+    const active = document.getElementById("map-btn-" + region)
+    if (active) active.className = "px-2 py-1 text-xs rounded-md bg-indigo-600 text-white map-zoom-btn"
   },
   setData(data) {
     if (!data || !data.points || data.points.length === 0) return

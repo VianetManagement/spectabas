@@ -22,7 +22,6 @@ defmodule SpectabasWeb.Dashboard.MapLive do
        |> assign(:site, site)
        |> assign(:user, user)
        |> assign(:date_range, "7d")
-       |> assign(:map_region, "world")
        |> load_data()}
     end
   end
@@ -33,10 +32,9 @@ defmodule SpectabasWeb.Dashboard.MapLive do
   end
 
   def handle_event("zoom_map", %{"region" => region}, socket) do
-    {:noreply,
-     socket
-     |> assign(:map_region, region)
-     |> push_event("map-zoom", %{region: region})}
+    # Only push the zoom event — don't assign to avoid re-rendering which
+    # destroys the chart hooks and loses their data
+    {:noreply, push_event(socket, "map-zoom", %{region: region})}
   end
 
   defp load_data(socket) do
@@ -138,13 +136,8 @@ defmodule SpectabasWeb.Dashboard.MapLive do
                 }
                 phx-click="zoom_map"
                 phx-value-region={id}
-                class={[
-                  "px-2 py-1 text-xs rounded-md",
-                  if(@map_region == id,
-                    do: "bg-indigo-600 text-white",
-                    else: "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  )
-                ]}
+                id={"map-btn-#{id}"}
+                class="px-2 py-1 text-xs rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200 map-zoom-btn"
               >
                 {label}
               </button>
