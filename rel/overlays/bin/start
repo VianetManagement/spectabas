@@ -3,6 +3,9 @@ set -eu
 
 cd -P -- "$(dirname -- "$0")"
 
+echo "Running migrations..."
+./spectabas eval "Spectabas.Release.migrate()"
+
 if [ -n "${ADMIN_EMAIL:-}" ] && [ -n "${ADMIN_PASSWORD:-}" ]; then
   echo "Ensuring admin account..."
   ./spectabas eval "Spectabas.Release.create_admin(\"$ADMIN_EMAIL\", \"$ADMIN_PASSWORD\")"
