@@ -456,6 +456,11 @@ defmodule SpectabasWeb.DocsLive do
                 Spectabas.track("download", { file: link.href });
               });
             });
+
+            // Backdate an event (e.g. queued from offline)
+            Spectabas.track("purchase", { plan: "pro" }, {
+              occurred_at: Math.floor(Date.now() / 1000) - 3600 // 1 hour ago
+            });
             ```
 
             ---
@@ -511,7 +516,7 @@ defmodule SpectabasWeb.DocsLive do
 
             ---
 
-            ### `Spectabas.ecommerce.addOrder(order)`
+            ### `Spectabas.ecommerce.addOrder(order, opts)`
 
             Track a completed order. Order data appears in the **Ecommerce** dashboard with revenue totals, average order value, and top products.
 
@@ -520,6 +525,7 @@ defmodule SpectabasWeb.DocsLive do
             | `order_id` | string | yes | Unique order identifier. Duplicate order IDs are deduplicated. |
             | `revenue` | string | yes | Total order value (e.g. `"99.99"`). Use strings to avoid floating-point issues. |
             | `currency` | string | no | ISO 4217 currency code (e.g. `"USD"`, `"EUR"`). Defaults to site currency. |
+            | `opts.occurred_at` | integer | no | Unix UTC timestamp to backdate the order (must be within 7 days). |
 
             ```javascript
             Spectabas.ecommerce.addOrder({
@@ -527,6 +533,12 @@ defmodule SpectabasWeb.DocsLive do
               revenue: "149.98",
               currency: "USD"
             });
+
+            // Backdate an order (e.g. processing a delayed webhook)
+            Spectabas.ecommerce.addOrder({
+              order_id: "ORD-456",
+              revenue: "79.99"
+            }, { occurred_at: 1711900000 });
             ```
 
             ---
@@ -1442,6 +1454,7 @@ defmodule SpectabasWeb.DocsLive do
                   discount: order.discount,
                   visitor_id: conn.cookies["_sab"],
                   currency: "USD",
+                  occurred_at: DateTime.to_unix(order.completed_at),
                   items: Enum.map(order.line_items, fn item ->
                     %{name: item.product_name, price: item.unit_price, quantity: item.quantity}
                   end)
@@ -1460,6 +1473,7 @@ defmodule SpectabasWeb.DocsLive do
                 "order_id": "ORD-123",
                 "revenue": 99.99,
                 "visitor_id": "abc123...",
+                "occurred_at": 1711900000,
                 "items": [{"name": "Widget", "price": 49.99, "quantity": 2}]
               }'
             ```
