@@ -231,8 +231,14 @@ export const worldMapPlugin = {
   id: "worldMap",
 
   beforeDraw(chart, _args, options) {
-    const { ctx, chartArea } = chart
+    const { ctx, chartArea, scales } = chart
     if (!chartArea) return
+
+    // Use the chart's current scale ranges (supports zoom)
+    const xMin = scales.x ? scales.x.min : -180
+    const xMax = scales.x ? scales.x.max : 180
+    const yMin = scales.y ? scales.y.min : -90
+    const yMax = scales.y ? scales.y.max : 90
 
     const area = {
       left: chartArea.left,
@@ -246,17 +252,27 @@ export const worldMapPlugin = {
     const lineWidth = options.lineWidth ?? 0.5
     const highlight = options.highlight || {}
 
+    // Convert lon/lat to pixel using current scale ranges
+    function scaleToXY(lon, lat) {
+      const x = area.left + ((lon - xMin) / (xMax - xMin)) * area.width
+      const y = area.top + ((yMax - lat) / (yMax - yMin)) * area.height
+      return [x, y]
+    }
+
     ctx.save()
+    ctx.beginPath()
+    ctx.rect(area.left, area.top, area.width, area.height)
+    ctx.clip()
 
     for (const country of WORLD_MAP) {
       const countryFill = highlight[country.n] || fillColor
 
       for (const ring of country.p) {
         ctx.beginPath()
-        const [x0, y0] = lonLatToXY(ring[0][0], ring[0][1], area)
+        const [x0, y0] = scaleToXY(ring[0][0], ring[0][1])
         ctx.moveTo(x0, y0)
         for (let k = 1; k < ring.length; k++) {
-          const [x, y] = lonLatToXY(ring[k][0], ring[k][1], area)
+          const [x, y] = scaleToXY(ring[k][0], ring[k][1])
           ctx.lineTo(x, y)
         }
         ctx.closePath()
