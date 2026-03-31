@@ -7,7 +7,7 @@
   var site = script.getAttribute("data-id");
   if (!site) return;
 
-  var gdpr = script.getAttribute("data-gdpr") || "on";
+  var gdpr = script.getAttribute("data-gdpr") || "off";
   var xdSites = (script.getAttribute("data-xd") || "").split(",").filter(Boolean);
   var endpoint = script.src.replace(/\/assets\/v1\.js.*$/, "");
 

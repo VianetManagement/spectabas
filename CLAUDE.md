@@ -188,6 +188,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Tracking subdomain plug**: Blocks all UI routes on analytics subdomains, only allows `/c/*`, `/assets/v1.js`, `/health`
 - **Spam filter**: `Spectabas.Analytics.SpamFilter` maintains builtin + DB-stored spam domains, auto-excluded from Sources/Channels queries. Admin page at `/admin/spam-filter` for managing blocklist with auto-detection of suspicious referrer domains. Daily Oban worker (`SpamDetector`) scans for candidates.
 - **Pageview rate limiting**: Tracker uses sessionStorage to enforce 5-second minimum interval between pageviews for the same URL. Prevents overcounting from rapid refreshes, auto-refresh, or iframe reloads.
+- **Tracker GDPR default**: `data-gdpr` defaults to `"off"` (cookie-based). Sites needing fingerprint-only mode must explicitly set `data-gdpr="on"`.
 - **Ad blocker evasion**: Script at `/assets/v1.js`, beacon uses public_key not domain, endpoints obfuscated
 - **Cloudflare support**: Checks `CF-Connecting-IP` header before `x-forwarded-for`
 - **Sidebar layout**: All dashboard pages use `<.dashboard_layout>` from SidebarComponent

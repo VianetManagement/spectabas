@@ -380,12 +380,14 @@ defmodule SpectabasWeb.DocsLive do
             | Attribute | Values | Default | Description |
             |-----------|--------|---------|-------------|
             | `data-id` | string | required | Your site's public key |
-            | `data-gdpr` | "on" / "off" | "on" | GDPR mode (on = fingerprint, off = cookie) |
+            | `data-gdpr` | "on" / "off" | "off" | GDPR mode (on = fingerprint, off = cookie) |
             | `data-xd` | comma-separated domains | "" | Cross-domain tracking domains |
 
             ### GDPR Mode
 
-            **GDPR On (default):** Uses a fingerprint (hash of UA + screen + timezone + language) instead of cookies. No consent banner needed. IP addresses are anonymized before storage. Tracking parameters (utm, gclid, etc.) are stripped from URLs.
+            **GDPR Off (default):** Uses cookies for accurate visitor identification and UTM persistence. Most sites should use this mode.
+
+            **GDPR On:** Add `data-gdpr="on"` to use fingerprint-only identification (hash of UA + screen + timezone + language) instead of cookies. No consent banner needed. IP addresses are anonymized before storage. Tracking parameters (utm, gclid, etc.) are stripped from URLs.
 
             **GDPR Off:** Uses a persistent cookie (`_sab`, 2-year lifetime) for more accurate visitor identification. Requires user consent in EU/UK. Full IP addresses stored. UTM parameters preserved in session storage.
 
@@ -622,15 +624,18 @@ defmodule SpectabasWeb.DocsLive do
             | Attribute | Values | Default | Description |
             |-----------|--------|---------|-------------|
             | `data-id` | string | (required) | Your site's public key. Found in Site Settings. |
-            | `data-gdpr` | `"on"` / `"off"` | `"on"` | GDPR mode. `"on"` uses fingerprint-only identification (no cookies). `"off"` enables cookie-based visitor tracking and UTM persistence. |
+            | `data-gdpr` | `"on"` / `"off"` | `"off"` | GDPR mode. `"on"` uses fingerprint-only identification (no cookies). `"off"` enables cookie-based visitor tracking and UTM persistence. |
             | `data-xd` | comma-separated domains | (none) | Cross-domain tracking. List domains that share visitor identity (e.g. `"shop.example.com,blog.example.com"`). |
 
             ```html
-            <!-- Minimal (GDPR-on, no cross-domain) -->
+            <!-- Minimal (cookie-based, recommended) -->
             <script defer data-id="YOUR_KEY" src="https://b.example.com/assets/v1.js"></script>
 
-            <!-- GDPR-off with cross-domain tracking -->
-            <script defer data-id="YOUR_KEY" data-gdpr="off"
+            <!-- GDPR-on (fingerprint-only, no cookies) -->
+            <script defer data-id="YOUR_KEY" data-gdpr="on" src="https://b.example.com/assets/v1.js"></script>
+
+            <!-- With cross-domain tracking -->
+            <script defer data-id="YOUR_KEY"
               data-xd="shop.example.com,blog.example.com"
               src="https://b.example.com/assets/v1.js"></script>
             ```
