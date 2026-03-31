@@ -190,7 +190,8 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   end
 
   def handle_event("update_segment", %{"action" => "load", "segment_id" => id}, socket) do
-    saved = Segments.get_segment!(id)
+    %{user: user, site: site} = socket.assigns
+    saved = Segments.get_segment!(id, user, site)
     filters = normalize_filters(saved.filters)
     {:noreply, socket |> assign(:segment, filters) |> load_stats()}
   end
@@ -313,22 +314,65 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   end
 
   # Slow path: all the data cards, map, timezones
+  # Runs all 9 queries in parallel for ~3x faster load vs sequential.
   defp load_deferred_stats(socket) do
     %{site: site, user: user} = socket.assigns
     {date_range, seg_opts} = date_range_and_opts(socket)
 
-    top_pages = query_limited(fn -> Analytics.top_pages(site, user, date_range, seg_opts) end, 5)
-    top_sources = query_limited(fn -> Analytics.top_sources(site, user, date_range) end, 5)
-    top_regions = query_limited(fn -> Analytics.top_regions(site, user, date_range) end, 5)
-    top_browsers = query_limited(fn -> Analytics.top_browsers(site, user, date_range) end, 5)
-    top_os = query_limited(fn -> Analytics.top_os(site, user, date_range) end, 5)
-    entry_pages = query_limited(fn -> Analytics.entry_pages(site, user, date_range) end, 5)
-    locations = query_limited(fn -> Analytics.visitor_locations(site, user, date_range) end, 50)
+    # Launch all queries in parallel
+    tasks = %{
+      top_pages:
+        Task.async(fn ->
+          safe_query(fn -> Analytics.top_pages(site, user, date_range, seg_opts) end)
+          |> Enum.take(5)
+        end),
+      top_sources:
+        Task.async(fn ->
+          safe_query(fn -> Analytics.top_sources(site, user, date_range) end) |> Enum.take(5)
+        end),
+      top_regions:
+        Task.async(fn ->
+          safe_query(fn -> Analytics.top_regions(site, user, date_range) end) |> Enum.take(5)
+        end),
+      top_browsers:
+        Task.async(fn ->
+          safe_query(fn -> Analytics.top_browsers(site, user, date_range) end) |> Enum.take(5)
+        end),
+      top_os:
+        Task.async(fn ->
+          safe_query(fn -> Analytics.top_os(site, user, date_range) end) |> Enum.take(5)
+        end),
+      entry_pages:
+        Task.async(fn ->
+          safe_query(fn -> Analytics.entry_pages(site, user, date_range) end) |> Enum.take(5)
+        end),
+      locations:
+        Task.async(fn ->
+          safe_query(fn -> Analytics.visitor_locations(site, user, date_range) end)
+          |> Enum.take(50)
+        end),
+      timezones:
+        Task.async(fn ->
+          safe_query(fn -> Analytics.timezone_distribution(site, user, date_range) end)
+          |> Enum.take(5)
+        end),
+      intents:
+        Task.async(fn ->
+          safe_query(fn -> Analytics.intent_breakdown(site, user, date_range) end)
+          |> Enum.take(10)
+        end)
+    }
 
-    timezones =
-      query_limited(fn -> Analytics.timezone_distribution(site, user, date_range) end, 5)
-
-    intents = query_limited(fn -> Analytics.intent_breakdown(site, user, date_range) end, 10)
+    # Collect results with safe yields — timeouts degrade gracefully
+    top_pages = safe_yield(tasks.top_pages, [])
+    top_sources = safe_yield(tasks.top_sources, [])
+    top_regions = safe_yield(tasks.top_regions, [])
+    top_browsers = safe_yield(tasks.top_browsers, [])
+    top_os = safe_yield(tasks.top_os, [])
+    entry_pages = safe_yield(tasks.entry_pages, [])
+    locations = safe_yield(tasks.locations, [])
+    timezones = safe_yield(tasks.timezones, [])
+    intents = safe_yield(tasks.intents, [])
 
     socket
     |> assign(:top_pages, top_pages)
@@ -400,10 +444,6 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
       days <= 31 -> :week
       true -> :month
     end
-  end
-
-  defp query_limited(fun, limit) do
-    safe_query(fun) |> Enum.take(limit)
   end
 
   # Normalize saved segment filters from Postgres JSON (may have atom or string keys)

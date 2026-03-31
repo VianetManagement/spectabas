@@ -1281,7 +1281,7 @@ defmodule Spectabas.Analytics do
   def visitor_log(%Site{} = site, %User{} = user, date_range, opts) do
     date_range = ensure_date_range(date_range)
     seg = segment_sql(opts)
-    per_page = Keyword.get(opts, :per_page, 50)
+    per_page = opts |> Keyword.get(:per_page, 50) |> min(200) |> max(1)
     cursor = Keyword.get(opts, :cursor, nil)
 
     cursor_clause =
@@ -1320,7 +1320,7 @@ defmodule Spectabas.Analytics do
       GROUP BY visitor_id
       #{cursor_clause}
       ORDER BY last_seen DESC
-      LIMIT #{per_page}
+      LIMIT #{ClickHouse.param(per_page)}
       """
 
       case ClickHouse.query(sql) do

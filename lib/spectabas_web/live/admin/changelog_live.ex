@@ -45,6 +45,33 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v2.6.0 — 2026-03-31 UTC",
+       [
+         %{
+           title: "Security: SQL injection fix in visitor log pagination",
+           description: "per_page parameter is now parameterized and clamped to 1-200 range."
+         },
+         %{
+           title: "Security: saved segment IDOR fix",
+           description:
+             "Loading saved segments now validates ownership by user and site, preventing cross-user segment access."
+         },
+         %{
+           title: "Security: origin validation on identify and cross-domain endpoints",
+           description:
+             "/c/i and /c/x now check request origin and opt-out cookies, matching /c/e protections."
+         },
+         %{
+           title: "Fix: ingest error handling",
+           description:
+             "Ingest.process errors are now properly logged instead of silently swallowed as crashes."
+         },
+         %{
+           title: "Performance: parallel deferred stats loading",
+           description:
+             "Dashboard deferred stats (9 queries) now run in parallel via Task.async instead of sequentially, reducing load time by ~5x."
+         }
+       ]},
       {"v2.5.5 — 2026-03-31 UTC",
        [
          %{

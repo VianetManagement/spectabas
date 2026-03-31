@@ -40,8 +40,8 @@ defmodule Spectabas.Segments do
     end
   end
 
-  @doc "Get a saved segment by ID."
-  def get_segment!(id) do
-    Repo.get!(SavedSegment, id)
+  @doc "Get a saved segment by ID, scoped to the given user and site."
+  def get_segment!(id, user, site) do
+    Repo.get_by!(SavedSegment, id: id, user_id: user.id, site_id: site.id)
   end
 end

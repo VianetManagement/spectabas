@@ -37,8 +37,13 @@ defmodule SpectabasWeb.CollectController do
       conn = conn |> assign(:site, site) |> assign(:gdpr_mode, gdpr_mode)
 
       try do
-        {:ok, event} = Ingest.process(payload, conn)
-        IngestBuffer.push(event)
+        case Ingest.process(payload, conn) do
+          {:ok, event} ->
+            IngestBuffer.push(event)
+
+          other ->
+            Logger.warning("[Collect] Ingest.process failed: #{inspect(other)}")
+        end
       rescue
         e ->
           Logger.error("[Collect] Ingest.process crashed: #{Exception.message(e)}")
@@ -73,49 +78,77 @@ defmodule SpectabasWeb.CollectController do
   end
 
   def identify(conn, params) do
+    # Respect opt-out cookie
+    if conn.cookies[@optout_cookie] do
+      send_resp(conn, 204, "")
+    else
+      do_identify(conn, params)
+    end
+  end
+
+  defp do_identify(conn, params) do
     site =
       case resolve_site(conn, params) do
         {:ok, s} -> s
         _ -> nil
       end
 
-    if site do
-      visitor_id = params["vid"]
-      traits = Map.drop(params, ["vid"])
+    cond do
+      is_nil(site) ->
+        conn
+        |> put_status(404)
+        |> json(%{error: "site not found"})
 
-      case Visitors.identify(site.id, visitor_id, traits) do
-        {:ok, _visitor} -> send_resp(conn, 204, "")
-        {:error, _reason} -> send_resp(conn, 204, "")
-      end
-    else
-      conn
-      |> put_status(404)
-      |> json(%{error: "site not found"})
+      check_origin(conn, site) != :ok ->
+        send_resp(conn, 204, "")
+
+      true ->
+        visitor_id = params["vid"]
+        traits = Map.drop(params, ["vid"])
+
+        case Visitors.identify(site.id, visitor_id, traits) do
+          {:ok, _visitor} -> send_resp(conn, 204, "")
+          {:error, _reason} -> send_resp(conn, 204, "")
+        end
     end
   end
 
   def cross_domain(conn, params) do
+    # Respect opt-out cookie
+    if conn.cookies[@optout_cookie] do
+      send_resp(conn, 204, "")
+    else
+      do_cross_domain(conn, params)
+    end
+  end
+
+  defp do_cross_domain(conn, params) do
     site =
       case resolve_site(conn, params) do
         {:ok, s} -> s
         _ -> nil
       end
 
-    if site do
-      destination = params["destination"] || ""
-
-      if destination_allowed?(site, destination) do
-        token = Visitors.generate_xdomain_token(params["vid"])
-        json(conn, %{token: token})
-      else
+    cond do
+      is_nil(site) ->
         conn
-        |> put_status(403)
-        |> json(%{error: "destination not allowed"})
-      end
-    else
-      conn
-      |> put_status(404)
-      |> json(%{error: "site not found"})
+        |> put_status(404)
+        |> json(%{error: "site not found"})
+
+      check_origin(conn, site) != :ok ->
+        send_resp(conn, 204, "")
+
+      true ->
+        destination = params["destination"] || ""
+
+        if destination_allowed?(site, destination) do
+          token = Visitors.generate_xdomain_token(params["vid"])
+          json(conn, %{token: token})
+        else
+          conn
+          |> put_status(403)
+          |> json(%{error: "destination not allowed"})
+        end
     end
   end
 
@@ -184,8 +217,13 @@ defmodule SpectabasWeb.CollectController do
       case CollectPayload.validate(payload_params) do
         {:ok, payload} ->
           try do
-            {:ok, event} = Ingest.process(payload, conn)
-            IngestBuffer.push(event)
+            case Ingest.process(payload, conn) do
+              {:ok, event} ->
+                IngestBuffer.push(event)
+
+              other ->
+                Logger.warning("[Collect:pixel] Ingest.process failed: #{inspect(other)}")
+            end
           rescue
             e ->
               Logger.error("[Collect:pixel] Ingest.process crashed: #{Exception.message(e)}")

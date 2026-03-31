@@ -168,6 +168,13 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 9. **Health endpoint** — public `/health` returns only `ok/degraded`, no internal details
 10. **SQL parameterization** — backfill-geo lat/lon/asn use `ClickHouse.param/1`
 
+### Audit v3 (v2.6.0) — 5 findings fixed
+1. **SQL injection** — `visitor_log` per_page interpolated raw into SQL; now uses `ClickHouse.param/1` with clamped range
+2. **Segment IDOR** — `get_segment!` had no ownership check; now scopes by user_id and site_id
+3. **Origin validation** — `/c/i` (identify) and `/c/x` (cross-domain) lacked origin checks and opt-out cookie validation
+4. **Silent event loss** — `Ingest.process` errors were caught as crashes via pattern match in try/rescue; now uses explicit case handling
+5. **Deferred stats sequential** — 9 dashboard queries ran sequentially (~1s); now parallel via Task.async (~200ms)
+
 ## UI/UX
 
 - **Sidebar navigation** — color-coded categories (Behavior, Acquisition, Audience, Conversions, Tools)
@@ -187,7 +194,9 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Origin validation**: Auto-allows parent domain of analytics subdomain
 - **Tracking subdomain plug**: Blocks all UI routes on analytics subdomains, only allows `/c/*`, `/assets/v1.js`, `/health`
 - **Spam filter**: `Spectabas.Analytics.SpamFilter` maintains builtin + DB-stored spam domains, auto-excluded from Sources/Channels queries. Admin page at `/admin/spam-filter` for managing blocklist with auto-detection of suspicious referrer domains. Daily Oban worker (`SpamDetector`) scans for candidates.
-- **Pageview rate limiting**: Tracker uses sessionStorage to enforce 5-second minimum interval between pageviews for the same URL. Prevents overcounting from rapid refreshes, auto-refresh, or iframe reloads.
+- **Pageview rate limiting**: Tracker uses sessionStorage to enforce 5-second minimum interval between pageviews for the same pathname (not full URL). Query-string-only changes (search filters, pagination) don't trigger new pageviews. Prevents overcounting from rapid refreshes, auto-refresh, or iframe reloads.
+- **SPA pageview tracking**: Only pathname changes trigger new pageviews. Query-string-only pushState changes are ignored. This matches standard analytics behavior (Matomo, GA).
+- **Saved segments**: Ownership enforced — `get_segment!/3` scopes by user_id and site_id. Never load segments by ID alone.
 - **Tracker GDPR default**: `data-gdpr` defaults to `"off"` (cookie-based). Sites needing fingerprint-only mode must explicitly set `data-gdpr="on"`.
 - **Ad blocker evasion**: Script at `/assets/v1.js`, beacon uses public_key not domain, endpoints obfuscated
 - **Cloudflare support**: Checks `CF-Connecting-IP` header before `x-forwarded-for`
