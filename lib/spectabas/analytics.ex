@@ -242,12 +242,12 @@ defmodule Spectabas.Analytics do
       sql = """
       SELECT
         url_path,
-        count() AS pageviews,
-        uniq(visitor_id) AS unique_visitors,
-        round(avg(duration_s), 0) AS avg_duration
+        countIf(event_type = 'pageview') AS pageviews,
+        uniqIf(visitor_id, event_type = 'pageview') AS unique_visitors,
+        round(avgIf(duration_s, event_type = 'duration' AND duration_s > 0), 0) AS avg_duration
       FROM events
       WHERE site_id = #{ClickHouse.param(site.id)}
-        AND event_type = 'pageview'
+        AND event_type IN ('pageview', 'duration')
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
         AND ip_is_bot = 0

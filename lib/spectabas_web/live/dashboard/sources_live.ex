@@ -5,6 +5,7 @@ defmodule SpectabasWeb.Dashboard.SourcesLive do
 
   alias Spectabas.{Accounts, Sites, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
+  import Spectabas.TypeHelpers
   import SpectabasWeb.Dashboard.DateHelpers
 
   @tabs [
@@ -186,10 +187,10 @@ defmodule SpectabasWeb.Dashboard.SourcesLive do
                   </.link>
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right">
-                  {Map.get(source, "pageviews", 0)}
+                  {format_number(to_num(Map.get(source, "pageviews", 0)))}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right">
-                  {Map.get(source, "sessions", 0)}
+                  {format_number(to_num(Map.get(source, "sessions", 0)))}
                 </td>
               </tr>
             </tbody>

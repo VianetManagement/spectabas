@@ -201,14 +201,14 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
                       {Map.get(page, "url_path", "/")}
                     </.link>
                   </td>
-                  <td class="px-6 py-4 text-sm text-gray-900 text-right">
-                    {Map.get(page, "pageviews", 0)}
+                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                    {format_number(to_num(Map.get(page, "pageviews", 0)))}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                    {format_number(to_num(Map.get(page, "unique_visitors", 0)))}
                   </td>
                   <td class="px-6 py-4 text-sm text-gray-900 text-right">
-                    {Map.get(page, "unique_visitors", 0)}
-                  </td>
-                  <td class="px-6 py-4 text-sm text-gray-900 text-right">
-                    {format_duration(Map.get(page, "avg_duration", 0))}
+                    {format_duration(to_num(Map.get(page, "avg_duration", 0)))}
                   </td>
                   <td class="px-6 py-4 text-sm text-right tabular-nums">
                     <.speed_pill ms={to_num(page["page_load"])} />

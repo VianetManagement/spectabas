@@ -174,7 +174,7 @@ defmodule SpectabasWeb.Dashboard.NetworkLive do
                   {Map.get(asn, "ip_org", "Unknown")}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right">
-                  {Map.get(asn, "hits", 0)}
+                  {format_number(to_num(Map.get(asn, "hits", 0)))}
                 </td>
                 <td class="px-6 py-4 text-center">
                   <span
