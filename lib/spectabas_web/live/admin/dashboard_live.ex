@@ -111,6 +111,15 @@ defmodule SpectabasWeb.Admin.DashboardLive do
             Live buffer, cache, flush tasks, BEAM memory, ClickHouse throughput
           </p>
         </.link>
+        <.link
+          navigate={~p"/admin/api-logs"}
+          class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+        >
+          <h3 class="font-semibold text-gray-900 mb-1">API Access Logs</h3>
+          <p class="text-sm text-gray-500">
+            API call history, usage by endpoint and key, status codes
+          </p>
+        </.link>
         <a
           href="/health/diag"
           class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
