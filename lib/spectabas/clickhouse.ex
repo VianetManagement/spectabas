@@ -271,7 +271,8 @@ defmodule Spectabas.ClickHouse do
     Req.new(
       base_url: url,
       params: [database: db, user: user, password: pass],
-      headers: [{"content-type", "application/x-www-form-urlencoded"}]
+      headers: [{"content-type", "application/x-www-form-urlencoded"}],
+      finch: Spectabas.ClickHouseFinch
     )
     |> Req.merge(@default_opts)
   end

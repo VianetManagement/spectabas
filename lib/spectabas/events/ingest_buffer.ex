@@ -2,7 +2,10 @@ defmodule Spectabas.Events.IngestBuffer do
   @moduledoc """
   GenServer that buffers incoming events and flushes them to ClickHouse
   in batches. Flush triggers on timer (configurable, default 500ms) or
-  when batch size is reached (configurable, default 200).
+  when batch size is reached (configurable, default 1000).
+
+  Flushes are performed asynchronously via Task.Supervisor so the GenServer
+  is never blocked on ClickHouse I/O and can continue accepting events.
 
   On ClickHouse failure, events are sent to DeadLetter.
   On success, broadcasts to PubSub "site:{id}" topics grouped by site_id.
@@ -17,7 +20,7 @@ defmodule Spectabas.Events.IngestBuffer do
   alias Spectabas.Events.{EventSchema, DeadLetter}
 
   @default_flush_interval_ms 500
-  @default_max_batch_size 200
+  @default_max_batch_size 1_000
   @max_buffer_size 10_000
   @soft_limit 5_000
   @ets_table :ingest_buffer_counter
@@ -99,7 +102,7 @@ defmodule Spectabas.Events.IngestBuffer do
       update_ets_size(new_size)
 
       if new_size >= state.max_batch do
-        do_flush(new_buffer)
+        async_flush(new_buffer)
         update_ets_size(0)
         {:noreply, %{state | buffer: [], size: 0}}
       else
@@ -110,15 +113,18 @@ defmodule Spectabas.Events.IngestBuffer do
 
   @impl true
   def handle_call(:flush, _from, state) do
-    do_flush(state.buffer)
-    update_ets_size(0)
+    if state.size > 0 do
+      async_flush(state.buffer)
+      update_ets_size(0)
+    end
+
     {:reply, :ok, %{state | buffer: [], size: 0}}
   end
 
   @impl true
   def handle_info(:tick, state) do
     if state.size > 0 do
-      do_flush(state.buffer)
+      async_flush(state.buffer)
       update_ets_size(0)
       schedule_flush(state.flush_interval)
       {:noreply, %{state | buffer: [], size: 0}}
@@ -128,7 +134,17 @@ defmodule Spectabas.Events.IngestBuffer do
     end
   end
 
-  # Graceful shutdown — flush remaining buffer before dying
+  # Ignore Task.Supervisor DOWN messages from completed flush tasks
+  def handle_info({ref, _result}, state) when is_reference(ref) do
+    Process.demonitor(ref, [:flush])
+    {:noreply, state}
+  end
+
+  def handle_info({:DOWN, _ref, :process, _pid, _reason}, state) do
+    {:noreply, state}
+  end
+
+  # Graceful shutdown — flush remaining buffer synchronously before dying
   @impl true
   def terminate(reason, state) do
     if state.size > 0 do
@@ -136,6 +152,7 @@ defmodule Spectabas.Events.IngestBuffer do
         "[IngestBuffer] Shutting down (#{reason}), flushing #{state.size} buffered events"
       )
 
+      # Synchronous flush on shutdown to ensure events are not lost
       do_flush(state.buffer)
     end
 
@@ -150,6 +167,15 @@ defmodule Spectabas.Events.IngestBuffer do
 
   defp update_ets_size(size) do
     :ets.insert(@ets_table, {:size, size})
+  end
+
+  # Spawn an async task to flush events — GenServer continues immediately
+  defp async_flush([]), do: :ok
+
+  defp async_flush(events) do
+    Task.Supervisor.start_child(Spectabas.IngestFlushSupervisor, fn ->
+      do_flush(events)
+    end)
   end
 
   defp do_flush([]), do: :ok

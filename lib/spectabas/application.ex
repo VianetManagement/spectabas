@@ -6,6 +6,8 @@ defmodule Spectabas.Application do
 
   @impl true
   def start(_type, _args) do
+    Spectabas.Visitors.Cache.init()
+
     children =
       [
         SpectabasWeb.Telemetry,
@@ -13,6 +15,11 @@ defmodule Spectabas.Application do
         {DNSCluster, query: Application.get_env(:spectabas, :dns_cluster_query) || :ignore},
         {Phoenix.PubSub, name: Spectabas.PubSub},
         {Finch, name: Spectabas.Finch},
+        {Finch,
+         name: Spectabas.ClickHouseFinch,
+         pools: %{
+           :default => [size: 25, count: 4]
+         }},
         {Oban, Application.fetch_env!(:spectabas, Oban)},
         Spectabas.GeoIP,
         Spectabas.IPEnricher.ASNBlocklist,
@@ -38,7 +45,11 @@ defmodule Spectabas.Application do
     cfg = Application.get_env(:spectabas, Spectabas.ClickHouse, [])
 
     if cfg[:url] && cfg[:url] != "" && !String.contains?(cfg[:url], "placeholder") do
-      [Spectabas.ClickHouse, Spectabas.Events.IngestBuffer]
+      [
+        Spectabas.ClickHouse,
+        {Task.Supervisor, name: Spectabas.IngestFlushSupervisor},
+        Spectabas.Events.IngestBuffer
+      ]
     else
       Logger.warning("ClickHouse not configured — analytics features disabled")
       []

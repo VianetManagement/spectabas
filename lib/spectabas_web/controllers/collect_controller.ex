@@ -32,6 +32,7 @@ defmodule SpectabasWeb.CollectController do
          {:ok, payload} <- CollectPayload.validate(params),
          {:ok, site} <- resolve_site(conn, params),
          :ok <- check_origin(conn, site),
+         :ok <- check_site_rate_limit(site),
          false <- Sites.ip_blocked?(site, client_ip(conn)) do
       gdpr_mode = if site.gdpr_mode == "off", do: :off, else: :on
       conn = conn |> assign(:site, site) |> assign(:gdpr_mode, gdpr_mode)
@@ -61,6 +62,11 @@ defmodule SpectabasWeb.CollectController do
       {:error, :origin_not_allowed} ->
         Logger.warning("[Collect] Origin not allowed")
         send_resp(conn, 204, "")
+
+      {:error, :site_rate_limited} ->
+        conn
+        |> put_resp_header("retry-after", "60")
+        |> send_resp(429, "")
 
       {:error, changeset} ->
         conn
@@ -242,6 +248,17 @@ defmodule SpectabasWeb.CollectController do
   end
 
   # --- Private helpers ---
+
+  # Per-site rate limit: 1000 events/sec (60,000 per minute window)
+  @site_rate_limit 60_000
+  @site_rate_window 60_000
+
+  defp check_site_rate_limit(site) do
+    case Hammer.check_rate("site:#{site.id}", @site_rate_window, @site_rate_limit) do
+      {:allow, _count} -> :ok
+      {:deny, _limit} -> {:error, :site_rate_limited}
+    end
+  end
 
   defp check_content_length(conn) do
     case Plug.Conn.get_req_header(conn, "content-length") do

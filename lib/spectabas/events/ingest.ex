@@ -18,7 +18,7 @@ defmodule Spectabas.Events.Ingest do
   import Ecto.Query
   alias Spectabas.Events.{CollectPayload, IntentClassifier}
   alias Spectabas.{Sessions, Visitors}
-  alias Spectabas.Visitors.Visitor
+  alias Spectabas.Visitors.{Cache, Visitor}
 
   @tracking_params ~w(utm_source utm_medium utm_campaign utm_term utm_content
                       gclid fbclid msclkid mc_cid mc_eid _ga _gl)
@@ -230,72 +230,105 @@ defmodule Spectabas.Events.Ingest do
             true -> generate_fingerprint(ua_string, client_ip)
           end
 
-        case Visitors.get_or_create(site.id, fingerprint, :on, client_ip) do
-          {:ok, visitor} -> visitor.id
-          _ -> fingerprint
+        # ETS cache check — avoid Postgres round-trip for repeat visitors
+        case Cache.get(site.id, fingerprint) do
+          nil ->
+            case Visitors.get_or_create(site.id, fingerprint, :on, client_ip) do
+              {:ok, visitor} ->
+                Cache.put(site.id, fingerprint, visitor.id)
+                visitor.id
+
+              _ ->
+                fingerprint
+            end
+
+          cached_id ->
+            cached_id
         end
 
       # GDPR-off with fingerprint as vid (cookies blocked) — treat like GDPR-on
       gdpr_mode == :off and is_binary(payload.vid) and String.starts_with?(payload.vid, "fp_") ->
-        case Visitors.get_or_create(site.id, payload.vid, :on, client_ip) do
-          {:ok, visitor} -> visitor.id
-          _ -> payload.vid
-        end
-
-      # GDPR-off with cookie UUID as vid
-      gdpr_mode == :off and payload.vid != nil and payload.vid != "" ->
-        fp = if payload._fp && payload._fp != "", do: payload._fp, else: nil
-
-        # Step 1: Try to find visitor by this cookie_id
-        existing_by_cookie =
-          Spectabas.Repo.one(
-            from(v in Visitor,
-              where: v.site_id == ^site.id and v.cookie_id == ^payload.vid,
-              limit: 1
-            )
-          )
-
-        if existing_by_cookie do
-          # Cookie matches an existing visitor — return visit
-          if fp &&
-               (existing_by_cookie.fingerprint_id == nil or
-                  existing_by_cookie.fingerprint_id == "") do
-            existing_by_cookie
-            |> Visitor.changeset(%{fingerprint_id: fp})
-            |> Spectabas.Repo.update()
-          end
-
-          Visitors.get_or_create(site.id, payload.vid, :off, client_ip)
-          existing_by_cookie.id
-        else
-          # New cookie — check fingerprint for dedup
-          existing_by_fp = if fp, do: Visitors.find_by_fingerprint(site.id, fp), else: nil
-
-          if existing_by_fp do
-            # Fingerprint match! Update existing visitor with new cookie_id
-            existing_by_fp
-            |> Visitor.changeset(%{
-              cookie_id: payload.vid,
-              last_seen_at: DateTime.utc_now() |> DateTime.truncate(:second),
-              last_ip: client_ip
-            })
-            |> Spectabas.Repo.update()
-
-            existing_by_fp.id
-          else
-            # Truly new visitor
-            case Visitors.get_or_create(site.id, payload.vid, :off, client_ip) do
+        case Cache.get(site.id, payload.vid) do
+          nil ->
+            case Visitors.get_or_create(site.id, payload.vid, :on, client_ip) do
               {:ok, visitor} ->
-                if fp do
-                  visitor |> Visitor.changeset(%{fingerprint_id: fp}) |> Spectabas.Repo.update()
-                end
-
+                Cache.put(site.id, payload.vid, visitor.id)
                 visitor.id
 
               _ ->
                 payload.vid
             end
-          end
+
+          cached_id ->
+            cached_id
+        end
+
+      # GDPR-off with cookie UUID as vid
+      gdpr_mode == :off and payload.vid != nil and payload.vid != "" ->
+        # ETS cache check — most common path for returning GDPR-off visitors
+        case Cache.get(site.id, payload.vid) do
+          cached_id when not is_nil(cached_id) ->
+            cached_id
+
+          nil ->
+            fp = if payload._fp && payload._fp != "", do: payload._fp, else: nil
+
+            # Step 1: Try to find visitor by this cookie_id
+            existing_by_cookie =
+              Spectabas.Repo.one(
+                from(v in Visitor,
+                  where: v.site_id == ^site.id and v.cookie_id == ^payload.vid,
+                  limit: 1
+                )
+              )
+
+            if existing_by_cookie do
+              # Cookie matches an existing visitor — return visit
+              if fp &&
+                   (existing_by_cookie.fingerprint_id == nil or
+                      existing_by_cookie.fingerprint_id == "") do
+                existing_by_cookie
+                |> Visitor.changeset(%{fingerprint_id: fp})
+                |> Spectabas.Repo.update()
+              end
+
+              Visitors.get_or_create(site.id, payload.vid, :off, client_ip)
+              Cache.put(site.id, payload.vid, existing_by_cookie.id)
+              existing_by_cookie.id
+            else
+              # New cookie — check fingerprint for dedup
+              existing_by_fp = if fp, do: Visitors.find_by_fingerprint(site.id, fp), else: nil
+
+              if existing_by_fp do
+                # Fingerprint match! Update existing visitor with new cookie_id
+                existing_by_fp
+                |> Visitor.changeset(%{
+                  cookie_id: payload.vid,
+                  last_seen_at: DateTime.utc_now() |> DateTime.truncate(:second),
+                  last_ip: client_ip
+                })
+                |> Spectabas.Repo.update()
+
+                Cache.put(site.id, payload.vid, existing_by_fp.id)
+                existing_by_fp.id
+              else
+                # Truly new visitor
+                case Visitors.get_or_create(site.id, payload.vid, :off, client_ip) do
+                  {:ok, visitor} ->
+                    if fp do
+                      visitor
+                      |> Visitor.changeset(%{fingerprint_id: fp})
+                      |> Spectabas.Repo.update()
+                    end
+
+                    Cache.put(site.id, payload.vid, visitor.id)
+                    visitor.id
+
+                  _ ->
+                    payload.vid
+                end
+              end
+            end
         end
 
       # Fallback: no vid (defensive)
@@ -307,29 +340,41 @@ defmodule Spectabas.Events.Ingest do
             do: payload._fp,
             else: generate_fingerprint(ua_string, client_ip)
 
-        case Visitors.find_by_fingerprint(site.id, fp) do
-          %{id: existing_id, cookie_id: existing_cookie} when not is_nil(existing_cookie) ->
-            # Found an existing visitor with this fingerprint — reuse their cookie_id
-            case Visitors.get_or_create(site.id, existing_cookie, :off, client_ip) do
-              {:ok, visitor} -> visitor.id
-              _ -> existing_id
-            end
+        case Cache.get(site.id, fp) do
+          cached_id when not is_nil(cached_id) ->
+            cached_id
 
-          _ ->
-            # No fingerprint match — create a new visitor
-            cookie_id = Ecto.UUID.generate()
+          nil ->
+            case Visitors.find_by_fingerprint(site.id, fp) do
+              %{id: existing_id, cookie_id: existing_cookie} when not is_nil(existing_cookie) ->
+                # Found an existing visitor with this fingerprint — reuse their cookie_id
+                case Visitors.get_or_create(site.id, existing_cookie, :off, client_ip) do
+                  {:ok, visitor} ->
+                    Cache.put(site.id, fp, visitor.id)
+                    visitor.id
 
-            case Visitors.get_or_create(site.id, cookie_id, :off, client_ip) do
-              {:ok, visitor} ->
-                # Store the fingerprint on the new visitor for future dedup
-                visitor
-                |> Visitor.changeset(%{fingerprint_id: fp})
-                |> Spectabas.Repo.update()
-
-                visitor.id
+                  _ ->
+                    Cache.put(site.id, fp, existing_id)
+                    existing_id
+                end
 
               _ ->
-                cookie_id
+                # No fingerprint match — create a new visitor
+                cookie_id = Ecto.UUID.generate()
+
+                case Visitors.get_or_create(site.id, cookie_id, :off, client_ip) do
+                  {:ok, visitor} ->
+                    # Store the fingerprint on the new visitor for future dedup
+                    visitor
+                    |> Visitor.changeset(%{fingerprint_id: fp})
+                    |> Spectabas.Repo.update()
+
+                    Cache.put(site.id, fp, visitor.id)
+                    visitor.id
+
+                  _ ->
+                    cookie_id
+                end
             end
         end
 
@@ -337,9 +382,19 @@ defmodule Spectabas.Events.Ingest do
       true ->
         fingerprint = generate_fingerprint(ua_string, client_ip)
 
-        case Visitors.get_or_create(site.id, fingerprint, :on, client_ip) do
-          {:ok, visitor} -> visitor.id
-          _ -> fingerprint
+        case Cache.get(site.id, fingerprint) do
+          nil ->
+            case Visitors.get_or_create(site.id, fingerprint, :on, client_ip) do
+              {:ok, visitor} ->
+                Cache.put(site.id, fingerprint, visitor.id)
+                visitor.id
+
+              _ ->
+                fingerprint
+            end
+
+          cached_id ->
+            cached_id
         end
     end
   end
