@@ -12,10 +12,16 @@ defmodule SpectabasWeb.CollectController do
     require Logger
 
     # Respect opt-out cookie
-    if conn.cookies[@optout_cookie] do
-      send_resp(conn, 204, "")
-    else
-      do_create(conn, params)
+    cond do
+      conn.cookies[@optout_cookie] ->
+        send_resp(conn, 204, "")
+
+      IngestBuffer.full?() ->
+        Logger.warning("[Collect] IngestBuffer backpressure — rejecting event with 503")
+        send_resp(conn, 503, "")
+
+      true ->
+        do_create(conn, params)
     end
   end
 

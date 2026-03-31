@@ -45,6 +45,39 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v2.5.1 — 2026-03-28 UTC",
+       [
+         %{
+           title: "Performance: parallel realtime queries",
+           description:
+             "realtime dashboard now runs all 3 ClickHouse queries concurrently using Task.async with 10s timeout and safe fallbacks."
+         },
+         %{
+           title: "Performance: response compression",
+           description:
+             "dynamic HTML and JSON responses are now gzip-compressed for clients that support it, reducing bandwidth for dashboard pages."
+         },
+         %{
+           title: "Performance: keyset pagination for visitor log",
+           description:
+             "replaced OFFSET-based pagination with cursor/keyset pagination for stable, efficient browsing of large visitor sets."
+         },
+         %{
+           title: "Performance: bounded email report queries",
+           description:
+             "email report subscription lookups now pre-filter in SQL (excluding recently-sent subscriptions) to reduce database load."
+         },
+         %{
+           title: "Performance: streamed data exports",
+           description:
+             "large CSV exports now fetch and write data in 10,000-row chunks instead of loading all rows into memory at once."
+         },
+         %{
+           title: "Reliability: ingest buffer backpressure",
+           description:
+             "collection endpoint now returns 503 when the ingest buffer exceeds 5,000 events, preventing memory exhaustion under extreme load. Tracker handles 503 gracefully."
+         }
+       ]},
       {"v2.5.0 — 2026-03-30 UTC",
        [
          %{

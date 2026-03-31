@@ -1281,9 +1281,17 @@ defmodule Spectabas.Analytics do
   def visitor_log(%Site{} = site, %User{} = user, date_range, opts) do
     date_range = ensure_date_range(date_range)
     seg = segment_sql(opts)
-    page = Keyword.get(opts, :page, 1)
     per_page = Keyword.get(opts, :per_page, 50)
-    offset = (page - 1) * per_page
+    cursor = Keyword.get(opts, :cursor, nil)
+
+    cursor_clause =
+      case cursor do
+        %{"last_seen" => ts, "visitor_id" => vid} when is_binary(ts) and is_binary(vid) ->
+          "HAVING (last_seen, visitor_id) < (#{ClickHouse.param(ts)}, #{ClickHouse.param(vid)})"
+
+        _ ->
+          ""
+      end
 
     with :ok <- authorize(site, user) do
       sql = """
@@ -1310,11 +1318,27 @@ defmodule Spectabas.Analytics do
         AND ip_is_bot = 0
         #{seg}
       GROUP BY visitor_id
+      #{cursor_clause}
       ORDER BY last_seen DESC
-      LIMIT #{per_page} OFFSET #{offset}
+      LIMIT #{per_page}
       """
 
-      ClickHouse.query(sql)
+      case ClickHouse.query(sql) do
+        {:ok, rows} ->
+          next_cursor =
+            case List.last(rows) do
+              nil ->
+                nil
+
+              last_row ->
+                %{"last_seen" => last_row["last_seen"], "visitor_id" => last_row["visitor_id"]}
+            end
+
+          {:ok, rows, next_cursor}
+
+        error ->
+          error
+      end
     end
   end
 

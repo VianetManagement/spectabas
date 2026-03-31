@@ -56,20 +56,40 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
   defp load_data(socket) do
     site = socket.assigns.site
 
+    tasks = [
+      Task.async(fn -> Analytics.realtime_visitors(site) end),
+      Task.async(fn -> Analytics.realtime_visitors_grouped(site) end),
+      Task.async(fn -> Analytics.realtime_events(site) end)
+    ]
+
+    results =
+      tasks
+      |> Task.yield_many(10_000)
+      |> Enum.map(fn {task, result} ->
+        case result do
+          {:ok, val} ->
+            val
+
+          nil ->
+            Task.shutdown(task, :brutal_kill)
+            :error
+        end
+      end)
+
     active_count =
-      case Analytics.realtime_visitors(site) do
+      case Enum.at(results, 0) do
         {:ok, count} -> count
         _ -> 0
       end
 
     grouped =
-      case Analytics.realtime_visitors_grouped(site) do
+      case Enum.at(results, 1) do
         {:ok, rows} -> rows
         _ -> []
       end
 
     raw_events =
-      case Analytics.realtime_events(site) do
+      case Enum.at(results, 2) do
         {:ok, events} -> events
         _ -> []
       end

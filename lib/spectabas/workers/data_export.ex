@@ -14,13 +14,14 @@ defmodule Spectabas.Workers.DataExport do
 
   @max_rows 1_000_000
 
+  @chunk_size 10_000
+
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"export_id" => export_id}}) do
     export = Repo.get!(Export, export_id) |> Repo.preload([:site, :user])
 
     with :ok <- verify_access(export),
-         {:ok, rows} <- fetch_data(export),
-         {:ok, file_path} <- write_csv(export, rows) do
+         {:ok, file_path} <- stream_csv(export) do
       Reports.mark_export_complete(export, file_path)
       Logger.info("[DataExport] Export #{export_id} completed: #{file_path}")
       :ok
@@ -43,63 +44,94 @@ defmodule Spectabas.Workers.DataExport do
     end
   end
 
-  defp fetch_data(%Export{site: site, date_from: date_from, date_to: date_to}) do
-    sql = """
-    SELECT
-      timestamp,
-      event_type,
-      url_path,
-      url_host,
-      referrer_domain,
-      utm_source,
-      utm_medium,
-      utm_campaign,
-      country,
-      city,
-      device_type,
-      browser,
-      os,
-      visitor_id,
-      session_id
-    FROM events
-    WHERE site_id = #{ClickHouse.param(site.id)}
-      AND timestamp >= #{ClickHouse.param(format_datetime(date_from))}
-      AND timestamp <= #{ClickHouse.param(format_datetime(date_to))}
-    ORDER BY timestamp ASC
-    LIMIT #{@max_rows}
-    """
+  @csv_headers [
+    "timestamp",
+    "event_type",
+    "url_path",
+    "url_host",
+    "referrer_domain",
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "country",
+    "city",
+    "device_type",
+    "browser",
+    "os",
+    "visitor_id",
+    "session_id"
+  ]
 
-    ClickHouse.query(sql)
-  end
-
-  defp write_csv(%Export{id: export_id}, rows) do
+  defp stream_csv(%Export{id: export_id, site: site, date_from: date_from, date_to: date_to}) do
     file_path = Path.join(System.tmp_dir!(), "spectabas_export_#{export_id}.csv")
 
-    headers = [
-      "timestamp",
-      "event_type",
-      "url_path",
-      "url_host",
-      "referrer_domain",
-      "utm_source",
-      "utm_medium",
-      "utm_campaign",
-      "country",
-      "city",
-      "device_type",
-      "browser",
-      "os",
-      "visitor_id",
-      "session_id"
-    ]
+    # Write header
+    header_csv = [@csv_headers] |> CSV.encode() |> Enum.join()
+    File.write!(file_path, header_csv)
 
-    csv_content =
-      [headers | Enum.map(rows, fn row -> Enum.map(headers, &Map.get(row, &1, "")) end)]
-      |> CSV.encode()
-      |> Enum.join()
+    # Fetch and write in chunks
+    fetch_and_write_chunks(file_path, site, date_from, date_to, 0, 0)
+  end
 
-    File.write!(file_path, csv_content)
-    {:ok, file_path}
+  defp fetch_and_write_chunks(file_path, site, date_from, date_to, offset, total_written) do
+    if total_written >= @max_rows do
+      {:ok, file_path}
+    else
+      sql = """
+      SELECT
+        timestamp,
+        event_type,
+        url_path,
+        url_host,
+        referrer_domain,
+        utm_source,
+        utm_medium,
+        utm_campaign,
+        country,
+        city,
+        device_type,
+        browser,
+        os,
+        visitor_id,
+        session_id
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_to))}
+      ORDER BY timestamp ASC
+      LIMIT #{@chunk_size} OFFSET #{offset}
+      """
+
+      case ClickHouse.query(sql) do
+        {:ok, []} ->
+          {:ok, file_path}
+
+        {:ok, rows} ->
+          chunk_csv =
+            rows
+            |> Enum.map(fn row -> Enum.map(@csv_headers, &Map.get(row, &1, "")) end)
+            |> CSV.encode()
+            |> Enum.join()
+
+          File.write!(file_path, chunk_csv, [:append])
+
+          if length(rows) < @chunk_size do
+            {:ok, file_path}
+          else
+            fetch_and_write_chunks(
+              file_path,
+              site,
+              date_from,
+              date_to,
+              offset + @chunk_size,
+              total_written + length(rows)
+            )
+          end
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
   end
 
   defp format_datetime(nil), do: "1970-01-01 00:00:00"

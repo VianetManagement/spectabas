@@ -139,8 +139,12 @@ defmodule Spectabas.Reports do
 
   @doc "Find subscriptions due for sending right now."
   def list_due_subscriptions(utc_now) do
+    # Pre-filter: exclude subscriptions sent in the last hour (can't be due again so soon)
+    one_hour_ago = DateTime.add(utc_now, -3600, :second)
+
     from(s in EmailReportSubscription,
       where: s.frequency != :off,
+      where: is_nil(s.last_sent_at) or s.last_sent_at < ^one_hour_ago,
       preload: [:user, :site]
     )
     |> Repo.all()

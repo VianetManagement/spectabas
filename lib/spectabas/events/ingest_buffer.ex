@@ -19,6 +19,8 @@ defmodule Spectabas.Events.IngestBuffer do
   @default_flush_interval_ms 500
   @default_max_batch_size 200
   @max_buffer_size 10_000
+  @soft_limit 5_000
+  @ets_table :ingest_buffer_counter
 
   # --- Public API ---
 
@@ -36,12 +38,32 @@ defmodule Spectabas.Events.IngestBuffer do
     GenServer.call(__MODULE__, :flush)
   end
 
+  @doc "Returns true if the buffer is over the soft limit and should reject new events."
+  def full? do
+    case :ets.lookup(@ets_table, :size) do
+      [{:size, n}] -> n >= @soft_limit
+      _ -> false
+    end
+  end
+
+  @doc "Returns the current buffer size."
+  def buffer_size do
+    case :ets.lookup(@ets_table, :size) do
+      [{:size, n}] -> n
+      _ -> 0
+    end
+  end
+
   # --- Callbacks ---
 
   @impl true
   def init(_opts) do
     # Trap exits so we can flush remaining buffer on shutdown
     Process.flag(:trap_exit, true)
+
+    # Create ETS table for lock-free size checks from the hot path
+    :ets.new(@ets_table, [:named_table, :public, :set])
+    :ets.insert(@ets_table, {:size, 0})
 
     cfg = Application.get_env(:spectabas, __MODULE__, [])
     flush_interval = cfg[:flush_interval_ms] || @default_flush_interval_ms
@@ -74,9 +96,11 @@ defmodule Spectabas.Events.IngestBuffer do
     else
       new_buffer = [event | state.buffer]
       new_size = state.size + 1
+      update_ets_size(new_size)
 
       if new_size >= state.max_batch do
         do_flush(new_buffer)
+        update_ets_size(0)
         {:noreply, %{state | buffer: [], size: 0}}
       else
         {:noreply, %{state | buffer: new_buffer, size: new_size}}
@@ -87,6 +111,7 @@ defmodule Spectabas.Events.IngestBuffer do
   @impl true
   def handle_call(:flush, _from, state) do
     do_flush(state.buffer)
+    update_ets_size(0)
     {:reply, :ok, %{state | buffer: [], size: 0}}
   end
 
@@ -94,6 +119,7 @@ defmodule Spectabas.Events.IngestBuffer do
   def handle_info(:tick, state) do
     if state.size > 0 do
       do_flush(state.buffer)
+      update_ets_size(0)
       schedule_flush(state.flush_interval)
       {:noreply, %{state | buffer: [], size: 0}}
     else
@@ -120,6 +146,10 @@ defmodule Spectabas.Events.IngestBuffer do
 
   defp schedule_flush(interval) do
     Process.send_after(self(), :tick, interval)
+  end
+
+  defp update_ets_size(size) do
+    :ets.insert(@ets_table, {:size, size})
   end
 
   defp do_flush([]), do: :ok

@@ -34,7 +34,9 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
        |> assign(:site, site)
        |> assign(:user, user)
        |> assign(:date_range, "7d")
-       |> assign(:page, 1)
+       |> assign(:cursor, nil)
+       |> assign(:cursor_stack, [])
+       |> assign(:next_cursor, nil)
        |> assign(:segment, segment)
        |> assign(:ip_search, ip_search)
        |> assign(:ip_results, nil)
@@ -45,16 +47,38 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
 
   @impl true
   def handle_event("change_range", %{"range" => range}, socket) do
-    {:noreply, socket |> assign(:date_range, range) |> assign(:page, 1) |> load_data()}
+    {:noreply,
+     socket
+     |> assign(:date_range, range)
+     |> assign(:cursor, nil)
+     |> assign(:cursor_stack, [])
+     |> assign(:next_cursor, nil)
+     |> load_data()}
   end
 
   def handle_event("next_page", _params, socket) do
-    {:noreply, socket |> assign(:page, socket.assigns.page + 1) |> load_data()}
+    # Push current cursor onto stack for back navigation, advance to next_cursor
+    stack = [socket.assigns.cursor | socket.assigns.cursor_stack]
+
+    {:noreply,
+     socket
+     |> assign(:cursor_stack, stack)
+     |> assign(:cursor, socket.assigns.next_cursor)
+     |> load_data()}
   end
 
   def handle_event("prev_page", _params, socket) do
-    page = max(socket.assigns.page - 1, 1)
-    {:noreply, socket |> assign(:page, page) |> load_data()}
+    case socket.assigns.cursor_stack do
+      [prev_cursor | rest] ->
+        {:noreply,
+         socket
+         |> assign(:cursor, prev_cursor)
+         |> assign(:cursor_stack, rest)
+         |> load_data()}
+
+      [] ->
+        {:noreply, socket}
+    end
   end
 
   def handle_event("search_ip", %{"ip" => ip}, socket) do
@@ -89,19 +113,22 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
   end
 
   defp load_data(socket) do
-    %{site: site, user: user, date_range: range, page: page, segment: segment} = socket.assigns
+    %{site: site, user: user, date_range: range, cursor: cursor, segment: segment} =
+      socket.assigns
 
-    visitors =
+    {visitors, next_cursor} =
       case Analytics.visitor_log(site, user, range_to_period(range),
-             page: page,
+             cursor: cursor,
              per_page: 30,
              segment: segment
            ) do
-        {:ok, rows} -> rows
-        _ -> []
+        {:ok, rows, next_cur} -> {rows, next_cur}
+        _ -> {[], nil}
       end
 
-    assign(socket, :visitors, visitors)
+    socket
+    |> assign(:visitors, visitors)
+    |> assign(:next_cursor, next_cursor)
   end
 
   @impl true
@@ -368,15 +395,15 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
 
         <div class="flex items-center justify-between mt-4">
           <button
-            :if={@page > 1}
+            :if={@cursor_stack != []}
             phx-click="prev_page"
             class="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50"
           >
             &larr; Previous
           </button>
-          <span class="text-sm text-gray-500">Page {@page}</span>
+          <span :if={@cursor_stack == []} />
           <button
-            :if={length(@visitors) == 30}
+            :if={@next_cursor != nil and length(@visitors) == 30}
             phx-click="next_page"
             class="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50"
           >
