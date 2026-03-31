@@ -180,18 +180,27 @@ defmodule Spectabas.Events.IngestBuffer do
     if rows != [] do
       Logger.info("[IngestBuffer] Flushing #{length(rows)} events")
 
-      case ClickHouse.insert("events", rows) do
-        :ok ->
-          broadcast_events(events)
-          flush_ecommerce_events(events)
-          Logger.info("[IngestBuffer] Flushed #{length(rows)} events OK")
+      try do
+        case ClickHouse.insert("events", rows) do
+          :ok ->
+            broadcast_events(events)
+            flush_ecommerce_events(events)
+            Logger.info("[IngestBuffer] Flushed #{length(rows)} events OK")
 
-        {:error, reason} ->
+          {:error, reason} ->
+            Logger.error(
+              "[IngestBuffer] ClickHouse insert FAILED: #{inspect(String.slice(to_string(reason), 0, 500))}"
+            )
+
+            DeadLetter.enqueue(rows, reason)
+        end
+      rescue
+        e ->
           Logger.error(
-            "[IngestBuffer] ClickHouse insert FAILED: #{inspect(String.slice(to_string(reason), 0, 500))}"
+            "[IngestBuffer] ClickHouse insert CRASHED: #{Exception.message(e) |> String.slice(0, 300)}"
           )
 
-          DeadLetter.enqueue(rows, reason)
+          DeadLetter.enqueue(rows, Exception.message(e))
       end
     end
   end
@@ -199,7 +208,7 @@ defmodule Spectabas.Events.IngestBuffer do
   defp flush_ecommerce_events(events) do
     ecom_events =
       events
-      |> Enum.filter(&(&1[:event_type] == "ecommerce_order"))
+      |> Enum.filter(&(&1[:event_type] in ["ecommerce_order", "ecommerce_item"]))
       |> Enum.map(fn event ->
         props = event[:props] || %{}
 
@@ -220,13 +229,20 @@ defmodule Spectabas.Events.IngestBuffer do
       end)
 
     if ecom_events != [] do
-      case ClickHouse.insert("ecommerce_events", ecom_events) do
-        :ok ->
-          Logger.info("[IngestBuffer] Wrote #{length(ecom_events)} ecommerce events")
+      try do
+        case ClickHouse.insert("ecommerce_events", ecom_events) do
+          :ok ->
+            Logger.info("[IngestBuffer] Wrote #{length(ecom_events)} ecommerce events")
 
-        {:error, reason} ->
+          {:error, reason} ->
+            Logger.warning(
+              "[IngestBuffer] Ecommerce insert failed: #{inspect(reason) |> String.slice(0, 200)}"
+            )
+        end
+      rescue
+        e ->
           Logger.warning(
-            "[IngestBuffer] Ecommerce insert failed: #{inspect(reason) |> String.slice(0, 200)}"
+            "[IngestBuffer] Ecommerce insert crashed: #{Exception.message(e) |> String.slice(0, 200)}"
           )
       end
     end

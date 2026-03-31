@@ -145,8 +145,10 @@
 
   // Public API
   window.Spectabas = {
-    track: function (name, props) {
-      sendEvent("custom", { n: name, p: props || {} });
+    track: function (name, props, opts) {
+      var extra = { n: name, p: props || {} };
+      if (opts && opts.occurred_at) extra._oa = opts.occurred_at;
+      sendEvent("custom", extra);
     },
     identify: function (traits) {
       send(endpoint + "/c/i", {
@@ -158,11 +160,15 @@
       setCookie("_sab_optout", "1", 63072000);
     },
     ecommerce: {
-      addOrder: function (order) {
-        sendEvent("ecommerce_order", { p: order });
+      addOrder: function (order, opts) {
+        var extra = { p: order };
+        if (opts && opts.occurred_at) extra._oa = opts.occurred_at;
+        sendEvent("ecommerce_order", extra);
       },
-      addItem: function (item) {
-        sendEvent("ecommerce_item", { p: item });
+      addItem: function (item, opts) {
+        var extra = { p: item };
+        if (opts && opts.occurred_at) extra._oa = opts.occurred_at;
+        sendEvent("ecommerce_item", extra);
       },
     },
   };
@@ -187,11 +193,13 @@
       _bot: botHints ? 1 : 0,
       _hi: hadInteraction ? 1 : 0,
       _fp: browserFp,
+      _oa: Math.floor(Date.now() / 1000),
     };
 
     if (extra) {
       if (extra.n) payload.n = extra.n;
       if (extra.p) payload.p = extra.p;
+      if (extra._oa) payload._oa = extra._oa;
     }
 
     // Add UTMs from sessionStorage

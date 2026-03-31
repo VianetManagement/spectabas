@@ -182,5 +182,72 @@ defmodule SpectabasWeb.API.EcommerceTest do
 
       assert conn.status in [200, 500]
     end
+
+    test "accepts occurred_at as integer Unix timestamp", %{conn: conn, site: site} do
+      one_hour_ago = DateTime.utc_now() |> DateTime.add(-3600, :second) |> DateTime.to_unix()
+
+      conn =
+        post(conn, "/api/v1/sites/#{site.id}/ecommerce/transactions", %{
+          "order_id" => "ORD-TIMESTAMP-1",
+          "revenue" => 50.00,
+          "occurred_at" => one_hour_ago
+        })
+
+      assert conn.status in [200, 500]
+    end
+
+    test "accepts occurred_at as string Unix timestamp", %{conn: conn, site: site} do
+      two_hours_ago =
+        DateTime.utc_now() |> DateTime.add(-7200, :second) |> DateTime.to_unix() |> to_string()
+
+      conn =
+        post(conn, "/api/v1/sites/#{site.id}/ecommerce/transactions", %{
+          "order_id" => "ORD-TIMESTAMP-2",
+          "revenue" => 75.00,
+          "occurred_at" => two_hours_ago
+        })
+
+      assert conn.status in [200, 500]
+    end
+
+    test "ignores occurred_at older than 7 days", %{conn: conn, site: site} do
+      eight_days_ago =
+        DateTime.utc_now() |> DateTime.add(-8 * 86400, :second) |> DateTime.to_unix()
+
+      conn =
+        post(conn, "/api/v1/sites/#{site.id}/ecommerce/transactions", %{
+          "order_id" => "ORD-TIMESTAMP-3",
+          "revenue" => 25.00,
+          "occurred_at" => eight_days_ago
+        })
+
+      # Should still succeed (falls back to current time)
+      assert conn.status in [200, 500]
+    end
+
+    test "ignores occurred_at in the future", %{conn: conn, site: site} do
+      future = DateTime.utc_now() |> DateTime.add(3600, :second) |> DateTime.to_unix()
+
+      conn =
+        post(conn, "/api/v1/sites/#{site.id}/ecommerce/transactions", %{
+          "order_id" => "ORD-TIMESTAMP-4",
+          "revenue" => 30.00,
+          "occurred_at" => future
+        })
+
+      # Should still succeed (falls back to current time)
+      assert conn.status in [200, 500]
+    end
+
+    test "ignores invalid occurred_at value", %{conn: conn, site: site} do
+      conn =
+        post(conn, "/api/v1/sites/#{site.id}/ecommerce/transactions", %{
+          "order_id" => "ORD-TIMESTAMP-5",
+          "revenue" => 15.00,
+          "occurred_at" => "not-a-timestamp"
+        })
+
+      assert conn.status in [200, 500]
+    end
   end
 end

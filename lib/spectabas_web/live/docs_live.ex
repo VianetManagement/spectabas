@@ -420,7 +420,7 @@ defmodule SpectabasWeb.DocsLive do
 
             ---
 
-            ### `Spectabas.track(name, props)`
+            ### `Spectabas.track(name, props, opts)`
 
             Send a custom event. Custom events appear in your dashboard under **Goals** and can be used in **Funnels**.
 
@@ -428,6 +428,7 @@ defmodule SpectabasWeb.DocsLive do
             |-----------|------|----------|-------------|
             | `name` | string | yes | Event name. Use lowercase with underscores (e.g. `signup_complete`). Names starting with `_` are reserved for internal events. |
             | `props` | object | no | Key-value pairs of string properties. All values are converted to strings server-side. Max 20 properties per event. |
+            | `opts` | object | no | Options. `{ occurred_at: unixTimestamp }` to backdate the event (UTC seconds, must be within 7 days). |
 
             ```javascript
             // Basic event
@@ -1423,6 +1424,7 @@ defmodule SpectabasWeb.DocsLive do
             | `discount` | number | no | Discount applied |
             | `currency` | string | no | Currency code (defaults to site currency) |
             | `items` | array | no | List of items: `[{"name": "...", "price": 9.99, "quantity": 1}]` |
+            | `occurred_at` | integer | no | Unix timestamp (UTC seconds) for when the order occurred. Must be within the last 7 days. Defaults to current time. |
 
             ### Example (Elixir/Phoenix)
 

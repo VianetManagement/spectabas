@@ -83,6 +83,8 @@ defmodule SpectabasWeb.API.StatsController do
   """
   def identify(conn, %{"site_id" => site_id} = params) do
     with {:ok, site, _user} <- authorize_site(conn, site_id) do
+      # Note: occurred_at is accepted but not currently used for identify
+      _occurred_at = params["occurred_at"]
       visitor_id = params["visitor_id"]
 
       if is_nil(visitor_id) or visitor_id == "" do
@@ -136,7 +138,7 @@ defmodule SpectabasWeb.API.StatsController do
       if is_nil(order_id) or order_id == "" do
         conn |> put_status(400) |> json(%{error: "order_id required"})
       else
-        now = DateTime.utc_now()
+        now = parse_occurred_at(params["occurred_at"])
 
         row = %{
           "site_id" => site.id,
@@ -169,6 +171,38 @@ defmodule SpectabasWeb.API.StatsController do
       error -> handle_error(conn, error)
     end
   end
+
+  # Parse optional occurred_at Unix timestamp (UTC seconds).
+  # Falls back to now if missing, invalid, or outside the allowed window
+  # (last 7 days to 60 seconds in the future).
+  defp parse_occurred_at(nil), do: DateTime.utc_now()
+
+  defp parse_occurred_at(ts) when is_integer(ts) do
+    case DateTime.from_unix(ts) do
+      {:ok, dt} ->
+        now = DateTime.utc_now()
+        week_ago = DateTime.add(now, -7, :day)
+
+        if DateTime.compare(dt, week_ago) == :gt and
+             DateTime.compare(dt, DateTime.add(now, 60, :second)) != :gt do
+          dt
+        else
+          now
+        end
+
+      _ ->
+        DateTime.utc_now()
+    end
+  end
+
+  defp parse_occurred_at(ts) when is_binary(ts) do
+    case Integer.parse(ts) do
+      {n, _} -> parse_occurred_at(n)
+      :error -> DateTime.utc_now()
+    end
+  end
+
+  defp parse_occurred_at(_), do: DateTime.utc_now()
 
   defp parse_amount(nil), do: 0
   defp parse_amount(n) when is_number(n), do: n

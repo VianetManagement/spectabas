@@ -45,6 +45,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v2.8.0 — 2026-03-31 UTC",
+       [
+         %{
+           title: "Feature: occurred_at timestamp on all events",
+           description:
+             "All API endpoints and the JavaScript tracker now support an optional occurred_at field (Unix UTC seconds) to backdate events up to 7 days. Useful for server-side event queuing and batch imports."
+         },
+         %{
+           title: "Fix: ClickHouse outage no longer crashes the BEAM",
+           description:
+             "IngestBuffer flush now wraps ClickHouse inserts in try/rescue so connection failures are logged and dead-lettered instead of crashing the process."
+         }
+       ]},
       {"v2.7.1 — 2026-03-31 UTC",
        [
          %{

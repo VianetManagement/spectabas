@@ -47,7 +47,7 @@ defmodule Spectabas.Events.Ingest do
     {_url_parsed, url_path, url_host, url_scheme} = normalize_url(payload.u, gdpr_mode)
     referrer_domain = parse_referrer_domain(payload.r)
 
-    now = DateTime.utc_now()
+    now = resolve_timestamp(payload._oa)
 
     event =
       %{
@@ -442,6 +442,28 @@ defmodule Spectabas.Events.Ingest do
       _ -> ""
     end
   end
+
+  # Use client-provided occurred_at timestamp if valid (within last 7 days, not in future)
+  defp resolve_timestamp(nil), do: DateTime.utc_now()
+
+  defp resolve_timestamp(oa) when is_integer(oa) do
+    now = DateTime.utc_now()
+    seven_days_ago = DateTime.add(now, -7, :day)
+
+    case DateTime.from_unix(oa) do
+      {:ok, dt} ->
+        if DateTime.compare(dt, seven_days_ago) != :lt and DateTime.compare(dt, now) != :gt do
+          dt
+        else
+          now
+        end
+
+      _ ->
+        now
+    end
+  end
+
+  defp resolve_timestamp(_), do: DateTime.utc_now()
 
   defp extract_utms(url, payload) do
     url_params =
