@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v2.5.2 — 2026-03-28 UTC",
+       [
+         %{
+           title: "Fix: page load times on Top Pages",
+           description:
+             "RUM vitals query now caps page_load at 60s (filtering corrupt data from old NaN bug) and returns data for the most-visited pages instead of the slowest, so load times actually appear next to top pages."
+         }
+       ]},
       {"v2.5.1 — 2026-03-28 UTC",
        [
          %{

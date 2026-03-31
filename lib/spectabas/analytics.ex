@@ -1836,12 +1836,16 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
-      # Simple query — just get median page_load per URL from _rum events
+      # Median page_load per URL from _rum events, ordered by sample count
+      # so we return data for the most-visited pages (matching top_pages).
+      # Cap at 60000ms to filter corrupt data from old NaN bug.
       sql = """
       SELECT
         url_path,
         round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'page_load')),
-          toFloat64OrZero(JSONExtractString(properties, 'page_load')) > 0)) AS page_load
+          toFloat64OrZero(JSONExtractString(properties, 'page_load')) > 0
+          AND toFloat64OrZero(JSONExtractString(properties, 'page_load')) <= 60000)) AS page_load,
+        count() AS samples
       FROM events
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND event_name = '_rum'
@@ -1849,8 +1853,8 @@ defmodule Spectabas.Analytics do
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
       GROUP BY url_path
       HAVING page_load > 0
-      ORDER BY page_load DESC
-      LIMIT 50
+      ORDER BY samples DESC
+      LIMIT 100
       """
 
       ClickHouse.query(sql)
