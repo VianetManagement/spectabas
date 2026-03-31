@@ -108,10 +108,10 @@ defmodule SpectabasWeb.Dashboard.AttributionLive do
                   {format_number(to_num(ch["visitors"]))}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {ch["first_touch"]}
+                  {format_number(to_num(ch["first_touch"]))}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {ch["last_touch"]}
+                  {format_number(to_num(ch["last_touch"]))}
                 </td>
               </tr>
             </tbody>

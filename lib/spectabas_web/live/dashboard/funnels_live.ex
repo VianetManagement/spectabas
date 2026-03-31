@@ -5,6 +5,7 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
 
   alias Spectabas.{Accounts, Sites, Goals, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
+  import Spectabas.TypeHelpers
 
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
@@ -230,7 +231,7 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
                     {Map.get(step, "name", "Step #{idx + 1}")}
                   </span>
                   <span class="text-sm font-medium text-gray-900">
-                    {Map.get(step, "visitors", 0)}
+                    {format_number(to_num(Map.get(step, "visitors", 0)))}
                   </span>
                 </div>
                 <div class="w-full bg-gray-200 rounded-full h-2">

@@ -108,7 +108,7 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
                   {format_number(to_num(s["searches"]))}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {s["unique_searchers"]}
+                  {format_number(to_num(s["unique_searchers"]))}
                 </td>
               </tr>
             </tbody>

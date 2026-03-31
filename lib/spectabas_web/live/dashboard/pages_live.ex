@@ -91,17 +91,24 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
     pages = safe_query(fn -> Analytics.top_pages(site, user, period) end)
 
     # Fetch per-page RUM vitals summary and merge into page rows
+    # Use normalized paths for matching (lowercase, no trailing slash)
     vitals_rows = safe_query(fn -> Analytics.rum_vitals_summary(site, user, period) end)
-    vitals_map = Map.new(vitals_rows, fn r -> {r["url_path"], r} end)
+
+    vitals_map =
+      Map.new(vitals_rows, fn r ->
+        path = (r["url_path"] || "/") |> String.downcase() |> String.trim_trailing("/")
+        path = if path == "", do: "/", else: path
+        {path, r}
+      end)
 
     pages =
       Enum.map(pages, fn page ->
-        path = page["url_path"]
+        path = (page["url_path"] || "/") |> String.downcase() |> String.trim_trailing("/")
+        path = if path == "", do: "/", else: path
         rum = Map.get(vitals_map, path, %{})
 
         Map.merge(page, %{
-          "page_load" => rum["page_load"],
-          "lcp" => rum["lcp"]
+          "page_load" => rum["page_load"]
         })
       end)
 

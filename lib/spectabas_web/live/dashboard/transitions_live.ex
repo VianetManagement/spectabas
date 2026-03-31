@@ -162,7 +162,7 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
                   {row["prev_page"]}
                 </span>
                 <span class="text-sm font-medium text-gray-600 tabular-nums">
-                  {row["transitions"]}
+                  {format_number(to_num(row["transitions"]))}
                 </span>
               </div>
             </div>
@@ -188,7 +188,7 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
                   {row["next_page"]}
                 </span>
                 <span class="text-sm font-medium text-gray-600 tabular-nums">
-                  {row["transitions"]}
+                  {format_number(to_num(row["transitions"]))}
                 </span>
               </div>
             </div>
