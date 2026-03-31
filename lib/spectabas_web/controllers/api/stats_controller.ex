@@ -111,6 +111,107 @@ defmodule SpectabasWeb.API.StatsController do
     end
   end
 
+  @doc """
+  Record an ecommerce transaction from your server.
+
+  POST /api/v1/sites/:site_id/ecommerce/transactions
+  Body: {
+    "order_id": "ORD-123",
+    "revenue": 99.99,
+    "visitor_id": "<_sab cookie value>",  (optional)
+    "subtotal": 89.99,                    (optional)
+    "tax": 7.20,                          (optional)
+    "shipping": 2.80,                     (optional)
+    "discount": 0,                        (optional)
+    "currency": "USD",                    (optional, defaults to site currency)
+    "items": [                            (optional)
+      {"name": "Widget", "price": 29.99, "quantity": 3}
+    ]
+  }
+  """
+  def record_transaction(conn, %{"site_id" => site_id} = params) do
+    with {:ok, site, _user} <- authorize_site(conn, site_id) do
+      order_id = params["order_id"]
+
+      if is_nil(order_id) or order_id == "" do
+        conn |> put_status(400) |> json(%{error: "order_id required"})
+      else
+        now = DateTime.utc_now()
+
+        row = %{
+          "site_id" => site.id,
+          "visitor_id" => params["visitor_id"] || "",
+          "session_id" => params["session_id"] || "",
+          "order_id" => order_id,
+          "revenue" => parse_amount(params["revenue"]),
+          "subtotal" => parse_amount(params["subtotal"]),
+          "tax" => parse_amount(params["tax"]),
+          "shipping" => parse_amount(params["shipping"]),
+          "discount" => parse_amount(params["discount"]),
+          "currency" => params["currency"] || site.currency || "USD",
+          "items" => Jason.encode!(params["items"] || []),
+          "timestamp" => Calendar.strftime(now, "%Y-%m-%d %H:%M:%S")
+        }
+
+        case Spectabas.ClickHouse.insert("ecommerce_events", [row]) do
+          :ok ->
+            json(conn, %{ok: true, order_id: order_id})
+
+          {:error, reason} ->
+            Logger.warning(
+              "[API] Ecommerce insert failed: #{inspect(reason) |> String.slice(0, 200)}"
+            )
+
+            conn |> put_status(500) |> json(%{error: "failed to record transaction"})
+        end
+      end
+    else
+      error -> handle_error(conn, error)
+    end
+  end
+
+  defp parse_amount(nil), do: 0
+  defp parse_amount(n) when is_number(n), do: n
+
+  defp parse_amount(n) when is_binary(n) do
+    case Float.parse(n) do
+      {f, _} -> f
+      :error -> 0
+    end
+  end
+
+  defp parse_amount(_), do: 0
+
+  def ecommerce_stats(conn, %{"site_id" => site_id} = params) do
+    with {:ok, site, user} <- authorize_site(conn, site_id),
+         date_range <- parse_date_range(params),
+         {:ok, stats} <- Analytics.ecommerce_stats(site, user, date_range) do
+      json(conn, %{data: stats})
+    else
+      error -> handle_error(conn, error)
+    end
+  end
+
+  def ecommerce_products(conn, %{"site_id" => site_id} = params) do
+    with {:ok, site, user} <- authorize_site(conn, site_id),
+         date_range <- parse_date_range(params),
+         {:ok, data} <- Analytics.ecommerce_top_products(site, user, date_range) do
+      json(conn, %{data: data})
+    else
+      error -> handle_error(conn, error)
+    end
+  end
+
+  def ecommerce_orders(conn, %{"site_id" => site_id} = params) do
+    with {:ok, site, user} <- authorize_site(conn, site_id),
+         date_range <- parse_date_range(params),
+         {:ok, data} <- Analytics.ecommerce_orders(site, user, date_range) do
+      json(conn, %{data: data})
+    else
+      error -> handle_error(conn, error)
+    end
+  end
+
   # --- Shared error handler ---
 
   defp handle_error(conn, {:error, :not_found}) do

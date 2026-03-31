@@ -6,6 +6,7 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
   alias Spectabas.{Accounts, Sites, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
   import SpectabasWeb.Dashboard.DateHelpers
+  import Spectabas.TypeHelpers
 
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
@@ -38,22 +39,23 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
 
   defp load_ecommerce(socket) do
     %{site: site, user: user, date_range: range} = socket.assigns
+    period = range_to_period(range)
 
     stats =
-      case Analytics.ecommerce_stats(site, user, range_to_period(range)) do
-        {:ok, data} ->
-          data
-
-        _ ->
-          %{
-            total_revenue: Decimal.new(0),
-            total_orders: 0,
-            avg_order_value: Decimal.new(0),
-            top_products: []
-          }
+      case Analytics.ecommerce_stats(site, user, period) do
+        {:ok, data} -> data
+        _ -> %{"total_orders" => 0, "total_revenue" => 0, "avg_order_value" => 0}
       end
 
-    assign(socket, :ecommerce, stats)
+    products =
+      case Analytics.ecommerce_top_products(site, user, period) do
+        {:ok, rows} -> rows
+        _ -> []
+      end
+
+    socket
+    |> assign(:ecommerce, stats)
+    |> assign(:top_products, products)
   end
 
   @impl true
@@ -106,17 +108,19 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
           <div class="bg-white rounded-lg shadow p-6">
             <dt class="text-sm font-medium text-gray-500">Total Revenue</dt>
             <dd class="mt-1 text-3xl font-bold text-gray-900">
-              {@site.currency} {format_money(@ecommerce.total_revenue)}
+              {@site.currency} {format_money(@ecommerce["total_revenue"])}
             </dd>
           </div>
           <div class="bg-white rounded-lg shadow p-6">
             <dt class="text-sm font-medium text-gray-500">Orders</dt>
-            <dd class="mt-1 text-3xl font-bold text-gray-900">{@ecommerce.total_orders}</dd>
+            <dd class="mt-1 text-3xl font-bold text-gray-900">
+              {format_number(to_num(@ecommerce["total_orders"]))}
+            </dd>
           </div>
           <div class="bg-white rounded-lg shadow p-6">
             <dt class="text-sm font-medium text-gray-500">Avg Order Value</dt>
             <dd class="mt-1 text-3xl font-bold text-gray-900">
-              {@site.currency} {format_money(@ecommerce.avg_order_value)}
+              {@site.currency} {format_money(@ecommerce["avg_order_value"])}
             </dd>
           </div>
         </div>
@@ -140,16 +144,16 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
-              <tr :if={Map.get(@ecommerce, :top_products, []) == []}>
+              <tr :if={@top_products == []}>
                 <td colspan="3" class="px-6 py-8 text-center text-gray-500">No product data yet.</td>
               </tr>
-              <tr :for={product <- Map.get(@ecommerce, :top_products, [])} class="hover:bg-gray-50">
-                <td class="px-6 py-4 text-sm text-gray-900">{Map.get(product, "name", "Unknown")}</td>
-                <td class="px-6 py-4 text-sm text-gray-900 text-right">
-                  {Map.get(product, "quantity", 0)}
+              <tr :for={product <- @top_products} class="hover:bg-gray-50">
+                <td class="px-6 py-4 text-sm text-gray-900">{product["name"] || "Unknown"}</td>
+                <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                  {format_number(to_num(product["quantity"]))}
                 </td>
-                <td class="px-6 py-4 text-sm text-gray-900 text-right">
-                  {@site.currency} {format_money(Map.get(product, "revenue", 0))}
+                <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                  {@site.currency} {format_money(product["revenue"])}
                 </td>
               </tr>
             </tbody>
@@ -162,5 +166,13 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
 
   defp format_money(%Decimal{} = d), do: Decimal.round(d, 2) |> Decimal.to_string()
   defp format_money(n) when is_number(n), do: :erlang.float_to_binary(n / 1, decimals: 2)
+
+  defp format_money(n) when is_binary(n) do
+    case Float.parse(n) do
+      {f, _} -> :erlang.float_to_binary(f, decimals: 2)
+      :error -> "0.00"
+    end
+  end
+
   defp format_money(_), do: "0.00"
 end

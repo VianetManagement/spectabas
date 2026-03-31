@@ -1044,6 +1044,71 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  def ecommerce_top_products(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      site_currency = site.currency || "USD"
+
+      sql = """
+      SELECT
+        item.1 AS name,
+        sum(item.2) AS quantity,
+        sum(item.3) AS revenue
+      FROM ecommerce_events
+      ARRAY JOIN JSONExtractArrayRaw(items, '') AS raw_item
+      CROSS JOIN (
+        SELECT
+          JSONExtractString(raw_item, 'name') AS item_1,
+          toUInt32OrZero(JSONExtractString(raw_item, 'quantity')) AS item_2,
+          toDecimal64OrZero(JSONExtractString(raw_item, 'price'), 2) *
+            toUInt32OrZero(JSONExtractString(raw_item, 'quantity')) AS item_3
+      ) AS item
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND (currency = #{ClickHouse.param(site_currency)} OR currency = '')
+        AND item.1 != ''
+      GROUP BY name
+      ORDER BY revenue DESC
+      LIMIT 50
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  def ecommerce_orders(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      site_currency = site.currency || "USD"
+
+      sql = """
+      SELECT
+        order_id,
+        visitor_id,
+        revenue,
+        subtotal,
+        tax,
+        shipping,
+        discount,
+        currency,
+        items,
+        timestamp
+      FROM ecommerce_events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND (currency = #{ClickHouse.param(site_currency)} OR currency = '')
+      ORDER BY timestamp DESC
+      LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
   @doc """
   All events for a specific visitor_id, ordered by timestamp.
   """

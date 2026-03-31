@@ -45,6 +45,24 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v2.7.1 — 2026-03-31 UTC",
+       [
+         %{
+           title: "Fix: ecommerce dashboard crash",
+           description:
+             "Fixed internal server error caused by string vs atom key mismatch, missing top products query, and format_money not handling string values."
+         },
+         %{
+           title: "API: ecommerce read + write endpoints",
+           description:
+             "GET stats, products, orders at /api/v1/sites/:id/ecommerce/*. POST transactions at /api/v1/sites/:id/ecommerce/transactions for server-side order recording."
+         },
+         %{
+           title: "Fix: ecommerce_order events now write to ecommerce_events table",
+           description:
+             "IngestBuffer now extracts ecommerce_order events from the batch and writes them to the ecommerce_events ClickHouse table alongside the main events table."
+         }
+       ]},
       {"v2.7.0 — 2026-03-31 UTC",
        [
          %{

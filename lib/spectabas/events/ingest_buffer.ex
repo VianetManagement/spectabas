@@ -183,6 +183,7 @@ defmodule Spectabas.Events.IngestBuffer do
       case ClickHouse.insert("events", rows) do
         :ok ->
           broadcast_events(events)
+          flush_ecommerce_events(events)
           Logger.info("[IngestBuffer] Flushed #{length(rows)} events OK")
 
         {:error, reason} ->
@@ -194,6 +195,54 @@ defmodule Spectabas.Events.IngestBuffer do
       end
     end
   end
+
+  defp flush_ecommerce_events(events) do
+    ecom_events =
+      events
+      |> Enum.filter(&(&1[:event_type] == "ecommerce_order"))
+      |> Enum.map(fn event ->
+        props = event[:props] || %{}
+
+        %{
+          "site_id" => event[:site_id],
+          "visitor_id" => event[:visitor_id] || "",
+          "session_id" => event[:session_id] || "",
+          "order_id" => props["order_id"] || props[:order_id] || "",
+          "revenue" => parse_decimal(props["revenue"] || props[:revenue]),
+          "subtotal" => parse_decimal(props["subtotal"] || props[:subtotal]),
+          "tax" => parse_decimal(props["tax"] || props[:tax]),
+          "shipping" => parse_decimal(props["shipping"] || props[:shipping]),
+          "discount" => parse_decimal(props["discount"] || props[:discount]),
+          "currency" => props["currency"] || props[:currency] || "USD",
+          "items" => Jason.encode!(props["items"] || props[:items] || []),
+          "timestamp" => event[:timestamp] |> Calendar.strftime("%Y-%m-%d %H:%M:%S")
+        }
+      end)
+
+    if ecom_events != [] do
+      case ClickHouse.insert("ecommerce_events", ecom_events) do
+        :ok ->
+          Logger.info("[IngestBuffer] Wrote #{length(ecom_events)} ecommerce events")
+
+        {:error, reason} ->
+          Logger.warning(
+            "[IngestBuffer] Ecommerce insert failed: #{inspect(reason) |> String.slice(0, 200)}"
+          )
+      end
+    end
+  end
+
+  defp parse_decimal(nil), do: 0
+  defp parse_decimal(n) when is_number(n), do: n
+
+  defp parse_decimal(n) when is_binary(n) do
+    case Float.parse(n) do
+      {f, _} -> f
+      :error -> 0
+    end
+  end
+
+  defp parse_decimal(_), do: 0
 
   defp broadcast_events(events) do
     events
