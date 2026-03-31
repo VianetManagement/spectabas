@@ -12,11 +12,12 @@ defmodule Spectabas.Health do
     end
   end
 
-  @doc "Minimal public status — no internal details"
+  @doc "Minimal public status — no internal details. Postgres is required, ClickHouse is not (it starts async)."
   def status do
-    pg = check_postgres()
-    ch = check_clickhouse()
-    if pg == :ok and ch == :ok, do: "ok", else: "degraded"
+    case check_postgres() do
+      :ok -> "ok"
+      _ -> "degraded"
+    end
   end
 
   @doc "Detailed status for authenticated admin endpoints only"

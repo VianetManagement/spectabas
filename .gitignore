@@ -41,3 +41,6 @@ npm-debug.log
 # UA Inspector database files
 /priv/ua_inspector/
 
+# Claude Code worktrees
+.claude/worktrees/
+
