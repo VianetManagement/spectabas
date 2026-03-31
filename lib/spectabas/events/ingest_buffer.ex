@@ -144,9 +144,26 @@ defmodule Spectabas.Events.IngestBuffer do
     {:noreply, state}
   end
 
-  # Graceful shutdown — flush remaining buffer synchronously before dying
+  # Graceful shutdown — wait for in-flight flushes, then flush remaining buffer
   @impl true
   def terminate(reason, state) do
+    # Wait for any in-flight async flush tasks to complete (up to 5s)
+    in_flight = Task.Supervisor.children(Spectabas.IngestFlushSupervisor)
+
+    if length(in_flight) > 0 do
+      Logger.info("[IngestBuffer] Waiting for #{length(in_flight)} in-flight flushes...")
+
+      Enum.each(in_flight, fn pid ->
+        ref = Process.monitor(pid)
+
+        receive do
+          {:DOWN, ^ref, :process, ^pid, _} -> :ok
+        after
+          5_000 -> :ok
+        end
+      end)
+    end
+
     if state.size > 0 do
       Logger.info(
         "[IngestBuffer] Shutting down (#{reason}), flushing #{state.size} buffered events"
