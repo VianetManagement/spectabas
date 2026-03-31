@@ -153,7 +153,7 @@ defmodule SpectabasWeb.Dashboard.EntryExitLive do
                   {format_number(to_num(row["unique_visitors"]))}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {row[count_key(@tab)]}
+                  {format_number(to_num(row[count_key(@tab)]))}
                 </td>
               </tr>
             </tbody>

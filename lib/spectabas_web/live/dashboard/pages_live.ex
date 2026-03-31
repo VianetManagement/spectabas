@@ -92,7 +92,14 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
 
     # Fetch per-page RUM vitals summary and merge into page rows
     # Use normalized paths for matching (lowercase, no trailing slash)
+    require Logger
+    raw_result = Analytics.rum_vitals_summary(site, user, period)
+    Logger.info("[Pages] rum_vitals_summary raw: #{inspect(raw_result, limit: 300)}")
     vitals_rows = safe_query(fn -> Analytics.rum_vitals_summary(site, user, period) end)
+
+    Logger.info(
+      "[Pages] vitals_rows count: #{length(vitals_rows)}, sample: #{inspect(Enum.take(vitals_rows, 2), limit: 300)}"
+    )
 
     vitals_map =
       Map.new(vitals_rows, fn r ->

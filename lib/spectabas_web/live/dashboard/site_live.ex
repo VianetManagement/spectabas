@@ -672,7 +672,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
             empty={false}
           >
             <div class="flex flex-col items-center justify-center py-4">
-              <div class="text-4xl font-bold text-gray-900">{@live_visitors}</div>
+              <div class="text-4xl font-bold text-gray-900">{format_number(@live_visitors)}</div>
               <div class="text-sm text-gray-500 mt-1">active visitors</div>
             </div>
           </.data_card>

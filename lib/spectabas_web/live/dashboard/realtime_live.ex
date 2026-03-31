@@ -116,7 +116,7 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
         <div class="bg-white rounded-lg shadow p-6 mb-6 text-center">
           <div class="flex items-center justify-center gap-3">
             <span class="w-3 h-3 bg-green-500 rounded-full animate-pulse"></span>
-            <span class="text-5xl font-bold text-gray-900">{@active_count}</span>
+            <span class="text-5xl font-bold text-gray-900">{format_number(@active_count)}</span>
           </div>
           <p class="text-gray-500 mt-2">visitors online right now</p>
         </div>
