@@ -474,11 +474,11 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
 
   defp empty_overview do
     %{
-      "pageviews" => 0,
-      "unique_visitors" => 0,
-      "total_sessions" => 0,
-      "bounce_rate" => 0,
-      "avg_duration" => 0
+      pageviews: 0,
+      unique_visitors: 0,
+      sessions: 0,
+      bounce_rate: 0.0,
+      avg_duration: 0
     }
   end
 

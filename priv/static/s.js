@@ -219,7 +219,7 @@
 
     send(endpoint + "/c/e?s=" + encodeURIComponent(site), {
       t: "duration",
-      u: window.location.href,
+      u: lastSentUrl,
       vid: vid,
       sid: sid,
       d: duration,

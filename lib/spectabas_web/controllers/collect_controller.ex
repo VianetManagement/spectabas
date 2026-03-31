@@ -269,17 +269,13 @@ defmodule SpectabasWeb.CollectController do
     end
   end
 
-  defp destination_allowed?(site, destination) do
-    allowed = site.cross_domain_sites || []
-
-    if site.cross_domain_tracking and allowed != [] do
-      uri = URI.parse(destination)
-      host = uri.host || ""
-      Enum.any?(allowed, fn allowed_domain -> host == allowed_domain end)
-    else
-      false
-    end
+  defp destination_allowed?(site, destination) when is_binary(destination) do
+    host = String.trim(destination)
+    allowed = allowed_domains(site)
+    host in allowed or subdomain_of_parent?(host, site.domain)
   end
+
+  defp destination_allowed?(_site, _destination), do: false
 
   defp resolve_site(conn, params) do
     alias Spectabas.Sites.DomainCache
@@ -320,9 +316,18 @@ defmodule SpectabasWeb.CollectController do
     origin = get_req_header(conn, "origin") |> List.first() || ""
     referer = get_req_header(conn, "referer") |> List.first() || ""
 
-    # Allow if no origin (server-side, curl, etc)
+    # Allow if no origin only for non-browser requests (server-side, curl, etc).
+    # Modern browsers always send Sec-Fetch-Site; if present, require origin/referer.
+    sec_fetch = get_req_header(conn, "sec-fetch-site") |> List.first()
+
     if origin == "" and referer == "" do
-      :ok
+      if sec_fetch do
+        # Browser request with both headers stripped — reject
+        {:error, :origin_not_allowed}
+      else
+        # No Sec-Fetch-Site: likely server-side/curl — allow
+        :ok
+      end
     else
       origin_host = extract_host(origin)
       referer_host = extract_host(referer)

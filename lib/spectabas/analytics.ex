@@ -690,7 +690,7 @@ defmodule Spectabas.Analytics do
       SELECT
         ip_timezone AS timezone,
         uniq(visitor_id) AS visitors,
-        count() AS pageviews
+        countIf(event_type = 'pageview') AS pageviews
       FROM events
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
@@ -901,8 +901,10 @@ defmodule Spectabas.Analytics do
   Funnel stats using ClickHouse windowFunnel().
   Steps is a list of event conditions (e.g., event_type/url_path matches).
   """
-  def funnel_stats(%Site{} = site, %User{} = user, %{steps: steps} = _funnel)
+  def funnel_stats(%Site{} = site, %User{} = user, %{steps: steps} = _funnel, date_range \\ "30d")
       when is_list(steps) do
+    date_range = ensure_date_range(date_range)
+
     with :ok <- authorize(site, user) do
       step_conditions =
         steps
@@ -935,6 +937,8 @@ defmodule Spectabas.Analytics do
           windowFunnel(86400)(timestamp, #{step_conditions}) AS level
         FROM events
         WHERE site_id = #{ClickHouse.param(site.id)}
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
         GROUP BY visitor_id
       )
       """
@@ -967,6 +971,7 @@ defmodule Spectabas.Analytics do
             WHERE site_id = #{ClickHouse.param(site.id)}
               AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
               AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+              AND ip_is_bot = 0
               AND #{condition}
             """
           end)
@@ -1624,15 +1629,20 @@ defmodule Spectabas.Analytics do
         GROUP BY cohort_week, week_number
       ) AS retention
       LEFT JOIN (
-        SELECT
-          toMonday(min(toDate(timestamp))) AS cohort_week,
-          uniq(visitor_id) AS cohort_size
-        FROM events
-        WHERE site_id = #{ClickHouse.param(site.id)}
-          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-          AND ip_is_bot = 0
-        GROUP BY visitor_id
+        SELECT cohort_week, count() AS cohort_size
+        FROM (
+          SELECT
+            visitor_id,
+            toMonday(min(toDate(timestamp))) AS cohort_week
+          FROM events
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+            AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+            AND event_type = 'pageview'
+            AND ip_is_bot = 0
+          GROUP BY visitor_id
+        )
+        GROUP BY cohort_week
       ) AS sizes USING (cohort_week)
       ORDER BY cohort_week, week_number
       """

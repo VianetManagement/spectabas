@@ -45,6 +45,53 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v2.6.1 — 2026-03-31 UTC",
+       [
+         %{
+           title: "Fix: funnel_stats now scoped to date range",
+           description:
+             "Funnel queries were scanning the entire events table. Now filtered by timestamp."
+         },
+         %{
+           title: "Fix: goal_completions excludes bot traffic",
+           description: "Bot visitors no longer inflate conversion numbers."
+         },
+         %{
+           title: "Fix: cohort retention sizes corrected",
+           description:
+             "Cohort size calculation was always returning 1 per cohort due to incorrect GROUP BY. Now properly counts visitors per cohort week."
+         },
+         %{
+           title: "Security: origin bypass closed",
+           description:
+             "Requests with sec-fetch-site header (browsers) now require valid Origin or Referer. Server-side collection still works without headers."
+         },
+         %{
+           title: "Security: session cookie hardened",
+           description:
+             "Endpoint session key and salt now match runtime config. Added secure and http_only flags."
+         },
+         %{
+           title: "Fix: cross-domain tokens now work",
+           description:
+             "destination_allowed? was parsing bare hostnames as URIs (always nil). Now treats destination as plain hostname."
+         },
+         %{
+           title: "Fix: SPA duration attributed to correct page",
+           description:
+             "Duration events now use the URL of the page visited, not the URL after SPA navigation."
+         },
+         %{
+           title: "Fix: timezone_distribution counts only pageviews",
+           description:
+             "Was counting all event types as pageviews. Now uses countIf for accuracy."
+         },
+         %{
+           title: "Fix: dashboard crash on ClickHouse timeout",
+           description:
+             "empty_overview now returns atom keys matching fetch_overview, preventing crashes when queries time out."
+         }
+       ]},
       {"v2.6.0 — 2026-03-31 UTC",
        [
          %{

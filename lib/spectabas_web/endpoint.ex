@@ -6,9 +6,11 @@ defmodule SpectabasWeb.Endpoint do
   # Set :encryption_salt if you would also like to encrypt it.
   @session_options [
     store: :cookie,
-    key: "_spectabas_key",
-    signing_salt: "1Yu/a1Xc",
-    same_site: "Lax"
+    key: "_spectabas_session",
+    signing_salt: "spectabas_session",
+    same_site: "Lax",
+    secure: true,
+    http_only: true
   ]
 
   socket "/live", Phoenix.LiveView.Socket,

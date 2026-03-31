@@ -87,7 +87,7 @@ defmodule Spectabas.Goals do
 
   @doc """
   Evaluate a funnel using ClickHouse windowFunnel().
-  Delegates to Analytics.funnel_stats/3.
+  Delegates to Analytics.funnel_stats/4.
   """
   def evaluate_funnel(site, user, funnel) do
     Analytics.funnel_stats(site, user, funnel)
