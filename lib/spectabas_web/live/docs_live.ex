@@ -1328,6 +1328,160 @@ defmodule SpectabasWeb.DocsLive do
             - **Call on every login** — the `_sab` cookie may change (new browser, cleared cookies), so always identify on login to keep the association current.
             - **IP is optional** — if provided, it updates the visitor's geo data and known IPs list.
             """
+          },
+          %{
+            id: "api-ecommerce-stats",
+            title: "Ecommerce Stats",
+            body: """
+            `GET /api/v1/sites/:site_id/ecommerce`
+
+            Returns aggregate ecommerce stats for the period.
+
+            | Parameter | Default | Description |
+            |-----------|---------|-------------|
+            | `period` | `7d` | `24h`, `7d`, `30d`, or `custom` |
+            | `from` | — | ISO 8601 start (required for `custom`) |
+            | `to` | — | ISO 8601 end (required for `custom`) |
+
+            ```json
+            {
+              "data": {
+                "total_orders": 42,
+                "total_revenue": 4199.58,
+                "avg_order_value": 99.99,
+                "min_order": 12.50,
+                "max_order": 349.00
+              }
+            }
+            ```
+            """
+          },
+          %{
+            id: "api-ecommerce-products",
+            title: "Ecommerce Top Products",
+            body: """
+            `GET /api/v1/sites/:site_id/ecommerce/products`
+
+            Returns top products by revenue for the period. Extracts product data from order item lists.
+
+            ```json
+            {
+              "data": [
+                {"name": "Pro Widget", "quantity": 156, "revenue": 9343.44},
+                {"name": "Basic Widget", "quantity": 89, "revenue": 2669.11}
+              ]
+            }
+            ```
+            """
+          },
+          %{
+            id: "api-ecommerce-orders",
+            title: "Ecommerce Orders",
+            body: """
+            `GET /api/v1/sites/:site_id/ecommerce/orders`
+
+            Returns the most recent 100 orders for the period, with full details.
+
+            ```json
+            {
+              "data": [
+                {
+                  "order_id": "ORD-123",
+                  "visitor_id": "abc...",
+                  "revenue": 99.99,
+                  "subtotal": 89.99,
+                  "tax": 7.20,
+                  "shipping": 2.80,
+                  "discount": 0,
+                  "currency": "USD",
+                  "items": "[{\\"name\\":\\"Widget\\",\\"price\\":49.99,\\"quantity\\":2}]",
+                  "timestamp": "2026-03-31 19:00:00"
+                }
+              ]
+            }
+            ```
+            """
+          },
+          %{
+            id: "api-ecommerce-transactions",
+            title: "Record Ecommerce Transaction",
+            body: """
+            `POST /api/v1/sites/:site_id/ecommerce/transactions`
+
+            Record an ecommerce transaction from your server. Use this when a purchase is completed to ensure accurate revenue tracking regardless of client-side JavaScript.
+
+            **Request body:**
+
+            | Field | Type | Required | Description |
+            |-------|------|----------|-------------|
+            | `order_id` | string | yes | Unique order identifier |
+            | `revenue` | number | no | Total revenue (including tax/shipping) |
+            | `visitor_id` | string | no | The `_sab` cookie value to link to a visitor |
+            | `subtotal` | number | no | Subtotal before tax/shipping |
+            | `tax` | number | no | Tax amount |
+            | `shipping` | number | no | Shipping cost |
+            | `discount` | number | no | Discount applied |
+            | `currency` | string | no | Currency code (defaults to site currency) |
+            | `items` | array | no | List of items: `[{"name": "...", "price": 9.99, "quantity": 1}]` |
+
+            ### Example (Elixir/Phoenix)
+
+            ```elixir
+            # After successful checkout:
+            Task.start(fn ->
+              Req.post!("https://www.spectabas.com/api/v1/sites/4/ecommerce/transactions",
+                headers: [{"authorization", "Bearer YOUR_API_KEY"}],
+                json: %{
+                  order_id: order.id,
+                  revenue: order.total,
+                  subtotal: order.subtotal,
+                  tax: order.tax,
+                  shipping: order.shipping,
+                  discount: order.discount,
+                  visitor_id: conn.cookies["_sab"],
+                  currency: "USD",
+                  items: Enum.map(order.line_items, fn item ->
+                    %{name: item.product_name, price: item.unit_price, quantity: item.quantity}
+                  end)
+                }
+              )
+            end)
+            ```
+
+            ### Example (curl)
+
+            ```bash
+            curl -X POST https://www.spectabas.com/api/v1/sites/4/ecommerce/transactions \\
+              -H "Authorization: Bearer YOUR_API_KEY" \\
+              -H "Content-Type: application/json" \\
+              -d '{
+                "order_id": "ORD-123",
+                "revenue": 99.99,
+                "visitor_id": "abc123...",
+                "items": [{"name": "Widget", "price": 49.99, "quantity": 2}]
+              }'
+            ```
+
+            ### Response
+
+            ```json
+            {"ok": true, "order_id": "ORD-123"}
+            ```
+
+            ### JavaScript (client-side alternative)
+
+            You can also record transactions client-side using the tracker:
+
+            ```javascript
+            spectabas.ecommerce.addOrder({
+              order_id: "ORD-123",
+              revenue: 99.99,
+              items: [{name: "Widget", price: 49.99, quantity: 2}]
+            });
+            ```
+
+            The server-side API is recommended for accuracy — it can't be blocked by ad blockers and doesn't depend on the user's browser staying on the page after checkout.
+            """
           }
         ]
       },
