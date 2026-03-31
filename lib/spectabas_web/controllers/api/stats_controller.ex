@@ -63,6 +63,15 @@ defmodule SpectabasWeb.API.StatsController do
     end
   end
 
+  def realtime_visitors(conn, %{"site_id" => site_id}) do
+    with {:ok, site, _user} <- authorize_site(conn, site_id),
+         {:ok, data} <- Analytics.realtime_visitors_grouped(site) do
+      json(conn, %{data: data})
+    else
+      error -> handle_error(conn, error)
+    end
+  end
+
   # --- Shared error handler ---
 
   defp handle_error(conn, {:error, :not_found}) do

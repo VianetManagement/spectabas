@@ -83,7 +83,9 @@
   }
 
   // Rate-limited pageview sending — prevents overcounting from rapid refreshes,
-  // auto-refresh, or iframes reloading. Max 1 pageview per URL per 5 seconds.
+  // auto-refresh, or iframes reloading. Max 1 pageview per pathname per 5 seconds.
+  // Uses pathname (not full URL) so query-string changes on the same page
+  // (e.g. search filters, pagination) don't each count as a separate pageview.
   var lastSentUrl = window.location.href;
   var pvMinInterval = 5000;
 
@@ -91,7 +93,7 @@
     var url = window.location.href;
     var now = Date.now();
     try {
-      var key = "_sab_pv_" + url;
+      var key = "_sab_pv_" + window.location.pathname;
       var lastSent = parseInt(sessionStorage.getItem(key) || "0", 10);
       if (now - lastSent < pvMinInterval) return;
       sessionStorage.setItem(key, String(now));
@@ -102,21 +104,26 @@
 
   sendPageview();
 
-  // SPA support — only fire pageview if URL actually changed
+  // SPA support — only fire pageview if pathname changed (not just query string).
+  // Query-string-only changes (search filters, pagination, sorting) are not
+  // separate pageviews — they're interactions on the same page.
+  var lastSentPath = window.location.pathname;
   var origPushState = history.pushState;
   history.pushState = function () {
     origPushState.apply(this, arguments);
-    if (window.location.href !== lastSentUrl) {
+    if (window.location.pathname !== lastSentPath) {
       sendDuration();
       pageStart = Date.now();
+      lastSentPath = window.location.pathname;
       sendPageview();
     }
   };
 
   window.addEventListener("popstate", function () {
-    if (window.location.href !== lastSentUrl) {
+    if (window.location.pathname !== lastSentPath) {
       sendDuration();
       pageStart = Date.now();
+      lastSentPath = window.location.pathname;
       sendPageview();
     }
   });

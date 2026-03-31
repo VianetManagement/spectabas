@@ -45,6 +45,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v2.5.4 — 2026-03-31 UTC",
+       [
+         %{
+           title: "Fix: SPA pageview overcounting",
+           description:
+             "Query-string-only URL changes (search filters, pagination, sorting) no longer trigger separate pageviews. Only pathname changes count as new pageviews, matching standard analytics behavior."
+         },
+         %{
+           title: "API: realtime visitor details endpoint",
+           description:
+             "New GET /api/v1/sites/:id/realtime/visitors returns grouped visitor details (browser, OS, country, current page) for the last 5 minutes."
+         }
+       ]},
       {"v2.5.3 — 2026-03-31 UTC",
        [
          %{
