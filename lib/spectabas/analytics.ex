@@ -1812,30 +1812,19 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
+      # Simple query — just get median page_load per URL from _rum events
       sql = """
       SELECT
-        r.url_path,
-        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(r.properties, 'page_load')),
-          toFloat64OrZero(JSONExtractString(r.properties, 'page_load')) > 0)) AS page_load,
-        cw.lcp
-      FROM events r
-      LEFT JOIN (
-        SELECT
-          url_path,
-          round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'lcp')),
-            toFloat64OrZero(JSONExtractString(properties, 'lcp')) > 0)) AS lcp
-        FROM events
-        WHERE site_id = #{ClickHouse.param(site.id)}
-          AND event_name = '_cwv'
-          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-        GROUP BY url_path
-      ) cw ON r.url_path = cw.url_path
-      WHERE r.site_id = #{ClickHouse.param(site.id)}
-        AND r.event_name = '_rum'
-        AND r.timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-        AND r.timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-      GROUP BY r.url_path, cw.lcp
+        url_path,
+        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'page_load')),
+          toFloat64OrZero(JSONExtractString(properties, 'page_load')) > 0)) AS page_load
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND event_name = '_rum'
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      GROUP BY url_path
+      HAVING page_load > 0
       ORDER BY page_load DESC
       LIMIT 50
       """
