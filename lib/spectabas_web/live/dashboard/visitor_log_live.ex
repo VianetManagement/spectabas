@@ -3,7 +3,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
 
   @moduledoc "Visitor log — browsable session list with filtering."
 
-  alias Spectabas.{Accounts, Sites, Analytics}
+  alias Spectabas.{Accounts, Sites, Analytics, Visitors}
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers
   import SpectabasWeb.Dashboard.DateHelpers
@@ -125,6 +125,17 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
         {:ok, rows, next_cur} -> {rows, next_cur}
         _ -> {[], nil}
       end
+
+    # Enrich with emails from Postgres
+    email_map = Visitors.emails_for_visitor_ids(Enum.map(visitors, & &1["visitor_id"]))
+
+    visitors =
+      Enum.map(visitors, fn v ->
+        case Map.get(email_map, v["visitor_id"]) do
+          %{email: email} -> Map.put(v, "email", email)
+          _ -> v
+        end
+      end)
 
     socket
     |> assign(:visitors, visitors)
@@ -323,9 +334,12 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
                 <td class="px-4 py-3 text-sm">
                   <.link
                     navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{v["visitor_id"]}"}
-                    class="text-indigo-600 hover:text-indigo-800 font-mono text-xs"
+                    class="text-indigo-600 hover:text-indigo-800 text-xs"
                   >
-                    {String.slice(v["visitor_id"] || "", 0, 8)}...
+                    <span :if={v["email"]} class="font-medium">{v["email"]}</span>
+                    <span :if={!v["email"]} class="font-mono">
+                      {String.slice(v["visitor_id"] || "", 0, 8)}...
+                    </span>
                   </.link>
                 </td>
                 <td class="px-4 py-3">

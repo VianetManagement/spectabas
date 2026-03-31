@@ -3,7 +3,7 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
 
   @moduledoc "Realtime visitor dashboard with live event feed."
 
-  alias Spectabas.{Accounts, Sites, Analytics}
+  alias Spectabas.{Accounts, Sites, Analytics, Visitors}
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers
 
@@ -94,6 +94,29 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
         _ -> []
       end
 
+    # Enrich with emails from Postgres
+    all_vids =
+      (Enum.map(grouped, & &1["visitor_id"]) ++ Enum.map(raw_events, & &1["visitor_id"]))
+      |> Enum.uniq()
+
+    email_map = Visitors.emails_for_visitor_ids(all_vids)
+
+    grouped =
+      Enum.map(grouped, fn v ->
+        case Map.get(email_map, v["visitor_id"]) do
+          %{email: email} -> Map.put(v, "email", email)
+          _ -> v
+        end
+      end)
+
+    raw_events =
+      Enum.map(raw_events, fn e ->
+        case Map.get(email_map, e["visitor_id"]) do
+          %{email: email} -> Map.put(e, "email", email)
+          _ -> e
+        end
+      end)
+
     socket
     |> assign(:active_count, active_count)
     |> assign(:grouped, grouped)
@@ -178,9 +201,12 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
                 <td class="px-4 py-3 text-sm">
                   <.link
                     navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{v["visitor_id"]}"}
-                    class="text-indigo-600 hover:text-indigo-800 font-mono text-xs"
+                    class="text-indigo-600 hover:text-indigo-800 text-xs"
                   >
-                    {String.slice(v["visitor_id"] || "", 0, 8)}...
+                    <span :if={v["email"]} class="font-medium">{v["email"]}</span>
+                    <span :if={!v["email"]} class="font-mono">
+                      {String.slice(v["visitor_id"] || "", 0, 8)}...
+                    </span>
                   </.link>
                 </td>
                 <td class="px-4 py-3 text-sm">
@@ -257,9 +283,14 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
               <div class="flex items-center gap-3 text-xs text-gray-500 mt-1 flex-wrap">
                 <.link
                   navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{event["visitor_id"]}"}
-                  class="text-indigo-500 hover:text-indigo-700 font-mono"
+                  class="text-indigo-500 hover:text-indigo-700"
                 >
-                  {String.slice(event["visitor_id"] || "", 0, 8)}
+                  <span :if={event["email"]} class="text-xs font-medium">
+                    {event["email"]}
+                  </span>
+                  <span :if={!event["email"]} class="font-mono text-xs">
+                    {String.slice(event["visitor_id"] || "", 0, 8)}
+                  </span>
                 </.link>
                 <span :if={event["ip_country"] && event["ip_country"] != ""}>
                   {event["ip_country"]}

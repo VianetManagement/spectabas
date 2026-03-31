@@ -13,6 +13,28 @@ defmodule Spectabas.Visitors do
   @xdomain_table :spectabas_xdomain_tokens
 
   @doc """
+  Batch-lookup emails for a list of visitor_ids (UUIDs from ClickHouse).
+  Returns a map of %{visitor_id => %{email: "...", user_id: "..."}} for identified visitors.
+  Unidentified visitors are not included in the map.
+  """
+  def emails_for_visitor_ids(visitor_ids) when is_list(visitor_ids) do
+    visitor_ids = Enum.reject(visitor_ids, &(is_nil(&1) or &1 == ""))
+
+    if visitor_ids == [] do
+      %{}
+    else
+      # visitor_id in ClickHouse maps to the Visitor primary key (id)
+      query =
+        from(v in Visitor,
+          where: v.id in ^visitor_ids and not is_nil(v.email) and v.email != "",
+          select: {v.id, %{email: v.email, user_id: v.user_id}}
+        )
+
+      Repo.all(query) |> Map.new()
+    end
+  end
+
+  @doc """
   Find an existing visitor by fingerprint ID for a site.
   Used to deduplicate visitors who lost their cookie.
   """
