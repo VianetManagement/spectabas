@@ -120,9 +120,9 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
           <p class="text-sm text-indigo-600 font-medium">Current Page</p>
           <p class="text-2xl font-bold text-indigo-900 font-mono mt-1">{@current_page}</p>
           <div class="flex justify-center gap-8 mt-3 text-sm text-indigo-700">
-            <span>{@transitions.totals["total_views"] || 0} views</span>
-            <span>{@transitions.totals["unique_visitors"] || 0} visitors</span>
-            <span>{@transitions.totals["sessions"] || 0} sessions</span>
+            <span>{format_number(to_num(@transitions.totals["total_views"]))} views</span>
+            <span>{format_number(to_num(@transitions.totals["unique_visitors"]))} visitors</span>
+            <span>{format_number(to_num(@transitions.totals["sessions"]))} sessions</span>
           </div>
           <div
             :if={to_num(@page_perf["samples"]) > 0}

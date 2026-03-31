@@ -108,10 +108,10 @@ defmodule SpectabasWeb.Dashboard.OutboundLinksLive do
                   {link["url"]}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {link["hits"]}
+                  {format_number(to_num(link["hits"]))}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {link["visitors"]}
+                  {format_number(to_num(link["visitors"]))}
                 </td>
               </tr>
             </tbody>

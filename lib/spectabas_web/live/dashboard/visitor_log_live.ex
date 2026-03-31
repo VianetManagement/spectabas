@@ -244,7 +244,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
                 <td class="px-6 py-3 text-sm text-gray-500">{v["first_seen"]}</td>
                 <td class="px-6 py-3 text-sm text-gray-500">{v["last_seen"]}</td>
                 <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
-                  {v["pageviews"]}
+                  {format_number(to_num(v["pageviews"]))}
                 </td>
                 <td class="px-6 py-3 text-sm text-gray-500">
                   {v["browser"]} / {v["os"]}
@@ -315,7 +315,9 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
                     {v["intent"]}
                   </.link>
                 </td>
-                <td class="px-4 py-3 text-sm text-gray-900 tabular-nums">{v["pageviews"]}</td>
+                <td class="px-4 py-3 text-sm text-gray-900 tabular-nums">
+                  {format_number(to_num(v["pageviews"]))}
+                </td>
                 <td class="px-4 py-3 text-sm text-gray-500 tabular-nums">
                   {format_duration(to_int(v["duration"]))}
                 </td>

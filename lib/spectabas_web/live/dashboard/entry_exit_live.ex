@@ -5,6 +5,7 @@ defmodule SpectabasWeb.Dashboard.EntryExitLive do
 
   alias Spectabas.{Accounts, Sites, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
+  import Spectabas.TypeHelpers
   import SpectabasWeb.Dashboard.DateHelpers
 
   @impl true
@@ -149,7 +150,7 @@ defmodule SpectabasWeb.Dashboard.EntryExitLive do
                   {row["url_path"]}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {row["unique_visitors"]}
+                  {format_number(to_num(row["unique_visitors"]))}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
                   {row[count_key(@tab)]}

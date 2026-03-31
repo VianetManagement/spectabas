@@ -326,7 +326,9 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
                       </.link>
                     </td>
                     <td class="px-3 py-2 text-gray-500 text-xs">{v["last_seen"]}</td>
-                    <td class="px-3 py-2 text-gray-900 text-right tabular-nums">{v["pageviews"]}</td>
+                    <td class="px-3 py-2 text-gray-900 text-right tabular-nums">
+                      {format_number(to_num(v["pageviews"]))}
+                    </td>
                     <td class="px-3 py-2 text-gray-500 text-xs">
                       {[v["browser"], v["os"]]
                       |> Enum.reject(&(&1 == "" || is_nil(&1)))
@@ -472,7 +474,9 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
                   </.link>
                 </td>
                 <td class="px-3 py-2 text-gray-500 text-xs">{v["last_seen"]}</td>
-                <td class="px-3 py-2 text-gray-900 text-right tabular-nums">{v["pageviews"]}</td>
+                <td class="px-3 py-2 text-gray-900 text-right tabular-nums">
+                  {format_number(to_num(v["pageviews"]))}
+                </td>
                 <td class="px-3 py-2 text-gray-500 font-mono text-xs">{v["ip_address"]}</td>
                 <td class="px-3 py-2 text-gray-500 text-xs">
                   {[v["city"], v["country"]]

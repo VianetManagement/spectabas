@@ -5,6 +5,7 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
 
   alias Spectabas.{Accounts, Sites, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
+  import Spectabas.TypeHelpers
   import SpectabasWeb.Dashboard.DateHelpers
 
   @impl true
@@ -104,7 +105,7 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
               <tr :for={s <- @searches} class="hover:bg-gray-50">
                 <td class="px-6 py-4 text-sm font-medium text-gray-900">{s["search_term"]}</td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {s["searches"]}
+                  {format_number(to_num(s["searches"]))}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
                   {s["unique_searchers"]}

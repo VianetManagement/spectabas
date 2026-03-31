@@ -137,13 +137,13 @@ defmodule SpectabasWeb.Dashboard.ChannelsLive do
                 <tr :for={src <- @channel_detail} class="hover:bg-gray-50">
                   <td class="px-6 py-4 text-sm text-indigo-600 font-medium">{src["source"]}</td>
                   <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                    {src["pageviews"]}
+                    {format_number(to_num(src["pageviews"]))}
                   </td>
                   <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                    {src["visitors"]}
+                    {format_number(to_num(src["visitors"]))}
                   </td>
                   <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                    {src["sessions"]}
+                    {format_number(to_num(src["sessions"]))}
                   </td>
                 </tr>
               </tbody>
@@ -194,13 +194,13 @@ defmodule SpectabasWeb.Dashboard.ChannelsLive do
                   </span>
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {ch["pageviews"]}
+                  {format_number(to_num(ch["pageviews"]))}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {ch["visitors"]}
+                  {format_number(to_num(ch["visitors"]))}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {ch["sessions"]}
+                  {format_number(to_num(ch["sessions"]))}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-500 text-right tabular-nums">
                   {ch["sources"]}

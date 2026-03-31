@@ -159,10 +159,10 @@ defmodule SpectabasWeb.Dashboard.BotTrafficLive do
                     {p["url_path"]}
                   </td>
                   <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
-                    {p["hits"]}
+                    {format_number(to_num(p["hits"]))}
                   </td>
                   <td class="px-6 py-3 text-sm text-gray-500 text-right tabular-nums">
-                    {p["bots"]}
+                    {format_number(to_num(p["bots"]))}
                   </td>
                 </tr>
               </tbody>
@@ -200,7 +200,7 @@ defmodule SpectabasWeb.Dashboard.BotTrafficLive do
                     {String.slice(ua["user_agent"] || "", 0, 80)}
                   </td>
                   <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
-                    {ua["hits"]}
+                    {format_number(to_num(ua["hits"]))}
                   </td>
                 </tr>
               </tbody>

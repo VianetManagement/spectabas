@@ -108,10 +108,10 @@ defmodule SpectabasWeb.Dashboard.DownloadsLive do
                   {dl["url"]}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {dl["hits"]}
+                  {format_number(to_num(dl["hits"]))}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {dl["visitors"]}
+                  {format_number(to_num(dl["visitors"]))}
                 </td>
               </tr>
             </tbody>

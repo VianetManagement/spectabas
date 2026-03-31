@@ -5,6 +5,7 @@ defmodule SpectabasWeb.Dashboard.AttributionLive do
 
   alias Spectabas.{Accounts, Sites, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
+  import Spectabas.TypeHelpers
   import SpectabasWeb.Dashboard.DateHelpers
 
   @impl true
@@ -104,7 +105,7 @@ defmodule SpectabasWeb.Dashboard.AttributionLive do
               <tr :for={ch <- @channels} class="hover:bg-gray-50">
                 <td class="px-6 py-4 text-sm font-medium text-gray-900">{ch["channel"]}</td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {ch["visitors"]}
+                  {format_number(to_num(ch["visitors"]))}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
                   {ch["first_touch"]}

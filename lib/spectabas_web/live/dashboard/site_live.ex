@@ -702,7 +702,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
                   {raw(intent_icon(intent["intent"]))}
                 </div>
                 <div class="text-base sm:text-lg font-bold text-gray-900 group-hover:text-indigo-600">
-                  {intent["visitors"]}
+                  {format_number(to_num(intent["visitors"]))}
                 </div>
                 <div class="text-xs text-gray-500 capitalize">{intent["intent"]}</div>
               </.link>
@@ -755,7 +755,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
                   {location_label(loc)}
                 </span>
                 <span class="text-sm font-medium text-gray-600 tabular-nums">
-                  {loc["visitors"]}
+                  {format_number(to_num(loc["visitors"]))}
                 </span>
               </div>
             </div>

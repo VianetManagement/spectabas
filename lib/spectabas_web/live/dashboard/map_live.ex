@@ -185,7 +185,7 @@ defmodule SpectabasWeb.Dashboard.MapLive do
               <tr :for={loc <- Enum.take(@locations, 30)} class="hover:bg-gray-50">
                 <td class="px-6 py-3 text-sm text-gray-900">{location_name(loc)}</td>
                 <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
-                  {loc["visitors"]}
+                  {format_number(to_num(loc["visitors"]))}
                 </td>
               </tr>
             </tbody>

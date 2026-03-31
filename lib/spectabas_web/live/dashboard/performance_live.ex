@@ -171,7 +171,7 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
                   {format_ms(d["median_fcp"])}
                 </td>
                 <td class="px-5 py-3 text-sm text-right tabular-nums text-gray-500">
-                  {d["samples"]}
+                  {format_number(to_num(d["samples"]))}
                 </td>
               </tr>
             </tbody>
@@ -222,7 +222,7 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
                   {format_bytes(p["avg_size"])}
                 </td>
                 <td class="px-5 py-3 text-sm text-right tabular-nums text-gray-500">
-                  {p["samples"]}
+                  {format_number(to_num(p["samples"]))}
                 </td>
               </tr>
             </tbody>

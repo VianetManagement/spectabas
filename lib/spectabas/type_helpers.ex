@@ -82,7 +82,19 @@ defmodule Spectabas.TypeHelpers do
   def format_number(n) when is_number(n) and n >= 1_000_000,
     do: "#{Float.round(n / 1_000_000, 1)}M"
 
-  def format_number(n) when is_number(n) and n >= 1_000, do: "#{Float.round(n / 1_000, 1)}K"
-  def format_number(n) when is_number(n), do: to_string(n)
-  def format_number(n), do: to_string(to_num(n))
+  def format_number(n) when is_number(n), do: integer_with_commas(trunc(n))
+  def format_number(n), do: integer_with_commas(to_num(n))
+
+  @doc "Format an integer with comma separators (e.g., 1234567 → \"1,234,567\")"
+  def integer_with_commas(n) when is_integer(n) and n < 0, do: "-" <> integer_with_commas(-n)
+
+  def integer_with_commas(n) when is_integer(n) do
+    n
+    |> Integer.to_string()
+    |> String.reverse()
+    |> String.replace(~r/(\d{3})(?=\d)/, "\\1,")
+    |> String.reverse()
+  end
+
+  def integer_with_commas(n), do: integer_with_commas(to_num(n))
 end

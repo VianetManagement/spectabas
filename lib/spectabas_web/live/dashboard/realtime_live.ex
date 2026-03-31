@@ -5,6 +5,7 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
 
   alias Spectabas.{Accounts, Sites, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
+  import Spectabas.TypeHelpers
 
   @refresh_ms 5_000
 
@@ -173,7 +174,7 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
                   </.link>
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
-                  {v["pageviews"]}
+                  {format_number(to_num(v["pageviews"]))}
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-500">
                   {[v["city"], v["country"]]

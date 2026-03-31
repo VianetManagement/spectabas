@@ -5,6 +5,7 @@ defmodule SpectabasWeb.Dashboard.IpProfileLive do
 
   alias Spectabas.{Accounts, Sites, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
+  import Spectabas.TypeHelpers
 
   @impl true
   def mount(%{"site_id" => site_id, "ip" => ip}, _session, socket) do
@@ -182,7 +183,7 @@ defmodule SpectabasWeb.Dashboard.IpProfileLive do
                     </.link>
                   </td>
                   <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
-                    {v["pageviews"]}
+                    {format_number(to_num(v["pageviews"]))}
                   </td>
                   <td class="px-6 py-3 text-sm text-gray-500">
                     {v["browser"]} / {v["os"]}
@@ -225,7 +226,7 @@ defmodule SpectabasWeb.Dashboard.IpProfileLive do
                     </.link>
                   </td>
                   <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
-                    {p["hits"]}
+                    {format_number(to_num(p["hits"]))}
                   </td>
                 </tr>
               </tbody>

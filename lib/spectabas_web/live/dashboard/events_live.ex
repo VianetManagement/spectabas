@@ -106,10 +106,10 @@ defmodule SpectabasWeb.Dashboard.EventsLive do
               <tr :for={ev <- @events} class="hover:bg-gray-50">
                 <td class="px-6 py-4 text-sm font-medium text-gray-900">{ev["event_name"]}</td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {ev["hits"]}
+                  {format_number(to_num(ev["hits"]))}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {ev["visitors"]}
+                  {format_number(to_num(ev["visitors"]))}
                 </td>
               </tr>
             </tbody>
