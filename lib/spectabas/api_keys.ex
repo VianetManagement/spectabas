@@ -15,18 +15,22 @@ defmodule Spectabas.APIKeys do
   Generate a new API key for a user. Returns `{:ok, plaintext_key, api_key}`.
   The plaintext key is only available at creation time.
   """
-  def generate(user, name) when is_binary(name) do
+  def generate(user, name, opts \\ []) when is_binary(name) do
     raw = :crypto.strong_rand_bytes(32) |> Base.url_encode64(padding: false)
     plaintext = @prefix <> raw
     key_hash = hash_key(plaintext)
     key_prefix = String.slice(plaintext, 0, 12)
 
-    attrs = %{
-      user_id: user.id,
-      name: name,
-      key_hash: key_hash,
-      key_prefix: key_prefix
-    }
+    attrs =
+      %{
+        user_id: user.id,
+        name: name,
+        key_hash: key_hash,
+        key_prefix: key_prefix
+      }
+      |> maybe_put(:scopes, Keyword.get(opts, :scopes))
+      |> maybe_put(:site_ids, Keyword.get(opts, :site_ids))
+      |> maybe_put(:expires_at, Keyword.get(opts, :expires_at))
 
     %APIKey{}
     |> APIKey.changeset(attrs)
@@ -41,6 +45,9 @@ defmodule Spectabas.APIKeys do
     end
   end
 
+  defp maybe_put(attrs, _key, nil), do: attrs
+  defp maybe_put(attrs, key, value), do: Map.put(attrs, key, value)
+
   @doc """
   Verify an API key by hashing it and looking it up.
   Returns `{:ok, api_key}` with preloaded user or `{:error, :invalid}`.
@@ -49,8 +56,18 @@ defmodule Spectabas.APIKeys do
     key_hash = hash_key(plaintext_key)
 
     case Repo.one(from k in APIKey, where: k.key_hash == ^key_hash and is_nil(k.revoked_at)) do
-      nil -> {:error, :invalid}
-      api_key -> {:ok, api_key}
+      nil ->
+        {:error, :invalid}
+
+      %APIKey{expires_at: expires_at} = api_key when not is_nil(expires_at) ->
+        if DateTime.compare(expires_at, DateTime.utc_now()) == :lt do
+          {:error, :expired}
+        else
+          {:ok, api_key}
+        end
+
+      api_key ->
+        {:ok, api_key}
     end
   end
 

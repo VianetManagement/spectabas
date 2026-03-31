@@ -18,6 +18,7 @@ defmodule SpectabasWeb.Router do
     plug :accepts, ["json"]
     plug SpectabasWeb.Plugs.ApiRateLimit
     plug SpectabasWeb.Plugs.ApiAuth
+    plug SpectabasWeb.Plugs.ApiLogger
   end
 
   pipeline :collect do

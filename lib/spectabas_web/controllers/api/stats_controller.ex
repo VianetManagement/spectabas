@@ -2,10 +2,12 @@ defmodule SpectabasWeb.API.StatsController do
   use SpectabasWeb, :controller
 
   alias Spectabas.{Sites, Analytics, Accounts, Visitors}
+  alias SpectabasWeb.Plugs.ApiAuth
   require Logger
 
   def overview(conn, %{"site_id" => site_id} = params) do
-    with {:ok, site, user} <- authorize_site(conn, site_id),
+    with :ok <- require_scope(conn, "read:stats"),
+         {:ok, site, user} <- authorize_site(conn, site_id),
          date_range <- parse_date_range(params),
          {:ok, stats} <- Analytics.overview_stats(site, user, date_range) do
       json(conn, %{data: stats})
@@ -15,7 +17,8 @@ defmodule SpectabasWeb.API.StatsController do
   end
 
   def pages(conn, %{"site_id" => site_id} = params) do
-    with {:ok, site, user} <- authorize_site(conn, site_id),
+    with :ok <- require_scope(conn, "read:stats"),
+         {:ok, site, user} <- authorize_site(conn, site_id),
          date_range <- parse_date_range(params),
          {:ok, data} <- Analytics.top_pages(site, user, date_range) do
       json(conn, %{data: data})
@@ -25,7 +28,8 @@ defmodule SpectabasWeb.API.StatsController do
   end
 
   def sources(conn, %{"site_id" => site_id} = params) do
-    with {:ok, site, user} <- authorize_site(conn, site_id),
+    with :ok <- require_scope(conn, "read:stats"),
+         {:ok, site, user} <- authorize_site(conn, site_id),
          date_range <- parse_date_range(params),
          {:ok, data} <- Analytics.top_sources(site, user, date_range) do
       json(conn, %{data: data})
@@ -35,7 +39,8 @@ defmodule SpectabasWeb.API.StatsController do
   end
 
   def countries(conn, %{"site_id" => site_id} = params) do
-    with {:ok, site, user} <- authorize_site(conn, site_id),
+    with :ok <- require_scope(conn, "read:stats"),
+         {:ok, site, user} <- authorize_site(conn, site_id),
          date_range <- parse_date_range(params),
          {:ok, data} <- Analytics.top_countries(site, user, date_range) do
       json(conn, %{data: data})
@@ -45,7 +50,8 @@ defmodule SpectabasWeb.API.StatsController do
   end
 
   def devices(conn, %{"site_id" => site_id} = params) do
-    with {:ok, site, user} <- authorize_site(conn, site_id),
+    with :ok <- require_scope(conn, "read:stats"),
+         {:ok, site, user} <- authorize_site(conn, site_id),
          date_range <- parse_date_range(params),
          {:ok, data} <- Analytics.top_devices(site, user, date_range) do
       json(conn, %{data: data})
@@ -55,7 +61,8 @@ defmodule SpectabasWeb.API.StatsController do
   end
 
   def realtime(conn, %{"site_id" => site_id}) do
-    with {:ok, site, _user} <- authorize_site(conn, site_id),
+    with :ok <- require_scope(conn, "read:stats"),
+         {:ok, site, _user} <- authorize_site(conn, site_id),
          {:ok, data} <- Analytics.realtime_visitors(site) do
       json(conn, %{data: data})
     else
@@ -64,7 +71,8 @@ defmodule SpectabasWeb.API.StatsController do
   end
 
   def realtime_visitors(conn, %{"site_id" => site_id}) do
-    with {:ok, site, _user} <- authorize_site(conn, site_id),
+    with :ok <- require_scope(conn, "read:visitors"),
+         {:ok, site, _user} <- authorize_site(conn, site_id),
          {:ok, data} <- Analytics.realtime_visitors_grouped(site) do
       json(conn, %{data: data})
     else
@@ -82,7 +90,8 @@ defmodule SpectabasWeb.API.StatsController do
   is the value of the _sab cookie set by the tracker script.
   """
   def identify(conn, %{"site_id" => site_id} = params) do
-    with {:ok, site, _user} <- authorize_site(conn, site_id) do
+    with :ok <- require_scope(conn, "write:identify"),
+         {:ok, site, _user} <- authorize_site(conn, site_id) do
       # Note: occurred_at is accepted but not currently used for identify
       _occurred_at = params["occurred_at"]
       visitor_id = params["visitor_id"]
@@ -132,7 +141,8 @@ defmodule SpectabasWeb.API.StatsController do
   }
   """
   def record_transaction(conn, %{"site_id" => site_id} = params) do
-    with {:ok, site, _user} <- authorize_site(conn, site_id) do
+    with :ok <- require_scope(conn, "write:events"),
+         {:ok, site, _user} <- authorize_site(conn, site_id) do
       order_id = params["order_id"]
 
       if is_nil(order_id) or order_id == "" do
@@ -217,7 +227,8 @@ defmodule SpectabasWeb.API.StatsController do
   defp parse_amount(_), do: 0
 
   def ecommerce_stats(conn, %{"site_id" => site_id} = params) do
-    with {:ok, site, user} <- authorize_site(conn, site_id),
+    with :ok <- require_scope(conn, "read:stats"),
+         {:ok, site, user} <- authorize_site(conn, site_id),
          date_range <- parse_date_range(params),
          {:ok, stats} <- Analytics.ecommerce_stats(site, user, date_range) do
       json(conn, %{data: stats})
@@ -227,7 +238,8 @@ defmodule SpectabasWeb.API.StatsController do
   end
 
   def ecommerce_products(conn, %{"site_id" => site_id} = params) do
-    with {:ok, site, user} <- authorize_site(conn, site_id),
+    with :ok <- require_scope(conn, "read:stats"),
+         {:ok, site, user} <- authorize_site(conn, site_id),
          date_range <- parse_date_range(params),
          {:ok, data} <- Analytics.ecommerce_top_products(site, user, date_range) do
       json(conn, %{data: data})
@@ -237,7 +249,8 @@ defmodule SpectabasWeb.API.StatsController do
   end
 
   def ecommerce_orders(conn, %{"site_id" => site_id} = params) do
-    with {:ok, site, user} <- authorize_site(conn, site_id),
+    with :ok <- require_scope(conn, "read:stats"),
+         {:ok, site, user} <- authorize_site(conn, site_id),
          date_range <- parse_date_range(params),
          {:ok, data} <- Analytics.ecommerce_orders(site, user, date_range) do
       json(conn, %{data: data})
@@ -247,6 +260,10 @@ defmodule SpectabasWeb.API.StatsController do
   end
 
   # --- Shared error handler ---
+
+  defp handle_error(conn, {:error, :insufficient_scope}) do
+    conn |> put_status(403) |> json(%{error: "insufficient scope"})
+  end
 
   defp handle_error(conn, {:error, :not_found}) do
     conn |> put_status(404) |> json(%{error: "site not found"})
@@ -267,12 +284,22 @@ defmodule SpectabasWeb.API.StatsController do
 
   # --- Private helpers ---
 
+  defp require_scope(conn, scope) do
+    if ApiAuth.has_scope?(conn, scope) do
+      :ok
+    else
+      {:error, :insufficient_scope}
+    end
+  end
+
   defp authorize_site(conn, site_id) do
     user_id = conn.assigns[:current_user_id]
+    allowed_site_ids = conn.assigns[:api_site_ids] || []
 
     with {:ok, site} <- fetch_site(site_id),
          {:ok, user} <- fetch_user(user_id),
-         true <- Accounts.can_access_site?(user, site) do
+         true <- Accounts.can_access_site?(user, site),
+         true <- site_allowed?(site.id, allowed_site_ids) do
       {:ok, site, user}
     else
       nil -> {:error, :not_found}
@@ -280,6 +307,10 @@ defmodule SpectabasWeb.API.StatsController do
       error -> error
     end
   end
+
+  # Empty list = all sites allowed
+  defp site_allowed?(_site_id, []), do: true
+  defp site_allowed?(site_id, allowed), do: site_id in allowed
 
   defp fetch_site(site_id) do
     try do
