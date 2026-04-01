@@ -540,51 +540,48 @@ defmodule SpectabasWeb.HealthController do
 
   @import_token "sab_import_test_92f7a3b1"
 
-  def import_matomo_test(conn, %{"token" => token, "action" => "check"})
+  def import_matomo_test(conn, %{"token" => token, "action" => "status"})
       when token == @import_token do
-    # Debug: check what's in ClickHouse for the imported date
-    queries = %{
-      total_march_1:
-        Spectabas.ClickHouse.query(
-          "SELECT count() AS c FROM events WHERE site_id = 4 AND toDate(timestamp) = '2025-03-01'"
-        ),
-      stats_direct:
-        Spectabas.ClickHouse.query("""
-        SELECT count() AS sessions, sum(pv) AS pageviews, uniq(vid) AS visitors
-        FROM (
-          SELECT session_id, any(visitor_id) AS vid, countIf(event_type = 'pageview') AS pv
-          FROM events
-          WHERE site_id = 4
-            AND timestamp >= '2025-03-01 00:00:00'
-            AND timestamp <= '2025-03-01 23:59:59'
-            AND ip_is_bot = 0
-          GROUP BY session_id
-          HAVING pv > 0
-        )
-        """),
-      sample:
-        Spectabas.ClickHouse.query(
-          "SELECT event_type, ip_is_bot, visitor_id, session_id FROM events WHERE site_id = 4 AND toDate(timestamp) = '2025-03-01' LIMIT 3"
-        )
-    }
+    count = Spectabas.Imports.Matomo.imported_count(4)
+    json(conn, %{imported_events: count})
+  end
 
-    json(conn, %{queries: inspect(queries, pretty: true, limit: :infinity)})
+  def import_matomo_test(conn, %{"token" => token, "action" => "rollback"})
+      when token == @import_token do
+    result = Spectabas.Imports.Matomo.rollback(4)
+    json(conn, %{result: inspect(result)})
+  end
+
+  def import_matomo_test(conn, %{"token" => token, "action" => "import"})
+      when token == @import_token do
+    # Import April 2025 through March 27, 2026 (before native tracking)
+    # Run async so it doesn't timeout — check status via action=status
+    Task.start(fn ->
+      Spectabas.Imports.Matomo.import_range(
+        4,
+        "https://a.roommates.com",
+        2,
+        "8ed134b2e37850878a2c035ab4c13cd1",
+        ~D[2025-04-01],
+        ~D[2026-03-27]
+      )
+    end)
+
+    json(conn, %{
+      status: "started",
+      message: "Importing Apr 2025 - Mar 27 2026. Check progress with action=status"
+    })
   end
 
   def import_matomo_test(conn, %{"token" => token}) when token == @import_token do
-    result =
-      Task.async(fn ->
-        Spectabas.Imports.Matomo.import_day(
-          4,
-          "https://a.roommates.com",
-          2,
-          "8ed134b2e37850878a2c035ab4c13cd1",
-          ~D[2025-03-01]
-        )
-      end)
-      |> Task.await(120_000)
-
-    json(conn, %{result: inspect(result)})
+    json(conn, %{
+      actions: %{
+        import: "Start full historical import (Apr 2025 - Mar 2026)",
+        status: "Check imported event count",
+        rollback: "Delete all imported data"
+      },
+      usage: "Add &action=import|status|rollback"
+    })
   end
 
   def import_matomo_test(conn, _params) do

@@ -104,6 +104,51 @@ defmodule Spectabas.Imports.Matomo do
     {:ok, total, length(dates)}
   end
 
+  @doc "Delete all imported events for a site. Returns {:ok, count} or {:error, reason}."
+  def rollback(site_id) do
+    Logger.info("[MatomoImport] Rolling back imported data for site #{site_id}...")
+
+    # Count first
+    count_sql =
+      "SELECT count() AS c FROM events WHERE site_id = #{Spectabas.ClickHouse.param(site_id)} AND visitor_id LIKE 'imported\\_%'"
+
+    count =
+      case Spectabas.ClickHouse.query(count_sql) do
+        {:ok, [%{"c" => c}]} -> Spectabas.TypeHelpers.to_num(c)
+        _ -> 0
+      end
+
+    if count == 0 do
+      Logger.info("[MatomoImport] No imported data found for site #{site_id}")
+      {:ok, 0}
+    else
+      # Delete imported events using ALTER TABLE DELETE
+      delete_sql =
+        "ALTER TABLE #{Spectabas.ClickHouse.database()}.events DELETE WHERE site_id = #{Spectabas.ClickHouse.param(site_id)} AND visitor_id LIKE 'imported\\_%'"
+
+      case Spectabas.ClickHouse.execute(delete_sql) do
+        :ok ->
+          Logger.info("[MatomoImport] Rolled back #{count} imported events for site #{site_id}")
+          {:ok, count}
+
+        {:error, reason} ->
+          Logger.error("[MatomoImport] Rollback failed: #{inspect(reason)}")
+          {:error, reason}
+      end
+    end
+  end
+
+  @doc "Count imported events for a site."
+  def imported_count(site_id) do
+    sql =
+      "SELECT count() AS c FROM events WHERE site_id = #{Spectabas.ClickHouse.param(site_id)} AND visitor_id LIKE 'imported\\_%'"
+
+    case Spectabas.ClickHouse.query(sql) do
+      {:ok, [%{"c" => c}]} -> Spectabas.TypeHelpers.to_num(c)
+      _ -> 0
+    end
+  end
+
   # --- Event generation ---
 
   defp build_events(site_id, date, data) do

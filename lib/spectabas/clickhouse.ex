@@ -354,6 +354,12 @@ defmodule Spectabas.ClickHouse do
     end
   end
 
+  @doc "Returns the configured ClickHouse database name."
+  def database do
+    cfg = Application.get_env(:spectabas, __MODULE__, [])
+    cfg[:database] || "spectabas"
+  end
+
   @doc """
   Escape a value for safe ClickHouse SQL interpolation.
   Use this for every user-supplied value in a query string.
