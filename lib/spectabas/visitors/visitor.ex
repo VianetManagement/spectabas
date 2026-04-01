@@ -35,5 +35,9 @@ defmodule Spectabas.Visitors.Visitor do
     |> cast(attrs, @required_fields ++ @optional_fields)
     |> validate_required(@required_fields)
     |> validate_inclusion(:gdpr_mode, ~w(on off))
+    |> unique_constraint([:site_id, :cookie_id], name: :visitors_site_id_cookie_id_unique)
+    |> unique_constraint([:site_id, :fingerprint_id],
+      name: :visitors_site_id_fingerprint_id_unique
+    )
   end
 end

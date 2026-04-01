@@ -112,9 +112,22 @@ defmodule Spectabas.Visitors do
           |> maybe_put(:last_ip, client_ip)
           |> maybe_put(:known_ips, if(client_ip, do: [client_ip], else: []))
 
-        %Visitor{}
-        |> Visitor.changeset(attrs)
-        |> Repo.insert()
+        case %Visitor{} |> Visitor.changeset(attrs) |> Repo.insert() do
+          {:ok, visitor} ->
+            {:ok, visitor}
+
+          {:error, %Ecto.Changeset{errors: errors}} ->
+            # Unique constraint violation — another process inserted first, just fetch it
+            if Keyword.has_key?(errors, :site_id) or Keyword.has_key?(errors, :cookie_id) or
+                 Keyword.has_key?(errors, :fingerprint_id) do
+              case Repo.one(query) do
+                %Visitor{} = visitor -> {:ok, visitor}
+                nil -> {:error, :insert_conflict}
+              end
+            else
+              {:error, :insert_failed}
+            end
+        end
     end
   end
 

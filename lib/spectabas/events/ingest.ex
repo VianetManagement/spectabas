@@ -287,9 +287,7 @@ defmodule Spectabas.Events.Ingest do
               if fp &&
                    (existing_by_cookie.fingerprint_id == nil or
                       existing_by_cookie.fingerprint_id == "") do
-                existing_by_cookie
-                |> Visitor.changeset(%{fingerprint_id: fp})
-                |> Spectabas.Repo.update()
+                try_update_fingerprint(existing_by_cookie, fp)
               end
 
               Visitors.get_or_create(site.id, payload.vid, :off, client_ip)
@@ -302,11 +300,7 @@ defmodule Spectabas.Events.Ingest do
               # device model/browser share a fingerprint (e.g. two iPhone 15 users).
               case Visitors.get_or_create(site.id, payload.vid, :off, client_ip) do
                 {:ok, visitor} ->
-                  if fp do
-                    visitor
-                    |> Visitor.changeset(%{fingerprint_id: fp})
-                    |> Spectabas.Repo.update()
-                  end
+                  if fp, do: try_update_fingerprint(visitor, fp)
 
                   Cache.put(site.id, payload.vid, visitor.id)
                   visitor.id
@@ -351,9 +345,7 @@ defmodule Spectabas.Events.Ingest do
                 case Visitors.get_or_create(site.id, cookie_id, :off, client_ip) do
                   {:ok, visitor} ->
                     # Store the fingerprint on the new visitor for future dedup
-                    visitor
-                    |> Visitor.changeset(%{fingerprint_id: fp})
-                    |> Spectabas.Repo.update()
+                    try_update_fingerprint(visitor, fp)
 
                     Cache.put(site.id, fp, visitor.id)
                     visitor.id
@@ -505,6 +497,16 @@ defmodule Spectabas.Events.Ingest do
   end
 
   defp resolve_timestamp(_), do: DateTime.utc_now()
+
+  # Best-effort fingerprint update — silently skip if the fingerprint is already
+  # claimed by another visitor (unique constraint on site_id + fingerprint_id).
+  defp try_update_fingerprint(visitor, fp) do
+    visitor
+    |> Visitor.changeset(%{fingerprint_id: fp})
+    |> Spectabas.Repo.update()
+  rescue
+    Ecto.ConstraintError -> :ok
+  end
 
   defp extract_utms(url, payload) do
     url_params =
