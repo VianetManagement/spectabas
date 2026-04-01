@@ -9,7 +9,8 @@ defmodule SpectabasWeb.AdIntegrationController do
   def callback(conn, %{"platform" => platform, "code" => code, "state" => state}) do
     case Phoenix.Token.verify(SpectabasWeb.Endpoint, "ad_oauth", state, max_age: 600) do
       {:ok, site_id} ->
-        result = exchange_code(platform, code)
+        site = Spectabas.Sites.get_site!(site_id)
+        result = exchange_code(site, platform, code)
         handle_exchange(conn, platform, site_id, result)
 
       {:error, _} ->
@@ -31,10 +32,10 @@ defmodule SpectabasWeb.AdIntegrationController do
     |> redirect(to: ~p"/dashboard")
   end
 
-  defp exchange_code("google_ads", code), do: GoogleAds.exchange_code(code)
-  defp exchange_code("bing_ads", code), do: BingAds.exchange_code(code)
-  defp exchange_code("meta_ads", code), do: MetaAds.exchange_code(code)
-  defp exchange_code(_, _), do: {:error, "Unknown platform"}
+  defp exchange_code(site, "google_ads", code), do: GoogleAds.exchange_code(site, code)
+  defp exchange_code(site, "bing_ads", code), do: BingAds.exchange_code(site, code)
+  defp exchange_code(site, "meta_ads", code), do: MetaAds.exchange_code(site, code)
+  defp exchange_code(_, _, _), do: {:error, "Unknown platform"}
 
   defp handle_exchange(conn, platform, site_id, {:ok, tokens}) do
     expires_at =

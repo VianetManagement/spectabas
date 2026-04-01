@@ -6,14 +6,14 @@ defmodule Spectabas.AdIntegrations.Platforms.MetaAds do
   @graph_url "https://graph.facebook.com/v21.0"
   @authorize_url "https://www.facebook.com/v21.0/dialog/oauth"
 
-  defp config do
-    Application.get_env(:spectabas, :ad_platforms, [])[:meta_ads] || []
-  end
+  alias Spectabas.AdIntegrations.Credentials
 
-  def authorize_url(state) do
+  def authorize_url(site, state) do
+    creds = Credentials.get_for_platform(site, "meta_ads")
+
     params =
       URI.encode_query(%{
-        client_id: config()[:app_id],
+        client_id: creds["app_id"],
         redirect_uri: redirect_uri(),
         response_type: "code",
         scope: "ads_read",
@@ -23,12 +23,14 @@ defmodule Spectabas.AdIntegrations.Platforms.MetaAds do
     "#{@authorize_url}?#{params}"
   end
 
-  def exchange_code(code) do
+  def exchange_code(site, code) do
+    creds = Credentials.get_for_platform(site, "meta_ads")
+
     # Get short-lived token
     case Req.get!("#{@graph_url}/oauth/access_token",
            params: [
-             client_id: config()[:app_id],
-             client_secret: config()[:app_secret],
+             client_id: creds["app_id"],
+             client_secret: creds["app_secret"],
              redirect_uri: redirect_uri(),
              code: code
            ]
@@ -38,8 +40,8 @@ defmodule Spectabas.AdIntegrations.Platforms.MetaAds do
         case Req.get!("#{@graph_url}/oauth/access_token",
                params: [
                  grant_type: "fb_exchange_token",
-                 client_id: config()[:app_id],
-                 client_secret: config()[:app_secret],
+                 client_id: creds["app_id"],
+                 client_secret: creds["app_secret"],
                  fb_exchange_token: short_token
                ]
              ) do
@@ -60,13 +62,15 @@ defmodule Spectabas.AdIntegrations.Platforms.MetaAds do
     end
   end
 
-  def refresh_token(current_token) do
+  def refresh_token(site, current_token) do
+    creds = Credentials.get_for_platform(site, "meta_ads")
+
     # Meta long-lived tokens are refreshed by exchanging again
     case Req.get!("#{@graph_url}/oauth/access_token",
            params: [
              grant_type: "fb_exchange_token",
-             client_id: config()[:app_id],
-             client_secret: config()[:app_secret],
+             client_id: creds["app_id"],
+             client_secret: creds["app_secret"],
              fb_exchange_token: current_token
            ]
          ) do
@@ -100,7 +104,7 @@ defmodule Spectabas.AdIntegrations.Platforms.MetaAds do
     end
   end
 
-  def fetch_daily_spend(integration, %Date{} = date) do
+  def fetch_daily_spend(_site, integration, %Date{} = date) do
     access_token = Spectabas.AdIntegrations.decrypt_access_token(integration)
     account_id = integration.account_id
     date_str = Date.to_iso8601(date)

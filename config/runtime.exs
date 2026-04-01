@@ -61,20 +61,6 @@ if config_env() == :prod do
     end
   end
 
-  # Ad platform integrations
-  config :spectabas, :ad_platforms,
-    google_ads: [
-      client_id: System.get_env("GOOGLE_ADS_CLIENT_ID"),
-      client_secret: System.get_env("GOOGLE_ADS_CLIENT_SECRET"),
-      developer_token: System.get_env("GOOGLE_ADS_DEVELOPER_TOKEN")
-    ],
-    bing_ads: [
-      client_id: System.get_env("BING_ADS_CLIENT_ID"),
-      client_secret: System.get_env("BING_ADS_CLIENT_SECRET"),
-      developer_token: System.get_env("BING_ADS_DEVELOPER_TOKEN")
-    ],
-    meta_ads: [
-      app_id: System.get_env("META_ADS_APP_ID"),
-      app_secret: System.get_env("META_ADS_APP_SECRET")
-    ]
+  # Ad platform credentials are stored per-site in the database (encrypted)
+  # No global environment variables needed — configure from each site's Settings page
 end

@@ -10,7 +10,7 @@ defmodule Spectabas.Workers.AdSpendSync do
 
   @impl Oban.Worker
   def perform(_job) do
-    integrations = AdIntegrations.list_active()
+    integrations = AdIntegrations.list_active() |> Spectabas.Repo.preload(:site)
     yesterday = Date.add(Date.utc_today(), -1)
 
     Enum.each(integrations, fn integration ->
@@ -37,7 +37,7 @@ defmodule Spectabas.Workers.AdSpendSync do
       end
 
     if integration do
-      case fetch_spend(integration, date) do
+      case fetch_spend(integration.site, integration, date) do
         {:ok, rows} when rows != [] ->
           ch_rows =
             Enum.map(rows, fn row ->
@@ -86,15 +86,21 @@ defmodule Spectabas.Workers.AdSpendSync do
     end
   end
 
-  defp fetch_spend(%{platform: "google_ads"} = i, date), do: GoogleAds.fetch_daily_spend(i, date)
-  defp fetch_spend(%{platform: "bing_ads"} = i, date), do: BingAds.fetch_daily_spend(i, date)
-  defp fetch_spend(%{platform: "meta_ads"} = i, date), do: MetaAds.fetch_daily_spend(i, date)
-  defp fetch_spend(_, _), do: {:error, "unknown platform"}
+  defp fetch_spend(site, %{platform: "google_ads"} = i, date),
+    do: GoogleAds.fetch_daily_spend(site, i, date)
 
-  defp refresh(%{platform: "google_ads"} = integration) do
+  defp fetch_spend(site, %{platform: "bing_ads"} = i, date),
+    do: BingAds.fetch_daily_spend(site, i, date)
+
+  defp fetch_spend(site, %{platform: "meta_ads"} = i, date),
+    do: MetaAds.fetch_daily_spend(site, i, date)
+
+  defp fetch_spend(_, _, _), do: {:error, "unknown platform"}
+
+  defp refresh(%{platform: "google_ads", site: site} = integration) do
     rt = AdIntegrations.decrypt_refresh_token(integration)
 
-    case GoogleAds.refresh_token(rt) do
+    case GoogleAds.refresh_token(site, rt) do
       {:ok, tokens} ->
         expires_at =
           DateTime.add(DateTime.utc_now(), tokens.expires_in || 3600, :second)
@@ -107,10 +113,10 @@ defmodule Spectabas.Workers.AdSpendSync do
     end
   end
 
-  defp refresh(%{platform: "bing_ads"} = integration) do
+  defp refresh(%{platform: "bing_ads", site: site} = integration) do
     rt = AdIntegrations.decrypt_refresh_token(integration)
 
-    case BingAds.refresh_token(rt) do
+    case BingAds.refresh_token(site, rt) do
       {:ok, tokens} ->
         expires_at =
           DateTime.add(DateTime.utc_now(), tokens.expires_in || 3600, :second)
@@ -123,10 +129,10 @@ defmodule Spectabas.Workers.AdSpendSync do
     end
   end
 
-  defp refresh(%{platform: "meta_ads"} = integration) do
+  defp refresh(%{platform: "meta_ads", site: site} = integration) do
     at = AdIntegrations.decrypt_access_token(integration)
 
-    case MetaAds.refresh_token(at) do
+    case MetaAds.refresh_token(site, at) do
       {:ok, tokens} ->
         expires_at =
           DateTime.add(DateTime.utc_now(), tokens.expires_in || 5_184_000, :second)

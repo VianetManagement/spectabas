@@ -21,6 +21,7 @@ defmodule Spectabas.Sites.Site do
     field :ip_blocklist, {:array, :string}, default: []
     field :native_start_date, :date
     field :import_end_date, :date
+    field :ad_credentials_encrypted, :binary
 
     timestamps(type: :utc_datetime)
   end

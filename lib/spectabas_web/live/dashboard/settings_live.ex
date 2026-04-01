@@ -28,7 +28,8 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
        |> assign(:snippet, Sites.snippet_code(site))
        |> assign(:render_domain_status, check_render_domain(site.domain))
        |> assign(:example_html, example_html(site))
-       |> assign(:ad_integrations, Spectabas.AdIntegrations.list_for_site(site.id))}
+       |> assign(:ad_integrations, Spectabas.AdIntegrations.list_for_site(site.id))
+       |> assign(:configuring_platform, nil)}
     end
   end
 
@@ -88,6 +89,50 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
      socket
      |> put_flash(:info, "#{platform_label(integration.platform)} disconnected.")
      |> assign(:ad_integrations, Spectabas.AdIntegrations.list_for_site(socket.assigns.site.id))}
+  end
+
+  def handle_event("save_ad_credentials", %{"platform" => platform} = params, socket) do
+    site = socket.assigns.site
+
+    creds =
+      case platform do
+        "google_ads" ->
+          %{
+            "client_id" => params["client_id"] || "",
+            "client_secret" => params["client_secret"] || "",
+            "developer_token" => params["developer_token"] || ""
+          }
+
+        "bing_ads" ->
+          %{
+            "client_id" => params["client_id"] || "",
+            "client_secret" => params["client_secret"] || "",
+            "developer_token" => params["developer_token"] || ""
+          }
+
+        "meta_ads" ->
+          %{
+            "app_id" => params["app_id"] || "",
+            "app_secret" => params["app_secret"] || ""
+          }
+      end
+
+    case Spectabas.AdIntegrations.Credentials.save(site, platform, creds) do
+      {:ok, updated_site} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "#{platform_label(platform)} credentials saved.")
+         |> assign(:site, updated_site)}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to save credentials.")}
+    end
+  end
+
+  def handle_event("toggle_ad_config", %{"platform" => platform}, socket) do
+    current = socket.assigns[:configuring_platform]
+    new = if current == platform, do: nil, else: platform
+    {:noreply, assign(socket, :configuring_platform, new)}
   end
 
   def handle_event("verify_dns", _params, socket) do
@@ -491,18 +536,94 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                     Disconnect
                   </button>
                 <% else %>
-                  <%= if ad_platform_configured?(platform) do %>
+                  <%= if ad_platform_configured?(@site, platform) do %>
                     <a
-                      href={ad_authorize_url(platform, @site.id)}
+                      href={ad_authorize_url(platform, @site)}
                       class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
                     >
                       Connect {label}
                     </a>
-                  <% else %>
-                    <p class="text-xs text-gray-400">
-                      Not configured. Set environment variables to enable.
-                    </p>
                   <% end %>
+                  <button
+                    phx-click="toggle_ad_config"
+                    phx-value-platform={platform}
+                    class="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                  >
+                    {if @configuring_platform == platform, do: "Hide", else: "Configure"}
+                  </button>
+                <% end %>
+
+                <%!-- Credential Configuration Form --%>
+                <%= if @configuring_platform == platform do %>
+                  <form phx-submit="save_ad_credentials" class="mt-3 space-y-2">
+                    <input type="hidden" name="platform" value={platform} />
+                    <% creds = Spectabas.AdIntegrations.Credentials.get_for_platform(@site, platform) %>
+                    <%= if platform in ["google_ads", "bing_ads"] do %>
+                      <div>
+                        <label class="block text-[10px] font-medium text-gray-500">Client ID</label>
+                        <input
+                          type="text"
+                          name="client_id"
+                          value={creds["client_id"] || ""}
+                          class="mt-0.5 block w-full rounded border-gray-300 text-xs px-2 py-1.5"
+                          placeholder="OAuth Client ID"
+                        />
+                      </div>
+                      <div>
+                        <label class="block text-[10px] font-medium text-gray-500">
+                          Client Secret
+                        </label>
+                        <input
+                          type="password"
+                          name="client_secret"
+                          value={creds["client_secret"] || ""}
+                          class="mt-0.5 block w-full rounded border-gray-300 text-xs px-2 py-1.5"
+                          placeholder="OAuth Client Secret"
+                        />
+                      </div>
+                      <div>
+                        <label class="block text-[10px] font-medium text-gray-500">
+                          Developer Token
+                        </label>
+                        <input
+                          type="password"
+                          name="developer_token"
+                          value={creds["developer_token"] || ""}
+                          class="mt-0.5 block w-full rounded border-gray-300 text-xs px-2 py-1.5"
+                          placeholder="API Developer Token"
+                        />
+                      </div>
+                    <% else %>
+                      <div>
+                        <label class="block text-[10px] font-medium text-gray-500">App ID</label>
+                        <input
+                          type="text"
+                          name="app_id"
+                          value={creds["app_id"] || ""}
+                          class="mt-0.5 block w-full rounded border-gray-300 text-xs px-2 py-1.5"
+                          placeholder="Meta App ID"
+                        />
+                      </div>
+                      <div>
+                        <label class="block text-[10px] font-medium text-gray-500">
+                          App Secret
+                        </label>
+                        <input
+                          type="password"
+                          name="app_secret"
+                          value={creds["app_secret"] || ""}
+                          class="mt-0.5 block w-full rounded border-gray-300 text-xs px-2 py-1.5"
+                          placeholder="Meta App Secret"
+                        />
+                      </div>
+                    <% end %>
+                    <button
+                      type="submit"
+                      class="w-full px-2 py-1 text-xs font-medium rounded bg-gray-800 text-white hover:bg-gray-700"
+                    >
+                      Save Credentials
+                    </button>
+                  </form>
                 <% end %>
               </div>
             <% end %>
@@ -518,26 +639,19 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   defp platform_label("meta_ads"), do: "Meta Ads"
   defp platform_label(p), do: p
 
-  defp ad_authorize_url(platform, site_id) do
-    state = Phoenix.Token.sign(SpectabasWeb.Endpoint, "ad_oauth", site_id)
+  defp ad_authorize_url(platform, site) do
+    state = Phoenix.Token.sign(SpectabasWeb.Endpoint, "ad_oauth", site.id)
 
     case platform do
-      "google_ads" -> Spectabas.AdIntegrations.Platforms.GoogleAds.authorize_url(state)
-      "bing_ads" -> Spectabas.AdIntegrations.Platforms.BingAds.authorize_url(state)
-      "meta_ads" -> Spectabas.AdIntegrations.Platforms.MetaAds.authorize_url(state)
+      "google_ads" -> Spectabas.AdIntegrations.Platforms.GoogleAds.authorize_url(site, state)
+      "bing_ads" -> Spectabas.AdIntegrations.Platforms.BingAds.authorize_url(site, state)
+      "meta_ads" -> Spectabas.AdIntegrations.Platforms.MetaAds.authorize_url(site, state)
       _ -> "#"
     end
   end
 
-  defp ad_platform_configured?(platform) do
-    config = Application.get_env(:spectabas, :ad_platforms, [])
-
-    case platform do
-      "google_ads" -> config[:google_ads][:client_id] not in [nil, ""]
-      "bing_ads" -> config[:bing_ads][:client_id] not in [nil, ""]
-      "meta_ads" -> config[:meta_ads][:app_id] not in [nil, ""]
-      _ -> false
-    end
+  defp ad_platform_configured?(site, platform) do
+    Spectabas.AdIntegrations.Credentials.configured?(site, platform)
   end
 
   defp example_html(site) do

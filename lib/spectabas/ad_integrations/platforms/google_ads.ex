@@ -8,14 +8,14 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleAds do
   @api_base "https://googleads.googleapis.com/v17"
   @scope "https://www.googleapis.com/auth/adwords"
 
-  defp config do
-    Application.get_env(:spectabas, :ad_platforms, [])[:google_ads] || []
-  end
+  alias Spectabas.AdIntegrations.Credentials
 
-  def authorize_url(state) do
+  def authorize_url(site, state) do
+    creds = Credentials.get_for_platform(site, "google_ads")
+
     params =
       URI.encode_query(%{
-        client_id: config()[:client_id],
+        client_id: creds["client_id"],
         redirect_uri: redirect_uri(),
         response_type: "code",
         scope: @scope,
@@ -27,12 +27,14 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleAds do
     "#{@authorize_url}?#{params}"
   end
 
-  def exchange_code(code) do
+  def exchange_code(site, code) do
+    creds = Credentials.get_for_platform(site, "google_ads")
+
     case Req.post!(@token_url,
            form: [
              code: code,
-             client_id: config()[:client_id],
-             client_secret: config()[:client_secret],
+             client_id: creds["client_id"],
+             client_secret: creds["client_secret"],
              redirect_uri: redirect_uri(),
              grant_type: "authorization_code"
            ]
@@ -50,12 +52,14 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleAds do
     end
   end
 
-  def refresh_token(refresh_token) do
+  def refresh_token(site, refresh_token) do
+    creds = Credentials.get_for_platform(site, "google_ads")
+
     case Req.post!(@token_url,
            form: [
              refresh_token: refresh_token,
-             client_id: config()[:client_id],
-             client_secret: config()[:client_secret],
+             client_id: creds["client_id"],
+             client_secret: creds["client_secret"],
              grant_type: "refresh_token"
            ]
          ) do
@@ -67,9 +71,10 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleAds do
     end
   end
 
-  def fetch_daily_spend(integration, %Date{} = date) do
+  def fetch_daily_spend(site, integration, %Date{} = date) do
     access_token = Spectabas.AdIntegrations.decrypt_access_token(integration)
-    dev_token = config()[:developer_token]
+    creds = Credentials.get_for_platform(site, "google_ads")
+    dev_token = creds["developer_token"]
     customer_id = integration.account_id |> String.replace("-", "")
 
     gaql = """

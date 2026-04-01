@@ -1896,25 +1896,29 @@ defmodule SpectabasWeb.DocsLive do
             3. Create OAuth 2.0 credentials (Web application type)
             4. Set the authorized redirect URI to `https://www.spectabas.com/auth/ad/google_ads/callback`
             5. Get a Developer Token from [Google Ads API Center](https://ads.google.com/aw/apicenter)
-            6. Set environment variables: `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`, `GOOGLE_ADS_DEVELOPER_TOKEN`
+            6. In Spectabas: go to **Site Settings > Ad Platform Integrations > Google Ads > Configure** and enter the Client ID, Client Secret, and Developer Token
 
             **Microsoft/Bing Ads:**
             1. Register an app in [Azure Active Directory](https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps)
             2. Add the redirect URI: `https://www.spectabas.com/auth/ad/bing_ads/callback`
             3. Get a Developer Token from the [Bing Ads Developer Portal](https://developers.ads.microsoft.com)
-            4. Set environment variables: `BING_ADS_CLIENT_ID`, `BING_ADS_CLIENT_SECRET`, `BING_ADS_DEVELOPER_TOKEN`
+            4. In Spectabas: go to **Site Settings > Ad Platform Integrations > Microsoft Ads > Configure** and enter the Client ID, Client Secret, and Developer Token
 
             **Meta/Facebook Ads:**
             1. Create an app at [Meta for Developers](https://developers.facebook.com)
             2. Add Facebook Login product, set redirect URI to `https://www.spectabas.com/auth/ad/meta_ads/callback`
             3. Request the `ads_read` permission
-            4. Set environment variables: `META_ADS_APP_ID`, `META_ADS_APP_SECRET`
+            4. In Spectabas: go to **Site Settings > Ad Platform Integrations > Meta Ads > Configure** and enter the App ID and App Secret
+
+            > **All credentials are encrypted** and stored per-site. No environment variables needed. Each site can have its own OAuth app or share one.
 
             #### Connecting an Account
 
             1. Go to your site's **Settings** page
             2. Scroll to **Ad Platform Integrations**
-            3. Click **Connect** for the platform you want
+            3. Click **Configure** to enter your OAuth app credentials
+            4. Click **Save Credentials**
+            5. Click **Connect** to start the OAuth flow
             4. Complete the OAuth authorization flow (you'll be redirected to the ad platform to grant access)
             5. Once connected, the card shows "Connected" with the account name and last sync time
 
