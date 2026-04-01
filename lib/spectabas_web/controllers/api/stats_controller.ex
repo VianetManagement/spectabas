@@ -150,9 +150,12 @@ defmodule SpectabasWeb.API.StatsController do
       else
         now = parse_occurred_at(params["occurred_at"])
 
+        # Resolve visitor: if email provided, identify the visitor and link the transaction
+        visitor_id = resolve_transaction_visitor(site, params)
+
         row = %{
           "site_id" => site.id,
-          "visitor_id" => params["visitor_id"] || "",
+          "visitor_id" => visitor_id,
           "session_id" => params["session_id"] || "",
           "order_id" => order_id,
           "revenue" => parse_amount(params["revenue"]),
@@ -328,6 +331,43 @@ defmodule SpectabasWeb.API.StatsController do
     rescue
       Ecto.NoResultsError -> {:error, :unauthorized}
     end
+  end
+
+  # Resolve visitor_id for a transaction. If email is provided, identify the visitor
+  # so the transaction links to their Spectabas profile. Falls back to raw visitor_id param.
+  defp resolve_transaction_visitor(site, params) do
+    email = params["email"]
+    visitor_id = params["visitor_id"] || ""
+
+    cond do
+      # Email + visitor_id: identify the visitor (associate email) and use that ID
+      is_binary(email) and email != "" and visitor_id != "" ->
+        Visitors.identify(site.id, visitor_id, %{email: email})
+        visitor_id
+
+      # Email only (no visitor_id): look up by email in Postgres
+      is_binary(email) and email != "" ->
+        case find_visitor_by_email(site.id, email) do
+          %{id: id} -> id
+          nil -> ""
+        end
+
+      # No email: use raw visitor_id
+      true ->
+        visitor_id
+    end
+  end
+
+  defp find_visitor_by_email(site_id, email) do
+    import Ecto.Query
+
+    Spectabas.Repo.one(
+      from(v in Spectabas.Visitors.Visitor,
+        where: v.site_id == ^site_id and v.email == ^email,
+        order_by: [desc: v.last_seen_at],
+        limit: 1
+      )
+    )
   end
 
   defp parse_date_range(params) do

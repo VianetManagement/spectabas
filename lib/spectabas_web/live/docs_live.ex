@@ -1452,6 +1452,7 @@ defmodule SpectabasWeb.DocsLive do
             | `order_id` | string | yes | Unique order identifier |
             | `revenue` | number | no | Total revenue (including tax/shipping) |
             | `visitor_id` | string | no | The `_sab` cookie value to link to a visitor |
+            | `email` | string | no | Customer email — links the transaction to a Spectabas visitor profile. If `visitor_id` is also provided, identifies that visitor with this email. If only `email` is provided, looks up the visitor by email. |
             | `subtotal` | number | no | Subtotal before tax/shipping |
             | `tax` | number | no | Tax amount |
             | `shipping` | number | no | Shipping cost |
@@ -1475,6 +1476,7 @@ defmodule SpectabasWeb.DocsLive do
                   shipping: order.shipping,
                   discount: order.discount,
                   visitor_id: conn.cookies["_sab"],
+                  email: current_user.email,
                   currency: "USD",
                   occurred_at: DateTime.to_unix(order.completed_at),
                   items: Enum.map(order.line_items, fn item ->
@@ -1484,6 +1486,11 @@ defmodule SpectabasWeb.DocsLive do
               )
             end)
             ```
+
+            When `email` is provided:
+            - If `visitor_id` is also provided, the visitor is identified with that email (same as calling the identify API)
+            - If only `email` is provided (no `visitor_id`), the system looks up the most recent visitor with that email
+            - The transaction is then linked to that visitor, making it visible on their profile page and in the visitor log
 
             ### Example (curl)
 
@@ -1495,6 +1502,7 @@ defmodule SpectabasWeb.DocsLive do
                 "order_id": "ORD-123",
                 "revenue": 99.99,
                 "visitor_id": "abc123...",
+                "email": "customer@example.com",
                 "occurred_at": 1711900000,
                 "items": [{"name": "Widget", "price": 49.99, "quantity": 2}]
               }'

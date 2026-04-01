@@ -65,10 +65,15 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
         _ -> []
       end
 
+    # Enrich orders with visitor emails
+    visitor_ids = Enum.map(orders, & &1["visitor_id"]) |> Enum.reject(&(is_nil(&1) or &1 == ""))
+    email_map = Spectabas.Visitors.emails_for_visitor_ids(visitor_ids)
+
     socket
     |> assign(:ecommerce, stats)
     |> assign(:top_products, products)
     |> assign(:orders, orders)
+    |> assign(:email_map, email_map)
     |> assign(:timeseries, timeseries)
     |> push_ecommerce_chart(timeseries)
   end
@@ -256,9 +261,12 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
                   <.link
                     :if={order["visitor_id"] && order["visitor_id"] != ""}
                     navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{order["visitor_id"]}"}
-                    class="text-indigo-600 hover:text-indigo-800 font-mono text-xs"
+                    class="text-indigo-600 hover:text-indigo-800"
                   >
-                    {String.slice(order["visitor_id"] || "", 0, 8)}...
+                    {case @email_map[order["visitor_id"]] do
+                      %{email: email} when email != "" and not is_nil(email) -> email
+                      _ -> String.slice(order["visitor_id"] || "", 0, 8) <> "..."
+                    end}
                   </.link>
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums font-medium">

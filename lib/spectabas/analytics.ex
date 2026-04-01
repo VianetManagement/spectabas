@@ -1156,6 +1156,20 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  @doc "Ecommerce orders for a specific visitor."
+  def visitor_orders(%Site{} = site, visitor_id) when is_binary(visitor_id) do
+    sql = """
+    SELECT order_id, revenue, subtotal, tax, shipping, discount, currency, items, timestamp
+    FROM ecommerce_events
+    WHERE site_id = #{ClickHouse.param(site.id)}
+      AND visitor_id = #{ClickHouse.param(visitor_id)}
+    ORDER BY timestamp DESC
+    LIMIT 50
+    """
+
+    ClickHouse.query(sql)
+  end
+
   @doc """
   All events for a specific visitor_id, ordered by timestamp.
   """

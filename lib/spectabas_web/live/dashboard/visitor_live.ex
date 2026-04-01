@@ -87,6 +87,17 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
         end)
         |> Enum.sort_by(& &1.started, :desc)
 
+      # Load ecommerce orders for this visitor (if ecommerce enabled)
+      orders =
+        if site.ecommerce_enabled do
+          case Analytics.visitor_orders(site, visitor_id) do
+            {:ok, rows} -> rows
+            _ -> []
+          end
+        else
+          []
+        end
+
       {:ok,
        socket
        |> assign(:page_title, "Visitor - #{site.name}")
@@ -100,6 +111,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
        |> assign(:ip_visitors, ip_visitors)
        |> assign(:fp_visitors, fp_visitors)
        |> assign(:show_ip_panel, false)
+       |> assign(:orders, orders)
        |> assign(:visitor_ips, load_visitor_ips(site, visitor_id))}
     end
   end
@@ -443,6 +455,51 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
           </table>
         </div>
 
+        <%!-- Ecommerce Orders --%>
+        <div :if={@orders != []} class="bg-white rounded-lg shadow mb-6">
+          <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h3 class="text-sm font-semibold text-gray-700">
+              Orders ({length(@orders)})
+            </h3>
+            <.link
+              navigate={~p"/dashboard/sites/#{@site.id}/ecommerce"}
+              class="text-xs text-indigo-600 hover:text-indigo-800"
+            >
+              View all ecommerce &rarr;
+            </.link>
+          </div>
+          <table class="min-w-full divide-y divide-gray-200 text-sm">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-2 text-left text-xs text-gray-500">Order ID</th>
+                <th class="px-4 py-2 text-right text-xs text-gray-500">Revenue</th>
+                <th class="px-4 py-2 text-right text-xs text-gray-500">Tax</th>
+                <th class="px-4 py-2 text-right text-xs text-gray-500">Shipping</th>
+                <th class="px-4 py-2 text-left text-xs text-gray-500">Items</th>
+                <th class="px-4 py-2 text-left text-xs text-gray-500">Time</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr :for={order <- @orders} class="hover:bg-gray-50">
+                <td class="px-4 py-2 font-mono text-xs text-gray-900">{order["order_id"]}</td>
+                <td class="px-4 py-2 text-right tabular-nums font-medium text-green-600">
+                  {@site.currency} {format_order_amount(order["revenue"])}
+                </td>
+                <td class="px-4 py-2 text-right tabular-nums text-gray-500">
+                  {format_order_amount(order["tax"])}
+                </td>
+                <td class="px-4 py-2 text-right tabular-nums text-gray-500">
+                  {format_order_amount(order["shipping"])}
+                </td>
+                <td class="px-4 py-2 text-gray-500 text-xs">
+                  {parse_items(order["items"])}
+                </td>
+                <td class="px-4 py-2 text-gray-500 text-xs">{order["timestamp"]}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
         <%!-- Browser Fingerprint Cross-Reference --%>
         <div :if={@fp_visitors != []} class="bg-white rounded-lg shadow mb-6">
           <div class="px-5 py-4 border-b border-gray-100">
@@ -551,6 +608,36 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
   defp event_type_class("custom"), do: "bg-purple-100 text-purple-800"
   defp event_type_class("ecommerce_order"), do: "bg-green-100 text-green-800"
   defp event_type_class(_), do: "bg-gray-100 text-gray-800"
+
+  defp format_order_amount(n) when is_binary(n) do
+    case Float.parse(n) do
+      {f, _} -> :erlang.float_to_binary(f, decimals: 2)
+      :error -> "0.00"
+    end
+  end
+
+  defp format_order_amount(n) when is_number(n),
+    do: :erlang.float_to_binary(n / 1, decimals: 2)
+
+  defp format_order_amount(_), do: "0.00"
+
+  defp parse_items(nil), do: "-"
+  defp parse_items(""), do: "-"
+  defp parse_items("[]"), do: "-"
+
+  defp parse_items(json) when is_binary(json) do
+    case Jason.decode(json) do
+      {:ok, items} when is_list(items) ->
+        items
+        |> Enum.map(fn i -> "#{i["quantity"] || 1}x #{i["name"] || "?"}" end)
+        |> Enum.join(", ")
+
+      _ ->
+        "-"
+    end
+  end
+
+  defp parse_items(_), do: "-"
 
   defp load_visitor_ips(site, visitor_id) do
     case Analytics.visitor_ips(site, visitor_id) do

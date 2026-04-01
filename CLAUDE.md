@@ -137,6 +137,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Identified Users** — dashboard shows count and percentage of visitors with associated email (via server-side identify API)
 - **Ecommerce on Dashboard** — sites with ecommerce enabled show revenue/orders/AOV cards on the main overview
 - **Ecommerce Revenue Chart** — combined bar (revenue) + line (orders) chart on the ecommerce page
+- **Ecommerce Email Association** — transaction API accepts `email` to link orders to visitor profiles; orders show on visitor detail page
 
 ## Authentication
 
@@ -222,4 +223,5 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **API access logging**: Every API call is logged (endpoint, method, request body, response status, response body). Stored in PostgreSQL with 30-day retention via Oban cleanup worker. Admin UI at `/admin/api-logs` with detail modal.
 - **High-throughput ingest**: Async flush, 1000 batch size, ETS visitor cache, dedicated ClickHouse connection pool (100 connections), per-site rate limiting (1000 events/sec).
 - **occurred_at backdating**: All events support optional `occurred_at` field (Unix UTC seconds) to backdate events up to 7 days.
+- **Ecommerce email association**: Transaction API accepts optional `email` field. If `visitor_id` + `email` both provided, identifies the visitor. If only `email`, looks up by email. Orders appear on visitor profile pages.
 - **RUM collection**: Tracker sends `_rum` (nav timing) and `_cwv` (Core Web Vitals) custom events. Uses `performance.getEntriesByType("navigation")` with `performance.timing` fallback. IMPORTANT: PerformanceNavigationTiming uses `nav.startTime` (always 0) for the navigation baseline — NOT `nav.navigationStart` which only exists on the deprecated `performance.timing`. Queries use `quantileIf` to exclude zeros. ClickHouse `quantileIf` returns `nan` when no rows match — `parse_rows` sanitizes `nan`→`null` before JSON parsing.

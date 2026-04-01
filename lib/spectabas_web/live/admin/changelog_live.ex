@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v3.2.0 — 2026-03-31 UTC",
+       [
+         %{
+           title: "Feature: email on ecommerce transactions",
+           description:
+             "The ecommerce transaction API now accepts an optional `email` field. When provided, it identifies the visitor and links the transaction to their Spectabas profile. Orders table shows email instead of truncated visitor ID."
+         }
+       ]},
       {"v3.1.0 — 2026-03-31 UTC",
        [
          %{
