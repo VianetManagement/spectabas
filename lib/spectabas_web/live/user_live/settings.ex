@@ -228,8 +228,8 @@ defmodule SpectabasWeb.UserLive.Settings do
 
         <%!-- New key form --%>
         <div :if={@show_api_form} class="bg-gray-50 rounded-lg p-4 mb-4">
-          <form phx-submit="create_api_key" class="flex items-end gap-3">
-            <div class="flex-1">
+          <form phx-submit="create_api_key" class="space-y-4">
+            <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Key Name</label>
               <input
                 type="text"
@@ -239,11 +239,69 @@ defmodule SpectabasWeb.UserLive.Settings do
                 class="block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
               />
             </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Permissions</label>
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <label
+                  :for={scope <- Spectabas.Accounts.APIKey.valid_scopes()}
+                  class="flex items-center gap-2 text-sm text-gray-700"
+                >
+                  <input
+                    type="checkbox"
+                    name="scopes[]"
+                    value={scope}
+                    checked={scope != "admin:sites"}
+                    class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  {scope}
+                </label>
+              </div>
+              <p class="text-xs text-gray-500 mt-1">
+                admin:sites is not checked by default for security.
+              </p>
+            </div>
+
+            <div :if={@user_sites != []}>
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                Restrict to Sites <span class="text-gray-400 font-normal">(optional)</span>
+              </label>
+              <div class="grid grid-cols-2 gap-2">
+                <label
+                  :for={site <- @user_sites}
+                  class="flex items-center gap-2 text-sm text-gray-700"
+                >
+                  <input
+                    type="checkbox"
+                    name="site_ids[]"
+                    value={site.id}
+                    class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  {site.name}
+                </label>
+              </div>
+              <p class="text-xs text-gray-500 mt-1">
+                Leave all unchecked to allow access to all sites.
+              </p>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                Expiry Date <span class="text-gray-400 font-normal">(optional)</span>
+              </label>
+              <input
+                type="date"
+                name="expires_at"
+                min={Date.to_iso8601(Date.add(Date.utc_today(), 1))}
+                class="block w-48 rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+              />
+            </div>
+
             <button
               type="submit"
               class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
             >
-              Generate
+              Generate Key
             </button>
           </form>
         </div>
@@ -263,22 +321,58 @@ defmodule SpectabasWeb.UserLive.Settings do
           No API keys yet.
         </div>
         <div :if={@api_keys != []} class="divide-y divide-gray-100">
-          <div :for={key <- @api_keys} class="flex items-center justify-between py-3">
-            <div>
-              <span class="text-sm font-medium text-gray-900">{key.name}</span>
-              <span class="text-xs text-gray-500 ml-2 font-mono">{key.key_prefix}...</span>
-              <span :if={key.last_used_at} class="text-xs text-gray-400 ml-2">
-                Last used: {Calendar.strftime(key.last_used_at, "%Y-%m-%d")}
+          <div :for={key <- @api_keys} class="py-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <span class="text-sm font-medium text-gray-900">{key.name}</span>
+                <span class="text-xs text-gray-500 ml-2 font-mono">{key.key_prefix}...</span>
+                <span :if={key.last_used_at} class="text-xs text-gray-400 ml-2">
+                  Last used: {Calendar.strftime(key.last_used_at, "%Y-%m-%d")}
+                </span>
+                <span
+                  :if={key.expires_at}
+                  class={[
+                    "text-xs ml-2 px-1.5 py-0.5 rounded",
+                    if(DateTime.compare(key.expires_at, DateTime.utc_now()) == :lt,
+                      do: "bg-red-100 text-red-700",
+                      else: "bg-yellow-50 text-yellow-700"
+                    )
+                  ]}
+                >
+                  {if DateTime.compare(key.expires_at, DateTime.utc_now()) == :lt,
+                    do: "Expired",
+                    else: "Expires #{Calendar.strftime(key.expires_at, "%Y-%m-%d")}"}
+                </span>
+              </div>
+              <button
+                phx-click="revoke_api_key"
+                phx-value-id={key.id}
+                data-confirm={"Revoke API key \"#{key.name}\"? This cannot be undone."}
+                class="text-red-500 hover:text-red-700 text-sm font-medium"
+              >
+                Revoke
+              </button>
+            </div>
+            <div class="mt-1 flex flex-wrap gap-1">
+              <span
+                :for={scope <- key.scopes || []}
+                class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700"
+              >
+                {scope}
+              </span>
+              <span
+                :if={key.site_ids != nil and key.site_ids != []}
+                class="text-[10px] px-1.5 py-0.5 rounded bg-orange-50 text-orange-700"
+              >
+                {length(key.site_ids)} site(s) only
+              </span>
+              <span
+                :if={key.site_ids == nil or key.site_ids == []}
+                class="text-[10px] px-1.5 py-0.5 rounded bg-gray-50 text-gray-500"
+              >
+                All sites
               </span>
             </div>
-            <button
-              phx-click="revoke_api_key"
-              phx-value-id={key.id}
-              data-confirm={"Revoke API key \"#{key.name}\"? This cannot be undone."}
-              class="text-red-500 hover:text-red-700 text-sm font-medium"
-            >
-              Revoke
-            </button>
           </div>
         </div>
       </div>
@@ -316,6 +410,7 @@ defmodule SpectabasWeb.UserLive.Settings do
       |> assign(:show_api_form, false)
       |> assign(:new_api_key, nil)
       |> assign(:api_keys, APIKeys.list_user_keys(user))
+      |> assign(:user_sites, Accounts.accessible_sites(user))
       |> assign(:passkeys, Webauthn.list_credentials(user))
       |> assign(:passkey_challenge, nil)
       |> assign(:passkey_options, nil)
@@ -387,10 +482,43 @@ defmodule SpectabasWeb.UserLive.Settings do
     {:noreply, assign(socket, :show_api_form, !socket.assigns.show_api_form)}
   end
 
-  def handle_event("create_api_key", %{"name" => name}, socket) do
+  def handle_event("create_api_key", params, socket) do
     user = socket.assigns.current_scope.user
+    name = params["name"] || ""
 
-    case APIKeys.generate(user, name) do
+    scopes = params["scopes"] || []
+    scopes = if scopes == [], do: nil, else: scopes
+
+    site_ids =
+      case params["site_ids"] do
+        nil -> nil
+        [] -> nil
+        ids when is_list(ids) -> Enum.map(ids, &String.to_integer/1)
+        _ -> nil
+      end
+
+    expires_at =
+      case params["expires_at"] do
+        "" ->
+          nil
+
+        nil ->
+          nil
+
+        date_str ->
+          case Date.from_iso8601(date_str) do
+            {:ok, date} -> DateTime.new!(date, ~T[23:59:59], "Etc/UTC")
+            _ -> nil
+          end
+      end
+
+    opts =
+      []
+      |> then(fn o -> if scopes, do: [{:scopes, scopes} | o], else: o end)
+      |> then(fn o -> if site_ids, do: [{:site_ids, site_ids} | o], else: o end)
+      |> then(fn o -> if expires_at, do: [{:expires_at, expires_at} | o], else: o end)
+
+    case APIKeys.generate(user, name, opts) do
       {:ok, plaintext, _api_key} ->
         {:noreply,
          socket
