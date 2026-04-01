@@ -565,8 +565,7 @@ defmodule SpectabasWeb.HealthController do
         params: [user: "default", password: ""]
       )
 
-    sql =
-      "GRANT INSERT, SELECT, ALTER UPDATE, ALTER DELETE, ALTER DROP PARTITION ON #{db}.* TO #{writer}"
+    sql = "GRANT INSERT, SELECT, ALTER ON #{db}.* TO #{writer}"
 
     result =
       case Req.post(Req.merge(admin_req, params: [query: sql]), body: "") do

@@ -190,7 +190,7 @@ defmodule Spectabas.ClickHouse do
       # Users and grants
       "CREATE USER IF NOT EXISTS #{cfg[:username]} IDENTIFIED WITH plaintext_password BY '#{cfg[:password]}'",
       "CREATE USER IF NOT EXISTS #{cfg[:read_username]} IDENTIFIED WITH plaintext_password BY '#{cfg[:read_password]}'",
-      "GRANT INSERT, SELECT, ALTER UPDATE, ALTER DELETE, ALTER DROP PARTITION ON #{db}.* TO #{cfg[:username]}",
+      "GRANT INSERT, SELECT, ALTER ON #{db}.* TO #{cfg[:username]}",
       "GRANT SELECT ON #{db}.* TO #{cfg[:read_username]}",
       "ALTER TABLE #{db}.events ADD COLUMN IF NOT EXISTS ip_is_eu UInt8 DEFAULT 0 AFTER ip_is_bot",
       "ALTER TABLE #{db}.events ADD COLUMN IF NOT EXISTS visitor_intent String DEFAULT '' AFTER ip_gdpr_anonymized",
