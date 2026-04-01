@@ -1136,6 +1136,41 @@ defmodule Spectabas.Analytics do
     ClickHouse.query(sql)
   end
 
+  @doc "Look up ecommerce totals for a list of visitor IDs. Returns map of visitor_id => %{orders, revenue}."
+  def ecommerce_for_visitors(%Site{} = site, visitor_ids) when is_list(visitor_ids) do
+    visitor_ids = Enum.reject(visitor_ids, &(&1 == "" or is_nil(&1)))
+
+    if visitor_ids == [] or not site.ecommerce_enabled do
+      {:ok, %{}}
+    else
+      id_list = Enum.map_join(visitor_ids, ", ", &ClickHouse.param/1)
+
+      sql = """
+      SELECT
+        visitor_id,
+        count() AS orders,
+        sum(revenue) AS revenue
+      FROM ecommerce_events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND visitor_id IN (#{id_list})
+      GROUP BY visitor_id
+      """
+
+      case ClickHouse.query(sql) do
+        {:ok, rows} ->
+          map =
+            Map.new(rows, fn row ->
+              {row["visitor_id"], %{orders: to_int(row["orders"]), revenue: row["revenue"]}}
+            end)
+
+          {:ok, map}
+
+        _ ->
+          {:ok, %{}}
+      end
+    end
+  end
+
   @doc """
   Funnel stats using ClickHouse windowFunnel().
   Steps is a list of event conditions (e.g., event_type/url_path matches).
