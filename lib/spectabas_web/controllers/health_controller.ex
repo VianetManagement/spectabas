@@ -548,13 +548,23 @@ defmodule SpectabasWeb.HealthController do
         Spectabas.ClickHouse.query(
           "SELECT count() AS c FROM events WHERE site_id = 4 AND toDate(timestamp) = '2025-03-01'"
         ),
+      stats_direct:
+        Spectabas.ClickHouse.query("""
+        SELECT count() AS sessions, sum(pv) AS pageviews, uniq(vid) AS visitors
+        FROM (
+          SELECT session_id, any(visitor_id) AS vid, countIf(event_type = 'pageview') AS pv
+          FROM events
+          WHERE site_id = 4
+            AND timestamp >= '2025-03-01 00:00:00'
+            AND timestamp <= '2025-03-01 23:59:59'
+            AND ip_is_bot = 0
+          GROUP BY session_id
+          HAVING pv > 0
+        )
+        """),
       sample:
         Spectabas.ClickHouse.query(
-          "SELECT event_type, url_path, ip_country, browser, timestamp FROM events WHERE site_id = 4 AND toDate(timestamp) = '2025-03-01' LIMIT 5"
-        ),
-      visitor_prefix:
-        Spectabas.ClickHouse.query(
-          "SELECT count() AS c FROM events WHERE site_id = 4 AND visitor_id LIKE 'imported_%'"
+          "SELECT event_type, ip_is_bot, visitor_id, session_id FROM events WHERE site_id = 4 AND toDate(timestamp) = '2025-03-01' LIMIT 3"
         )
     }
 
