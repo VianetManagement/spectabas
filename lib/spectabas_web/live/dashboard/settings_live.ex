@@ -27,7 +27,8 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
        |> assign(:form, to_form(changeset))
        |> assign(:snippet, Sites.snippet_code(site))
        |> assign(:render_domain_status, check_render_domain(site.domain))
-       |> assign(:example_html, example_html(site))}
+       |> assign(:example_html, example_html(site))
+       |> assign(:ad_integrations, Spectabas.AdIntegrations.list_for_site(site.id))}
     end
   end
 
@@ -77,6 +78,16 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Failed to register: #{reason}")}
     end
+  end
+
+  def handle_event("disconnect_ad", %{"id" => id}, socket) do
+    integration = Spectabas.AdIntegrations.get!(id)
+    Spectabas.AdIntegrations.disconnect(integration)
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "#{platform_label(integration.platform)} disconnected.")
+     |> assign(:ad_integrations, Spectabas.AdIntegrations.list_for_site(socket.assigns.site.id))}
   end
 
   def handle_event("verify_dns", _params, socket) do
@@ -427,9 +438,106 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
             </div>
           </.form>
         </div>
+
+        <%!-- Ad Integrations --%>
+        <div class="bg-white rounded-lg shadow p-6 mt-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-2">Ad Platform Integrations</h2>
+          <p class="text-sm text-gray-500 mb-4">
+            Connect your ad accounts to track ROAS on the Revenue Attribution page.
+          </p>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <%= for {platform, label, icon_color} <- [
+              {"google_ads", "Google Ads", "bg-blue-100 text-blue-700"},
+              {"bing_ads", "Microsoft Ads", "bg-teal-100 text-teal-700"},
+              {"meta_ads", "Meta Ads", "bg-indigo-100 text-indigo-700"}
+            ] do %>
+              <% integration =
+                Enum.find(@ad_integrations, &(&1.platform == platform && &1.status == "active")) %>
+              <div class="border border-gray-200 rounded-lg p-4">
+                <div class="flex items-center gap-2 mb-3">
+                  <span class={"inline-flex items-center px-2 py-0.5 rounded text-xs font-medium #{icon_color}"}>
+                    {label}
+                  </span>
+                  <span
+                    :if={integration}
+                    class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700"
+                  >
+                    Connected
+                  </span>
+                </div>
+
+                <%= if integration do %>
+                  <div class="text-xs text-gray-500 space-y-1 mb-3">
+                    <div :if={integration.account_name}>
+                      Account: <span class="text-gray-700">{integration.account_name}</span>
+                    </div>
+                    <div :if={integration.last_synced_at}>
+                      Last sync: {Calendar.strftime(integration.last_synced_at, "%Y-%m-%d %H:%M")}
+                    </div>
+                    <div
+                      :if={integration.last_error}
+                      class="text-red-600"
+                    >
+                      Error: {String.slice(integration.last_error || "", 0, 80)}
+                    </div>
+                  </div>
+                  <button
+                    phx-click="disconnect_ad"
+                    phx-value-id={integration.id}
+                    data-confirm={"Disconnect #{label}? Ad spend data will stop syncing."}
+                    class="text-xs text-red-600 hover:text-red-800 font-medium"
+                  >
+                    Disconnect
+                  </button>
+                <% else %>
+                  <%= if ad_platform_configured?(platform) do %>
+                    <a
+                      href={ad_authorize_url(platform, @site.id)}
+                      class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+                    >
+                      Connect {label}
+                    </a>
+                  <% else %>
+                    <p class="text-xs text-gray-400">
+                      Not configured. Set environment variables to enable.
+                    </p>
+                  <% end %>
+                <% end %>
+              </div>
+            <% end %>
+          </div>
+        </div>
       </div>
     </.dashboard_layout>
     """
+  end
+
+  defp platform_label("google_ads"), do: "Google Ads"
+  defp platform_label("bing_ads"), do: "Microsoft Ads"
+  defp platform_label("meta_ads"), do: "Meta Ads"
+  defp platform_label(p), do: p
+
+  defp ad_authorize_url(platform, site_id) do
+    state = Phoenix.Token.sign(SpectabasWeb.Endpoint, "ad_oauth", site_id)
+
+    case platform do
+      "google_ads" -> Spectabas.AdIntegrations.Platforms.GoogleAds.authorize_url(state)
+      "bing_ads" -> Spectabas.AdIntegrations.Platforms.BingAds.authorize_url(state)
+      "meta_ads" -> Spectabas.AdIntegrations.Platforms.MetaAds.authorize_url(state)
+      _ -> "#"
+    end
+  end
+
+  defp ad_platform_configured?(platform) do
+    config = Application.get_env(:spectabas, :ad_platforms, [])
+
+    case platform do
+      "google_ads" -> config[:google_ads][:client_id] not in [nil, ""]
+      "bing_ads" -> config[:bing_ads][:client_id] not in [nil, ""]
+      "meta_ads" -> config[:meta_ads][:app_id] not in [nil, ""]
+      _ -> false
+    end
   end
 
   defp example_html(site) do
