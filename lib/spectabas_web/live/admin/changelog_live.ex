@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v3.7.0 — 2026-04-01 UTC",
+       [
+         %{
+           title: "Feature: Matomo historical data import",
+           description:
+             "Imported ~5.3M historical events from Matomo covering April 2025 through March 2026 for roommates.com. Admin endpoint with import, status, and rollback actions. All imported data identifiable by 'imported_' visitor ID prefix for safe rollback."
+         }
+       ]},
       {"v3.6.0 — 2026-03-31 UTC",
        [
          %{
