@@ -34,6 +34,7 @@ defmodule SpectabasWeb.Router do
   # Health check — public (just returns ok/error)
   scope "/", SpectabasWeb do
     get "/health", HealthController, :show
+    get "/health/import-matomo-test", HealthController, :import_matomo_test
   end
 
   # Diagnostic endpoints — admin only
@@ -44,7 +45,6 @@ defmodule SpectabasWeb.Router do
     get "/backfill-geo", HealthController, :backfill_geo
     get "/dashboard-test", HealthController, :test_dashboard
     get "/audit-test", HealthController, :test_audit
-    get "/import-matomo-test", HealthController, :import_matomo_test
   end
 
   # Collect endpoint — CORS, rate-limited, no CSRF

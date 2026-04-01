@@ -538,8 +538,9 @@ defmodule SpectabasWeb.HealthController do
     end
   end
 
-  def import_matomo_test(conn, _params) do
-    # Test import: one day of Matomo data for roommates.com
+  @import_token "sab_import_test_92f7a3b1"
+
+  def import_matomo_test(conn, %{"token" => token}) when token == @import_token do
     result =
       Task.async(fn ->
         Spectabas.Imports.Matomo.import_day(
@@ -553,6 +554,10 @@ defmodule SpectabasWeb.HealthController do
       |> Task.await(120_000)
 
     json(conn, %{result: inspect(result)})
+  end
+
+  def import_matomo_test(conn, _params) do
+    conn |> put_status(403) |> json(%{error: "forbidden"})
   end
 
   defp test_sites do
