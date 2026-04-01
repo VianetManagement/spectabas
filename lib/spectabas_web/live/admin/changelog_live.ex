@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v4.2.0 — 2026-04-01 UTC",
+       [
+         %{
+           title: "Enhancement: Revenue Attribution overhaul",
+           description:
+             "All 5 UTM dimensions (Source, Medium, Campaign, Term, Content). First-touch vs last-touch attribution toggle. Channel summary cards (Direct, Organic, Paid, Social, Referral, Email). Revenue share bars per source. 90-day date range option."
+         }
+       ]},
       {"v4.1.0 — 2026-04-01 UTC",
        [
          %{

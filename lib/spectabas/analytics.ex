@@ -1138,22 +1138,36 @@ defmodule Spectabas.Analytics do
 
   # ---- Revenue & Conversion Analytics ----
 
-  @doc "Revenue attribution by traffic source."
-  def revenue_by_source(%Site{} = site, %User{} = user, date_range, group_by \\ "source") do
+  @doc """
+  Revenue attribution by traffic source dimension.
+  - group_by: "source", "medium", "campaign", "term", "content"
+  - touch: "first" (first-touch attribution) or "last" (last-touch)
+  """
+  def revenue_by_source(%Site{} = site, %User{} = user, date_range, opts \\ []) do
     date_range = ensure_date_range(date_range)
+    group_by = Keyword.get(opts, :group_by, "source")
+    touch = Keyword.get(opts, :touch, "first")
 
     with :ok <- authorize(site, user) do
       source_expr =
         case group_by do
           "campaign" ->
-            "if(utm_campaign != '', utm_campaign, 'none')"
+            "if(utm_campaign != '', utm_campaign, '(none)')"
 
           "medium" ->
-            "if(utm_medium != '', utm_medium, 'none')"
+            "if(utm_medium != '', utm_medium, '(none)')"
+
+          "term" ->
+            "if(utm_term != '', utm_term, '(none)')"
+
+          "content" ->
+            "if(utm_content != '', utm_content, '(none)')"
 
           _ ->
             "if(referrer_domain != '', referrer_domain, if(utm_source != '', utm_source, 'Direct'))"
         end
+
+      agg_fn = if touch == "last", do: "argMax", else: "argMin"
 
       sql = """
       SELECT
@@ -1164,7 +1178,7 @@ defmodule Spectabas.Analytics do
         round(avg(ec.revenue), 2) AS avg_order_value,
         round(countDistinct(ec.order_id) / greatest(uniq(e.visitor_id), 1) * 100, 2) AS conversion_rate
       FROM (
-        SELECT visitor_id, argMin(#{source_expr}, timestamp) AS source
+        SELECT visitor_id, #{agg_fn}(#{source_expr}, timestamp) AS source
         FROM events
         WHERE site_id = #{ClickHouse.param(site.id)}
           AND event_type = 'pageview' AND ip_is_bot = 0
@@ -1182,6 +1196,108 @@ defmodule Spectabas.Analytics do
       GROUP BY source
       ORDER BY total_revenue DESC
       LIMIT 50
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Revenue summary by channel type (Direct, Organic, Paid, Social, Referral, Email)."
+  def revenue_by_channel(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        channel,
+        uniq(e.visitor_id) AS visitors,
+        countDistinct(ec.order_id) AS orders,
+        sum(ec.revenue) AS total_revenue,
+        round(countDistinct(ec.order_id) / greatest(uniq(e.visitor_id), 1) * 100, 2) AS conversion_rate
+      FROM (
+        SELECT
+          visitor_id,
+          argMin(
+            multiIf(
+              utm_medium IN ('cpc', 'ppc', 'paid', 'paidsearch', 'cpm'), 'Paid',
+              utm_medium = 'email' OR referrer_domain IN ('mail.google.com', 'mail.yahoo.com', 'outlook.live.com'), 'Email',
+              referrer_domain IN ('google.com', 'bing.com', 'duckduckgo.com', 'yahoo.com', 'baidu.com'), 'Organic Search',
+              referrer_domain IN ('facebook.com', 'instagram.com', 'twitter.com', 'linkedin.com', 'pinterest.com', 'tiktok.com', 'reddit.com', 't.co'), 'Social',
+              referrer_domain != '', 'Referral',
+              'Direct'
+            ),
+            timestamp
+          ) AS channel
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND event_type = 'pageview' AND ip_is_bot = 0
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY visitor_id
+      ) AS e
+      LEFT JOIN (
+        SELECT visitor_id, order_id, revenue
+        FROM ecommerce_events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      ) AS ec ON e.visitor_id = ec.visitor_id
+      GROUP BY channel
+      ORDER BY total_revenue DESC
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Daily revenue by source (top 5) for sparkline trends."
+  def revenue_trend_by_source(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        source,
+        toDate(ec.timestamp) AS day,
+        sum(ec.revenue) AS revenue
+      FROM (
+        SELECT visitor_id, argMin(
+          if(referrer_domain != '', referrer_domain, if(utm_source != '', utm_source, 'Direct')),
+          timestamp
+        ) AS source
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND event_type = 'pageview' AND ip_is_bot = 0
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY visitor_id
+      ) AS e
+      INNER JOIN (
+        SELECT visitor_id, revenue, timestamp
+        FROM ecommerce_events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      ) AS ec ON e.visitor_id = ec.visitor_id
+      WHERE source IN (
+        SELECT source FROM (
+          SELECT argMin(
+            if(referrer_domain != '', referrer_domain, if(utm_source != '', utm_source, 'Direct')),
+            timestamp
+          ) AS source, sum(revenue) AS rev
+          FROM events AS e2
+          INNER JOIN ecommerce_events AS ec2 ON e2.visitor_id = ec2.visitor_id
+            AND ec2.site_id = #{ClickHouse.param(site.id)}
+          WHERE e2.site_id = #{ClickHouse.param(site.id)}
+            AND e2.event_type = 'pageview' AND e2.ip_is_bot = 0
+            AND e2.timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+            AND e2.timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+          GROUP BY e2.visitor_id
+          ORDER BY rev DESC LIMIT 5
+        )
+      )
+      GROUP BY source, day
+      ORDER BY source, day
       """
 
       ClickHouse.query(sql)
