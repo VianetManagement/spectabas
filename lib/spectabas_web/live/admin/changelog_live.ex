@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v3.6.0 — 2026-03-31 UTC",
+       [
+         %{
+           title: "Feature: ecommerce product categories",
+           description:
+             "Items in ecommerce transactions now support an optional `category` field (e.g. \"new_subscription\" vs \"renewal\"). Top Products table groups by name + category with category badges. Item summaries on orders show category in parentheses."
+         }
+       ]},
       {"v3.5.0 — 2026-03-31 UTC",
        [
          %{

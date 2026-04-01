@@ -1057,6 +1057,7 @@ defmodule Spectabas.Analytics do
       sql = """
       SELECT
         JSONExtractString(item, 'name') AS name,
+        JSONExtractString(item, 'category') AS category,
         sum(toUInt32OrZero(JSONExtractString(item, 'quantity'))) AS quantity,
         sum(toDecimal64OrZero(JSONExtractString(item, 'price'), 2) *
             toUInt32OrZero(JSONExtractString(item, 'quantity'))) AS revenue
@@ -1067,7 +1068,7 @@ defmodule Spectabas.Analytics do
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
         AND (currency = #{ClickHouse.param(site_currency)} OR currency = '')
         AND name != ''
-      GROUP BY name
+      GROUP BY name, category
       ORDER BY revenue DESC
       LIMIT 50
       """

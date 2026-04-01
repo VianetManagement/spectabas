@@ -204,7 +204,15 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
                 <td colspan="3" class="px-6 py-8 text-center text-gray-500">No product data yet.</td>
               </tr>
               <tr :for={product <- @top_products} class="hover:bg-gray-50">
-                <td class="px-6 py-4 text-sm text-gray-900">{product["name"] || "Unknown"}</td>
+                <td class="px-6 py-4 text-sm text-gray-900">
+                  {product["name"] || "Unknown"}
+                  <span
+                    :if={product["category"] && product["category"] != ""}
+                    class="ml-2 text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-600"
+                  >
+                    {product["category"]}
+                  </span>
+                </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
                   {format_number(to_num(product["quantity"]))}
                 </td>
@@ -304,7 +312,8 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
         |> Enum.map(fn item ->
           name = item["name"] || "?"
           qty = item["quantity"] || 1
-          "#{qty}x #{name}"
+          cat = item["category"]
+          if cat && cat != "", do: "#{qty}x #{name} (#{cat})", else: "#{qty}x #{name}"
         end)
         |> Enum.join(", ")
 

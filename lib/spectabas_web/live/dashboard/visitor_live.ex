@@ -629,7 +629,12 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
     case Jason.decode(json) do
       {:ok, items} when is_list(items) ->
         items
-        |> Enum.map(fn i -> "#{i["quantity"] || 1}x #{i["name"] || "?"}" end)
+        |> Enum.map(fn i ->
+          name = i["name"] || "?"
+          qty = i["quantity"] || 1
+          cat = i["category"]
+          if cat && cat != "", do: "#{qty}x #{name} (#{cat})", else: "#{qty}x #{name}"
+        end)
         |> Enum.join(", ")
 
       _ ->

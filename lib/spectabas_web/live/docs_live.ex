@@ -715,7 +715,8 @@ defmodule SpectabasWeb.DocsLive do
                 sku: item.sku,
                 name: item.name,
                 price: String(item.price),
-                quantity: String(item.qty)
+                quantity: String(item.qty),
+                category: item.category  // optional: "new_subscription", "renewal", etc.
               });
             });
             ```
@@ -1582,7 +1583,7 @@ defmodule SpectabasWeb.DocsLive do
             | `shipping` | number | no | Shipping cost |
             | `discount` | number | no | Discount applied |
             | `currency` | string | no | Currency code (defaults to site currency) |
-            | `items` | array | no | List of items: `[{"name": "...", "price": 9.99, "quantity": 1}]` |
+            | `items` | array | no | List of items: `[{"name": "...", "price": 9.99, "quantity": 1, "category": "..."}]`. Category is optional — use it to distinguish sub-types (e.g. "new_subscription" vs "renewal"). |
             | `occurred_at` | integer | no | Unix timestamp (UTC seconds) for when the order occurred. Must be within the last 7 days. Defaults to current time. |
 
             ### Example (Elixir/Phoenix)
@@ -1604,7 +1605,12 @@ defmodule SpectabasWeb.DocsLive do
                   currency: "USD",
                   occurred_at: DateTime.to_unix(order.completed_at),
                   items: Enum.map(order.line_items, fn item ->
-                    %{name: item.product_name, price: item.unit_price, quantity: item.quantity}
+                    %{
+                      name: item.product_name,
+                      price: item.unit_price,
+                      quantity: item.quantity,
+                      category: item.category
+                    }
                   end)
                 }
               )
@@ -1628,7 +1634,7 @@ defmodule SpectabasWeb.DocsLive do
                 "visitor_id": "abc123...",
                 "email": "customer@example.com",
                 "occurred_at": 1711900000,
-                "items": [{"name": "Widget", "price": 49.99, "quantity": 2}]
+                "items": [{"name": "Widget", "price": 49.99, "quantity": 2, "category": "new"}]
               }'
             ```
 

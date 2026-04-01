@@ -138,6 +138,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Ecommerce on Dashboard** — sites with ecommerce enabled show revenue/orders/AOV cards on the main overview
 - **Ecommerce Revenue Chart** — combined bar (revenue) + line (orders) chart on the ecommerce page
 - **Ecommerce Email Association** — transaction API accepts `email` to link orders to visitor profiles; orders show on visitor detail page
+- **Product Categories** — ecommerce items support optional `category` field for sub-types (e.g. new_subscription vs renewal); Top Products groups by name+category
 
 ## Authentication
 
