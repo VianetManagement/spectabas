@@ -1890,42 +1890,112 @@ defmodule SpectabasWeb.DocsLive do
 
             #### Prerequisites (one-time, per platform)
 
-            **Google Ads:**
+            **Google Ads Setup (3 credentials needed: Client ID, Client Secret, Developer Token)**
 
-            You need a Google Cloud project and a Google Ads developer token.
+            *Step 1: Create a Google Cloud project*
+            1. Go to [Google Cloud Console](https://console.cloud.google.com)
+            2. Click the project dropdown at the top left, then **New Project**
+            3. Name it something like "Spectabas Analytics" and click **Create**
+            4. Make sure the new project is selected in the dropdown
 
-            1. Sign in to [Google Cloud Console](https://console.cloud.google.com) and create a new project (or use an existing one)
-            2. Go to **APIs & Services > Library** and enable the **Google Ads API**
-            3. Go to **APIs & Services > Credentials > Create Credentials > OAuth 2.0 Client ID**
-            4. Choose **Web application** as the type
-            5. Under **Authorized redirect URIs**, add: `https://www.spectabas.com/auth/ad/google_ads/callback`
-            6. Copy the **Client ID** and **Client Secret**
-            7. Sign in to [Google Ads API Center](https://ads.google.com/aw/apicenter) and apply for a **Developer Token** (Basic access is self-approved and sufficient)
-            8. In Spectabas: go to your site's **Settings > Ad Platform Integrations > Google Ads > Configure** and paste the Client ID, Client Secret, and Developer Token
+            *Step 2: Enable the Google Ads API*
+            1. In the left sidebar, go to **APIs & Services > Library**
+            2. Search for "Google Ads API"
+            3. Click on it and press **Enable**
 
-            **Microsoft/Bing Ads:**
+            *Step 3: Create OAuth credentials*
+            1. Go to **APIs & Services > Credentials** in the left sidebar
+            2. Click **+ Create Credentials > OAuth 2.0 Client ID**
+            3. If prompted, configure the OAuth consent screen first (choose "External", fill in app name and email)
+            4. For Application type, select **Web application**
+            5. Name it "Spectabas"
+            6. Under **Authorized redirect URIs**, click **Add URI** and enter: `https://www.spectabas.com/auth/ad/google_ads/callback`
+            7. Click **Create**
+            8. A dialog shows your **Client ID** and **Client Secret** — copy both
 
-            You need an Azure AD app registration and a Bing Ads developer token.
+            *Step 4: Get a Developer Token*
+            1. Sign in to [Google Ads](https://ads.google.com) with the account that manages your ad campaigns
+            2. Go to **Tools & Settings > Setup > API Center** (or visit [ads.google.com/aw/apicenter](https://ads.google.com/aw/apicenter) directly)
+            3. If you don't have a developer token yet, click **Apply for access**
+            4. Choose **Basic access** (self-approved, sufficient for Spectabas)
+            5. Copy your **Developer Token**
 
-            1. Sign in to the [Azure Portal](https://portal.azure.com) and go to **Azure Active Directory > App registrations > New registration**
-            2. Enter a name (e.g., "Spectabas Ad Sync") and select **Accounts in any organizational directory**
-            3. Under **Redirect URI**, add: `https://www.spectabas.com/auth/ad/bing_ads/callback` (type: Web)
-            4. After creating, go to **Certificates & secrets > New client secret** and copy the **Value**
-            5. Copy the **Application (client) ID** from the app's Overview page
-            6. Sign up at the [Microsoft Advertising Developer Portal](https://developers.ads.microsoft.com) and request a **Developer Token**
-            7. In Spectabas: go to your site's **Settings > Ad Platform Integrations > Microsoft Ads > Configure** and paste the Client ID, Client Secret, and Developer Token
+            *Step 5: Enter in Spectabas*
+            1. Go to your site's **Settings** page
+            2. Scroll to **Ad Platform Integrations > Google Ads**
+            3. Click **Configure**
+            4. Paste the Client ID, Client Secret, and Developer Token
+            5. Click **Save Credentials**
+            6. Click **Connect** to authorize
 
-            **Meta/Facebook Ads:**
+            ---
 
-            You need a Meta developer app with the Marketing API.
+            **Microsoft/Bing Ads Setup (3 credentials needed: Client ID, Client Secret, Developer Token)**
 
-            1. Sign in to [Meta for Developers](https://developers.facebook.com) and click **Create App**
-            2. Choose **Business** as the app type
-            3. Go to **Add Products > Facebook Login > Set Up**
+            *Step 1: Register an app in Azure*
+            1. Go to the [Azure Portal](https://portal.azure.com)
+            2. Search for "App registrations" in the top search bar and click it
+            3. Click **+ New registration**
+            4. Name: "Spectabas Ad Sync"
+            5. Supported account types: **Accounts in any organizational directory** (Multitenant)
+            6. Redirect URI: select **Web** and enter `https://www.spectabas.com/auth/ad/bing_ads/callback`
+            7. Click **Register**
+
+            *Step 2: Get the Client ID*
+            1. On the app's **Overview** page, copy the **Application (client) ID** — this is your Client ID
+
+            *Step 3: Create a Client Secret*
+            1. In the left sidebar, click **Certificates & secrets**
+            2. Click **+ New client secret**
+            3. Enter a description (e.g., "Spectabas") and choose an expiry (24 months recommended)
+            4. Click **Add**
+            5. Copy the **Value** (not the Secret ID) — this is your Client Secret. It's only shown once.
+
+            *Step 4: Get a Developer Token*
+            1. Go to the [Microsoft Advertising Developer Portal](https://developers.ads.microsoft.com)
+            2. Sign in with your Microsoft Advertising account
+            3. Request a **Developer Token** if you don't have one
+            4. Copy the token
+
+            *Step 5: Enter in Spectabas*
+            1. Go to your site's **Settings > Ad Platform Integrations > Microsoft Ads**
+            2. Click **Configure**
+            3. Paste the Client ID, Client Secret, and Developer Token
+            4. Click **Save Credentials**, then **Connect**
+
+            ---
+
+            **Meta/Facebook Ads Setup (2 credentials needed: App ID, App Secret)**
+
+            *Step 1: Create a Meta Developer App*
+            1. Go to [Meta for Developers](https://developers.facebook.com) and log in
+            2. Click **My Apps** in the top right, then **Create App**
+            3. Select **Other** for "What do you want your app to do?"
+            4. Select **Business** as the app type
+            5. Enter an app name (e.g., "Spectabas Analytics") and click **Create App**
+
+            *Step 2: Set up Facebook Login*
+            1. On the app dashboard, find **Facebook Login** and click **Set Up**
+            2. Choose **Web**
+            3. In the left sidebar, go to **Facebook Login > Settings**
             4. Under **Valid OAuth Redirect URIs**, add: `https://www.spectabas.com/auth/ad/meta_ads/callback`
-            5. Go to **App Settings > Basic** and copy the **App ID** and **App Secret**
-            6. Go to **App Review > Permissions and Features** and request the **ads_read** permission (required for accessing ad insights)
-            7. In Spectabas: go to your site's **Settings > Ad Platform Integrations > Meta Ads > Configure** and paste the App ID and App Secret
+            5. Click **Save Changes**
+
+            *Step 3: Get App ID and Secret*
+            1. In the left sidebar, go to **App Settings > Basic**
+            2. Your **App ID** is shown at the top
+            3. Click **Show** next to **App Secret** and copy it
+
+            *Step 4: Request ads_read permission*
+            1. In the left sidebar, go to **App Review > Permissions and Features**
+            2. Search for **ads_read** and click **Request** (this allows reading ad insights data)
+            3. Follow the review process (for Business-type apps with your own ad account, this is typically auto-approved)
+
+            *Step 5: Enter in Spectabas*
+            1. Go to your site's **Settings > Ad Platform Integrations > Meta Ads**
+            2. Click **Configure**
+            3. Paste the App ID and App Secret
+            4. Click **Save Credentials**, then **Connect**
 
             > **All credentials are encrypted** at rest using AES-256-GCM and stored per-site in the database. No environment variables or server access needed. Each site can use its own OAuth apps or share credentials across sites.
 
@@ -1936,8 +2006,7 @@ defmodule SpectabasWeb.DocsLive do
             3. Click **Configure** on the platform you want to set up
             4. Enter your OAuth credentials and click **Save Credentials**
             5. Click **Connect** — you'll be redirected to the ad platform to authorize access
-            6. After granting access, you'll be returned to Spectabas and the card will show "Connected"
-            5. Once connected, the card shows "Connected" with the account name and last sync time
+            6. After granting access, you'll be returned to Spectabas and the card will show "Connected" with the account name and last sync time
 
             ### What Gets Synced
 
@@ -1972,11 +2041,32 @@ defmodule SpectabasWeb.DocsLive do
             - Refresh tokens are used automatically when access tokens expire
             - Disconnecting an account immediately deletes all stored tokens
 
+            ### UTM Campaign Matching
+
+            Spectabas correlates ad spend with revenue by matching the **campaign name** from the ad platform with the **utm_campaign** parameter in your ad URLs. For this to work:
+
+            1. When you create a campaign in Google/Bing/Meta called `spring_promo`
+            2. Your ad destination URLs must include `?utm_campaign=spring_promo`
+            3. Spectabas sees visitors arriving with that UTM, tracks their purchases, and joins it with the spend data from the ad platform
+
+            If you use Google Ads auto-tagging (gclid), the campaign name is used directly. For Bing and Meta, make sure your UTM parameters match exactly.
+
+            ### Sync Schedule
+
+            - Ad spend data syncs **every 6 hours** automatically
+            - Each sync fetches **yesterday's data** from all connected platforms
+            - On first connection, the **last 30 days** are backfilled
+            - If a sync fails (API error, token expired), the error is shown on the settings card and retried next cycle
+            - Token refresh happens automatically before each sync if the token is expired
+
             ### Troubleshooting
 
-            - **"Not configured"** — The environment variables for that platform aren't set. Check Render environment settings.
-            - **Error status on card** — The last sync failed. Check the error message. Common causes: expired token (reconnect), revoked permissions, API rate limit.
-            - **No ROAS showing** — Campaign names don't match between UTM parameters and the ad platform. Verify naming consistency.
+            - **No "Connect" button visible** — Click **Configure** first and enter your OAuth credentials (Client ID, Client Secret, etc.). The Connect button appears after credentials are saved.
+            - **"Configure" shows empty fields** — Credentials haven't been entered yet for this site. Follow the setup steps above to get credentials from the ad platform.
+            - **Error status on card** — The last sync failed. Common causes: expired token (click Disconnect then reconnect), revoked permissions in the ad platform, API rate limit (will retry automatically).
+            - **No ROAS showing on Revenue Attribution** — Campaign names don't match between your UTM parameters and the ad platform. Check that `utm_campaign` values in your ad URLs exactly match the campaign names in Google/Bing/Meta.
+            - **Data seems outdated** — Syncs happen every 6 hours. The most recent data is from yesterday (ad platforms don't report same-day spend in real time).
+            - **Disconnecting doesn't delete spend data** — Historical ad spend data in ClickHouse is retained after disconnecting. Only the OAuth tokens are deleted.
             """
           },
           %{

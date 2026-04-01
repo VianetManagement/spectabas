@@ -486,9 +486,22 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
 
         <%!-- Ad Integrations --%>
         <div class="bg-white rounded-lg shadow p-6 mt-6">
-          <h2 class="text-lg font-semibold text-gray-900 mb-2">Ad Platform Integrations</h2>
+          <div class="flex items-center justify-between mb-2">
+            <h2 class="text-lg font-semibold text-gray-900">Ad Platform Integrations</h2>
+            <.link
+              navigate="/docs/admin#ad-integrations"
+              class="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+            >
+              Setup guide &rarr;
+            </.link>
+          </div>
           <p class="text-sm text-gray-500 mb-4">
             Connect your ad accounts to track ROAS on the Revenue Attribution page.
+            See the
+            <.link navigate="/docs/admin#ad-integrations" class="text-indigo-600 underline">
+              full documentation
+            </.link>
+            for step-by-step instructions.
           </p>
 
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
