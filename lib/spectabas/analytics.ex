@@ -356,25 +356,47 @@ defmodule Spectabas.Analytics do
     seg = segment_sql(opts)
 
     with :ok <- authorize(site, user) do
-      sql = """
-      SELECT
-        url_path,
-        countIf(event_type = 'pageview') AS pageviews,
-        uniqIf(visitor_id, event_type = 'pageview') AS unique_visitors,
-        round(avgIf(duration_s, event_type = 'duration' AND duration_s > 0), 0) AS avg_duration
-      FROM events
-      WHERE site_id = #{ClickHouse.param(site.id)}
-        AND event_type IN ('pageview', 'duration')
-        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-        AND ip_is_bot = 0
-        #{seg}
-      GROUP BY url_path
-      ORDER BY pageviews DESC
-      LIMIT 100
-      """
-
-      ClickHouse.query(sql)
+      import_aware_query(
+        site,
+        date_range,
+        fn nr ->
+          """
+          SELECT url_path, countIf(event_type = 'pageview') AS pageviews,
+            uniqIf(visitor_id, event_type = 'pageview') AS unique_visitors,
+            round(avgIf(duration_s, event_type = 'duration' AND duration_s > 0), 0) AS avg_duration
+          FROM events
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND event_type IN ('pageview', 'duration')
+            AND timestamp >= #{ClickHouse.param(format_datetime(nr.from))}
+            AND timestamp <= #{ClickHouse.param(format_datetime(nr.to))}
+            AND ip_is_bot = 0 #{seg}
+          GROUP BY url_path ORDER BY pageviews DESC LIMIT 100
+          """
+        end,
+        fn ir ->
+          """
+          SELECT url_path, sum(pageviews) AS pageviews, sum(visitors) AS unique_visitors, 0 AS avg_duration
+          FROM imported_pages
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND date >= #{ClickHouse.param(Date.to_iso8601(ir.from))}
+            AND date <= #{ClickHouse.param(Date.to_iso8601(ir.to))}
+          GROUP BY url_path ORDER BY pageviews DESC LIMIT 100
+          """
+        end,
+        fn row -> row["url_path"] end,
+        fn rows ->
+          %{
+            "url_path" => List.first(rows)["url_path"],
+            "pageviews" => to_string(sum_field(rows, "pageviews")),
+            "unique_visitors" => to_string(sum_field(rows, "unique_visitors")),
+            "avg_duration" => to_string(sum_field(rows, "avg_duration"))
+          }
+        end
+      )
+      |> case do
+        {:ok, rows} -> {:ok, Enum.sort_by(rows, &(-to_int(&1["pageviews"]))) |> Enum.take(100)}
+        error -> error
+      end
     end
   end
 
@@ -396,24 +418,44 @@ defmodule Spectabas.Analytics do
           "AND referrer_domain NOT IN (#{domains})"
         end
 
-      sql = """
-      SELECT
-        referrer_domain,
-        countIf(event_type = 'pageview') AS pageviews,
-        uniq(session_id) AS sessions
-      FROM events
-      WHERE site_id = #{ClickHouse.param(site.id)}
-        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-        AND referrer_domain != ''
-        AND ip_is_bot = 0
-        #{exclude_clause}
-      GROUP BY referrer_domain
-      ORDER BY pageviews DESC
-      LIMIT 100
-      """
-
-      ClickHouse.query(sql)
+      import_aware_query(
+        site,
+        date_range,
+        fn nr ->
+          """
+          SELECT referrer_domain, countIf(event_type = 'pageview') AS pageviews, uniq(session_id) AS sessions
+          FROM events
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND timestamp >= #{ClickHouse.param(format_datetime(nr.from))}
+            AND timestamp <= #{ClickHouse.param(format_datetime(nr.to))}
+            AND referrer_domain != '' AND ip_is_bot = 0 #{exclude_clause}
+          GROUP BY referrer_domain ORDER BY pageviews DESC LIMIT 100
+          """
+        end,
+        fn ir ->
+          """
+          SELECT referrer_domain, sum(pageviews) AS pageviews, sum(sessions) AS sessions
+          FROM imported_sources
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND date >= #{ClickHouse.param(Date.to_iso8601(ir.from))}
+            AND date <= #{ClickHouse.param(Date.to_iso8601(ir.to))}
+            AND referrer_domain != ''
+          GROUP BY referrer_domain ORDER BY pageviews DESC LIMIT 100
+          """
+        end,
+        fn row -> row["referrer_domain"] end,
+        fn rows ->
+          %{
+            "referrer_domain" => List.first(rows)["referrer_domain"],
+            "pageviews" => to_string(sum_field(rows, "pageviews")),
+            "sessions" => to_string(sum_field(rows, "sessions"))
+          }
+        end
+      )
+      |> case do
+        {:ok, rows} -> {:ok, Enum.sort_by(rows, &(-to_int(&1["pageviews"]))) |> Enum.take(100)}
+        error -> error
+      end
     end
   end
 
@@ -605,24 +647,50 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
-      sql = """
-      SELECT
-        ip_region_name,
-        ip_country,
-        countIf(event_type = 'pageview') AS pageviews,
-        uniq(visitor_id) AS unique_visitors
-      FROM events
-      WHERE site_id = #{ClickHouse.param(site.id)}
-        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-        AND ip_region_name != ''
-        AND ip_is_bot = 0
-      GROUP BY ip_region_name, ip_country
-      ORDER BY unique_visitors DESC
-      LIMIT 100
-      """
+      import_aware_query(
+        site,
+        date_range,
+        fn nr ->
+          """
+          SELECT ip_region_name, ip_country, countIf(event_type = 'pageview') AS pageviews,
+            uniq(visitor_id) AS unique_visitors
+          FROM events
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND timestamp >= #{ClickHouse.param(format_datetime(nr.from))}
+            AND timestamp <= #{ClickHouse.param(format_datetime(nr.to))}
+            AND ip_region_name != '' AND ip_is_bot = 0
+          GROUP BY ip_region_name, ip_country ORDER BY unique_visitors DESC LIMIT 100
+          """
+        end,
+        fn ir ->
+          """
+          SELECT ip_country_name AS ip_region_name, ip_country,
+            sum(pageviews) AS pageviews, sum(visitors) AS unique_visitors
+          FROM imported_countries
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND date >= #{ClickHouse.param(Date.to_iso8601(ir.from))}
+            AND date <= #{ClickHouse.param(Date.to_iso8601(ir.to))}
+            AND ip_country != ''
+          GROUP BY ip_country, ip_country_name ORDER BY unique_visitors DESC LIMIT 100
+          """
+        end,
+        fn row -> row["ip_country"] end,
+        fn rows ->
+          %{
+            "ip_region_name" => List.first(rows)["ip_region_name"],
+            "ip_country" => List.first(rows)["ip_country"],
+            "pageviews" => to_string(sum_field(rows, "pageviews")),
+            "unique_visitors" => to_string(sum_field(rows, "unique_visitors"))
+          }
+        end
+      )
+      |> case do
+        {:ok, rows} ->
+          {:ok, Enum.sort_by(rows, &(-to_int(&1["unique_visitors"]))) |> Enum.take(100)}
 
-      ClickHouse.query(sql)
+        error ->
+          error
+      end
     end
   end
 
@@ -717,23 +785,48 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
-      sql = """
-      SELECT
-        browser AS name,
-        countIf(event_type = 'pageview') AS pageviews,
-        uniq(visitor_id) AS unique_visitors
-      FROM events
-      WHERE site_id = #{ClickHouse.param(site.id)}
-        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-        AND browser != ''
-        AND ip_is_bot = 0
-      GROUP BY browser
-      ORDER BY unique_visitors DESC
-      LIMIT 100
-      """
+      import_aware_query(
+        site,
+        date_range,
+        fn nr ->
+          """
+          SELECT browser AS name, countIf(event_type = 'pageview') AS pageviews,
+            uniq(visitor_id) AS unique_visitors
+          FROM events
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND timestamp >= #{ClickHouse.param(format_datetime(nr.from))}
+            AND timestamp <= #{ClickHouse.param(format_datetime(nr.to))}
+            AND browser != '' AND ip_is_bot = 0
+          GROUP BY browser ORDER BY unique_visitors DESC LIMIT 100
+          """
+        end,
+        fn ir ->
+          """
+          SELECT browser AS name, sum(pageviews) AS pageviews, sum(visitors) AS unique_visitors
+          FROM imported_devices
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND date >= #{ClickHouse.param(Date.to_iso8601(ir.from))}
+            AND date <= #{ClickHouse.param(Date.to_iso8601(ir.to))}
+            AND browser != ''
+          GROUP BY browser ORDER BY unique_visitors DESC LIMIT 100
+          """
+        end,
+        fn row -> row["name"] end,
+        fn rows ->
+          %{
+            "name" => List.first(rows)["name"],
+            "pageviews" => to_string(sum_field(rows, "pageviews")),
+            "unique_visitors" => to_string(sum_field(rows, "unique_visitors"))
+          }
+        end
+      )
+      |> case do
+        {:ok, rows} ->
+          {:ok, Enum.sort_by(rows, &(-to_int(&1["unique_visitors"]))) |> Enum.take(100)}
 
-      ClickHouse.query(sql)
+        error ->
+          error
+      end
     end
   end
 
@@ -744,23 +837,48 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
-      sql = """
-      SELECT
-        os AS name,
-        countIf(event_type = 'pageview') AS pageviews,
-        uniq(visitor_id) AS unique_visitors
-      FROM events
-      WHERE site_id = #{ClickHouse.param(site.id)}
-        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-        AND os != ''
-        AND ip_is_bot = 0
-      GROUP BY os
-      ORDER BY unique_visitors DESC
-      LIMIT 100
-      """
+      import_aware_query(
+        site,
+        date_range,
+        fn nr ->
+          """
+          SELECT os AS name, countIf(event_type = 'pageview') AS pageviews,
+            uniq(visitor_id) AS unique_visitors
+          FROM events
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND timestamp >= #{ClickHouse.param(format_datetime(nr.from))}
+            AND timestamp <= #{ClickHouse.param(format_datetime(nr.to))}
+            AND os != '' AND ip_is_bot = 0
+          GROUP BY os ORDER BY unique_visitors DESC LIMIT 100
+          """
+        end,
+        fn ir ->
+          """
+          SELECT os AS name, sum(pageviews) AS pageviews, sum(visitors) AS unique_visitors
+          FROM imported_devices
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND date >= #{ClickHouse.param(Date.to_iso8601(ir.from))}
+            AND date <= #{ClickHouse.param(Date.to_iso8601(ir.to))}
+            AND os != ''
+          GROUP BY os ORDER BY unique_visitors DESC LIMIT 100
+          """
+        end,
+        fn row -> row["name"] end,
+        fn rows ->
+          %{
+            "name" => List.first(rows)["name"],
+            "pageviews" => to_string(sum_field(rows, "pageviews")),
+            "unique_visitors" => to_string(sum_field(rows, "unique_visitors"))
+          }
+        end
+      )
+      |> case do
+        {:ok, rows} ->
+          {:ok, Enum.sort_by(rows, &(-to_int(&1["unique_visitors"]))) |> Enum.take(100)}
 
-      ClickHouse.query(sql)
+        error ->
+          error
+      end
     end
   end
 
@@ -2160,6 +2278,48 @@ defmodule Spectabas.Analytics do
 
   # ClickHouse toTimezone() snippet for converting UTC timestamps to site timezone
   defp tz_sql(%Site{} = site), do: ClickHouse.param(site.timezone || "UTC")
+
+  # Generic import-aware query: runs native query on native range, import query on
+  # import range, merges results by key. Returns {:ok, merged_rows} or {:error, reason}.
+  # - native_query_fn: fn(native_date_range) -> SQL string
+  # - import_query_fn: fn(import_date_range) -> SQL string (or nil to skip)
+  # - key_fn: fn(row) -> merge key (string or tuple)
+  # - merge_fn: fn(rows_with_same_key) -> single merged row
+  defp import_aware_query(site, date_range, native_query_fn, import_query_fn, key_fn, merge_fn) do
+    {native_range, import_range} = split_date_range(site, date_range)
+
+    native_rows =
+      if native_range do
+        case ClickHouse.query(native_query_fn.(native_range)) do
+          {:ok, rows} -> rows
+          _ -> []
+        end
+      else
+        []
+      end
+
+    imported_rows =
+      if import_range && import_query_fn do
+        case ClickHouse.query(import_query_fn.(import_range)) do
+          {:ok, rows} -> rows
+          _ -> []
+        end
+      else
+        []
+      end
+
+    merged =
+      (native_rows ++ imported_rows)
+      |> Enum.group_by(key_fn)
+      |> Enum.map(fn {_key, rows} -> merge_fn.(rows) end)
+
+    {:ok, merged}
+  end
+
+  # Sum numeric string fields across multiple rows
+  defp sum_field(rows, field) do
+    Enum.reduce(rows, 0, fn row, acc -> acc + to_int(row[field]) end)
+  end
 
   # Split a date range into native and imported portions based on site's import dates.
   # Returns {native_range | nil, import_range | nil} where each is %{from: Date, to: Date}.
