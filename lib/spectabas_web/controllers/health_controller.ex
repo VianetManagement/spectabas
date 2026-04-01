@@ -559,8 +559,8 @@ defmodule SpectabasWeb.HealthController do
     {:ok, _} =
       site
       |> Spectabas.Sites.Site.changeset(%{
-        native_start_date: ~D[2026-03-29],
-        import_end_date: ~D[2026-03-28]
+        native_start_date: ~D[2026-03-30],
+        import_end_date: ~D[2026-03-29]
       })
       |> Spectabas.Repo.update()
 
@@ -576,7 +576,7 @@ defmodule SpectabasWeb.HealthController do
         2,
         "8ed134b2e37850878a2c035ab4c13cd1",
         ~D[2025-04-01],
-        ~D[2026-03-28]
+        ~D[2026-03-29]
       )
     end)
 
