@@ -5,6 +5,23 @@ defmodule SpectabasWeb.Admin.UsersLive do
 
   @roles ~w(superadmin admin analyst viewer)
 
+  @timezones [
+    "America/New_York",
+    "America/Chicago",
+    "America/Denver",
+    "America/Los_Angeles",
+    "America/Phoenix",
+    "America/Anchorage",
+    "Pacific/Honolulu",
+    "UTC",
+    "Europe/London",
+    "Europe/Paris",
+    "Europe/Berlin",
+    "Asia/Tokyo",
+    "Asia/Shanghai",
+    "Australia/Sydney"
+  ]
+
   @impl true
   def mount(_params, _session, socket) do
     users = Accounts.list_users()
@@ -17,14 +34,18 @@ defmodule SpectabasWeb.Admin.UsersLive do
      |> assign(:users, users)
      |> assign(:pending_invitations, pending)
      |> assign(:roles, @roles)
+     |> assign(:timezones, @timezones)
      |> assign(:all_sites, all_sites)
      |> assign(:show_invite, false)
      |> assign(:invite_email, "")
      |> assign(:invite_role, "analyst")
      |> assign(:invite_error, nil)
-     |> assign(:editing_permissions_for, nil)
-     |> assign(:user_permissions, %{})}
+     |> assign(:editing_user, nil)
+     |> assign(:edit_form, %{})
+     |> assign(:edit_site_ids, MapSet.new())}
   end
+
+  # -- Invite events --
 
   @impl true
   def handle_event("toggle_invite", _params, socket) do
@@ -93,87 +114,86 @@ defmodule SpectabasWeb.Admin.UsersLive do
     end
   end
 
-  def handle_event("toggle_force_2fa", %{"user-id" => user_id}, socket) do
+  # -- Edit user events --
+
+  def handle_event("edit_user", %{"id" => user_id}, socket) do
     user = Accounts.get_user!(user_id)
-    new_val = !user.force_2fa
+    perms = Accounts.list_user_permissions(user)
+    site_ids = Enum.map(perms, & &1.site_id) |> MapSet.new()
 
-    case user
-         |> Accounts.User.profile_changeset(%{force_2fa: new_val})
-         |> Spectabas.Repo.update() do
-      {:ok, _} ->
-        users = Accounts.list_users()
+    {:noreply,
+     socket
+     |> assign(:editing_user, user)
+     |> assign(:edit_form, %{
+       "display_name" => user.display_name || "",
+       "role" => to_string(user.role),
+       "timezone" => user.timezone || "America/New_York",
+       "force_2fa" => user.force_2fa
+     })
+     |> assign(:edit_site_ids, site_ids)}
+  end
 
-        msg =
-          if new_val,
-            do: "2FA now required for #{user.email}.",
-            else: "2FA requirement removed for #{user.email}."
+  def handle_event("close_edit", _params, socket) do
+    {:noreply, assign(socket, :editing_user, nil)}
+  end
 
-        {:noreply, socket |> put_flash(:info, msg) |> assign(:users, users)}
+  def handle_event("update_edit_form", params, socket) do
+    form = socket.assigns.edit_form
+
+    form =
+      form
+      |> maybe_update(params, "display_name")
+      |> maybe_update(params, "role")
+      |> maybe_update(params, "timezone")
+      |> then(fn f ->
+        if Map.has_key?(params, "force_2fa"),
+          do: Map.put(f, "force_2fa", params["force_2fa"] == "true"),
+          else: f
+      end)
+
+    {:noreply, assign(socket, :edit_form, form)}
+  end
+
+  def handle_event("save_user", _params, socket) do
+    admin = socket.assigns.current_scope.user
+    user = socket.assigns.editing_user
+    form = socket.assigns.edit_form
+
+    attrs = %{
+      display_name: form["display_name"],
+      role: String.to_existing_atom(form["role"]),
+      timezone: form["timezone"],
+      force_2fa: form["force_2fa"] || false
+    }
+
+    case user |> Accounts.User.profile_changeset(attrs) |> Spectabas.Repo.update() do
+      {:ok, updated_user} ->
+        # Sync site permissions for analyst/viewer
+        if form["role"] in ["analyst", "viewer"] do
+          sync_site_permissions(admin, updated_user, socket.assigns.edit_site_ids)
+        end
+
+        {:noreply,
+         socket
+         |> put_flash(:info, "User updated.")
+         |> assign(:users, Accounts.list_users())
+         |> assign(:editing_user, nil)}
 
       {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to update 2FA requirement.")}
+        {:noreply, put_flash(socket, :error, "Failed to update user.")}
     end
   end
 
-  def handle_event("change_role", %{"user_id" => user_id, "role" => role}, socket) do
-    admin = socket.assigns.current_scope.user
-    user = Accounts.get_user!(user_id)
+  def handle_event("toggle_site_access", %{"site-id" => sid}, socket) do
+    site_id = String.to_integer(sid)
+    current = socket.assigns.edit_site_ids
 
-    case Accounts.update_user_role(admin, user, role) do
-      {:ok, _user} ->
-        users = Accounts.list_users()
-        {:noreply, socket |> put_flash(:info, "Role updated.") |> assign(:users, users)}
+    new_ids =
+      if MapSet.member?(current, site_id),
+        do: MapSet.delete(current, site_id),
+        else: MapSet.put(current, site_id)
 
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to update role: #{inspect(reason)}")}
-    end
-  end
-
-  def handle_event("toggle_permissions", %{"user-id" => user_id}, socket) do
-    user_id = String.to_integer(user_id)
-
-    if socket.assigns.editing_permissions_for == user_id do
-      {:noreply, assign(socket, :editing_permissions_for, nil)}
-    else
-      user = Accounts.get_user!(user_id)
-      perms = Accounts.list_user_permissions(user)
-      site_ids = Enum.map(perms, & &1.site_id) |> MapSet.new()
-
-      {:noreply,
-       socket
-       |> assign(:editing_permissions_for, user_id)
-       |> assign(:user_permissions, Map.put(socket.assigns.user_permissions, user_id, site_ids))}
-    end
-  end
-
-  def handle_event("toggle_site_access", %{"user-id" => uid, "site-id" => sid}, socket) do
-    admin = socket.assigns.current_scope.user
-    user = Accounts.get_user!(uid)
-    site = Sites.get_site!(sid)
-
-    current_perms = Map.get(socket.assigns.user_permissions, user.id, MapSet.new())
-
-    if MapSet.member?(current_perms, site.id) do
-      Accounts.revoke_permission(admin, user, site)
-      new_perms = MapSet.delete(current_perms, site.id)
-
-      {:noreply,
-       assign(
-         socket,
-         :user_permissions,
-         Map.put(socket.assigns.user_permissions, user.id, new_perms)
-       )}
-    else
-      Accounts.grant_permission(admin, user, site, user.role)
-      new_perms = MapSet.put(current_perms, site.id)
-
-      {:noreply,
-       assign(
-         socket,
-         :user_permissions,
-         Map.put(socket.assigns.user_permissions, user.id, new_perms)
-       )}
-    end
+    {:noreply, assign(socket, :edit_site_ids, new_ids)}
   end
 
   def handle_event("delete_user", %{"id" => user_id}, socket) do
@@ -182,13 +202,18 @@ defmodule SpectabasWeb.Admin.UsersLive do
 
     case Accounts.delete_user(admin, user) do
       {:ok, _} ->
-        users = Accounts.list_users()
-        {:noreply, socket |> put_flash(:info, "User deleted.") |> assign(:users, users)}
+        {:noreply,
+         socket
+         |> put_flash(:info, "User deleted.")
+         |> assign(:users, Accounts.list_users())
+         |> assign(:editing_user, nil)}
 
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Failed to delete user: #{inspect(reason)}")}
     end
   end
+
+  # -- Render --
 
   @impl true
   def render(assigns) do
@@ -209,6 +234,7 @@ defmodule SpectabasWeb.Admin.UsersLive do
         </button>
       </div>
 
+      <%!-- Invite Form --%>
       <div :if={@show_invite} class="bg-white rounded-lg shadow p-6 mb-8">
         <h2 class="text-lg font-semibold text-gray-900 mb-4">Invite User</h2>
         <form phx-change="update_invite" phx-submit="send_invite" class="space-y-4">
@@ -248,6 +274,124 @@ defmodule SpectabasWeb.Admin.UsersLive do
         </form>
       </div>
 
+      <%!-- Edit User Panel --%>
+      <div :if={@editing_user} class="bg-white rounded-lg shadow p-6 mb-8">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold text-gray-900">
+            Edit: {@editing_user.email}
+          </h2>
+          <button phx-click="close_edit" class="text-sm text-gray-500 hover:text-gray-700">
+            Close
+          </button>
+        </div>
+
+        <form phx-change="update_edit_form" phx-submit="save_user" class="space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Display Name</label>
+              <input
+                type="text"
+                name="display_name"
+                value={@edit_form["display_name"]}
+                placeholder="Optional display name"
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Role</label>
+              <select
+                name="role"
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
+              >
+                <option :for={r <- @roles} value={r} selected={@edit_form["role"] == r}>
+                  {String.capitalize(r)}
+                </option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Timezone</label>
+              <select
+                name="timezone"
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
+              >
+                <option
+                  :for={tz <- @timezones}
+                  value={tz}
+                  selected={@edit_form["timezone"] == tz}
+                >
+                  {tz}
+                </option>
+              </select>
+            </div>
+            <div class="flex items-center pt-6">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="hidden"
+                  name="force_2fa"
+                  value="false"
+                />
+                <input
+                  type="checkbox"
+                  name="force_2fa"
+                  value="true"
+                  checked={@edit_form["force_2fa"]}
+                  class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span class="text-sm font-medium text-gray-700">Require 2FA</span>
+              </label>
+            </div>
+          </div>
+
+          <%!-- Site Access (only for analyst/viewer) --%>
+          <div :if={@edit_form["role"] in ["analyst", "viewer"]}>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Site Access</label>
+            <div class="flex flex-wrap gap-2">
+              <button
+                :for={site <- @all_sites}
+                type="button"
+                phx-click="toggle_site_access"
+                phx-value-site-id={site.id}
+                class={[
+                  "px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors",
+                  if(MapSet.member?(@edit_site_ids, site.id),
+                    do: "bg-indigo-600 text-white border-indigo-600",
+                    else: "bg-white text-gray-700 border-gray-300 hover:border-indigo-400"
+                  )
+                ]}
+              >
+                {site.name}
+              </button>
+            </div>
+            <p class="text-xs text-gray-500 mt-1">
+              Select which sites this user can access. No sites selected = no access.
+            </p>
+          </div>
+
+          <div :if={@edit_form["role"] in ["superadmin", "admin"]}>
+            <p class="text-xs text-gray-500">
+              Superadmin and Admin roles have access to all sites automatically.
+            </p>
+          </div>
+
+          <div class="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              phx-click="close_edit"
+              class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
+            >
+              Save Changes
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <%!-- Role Guide --%>
       <div class="bg-gray-50 rounded-lg border border-gray-200 p-4 mb-6">
         <h3 class="text-sm font-semibold text-gray-700 mb-2">Role Permissions</h3>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs text-gray-600">
@@ -255,190 +399,108 @@ defmodule SpectabasWeb.Admin.UsersLive do
             <span class="inline-block px-2 py-0.5 rounded bg-red-50 text-red-700 font-medium mb-1">
               Superadmin
             </span>
-            <p>
-              Full access. Manage users, sites, billing, and all settings. Required for 2FA configuration.
-            </p>
+            <p>Full access. Manage users, sites, billing.</p>
           </div>
           <div>
             <span class="inline-block px-2 py-0.5 rounded bg-orange-50 text-orange-700 font-medium mb-1">
               Admin
             </span>
-            <p>
-              Manage sites and settings. Can add/remove sites, configure tracking, and invite users.
-            </p>
+            <p>Manage sites and settings. All site access.</p>
           </div>
           <div>
             <span class="inline-block px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-medium mb-1">
               Analyst
             </span>
-            <p>
-              View all analytics data. Access dashboards, reports, visitor logs, and exports. Cannot change settings.
-            </p>
+            <p>View analytics for permitted sites only.</p>
           </div>
           <div>
             <span class="inline-block px-2 py-0.5 rounded bg-gray-100 text-gray-700 font-medium mb-1">
               Viewer
             </span>
-            <p>
-              Read-only dashboard access. Can view basic stats for sites they have permission to access.
-            </p>
+            <p>Read-only dashboard for permitted sites only.</p>
           </div>
         </div>
       </div>
 
+      <%!-- User Table --%>
       <div class="bg-white rounded-lg shadow overflow-hidden">
         <table class="min-w-full divide-y divide-gray-200">
           <thead class="bg-gray-50">
             <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                User
-              </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Role
-              </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                2FA
-              </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Last Sign In
-              </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Force 2FA
-              </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">2FA</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                 Site Access
               </th>
-              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                Last Sign In
+              </th>
+              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                 Actions
               </th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
-            <%= for user <- @users do %>
-              <tr class="hover:bg-gray-50">
-                <td class="px-6 py-4">
-                  <div class="text-sm font-medium text-gray-900">
-                    {user.display_name || user.email}
-                  </div>
-                  <div :if={user.display_name} class="text-sm text-gray-500">{user.email}</div>
-                </td>
-                <td class="px-6 py-4">
-                  <form phx-change="change_role" phx-submit="change_role">
-                    <input type="hidden" name="user_id" value={user.id} />
-                    <select
-                      name="role"
-                      class={[
-                        "text-xs font-medium rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2.5",
-                        role_color(to_string(user.role))
-                      ]}
-                    >
-                      <option :for={r <- @roles} value={r} selected={to_string(user.role) == r}>
-                        {String.capitalize(r)}
-                      </option>
-                    </select>
-                  </form>
-                </td>
-                <td class="px-6 py-4">
-                  <span
-                    :if={user.totp_enabled}
-                    class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800"
-                  >
-                    Enabled
-                  </span>
-                  <span
-                    :if={!user.totp_enabled}
-                    class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600"
-                  >
-                    Off
-                  </span>
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-500">
-                  {if user.last_sign_in_at,
-                    do: Calendar.strftime(user.last_sign_in_at, "%Y-%m-%d %H:%M"),
-                    else: "Never"}
-                </td>
-                <td class="px-6 py-4">
-                  <button
-                    :if={user.id != @current_scope.user.id}
-                    phx-click="toggle_force_2fa"
-                    phx-value-user-id={user.id}
-                    class={[
-                      "text-xs font-medium px-2 py-0.5 rounded",
-                      if(user.force_2fa,
-                        do: "bg-amber-100 text-amber-800",
-                        else: "bg-gray-100 text-gray-500 hover:bg-amber-50"
-                      )
-                    ]}
-                  >
-                    {if user.force_2fa, do: "Required", else: "Optional"}
-                  </button>
-                </td>
-                <td class="px-6 py-4">
-                  <span
-                    :if={to_string(user.role) in ["superadmin", "admin"]}
-                    class="text-xs text-gray-400"
-                  >
-                    All sites
-                  </span>
-                  <button
-                    :if={to_string(user.role) in ["analyst", "viewer"]}
-                    phx-click="toggle_permissions"
-                    phx-value-user-id={user.id}
-                    class={[
-                      "text-xs font-medium px-2 py-0.5 rounded",
-                      if(@editing_permissions_for == user.id,
-                        do: "bg-indigo-100 text-indigo-700",
-                        else: "bg-gray-100 text-gray-600 hover:bg-indigo-50"
-                      )
-                    ]}
-                  >
-                    <% perm_count =
-                      Map.get(@user_permissions, user.id, MapSet.new()) |> MapSet.size() %>
-                    {if @editing_permissions_for == user.id,
-                      do: "Close",
-                      else: if(perm_count > 0, do: "#{perm_count} site(s)", else: "Configure")}
-                  </button>
-                </td>
-                <td class="px-6 py-4 text-right">
-                  <button
-                    :if={user.id != @current_scope.user.id}
-                    phx-click="delete_user"
-                    phx-value-id={user.id}
-                    data-confirm={"Are you sure you want to delete #{user.email}?"}
-                    class="text-red-600 hover:text-red-800 text-sm"
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-              <tr :if={@editing_permissions_for == user.id}>
-                <td colspan="7" class="px-6 py-4 bg-indigo-50">
-                  <div class="text-sm font-medium text-gray-700 mb-2">
-                    Site access for {user.email}:
-                  </div>
-                  <div class="flex flex-wrap gap-2">
-                    <button
-                      :for={site <- @all_sites}
-                      phx-click="toggle_site_access"
-                      phx-value-user-id={user.id}
-                      phx-value-site-id={site.id}
-                      class={[
-                        "px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors",
-                        if(MapSet.member?(Map.get(@user_permissions, user.id, MapSet.new()), site.id),
-                          do: "bg-indigo-600 text-white border-indigo-600",
-                          else: "bg-white text-gray-700 border-gray-300 hover:border-indigo-400"
-                        )
-                      ]}
-                    >
-                      {site.name}
-                    </button>
-                  </div>
-                  <p class="text-xs text-gray-500 mt-2">
-                    Click a site to toggle access. Changes take effect immediately.
-                  </p>
-                </td>
-              </tr>
-            <% end %>
+            <tr :for={user <- @users} class="hover:bg-gray-50">
+              <td class="px-6 py-4">
+                <div class="text-sm font-medium text-gray-900">
+                  {user.display_name || user.email}
+                </div>
+                <div :if={user.display_name} class="text-sm text-gray-500">{user.email}</div>
+              </td>
+              <td class="px-6 py-4">
+                <span class={"text-xs font-medium rounded-lg px-2 py-1 #{role_color(to_string(user.role))}"}>
+                  {String.capitalize(to_string(user.role))}
+                </span>
+              </td>
+              <td class="px-6 py-4">
+                <span class={[
+                  "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
+                  if(user.totp_enabled,
+                    do: "bg-green-100 text-green-800",
+                    else: "bg-gray-100 text-gray-600"
+                  )
+                ]}>
+                  {if user.totp_enabled, do: "Enabled", else: "Off"}
+                </span>
+                <span
+                  :if={user.force_2fa}
+                  class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800"
+                >
+                  Required
+                </span>
+              </td>
+              <td class="px-6 py-4 text-xs text-gray-500">
+                {if to_string(user.role) in ["superadmin", "admin"],
+                  do: "All sites",
+                  else: "Per-site"}
+              </td>
+              <td class="px-6 py-4 text-sm text-gray-500">
+                {if user.last_sign_in_at,
+                  do: Calendar.strftime(user.last_sign_in_at, "%Y-%m-%d %H:%M"),
+                  else: "Never"}
+              </td>
+              <td class="px-6 py-4 text-right space-x-3">
+                <button
+                  :if={user.id != @current_scope.user.id}
+                  phx-click="edit_user"
+                  phx-value-id={user.id}
+                  class="text-indigo-600 hover:text-indigo-800 text-sm font-medium"
+                >
+                  Edit
+                </button>
+                <button
+                  :if={user.id != @current_scope.user.id}
+                  phx-click="delete_user"
+                  phx-value-id={user.id}
+                  data-confirm={"Are you sure you want to delete #{user.email}?"}
+                  class="text-red-600 hover:text-red-800 text-sm font-medium"
+                >
+                  Delete
+                </button>
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -450,13 +512,14 @@ defmodule SpectabasWeb.Admin.UsersLive do
           <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-yellow-50">
               <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Invited
+                  Email
                 </th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Status
+                  Role
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Invited
                 </th>
                 <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                   Actions
@@ -474,11 +537,6 @@ defmodule SpectabasWeb.Admin.UsersLive do
                 <td class="px-6 py-4 text-sm text-gray-500">
                   {Calendar.strftime(inv.inserted_at, "%Y-%m-%d %H:%M")}
                 </td>
-                <td class="px-6 py-4">
-                  <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                    Invited
-                  </span>
-                </td>
                 <td class="px-6 py-4 text-right space-x-3">
                   <button
                     phx-click="resend_invite"
@@ -490,7 +548,7 @@ defmodule SpectabasWeb.Admin.UsersLive do
                   <button
                     phx-click="delete_invite"
                     phx-value-id={inv.id}
-                    data-confirm="Revoke invitation for #{inv.email}?"
+                    data-confirm={"Revoke invitation for #{inv.email}?"}
                     class="text-red-500 hover:text-red-700 text-sm font-medium"
                   >
                     Revoke
@@ -503,6 +561,33 @@ defmodule SpectabasWeb.Admin.UsersLive do
       </div>
     </div>
     """
+  end
+
+  # -- Private --
+
+  defp sync_site_permissions(admin, user, desired_site_ids) do
+    current_perms = Accounts.list_user_permissions(user)
+    current_ids = Enum.map(current_perms, & &1.site_id) |> MapSet.new()
+
+    # Grant new
+    to_grant = MapSet.difference(desired_site_ids, current_ids)
+
+    Enum.each(to_grant, fn site_id ->
+      site = Sites.get_site!(site_id)
+      Accounts.grant_permission(admin, user, site, user.role)
+    end)
+
+    # Revoke removed
+    to_revoke = MapSet.difference(current_ids, desired_site_ids)
+
+    Enum.each(to_revoke, fn site_id ->
+      site = Sites.get_site!(site_id)
+      Accounts.revoke_permission(admin, user, site)
+    end)
+  end
+
+  defp maybe_update(form, params, key) do
+    if Map.has_key?(params, key), do: Map.put(form, key, params[key]), else: form
   end
 
   defp role_color("superadmin"), do: "bg-red-50 text-red-700"
