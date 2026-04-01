@@ -49,11 +49,15 @@ defmodule Spectabas.AdIntegrations do
   end
 
   def disconnect(integration) do
+    # Use a dummy encrypted value (single null byte) — validate_required needs non-empty binary
+    tombstone = Vault.encrypt("revoked")
+
     integration
     |> AdIntegration.changeset(%{
       status: "revoked",
-      access_token_encrypted: <<>>,
-      refresh_token_encrypted: <<>>
+      access_token_encrypted: tombstone,
+      refresh_token_encrypted: tombstone,
+      last_error: nil
     })
     |> Repo.update()
   end

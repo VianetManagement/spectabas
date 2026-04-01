@@ -199,7 +199,7 @@ defmodule Spectabas.AdIntegrationsTest do
   end
 
   describe "disconnect/1" do
-    test "disconnect fails validation because empty tokens violate required constraint", %{
+    test "disconnect sets status to revoked and replaces tokens with tombstone", %{
       site: site
     } do
       {:ok, integration} =
@@ -208,9 +208,10 @@ defmodule Spectabas.AdIntegrationsTest do
           refresh_token: "ref"
         })
 
-      # disconnect sets tokens to <<>> which fails validate_required
-      assert {:error, changeset} = AdIntegrations.disconnect(integration)
-      assert "can't be blank" in errors_on(changeset).access_token_encrypted
+      assert {:ok, disconnected} = AdIntegrations.disconnect(integration)
+      assert disconnected.status == "revoked"
+      # Tokens are replaced with encrypted "revoked" tombstone, not the original
+      assert disconnected.access_token_encrypted != integration.access_token_encrypted
     end
 
     test "disconnect succeeds when changeset required fields are relaxed", %{site: site} do
