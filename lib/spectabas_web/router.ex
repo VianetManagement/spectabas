@@ -34,7 +34,11 @@ defmodule SpectabasWeb.Router do
   # Health check — public (just returns ok/error)
   scope "/", SpectabasWeb do
     get "/health", HealthController, :show
-    get "/health/import-matomo-test", HealthController, :import_matomo_test
+  end
+
+  scope "/health", SpectabasWeb do
+    pipe_through :api
+    get "/import-matomo-test", HealthController, :import_matomo_test
   end
 
   # Diagnostic endpoints — admin only
