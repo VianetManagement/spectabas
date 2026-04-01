@@ -146,7 +146,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Churn Risk** — flags customers with 50%+ engagement decline (sessions, pages) over 14-day windows
 - **Funnel Revenue** — funnels show revenue from visitors at each step (ecommerce sites only)
 - **Abandoned Funnel Export** — CSV export of visitor IDs + emails who dropped off at each funnel step
-- **Ad Platform Integrations** — Google Ads, Bing Ads, Meta/Facebook Ads OAuth2 connections with daily spend sync for ROAS calculation
+- **Ad Platform Integrations** — Google Ads, Bing Ads, Meta/Facebook Ads OAuth2 connections with daily spend sync for ROAS calculation. Encrypted token storage (AES-256-GCM). Settings UI per site. Oban sync every 6h.
 
 ## Authentication
 
@@ -239,4 +239,6 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **High-throughput ingest**: Async flush, 500 batch size, ETS visitor cache, dedicated ClickHouse connection pool (100 connections), per-site rate limiting (1000 events/sec).
 - **occurred_at backdating**: All events support optional `occurred_at` field (Unix UTC seconds) to backdate events up to 7 days.
 - **Ecommerce email association**: Transaction API accepts optional `email` field. If `visitor_id` + `email` both provided, identifies the visitor. If only `email`, looks up by email. Orders appear on visitor profile pages.
+- **Ad integrations**: OAuth2 tokens stored encrypted via `Spectabas.AdIntegrations.Vault` (AES-256-GCM from SECRET_KEY_BASE). Platform adapters in `lib/spectabas/ad_integrations/platforms/`. Sync worker `AdSpendSync` runs every 6h via Oban `:ad_sync` queue. ClickHouse `ad_spend` table uses `ReplacingMergeTree(synced_at)` for dedup. ROAS = revenue / spend, matched by campaign_name = utm_campaign.
+- **Ad platform env vars**: `GOOGLE_ADS_CLIENT_ID/SECRET/DEVELOPER_TOKEN`, `BING_ADS_CLIENT_ID/SECRET/DEVELOPER_TOKEN`, `META_ADS_APP_ID/SECRET`. Read in `config/runtime.exs`.
 - **RUM collection**: Tracker sends `_rum` (nav timing) and `_cwv` (Core Web Vitals) custom events. Uses `performance.getEntriesByType("navigation")` with `performance.timing` fallback. IMPORTANT: PerformanceNavigationTiming uses `nav.startTime` (always 0) for the navigation baseline — NOT `nav.navigationStart` which only exists on the deprecated `performance.timing`. Queries use `quantileIf` to exclude zeros. ClickHouse `quantileIf` returns `nan` when no rows match — `parse_rows` sanitizes `nan`→`null` before JSON parsing.

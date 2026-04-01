@@ -1875,6 +1875,90 @@ defmodule SpectabasWeb.DocsLive do
             """
           },
           %{
+            id: "ad-integrations",
+            title: "Ad Platform Integrations",
+            body: """
+            Connect your advertising accounts to track Return on Ad Spend (ROAS) directly in Spectabas. Supported platforms: **Google Ads**, **Microsoft/Bing Ads**, and **Meta/Facebook Ads**.
+
+            ### How It Works
+
+            1. An admin connects each ad account via OAuth2 from **Site Settings > Ad Platform Integrations**
+            2. Spectabas syncs daily campaign spend data (spend, clicks, impressions) every 6 hours
+            3. The **Revenue Attribution** page joins ad spend with purchase data to calculate ROAS per campaign
+
+            ### Setting Up
+
+            #### Prerequisites (one-time, per platform)
+
+            **Google Ads:**
+            1. Create a project in [Google Cloud Console](https://console.cloud.google.com)
+            2. Enable the Google Ads API
+            3. Create OAuth 2.0 credentials (Web application type)
+            4. Set the authorized redirect URI to `https://www.spectabas.com/auth/ad/google_ads/callback`
+            5. Get a Developer Token from [Google Ads API Center](https://ads.google.com/aw/apicenter)
+            6. Set environment variables: `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`, `GOOGLE_ADS_DEVELOPER_TOKEN`
+
+            **Microsoft/Bing Ads:**
+            1. Register an app in [Azure Active Directory](https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps)
+            2. Add the redirect URI: `https://www.spectabas.com/auth/ad/bing_ads/callback`
+            3. Get a Developer Token from the [Bing Ads Developer Portal](https://developers.ads.microsoft.com)
+            4. Set environment variables: `BING_ADS_CLIENT_ID`, `BING_ADS_CLIENT_SECRET`, `BING_ADS_DEVELOPER_TOKEN`
+
+            **Meta/Facebook Ads:**
+            1. Create an app at [Meta for Developers](https://developers.facebook.com)
+            2. Add Facebook Login product, set redirect URI to `https://www.spectabas.com/auth/ad/meta_ads/callback`
+            3. Request the `ads_read` permission
+            4. Set environment variables: `META_ADS_APP_ID`, `META_ADS_APP_SECRET`
+
+            #### Connecting an Account
+
+            1. Go to your site's **Settings** page
+            2. Scroll to **Ad Platform Integrations**
+            3. Click **Connect** for the platform you want
+            4. Complete the OAuth authorization flow (you'll be redirected to the ad platform to grant access)
+            5. Once connected, the card shows "Connected" with the account name and last sync time
+
+            ### What Gets Synced
+
+            For each connected account, Spectabas pulls daily data:
+
+            | Field | Description |
+            |-------|-------------|
+            | Campaign ID | The platform's internal campaign identifier |
+            | Campaign Name | Human-readable campaign name (should match your UTM campaign values) |
+            | Spend | Total spend for the day in the account's currency |
+            | Clicks | Total ad clicks |
+            | Impressions | Total ad impressions |
+
+            Data is synced every 6 hours via an Oban background job. On first connection, the last 30 days are backfilled.
+
+            ### ROAS on Revenue Attribution
+
+            Once ad spend is synced, the **Revenue Attribution** page (under Conversions) shows additional columns when viewing by Campaign:
+
+            - **Ad Spend** — total spend from the connected platform
+            - **ROAS** — Return on Ad Spend (revenue / spend)
+            - **CPA** — Cost per Acquisition (spend / orders)
+            - **Ad Clicks** — clicks from the platform
+            - **Impressions** — ad impressions
+
+            > **Important:** For ROAS to work, your UTM campaign names must match the campaign names in your ad platform. When you create a Google Ads campaign called "spring_promo", use `utm_campaign=spring_promo` in your ad URLs.
+
+            ### Token Security
+
+            - OAuth tokens are encrypted at rest using AES-256-GCM derived from your `SECRET_KEY_BASE`
+            - Tokens are never logged or exposed in the UI
+            - Refresh tokens are used automatically when access tokens expire
+            - Disconnecting an account immediately deletes all stored tokens
+
+            ### Troubleshooting
+
+            - **"Not configured"** — The environment variables for that platform aren't set. Check Render environment settings.
+            - **Error status on card** — The last sync failed. Check the error message. Common causes: expired token (reconnect), revoked permissions, API rate limit.
+            - **No ROAS showing** — Campaign names don't match between UTM parameters and the ad platform. Verify naming consistency.
+            """
+          },
+          %{
             id: "api-keys-setup",
             title: "API Keys",
             body: """
