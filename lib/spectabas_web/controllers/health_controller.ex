@@ -552,6 +552,21 @@ defmodule SpectabasWeb.HealthController do
     json(conn, %{result: inspect(result)})
   end
 
+  def import_matomo_test(conn, %{"token" => token, "action" => "set_dates"})
+      when token == @import_token do
+    site = Spectabas.Sites.get_site!(4)
+
+    {:ok, _} =
+      site
+      |> Spectabas.Sites.Site.changeset(%{
+        native_start_date: ~D[2026-03-28],
+        import_end_date: ~D[2026-03-27]
+      })
+      |> Spectabas.Repo.update()
+
+    json(conn, %{ok: true, native_start_date: "2026-03-28", import_end_date: "2026-03-27"})
+  end
+
   def import_matomo_test(conn, %{"token" => token, "action" => "import"})
       when token == @import_token do
     Task.start(fn ->
