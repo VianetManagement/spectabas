@@ -38,14 +38,12 @@ defmodule Mix.Tasks.ImportMatomo do
 
     case opts[:action] do
       "status" ->
-        count = Spectabas.Imports.Matomo.imported_count(site_id)
-        Logger.info("[ImportMatomo] #{count} imported events for site #{site_id}")
+        count = Spectabas.Imports.Matomo.imported_day_count(site_id)
+        Logger.info("[ImportMatomo] #{count} imported days for site #{site_id}")
 
       "rollback" ->
-        case Spectabas.Imports.Matomo.rollback(site_id) do
-          {:ok, count} -> Logger.info("[ImportMatomo] Rolled back #{count} events")
-          {:error, reason} -> Logger.error("[ImportMatomo] Rollback failed: #{inspect(reason)}")
-        end
+        {:ok, results} = Spectabas.Imports.Matomo.rollback(site_id)
+        Logger.info("[ImportMatomo] Rollback: #{inspect(results)}")
 
       _ ->
         matomo_url = opts[:matomo_url] || raise "Missing --matomo-url"

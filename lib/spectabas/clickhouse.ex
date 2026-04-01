@@ -187,6 +187,70 @@ defmodule Spectabas.ClickHouse do
         sumIf(1, ip_is_bot = 1) AS bot_count
       FROM #{db}.events GROUP BY site_id, date, ip_asn, ip_asn_org, ip_org
       """,
+      # Imported data rollup tables (for Matomo/external data imports)
+      """
+      CREATE TABLE IF NOT EXISTS #{db}.imported_daily_stats (
+        site_id UInt64,
+        date Date,
+        pageviews UInt64 DEFAULT 0,
+        visitors UInt64 DEFAULT 0,
+        sessions UInt64 DEFAULT 0,
+        bounces UInt64 DEFAULT 0,
+        total_duration UInt64 DEFAULT 0
+      ) ENGINE = ReplacingMergeTree()
+      PARTITION BY toYYYYMM(date)
+      ORDER BY (site_id, date)
+      """,
+      """
+      CREATE TABLE IF NOT EXISTS #{db}.imported_pages (
+        site_id UInt64,
+        date Date,
+        url_path String,
+        pageviews UInt64 DEFAULT 0,
+        visitors UInt64 DEFAULT 0
+      ) ENGINE = ReplacingMergeTree()
+      PARTITION BY toYYYYMM(date)
+      ORDER BY (site_id, date, url_path)
+      """,
+      """
+      CREATE TABLE IF NOT EXISTS #{db}.imported_sources (
+        site_id UInt64,
+        date Date,
+        referrer_domain String DEFAULT '',
+        utm_source String DEFAULT '',
+        utm_medium String DEFAULT '',
+        pageviews UInt64 DEFAULT 0,
+        sessions UInt64 DEFAULT 0,
+        visitors UInt64 DEFAULT 0
+      ) ENGINE = ReplacingMergeTree()
+      PARTITION BY toYYYYMM(date)
+      ORDER BY (site_id, date, referrer_domain, utm_source, utm_medium)
+      """,
+      """
+      CREATE TABLE IF NOT EXISTS #{db}.imported_countries (
+        site_id UInt64,
+        date Date,
+        ip_country LowCardinality(String) DEFAULT '',
+        ip_country_name String DEFAULT '',
+        pageviews UInt64 DEFAULT 0,
+        visitors UInt64 DEFAULT 0
+      ) ENGINE = ReplacingMergeTree()
+      PARTITION BY toYYYYMM(date)
+      ORDER BY (site_id, date, ip_country)
+      """,
+      """
+      CREATE TABLE IF NOT EXISTS #{db}.imported_devices (
+        site_id UInt64,
+        date Date,
+        device_type LowCardinality(String) DEFAULT '',
+        browser LowCardinality(String) DEFAULT '',
+        os LowCardinality(String) DEFAULT '',
+        pageviews UInt64 DEFAULT 0,
+        visitors UInt64 DEFAULT 0
+      ) ENGINE = ReplacingMergeTree()
+      PARTITION BY toYYYYMM(date)
+      ORDER BY (site_id, date, device_type, browser, os)
+      """,
       # Users and grants
       "CREATE USER IF NOT EXISTS #{cfg[:username]} IDENTIFIED WITH plaintext_password BY '#{cfg[:password]}'",
       "CREATE USER IF NOT EXISTS #{cfg[:read_username]} IDENTIFIED WITH plaintext_password BY '#{cfg[:read_password]}'",
@@ -378,7 +442,7 @@ defmodule Spectabas.ClickHouse do
     "'#{e}'"
   end
 
-  @allowed_tables ~w(events daily_stats source_stats country_stats device_stats network_stats ecommerce_events)
+  @allowed_tables ~w(events daily_stats source_stats country_stats device_stats network_stats ecommerce_events imported_daily_stats imported_pages imported_sources imported_countries imported_devices)
   defp sanitize_table(t) when t in @allowed_tables, do: t
   defp sanitize_table(t), do: raise(ArgumentError, "Unknown ClickHouse table: #{t}")
 

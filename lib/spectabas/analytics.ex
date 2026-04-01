@@ -23,37 +23,107 @@ defmodule Spectabas.Analytics do
          :ok <- check_clickhouse() do
       seg = segment_sql(opts)
 
-      sql = """
-      SELECT
-        sum(pv) AS pageviews,
-        uniqExact(visitor_id) AS unique_visitors,
-        count() AS total_sessions,
-        round(countIf(pv = 1) / greatest(count(), 1) * 100, 1) AS bounce_rate,
-        round(avgIf(dur, dur > 0), 0) AS avg_duration
-      FROM (
-        SELECT
-          session_id,
-          any(visitor_id) AS visitor_id,
-          countIf(event_type = 'pageview') AS pv,
-          maxIf(duration_s, event_type = 'duration') AS dur,
-          countIf(event_type = 'custom' AND event_name NOT LIKE '\\_%') AS ce
-        FROM events
-        WHERE site_id = #{ClickHouse.param(site.id)}
-          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-          AND ip_is_bot = 0
-          #{seg}
-        GROUP BY session_id
-        HAVING pv > 0
-      )
-      """
+      # Check if we need to include imported data
+      {native_range, import_range} = split_date_range(site, date_range)
 
-      case ClickHouse.query(sql) do
-        {:ok, [row]} -> {:ok, row}
-        {:ok, []} -> {:ok, empty_overview()}
-        {:error, reason} -> {:error, reason}
-      end
+      native_result =
+        if native_range do
+          sql = """
+          SELECT
+            sum(pv) AS pageviews,
+            uniqExact(visitor_id) AS unique_visitors,
+            count() AS total_sessions,
+            round(countIf(pv = 1) / greatest(count(), 1) * 100, 1) AS bounce_rate,
+            round(avgIf(dur, dur > 0), 0) AS avg_duration
+          FROM (
+            SELECT
+              session_id,
+              any(visitor_id) AS visitor_id,
+              countIf(event_type = 'pageview') AS pv,
+              maxIf(duration_s, event_type = 'duration') AS dur,
+              countIf(event_type = 'custom' AND event_name NOT LIKE '\\_%') AS ce
+            FROM events
+            WHERE site_id = #{ClickHouse.param(site.id)}
+              AND timestamp >= #{ClickHouse.param(format_datetime(native_range.from))}
+              AND timestamp <= #{ClickHouse.param(format_datetime(native_range.to))}
+              AND ip_is_bot = 0
+              #{seg}
+            GROUP BY session_id
+            HAVING pv > 0
+          )
+          """
+
+          case ClickHouse.query(sql) do
+            {:ok, [row]} -> row
+            _ -> nil
+          end
+        end
+
+      imported_result =
+        if import_range do
+          sql = """
+          SELECT
+            sum(pageviews) AS pageviews,
+            sum(visitors) AS unique_visitors,
+            sum(sessions) AS total_sessions,
+            round(sum(bounces) / greatest(sum(sessions), 1) * 100, 1) AS bounce_rate,
+            round(sum(total_duration) / greatest(sum(sessions) - sum(bounces), 1), 0) AS avg_duration
+          FROM imported_daily_stats
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND date >= #{ClickHouse.param(Date.to_iso8601(import_range.from))}
+            AND date <= #{ClickHouse.param(Date.to_iso8601(import_range.to))}
+          """
+
+          case ClickHouse.query(sql) do
+            {:ok, [row]} -> row
+            _ -> nil
+          end
+        end
+
+      {:ok, merge_overview(native_result, imported_result)}
     end
+  end
+
+  defp merge_overview(nil, nil), do: empty_overview()
+  defp merge_overview(native, nil), do: native
+  defp merge_overview(nil, imported), do: imported
+
+  defp merge_overview(native, imported) do
+    n_pv = to_int(native["pageviews"])
+    i_pv = to_int(imported["pageviews"])
+    n_sess = to_int(native["total_sessions"])
+    i_sess = to_int(imported["total_sessions"])
+    total_sess = n_sess + i_sess
+
+    bounce_rate =
+      if total_sess > 0 do
+        (to_float(native["bounce_rate"]) * n_sess +
+           to_float(imported["bounce_rate"]) * i_sess) / total_sess
+      else
+        0.0
+      end
+
+    n_dur = to_int(native["avg_duration"])
+    i_dur = to_int(imported["avg_duration"])
+    n_non_bounce = max(n_sess - round(to_float(native["bounce_rate"]) / 100 * n_sess), 1)
+    i_non_bounce = max(i_sess - round(to_float(imported["bounce_rate"]) / 100 * i_sess), 1)
+    total_non_bounce = n_non_bounce + i_non_bounce
+
+    avg_duration =
+      if total_non_bounce > 0 do
+        (n_dur * n_non_bounce + i_dur * i_non_bounce) / total_non_bounce
+      else
+        0
+      end
+
+    %{
+      "pageviews" => to_string(n_pv + i_pv),
+      "unique_visitors" =>
+        to_string(to_int(native["unique_visitors"]) + to_int(imported["unique_visitors"])),
+      "total_sessions" => to_string(total_sess),
+      "bounce_rate" => to_string(Float.round(bounce_rate, 1)),
+      "avg_duration" => to_string(round(avg_duration))
+    }
   end
 
   @doc """
@@ -68,41 +138,76 @@ defmodule Spectabas.Analytics do
     with :ok <- authorize(site, user) do
       tz = site.timezone || "UTC"
       trunc_fn = if period == :day, do: "toStartOfHour", else: "toDate"
+      {native_range, import_range} = split_date_range(site, date_range)
 
-      sql = """
-      SELECT
-        #{trunc_fn}(toTimezone(timestamp, #{ClickHouse.param(tz)})) AS bucket,
-        countIf(event_type = 'pageview') AS pageviews,
-        uniq(visitor_id) AS visitors
-      FROM events
-      WHERE site_id = #{ClickHouse.param(site.id)}
-        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-        AND ip_is_bot = 0
-      GROUP BY bucket
-      ORDER BY bucket ASC
-      """
+      # Native timeseries
+      native_rows =
+        if native_range do
+          sql = """
+          SELECT
+            #{trunc_fn}(toTimezone(timestamp, #{ClickHouse.param(tz)})) AS bucket,
+            countIf(event_type = 'pageview') AS pageviews,
+            uniq(visitor_id) AS visitors
+          FROM events
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND timestamp >= #{ClickHouse.param(format_datetime(native_range.from))}
+            AND timestamp <= #{ClickHouse.param(format_datetime(native_range.to))}
+            AND ip_is_bot = 0
+          GROUP BY bucket
+          ORDER BY bucket ASC
+          """
 
-      case ClickHouse.query(sql) do
-        {:ok, rows} ->
-          data_map =
-            Map.new(rows, fn row ->
-              {row["bucket"] || "", {to_int(row["pageviews"]), to_int(row["visitors"])}}
-            end)
+          case ClickHouse.query(sql) do
+            {:ok, rows} -> rows
+            _ -> []
+          end
+        else
+          []
+        end
 
-          all_buckets = generate_buckets(date_range.from, date_range.to, period, tz)
+      # Imported timeseries (daily granularity only)
+      imported_rows =
+        if import_range do
+          sql = """
+          SELECT
+            date AS bucket,
+            pageviews,
+            visitors
+          FROM imported_daily_stats
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND date >= #{ClickHouse.param(Date.to_iso8601(import_range.from))}
+            AND date <= #{ClickHouse.param(Date.to_iso8601(import_range.to))}
+          ORDER BY date ASC
+          """
 
-          filled =
-            Enum.map(all_buckets, fn {bucket_key, label} ->
-              {pv, v} = Map.get(data_map, bucket_key, {0, 0})
-              %{"bucket" => bucket_key, "label" => label, "pageviews" => pv, "visitors" => v}
-            end)
+          case ClickHouse.query(sql) do
+            {:ok, rows} -> rows
+            _ -> []
+          end
+        else
+          []
+        end
 
-          {:ok, filled}
+      # Merge into a unified data map
+      data_map =
+        (native_rows ++ imported_rows)
+        |> Enum.reduce(%{}, fn row, acc ->
+          key = row["bucket"] || ""
+          pv = to_int(row["pageviews"])
+          v = to_int(row["visitors"])
+          {existing_pv, existing_v} = Map.get(acc, key, {0, 0})
+          Map.put(acc, key, {existing_pv + pv, existing_v + v})
+        end)
 
-        {:error, reason} ->
-          {:error, reason}
-      end
+      all_buckets = generate_buckets(date_range.from, date_range.to, period, tz)
+
+      filled =
+        Enum.map(all_buckets, fn {bucket_key, label} ->
+          {pv, v} = Map.get(data_map, bucket_key, {0, 0})
+          %{"bucket" => bucket_key, "label" => label, "pageviews" => pv, "visitors" => v}
+        end)
+
+      {:ok, filled}
     end
   end
 
@@ -160,6 +265,18 @@ defmodule Spectabas.Analytics do
   end
 
   defp to_int(_), do: 0
+
+  defp to_float(n) when is_float(n), do: n
+  defp to_float(n) when is_integer(n), do: n / 1
+
+  defp to_float(n) when is_binary(n) do
+    case Float.parse(n) do
+      {f, _} -> f
+      :error -> 0.0
+    end
+  end
+
+  defp to_float(_), do: 0.0
 
   @doc """
   Entry pages: first pageview URL per session.
@@ -2043,6 +2160,36 @@ defmodule Spectabas.Analytics do
 
   # ClickHouse toTimezone() snippet for converting UTC timestamps to site timezone
   defp tz_sql(%Site{} = site), do: ClickHouse.param(site.timezone || "UTC")
+
+  # Split a date range into native and imported portions based on site's import dates.
+  # Returns {native_range | nil, import_range | nil} where each is %{from: Date, to: Date}.
+  defp split_date_range(%Site{native_start_date: nil}, date_range), do: {date_range, nil}
+  defp split_date_range(%Site{import_end_date: nil}, date_range), do: {date_range, nil}
+
+  defp split_date_range(%Site{} = site, date_range) do
+    from_date = DateTime.to_date(date_range.from)
+    to_date = DateTime.to_date(date_range.to)
+
+    cond do
+      # Entirely after import period — native only
+      Date.compare(from_date, site.native_start_date) != :lt ->
+        {date_range, nil}
+
+      # Entirely within import period — import only
+      Date.compare(to_date, site.import_end_date) != :gt ->
+        {nil, %{from: from_date, to: to_date}}
+
+      # Spans both — split at the boundary
+      true ->
+        import_part = %{from: from_date, to: site.import_end_date}
+
+        native_from =
+          DateTime.new!(site.native_start_date, ~T[00:00:00], "Etc/UTC")
+
+        native_part = %{from: native_from, to: date_range.to}
+        {native_part, import_part}
+    end
+  end
 
   @doc """
   Overview stats for shared/public dashboards (no user access check).

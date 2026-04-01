@@ -542,8 +542,8 @@ defmodule SpectabasWeb.HealthController do
 
   def import_matomo_test(conn, %{"token" => token, "action" => "status"})
       when token == @import_token do
-    count = Spectabas.Imports.Matomo.imported_count(4)
-    json(conn, %{imported_events: count})
+    count = Spectabas.Imports.Matomo.imported_day_count(4)
+    json(conn, %{imported_days: count})
   end
 
   def import_matomo_test(conn, %{"token" => token, "action" => "rollback"})
@@ -552,63 +552,8 @@ defmodule SpectabasWeb.HealthController do
     json(conn, %{result: inspect(result)})
   end
 
-  def import_matomo_test(conn, %{"token" => token, "action" => "fix_grants"})
-      when token == @import_token do
-    # Run the grant with the admin/default user via ensure_schema path
-    cfg = Application.get_env(:spectabas, Spectabas.ClickHouse, [])
-    db = cfg[:database] || "spectabas"
-    writer = cfg[:username] || "spectabas_writer"
-
-    admin_req =
-      Req.new(
-        base_url: cfg[:url],
-        params: [user: "default", password: ""]
-      )
-
-    sql = "GRANT INSERT, SELECT, ALTER ON #{db}.* TO #{writer}"
-
-    result =
-      case Req.post(Req.merge(admin_req, params: [query: sql]), body: "") do
-        {:ok, %{status: 200}} -> :ok
-        {:ok, %{status: s, body: b}} -> {:error, "#{s}: #{b}"}
-        {:error, r} -> {:error, inspect(r)}
-      end
-
-    json(conn, %{grant_result: inspect(result)})
-  end
-
-  def import_matomo_test(conn, %{"token" => token, "action" => "drop_old_partitions"})
-      when token == @import_token do
-    # Drop monthly partitions that ONLY contain imported data (no native data)
-    # Apr 2025 through Feb 2026 — safe to drop entirely
-    # March 2026 (202603) is NOT dropped because it has native data from Mar 28+
-    db = Spectabas.ClickHouse.database()
-
-    partitions =
-      ~w(202504 202505 202506 202507 202508 202509 202510 202511 202512 202601 202602)
-
-    results =
-      Enum.map(partitions, fn part ->
-        sql = "ALTER TABLE #{db}.events DROP PARTITION '#{part}'"
-        {part, Spectabas.ClickHouse.execute(sql)}
-      end)
-
-    # For March 2026, only delete imported rows (keep native data from Mar 28+)
-    march_result =
-      Spectabas.ClickHouse.execute(
-        "ALTER TABLE #{db}.events DELETE WHERE site_id = 4 AND visitor_id LIKE 'imported\\_%' AND toYYYYMM(timestamp) = 202603"
-      )
-
-    json(conn, %{
-      dropped_partitions: inspect(results),
-      march_2026_cleanup: inspect(march_result)
-    })
-  end
-
   def import_matomo_test(conn, %{"token" => token, "action" => "import"})
       when token == @import_token do
-    # Import April 2025 through March 27, 2026 (before native tracking)
-    # Run async so it doesn't timeout — check status via action=status
     Task.start(fn ->
       Spectabas.Imports.Matomo.import_range(
         4,
@@ -622,18 +567,14 @@ defmodule SpectabasWeb.HealthController do
 
     json(conn, %{
       status: "started",
-      message: "Importing Apr 2025 - Mar 27 2026. Check progress with action=status"
+      message: "Importing into rollup tables. Check progress with action=status"
     })
   end
 
   def import_matomo_test(conn, %{"token" => token}) when token == @import_token do
     json(conn, %{
-      actions: %{
-        import: "Start full historical import (Apr 2025 - Mar 2026)",
-        status: "Check imported event count",
-        rollback: "Delete all imported data"
-      },
-      usage: "Add &action=import|status|rollback"
+      actions: ["import", "status", "rollback"],
+      usage: "?token=...&action=import|status|rollback"
     })
   end
 

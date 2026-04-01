@@ -19,6 +19,8 @@ defmodule Spectabas.Sites.Site do
     field :currency, :string, default: "USD"
     field :ip_allowlist, {:array, :string}, default: []
     field :ip_blocklist, {:array, :string}, default: []
+    field :native_start_date, :date
+    field :import_end_date, :date
 
     timestamps(type: :utc_datetime)
   end
@@ -41,7 +43,9 @@ defmodule Spectabas.Sites.Site do
       :ecommerce_enabled,
       :currency,
       :ip_allowlist,
-      :ip_blocklist
+      :ip_blocklist,
+      :native_start_date,
+      :import_end_date
     ])
     |> validate_required([:name, :domain])
     |> validate_length(:name, max: 255)

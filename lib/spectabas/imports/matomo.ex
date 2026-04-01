@@ -1,33 +1,94 @@
 defmodule Spectabas.Imports.Matomo do
   @moduledoc """
-  Import historical Matomo data into ClickHouse events table.
-  Fetches daily aggregates from Matomo API and generates synthetic pageview events.
+  Import historical Matomo data into ClickHouse rollup tables.
+  Writes to imported_daily_stats, imported_pages, imported_sources,
+  imported_countries, and imported_devices — NOT the raw events table.
   """
 
   require Logger
 
-  @doc """
-  Import a single day of Matomo data for the given site.
-  Returns {:ok, count} or {:error, reason}.
-  """
+  alias Spectabas.ClickHouse
+
+  @imported_tables ~w(imported_daily_stats imported_pages imported_sources imported_countries imported_devices)
+
+  @doc "Import a single day of Matomo data into rollup tables."
   def import_day(site_id, matomo_url, matomo_site_id, token, %Date{} = date) do
     date_str = Date.to_iso8601(date)
     Logger.info("[MatomoImport] Fetching #{date_str}...")
 
     summary = fetch(matomo_url, matomo_site_id, token, "VisitsSummary.get", date_str)
-    total_visits = get_int(summary, "nb_visits")
+    visits = get_int(summary, "nb_visits")
 
-    if total_visits == 0 do
+    if visits == 0 do
       Logger.info("[MatomoImport] #{date_str}: no visits, skipping")
       {:ok, 0}
     else
+      # 1. Daily summary
+      ClickHouse.insert("imported_daily_stats", [
+        %{
+          "site_id" => site_id,
+          "date" => date_str,
+          "pageviews" => get_int(summary, "nb_actions"),
+          "visitors" => get_int(summary, "nb_uniq_visitors"),
+          "sessions" => visits,
+          "bounces" => get_int(summary, "bounce_count"),
+          "total_duration" => get_int(summary, "sum_visit_length")
+        }
+      ])
+
+      # 2. Pages
       pages = fetch_list(matomo_url, matomo_site_id, token, "Actions.getPageUrls", date_str, 200)
 
+      page_rows =
+        Enum.map(pages, fn p ->
+          %{
+            "site_id" => site_id,
+            "date" => date_str,
+            "url_path" => clean_page_label(get_str(p, "label")),
+            "pageviews" => get_int(p, "nb_hits"),
+            "visitors" => get_int(p, "nb_visits")
+          }
+        end)
+        |> Enum.reject(&(&1["url_path"] == ""))
+
+      if page_rows != [], do: ClickHouse.insert("imported_pages", page_rows)
+
+      # 3. Countries
       countries =
         fetch_list(matomo_url, matomo_site_id, token, "UserCountry.getCountry", date_str, 50)
 
+      country_rows =
+        Enum.map(countries, fn c ->
+          %{
+            "site_id" => site_id,
+            "date" => date_str,
+            "ip_country" => String.upcase(get_str(c, "code")),
+            "ip_country_name" => get_str(c, "label"),
+            "pageviews" => get_int(c, "nb_visits"),
+            "visitors" => get_int(c, "nb_uniq_visitors")
+          }
+        end)
+        |> Enum.reject(&(&1["ip_country"] == ""))
+
+      if country_rows != [], do: ClickHouse.insert("imported_countries", country_rows)
+
+      # 4. Devices (type, browser, os as separate inserts)
       devices =
         fetch_list(matomo_url, matomo_site_id, token, "DevicesDetection.getType", date_str, 20)
+
+      device_rows =
+        Enum.map(devices, fn d ->
+          %{
+            "site_id" => site_id,
+            "date" => date_str,
+            "device_type" => normalize_device(get_str(d, "label")),
+            "browser" => "",
+            "os" => "",
+            "pageviews" => get_int(d, "nb_visits"),
+            "visitors" => get_int(d, "nb_uniq_visitors")
+          }
+        end)
+        |> Enum.reject(&(&1["device_type"] == ""))
 
       browsers =
         fetch_list(
@@ -39,6 +100,20 @@ defmodule Spectabas.Imports.Matomo do
           30
         )
 
+      browser_rows =
+        Enum.map(browsers, fn b ->
+          %{
+            "site_id" => site_id,
+            "date" => date_str,
+            "device_type" => "",
+            "browser" => get_str(b, "label"),
+            "os" => "",
+            "pageviews" => get_int(b, "nb_visits"),
+            "visitors" => get_int(b, "nb_uniq_visitors")
+          }
+        end)
+        |> Enum.reject(&(&1["browser"] == ""))
+
       os_list =
         fetch_list(
           matomo_url,
@@ -49,215 +124,95 @@ defmodule Spectabas.Imports.Matomo do
           20
         )
 
+      os_rows =
+        Enum.map(os_list, fn o ->
+          %{
+            "site_id" => site_id,
+            "date" => date_str,
+            "device_type" => "",
+            "browser" => "",
+            "os" => get_str(o, "label"),
+            "pageviews" => get_int(o, "nb_visits"),
+            "visitors" => get_int(o, "nb_uniq_visitors")
+          }
+        end)
+        |> Enum.reject(&(&1["os"] == ""))
+
+      all_device_rows = device_rows ++ browser_rows ++ os_rows
+      if all_device_rows != [], do: ClickHouse.insert("imported_devices", all_device_rows)
+
+      # 5. Sources/referrers
       referrers =
         fetch_list(matomo_url, matomo_site_id, token, "Referrers.getAll", date_str, 100)
 
-      events =
-        build_events(site_id, date, %{
-          pages: pages,
-          countries: countries,
-          devices: devices,
-          browsers: browsers,
-          os_list: os_list,
-          referrers: referrers
-        })
-
-      errors =
-        events
-        |> Enum.chunk_every(500)
-        |> Enum.reduce(0, fn batch, err_count ->
-          case Spectabas.ClickHouse.insert("events", batch) do
-            :ok ->
-              err_count
-
-            {:error, reason} ->
-              Logger.error(
-                "[MatomoImport] Insert failed: #{inspect(reason) |> String.slice(0, 200)}"
-              )
-
-              err_count + 1
-          end
+      source_rows =
+        Enum.map(referrers, fn r ->
+          %{
+            "site_id" => site_id,
+            "date" => date_str,
+            "referrer_domain" => normalize_referrer(get_str(r, "label")),
+            "utm_source" => "",
+            "utm_medium" => "",
+            "pageviews" => get_int(r, "nb_actions"),
+            "sessions" => get_int(r, "nb_visits"),
+            "visitors" => get_int(r, "nb_visits")
+          }
         end)
+        |> Enum.reject(&(&1["referrer_domain"] == ""))
 
-      count = length(events)
-      Logger.info("[MatomoImport] #{date_str}: inserted #{count} events (#{errors} batch errors)")
-      {:ok, count}
+      if source_rows != [], do: ClickHouse.insert("imported_sources", source_rows)
+
+      Logger.info("[MatomoImport] #{date_str}: imported (#{visits} visits)")
+      {:ok, 1}
     end
   rescue
     e ->
-      Logger.error("[MatomoImport] Crashed: #{Exception.message(e)}")
+      Logger.error("[MatomoImport] #{date} crashed: #{Exception.message(e)}")
       {:error, Exception.message(e)}
   end
 
-  @doc "Import a date range. Returns total event count."
+  @doc "Import a date range. Returns {:ok, days_imported, total_days}."
   def import_range(site_id, matomo_url, matomo_site_id, token, from_date, to_date) do
     dates = Date.range(from_date, to_date) |> Enum.to_list()
 
-    total =
+    imported =
       Enum.reduce(dates, 0, fn date, acc ->
         case import_day(site_id, matomo_url, matomo_site_id, token, date) do
-          {:ok, count} -> acc + count
+          {:ok, n} -> acc + n
           _ -> acc
         end
       end)
 
-    {:ok, total, length(dates)}
+    {:ok, imported, length(dates)}
   end
 
-  @doc "Delete all imported events for a site. Returns {:ok, count} or {:error, reason}."
+  @doc "Delete all imported data for a site from all rollup tables."
   def rollback(site_id) do
-    Logger.info("[MatomoImport] Rolling back imported data for site #{site_id}...")
+    db = ClickHouse.database()
 
-    # Count first
-    count_sql =
-      "SELECT count() AS c FROM events WHERE site_id = #{Spectabas.ClickHouse.param(site_id)} AND visitor_id LIKE 'imported\\_%'"
+    results =
+      Enum.map(@imported_tables, fn table ->
+        sql = "ALTER TABLE #{db}.#{table} DELETE WHERE site_id = #{ClickHouse.param(site_id)}"
 
-    count =
-      case Spectabas.ClickHouse.query(count_sql) do
-        {:ok, [%{"c" => c}]} -> Spectabas.TypeHelpers.to_num(c)
-        _ -> 0
-      end
+        case ClickHouse.execute(sql) do
+          :ok -> {table, :ok}
+          {:error, reason} -> {table, {:error, reason}}
+        end
+      end)
 
-    if count == 0 do
-      Logger.info("[MatomoImport] No imported data found for site #{site_id}")
-      {:ok, 0}
-    else
-      # Delete imported events using ALTER TABLE DELETE
-      delete_sql =
-        "ALTER TABLE #{Spectabas.ClickHouse.database()}.events DELETE WHERE site_id = #{Spectabas.ClickHouse.param(site_id)} AND visitor_id LIKE 'imported\\_%'"
-
-      case Spectabas.ClickHouse.execute(delete_sql) do
-        :ok ->
-          Logger.info("[MatomoImport] Rolled back #{count} imported events for site #{site_id}")
-          {:ok, count}
-
-        {:error, reason} ->
-          Logger.error("[MatomoImport] Rollback failed: #{inspect(reason)}")
-          {:error, reason}
-      end
-    end
+    Logger.info("[MatomoImport] Rollback for site #{site_id}: #{inspect(results)}")
+    {:ok, results}
   end
 
-  @doc "Count imported events for a site."
-  def imported_count(site_id) do
+  @doc "Count imported days for a site."
+  def imported_day_count(site_id) do
     sql =
-      "SELECT count() AS c FROM events WHERE site_id = #{Spectabas.ClickHouse.param(site_id)} AND visitor_id LIKE 'imported\\_%'"
+      "SELECT count() AS c FROM imported_daily_stats WHERE site_id = #{ClickHouse.param(site_id)}"
 
-    case Spectabas.ClickHouse.query(sql) do
+    case ClickHouse.query(sql) do
       {:ok, [%{"c" => c}]} -> Spectabas.TypeHelpers.to_num(c)
       _ -> 0
     end
-  end
-
-  # --- Event generation ---
-
-  defp build_events(site_id, date, data) do
-    country_pool =
-      build_pool(data.countries, fn c ->
-        {get_str(c, "code", ""), get_str(c, "label", ""), get_int(c, "nb_visits")}
-      end)
-
-    device_pool =
-      build_pool(data.devices, fn d ->
-        {normalize_device(get_str(d, "label", "")), get_int(d, "nb_visits")}
-      end)
-
-    browser_pool =
-      build_pool(data.browsers, fn b -> {get_str(b, "label", ""), get_int(b, "nb_visits")} end)
-
-    os_pool =
-      build_pool(data.os_list, fn o -> {get_str(o, "label", ""), get_int(o, "nb_visits")} end)
-
-    referrer_pool =
-      build_pool(data.referrers, fn r -> {get_str(r, "label", ""), get_int(r, "nb_visits")} end)
-
-    page_hits =
-      data.pages
-      |> Enum.flat_map(fn p ->
-        path = get_str(p, "label", "/") |> clean_page_label()
-        hits = get_int(p, "nb_hits")
-        Enum.map(1..max(hits, 1), fn _ -> path end)
-      end)
-
-    total = length(page_hits)
-    seconds_per_event = if total > 0, do: div(86400, total), else: 60
-
-    page_hits
-    |> Enum.with_index()
-    |> Enum.map(fn {url_path, idx} ->
-      seconds = rem(idx * seconds_per_event, 86400)
-
-      timestamp =
-        NaiveDateTime.new!(
-          date,
-          Time.new!(div(seconds, 3600), rem(div(seconds, 60), 60), rem(seconds, 60))
-        )
-        |> NaiveDateTime.to_string()
-        |> String.replace("T", " ")
-
-      {country_code, country_name} = sample_country(country_pool)
-      device_type = sample_single(device_pool)
-      browser = sample_single(browser_pool)
-      os = sample_single(os_pool)
-      referrer = sample_single(referrer_pool)
-
-      visitor_id = "imported_#{:erlang.phash2({site_id, date, idx}, 4_294_967_296)}"
-      session_id = "imported_s_#{:erlang.phash2({site_id, date, idx, url_path}, 4_294_967_296)}"
-
-      %{
-        "event_id" => Ecto.UUID.generate(),
-        "site_id" => site_id,
-        "visitor_id" => visitor_id,
-        "session_id" => session_id,
-        "event_type" => "pageview",
-        "event_name" => "",
-        "url_path" => url_path,
-        "url_host" => "www.roommates.com",
-        "referrer_domain" => normalize_referrer(referrer),
-        "referrer_url" => "",
-        "utm_source" => "",
-        "utm_medium" => "",
-        "utm_campaign" => "",
-        "utm_term" => "",
-        "utm_content" => "",
-        "device_type" => device_type,
-        "browser" => browser,
-        "browser_version" => "",
-        "os" => os,
-        "os_version" => "",
-        "screen_width" => 0,
-        "screen_height" => 0,
-        "ip_address" => "",
-        "ip_country" => String.upcase(country_code),
-        "ip_country_name" => country_name,
-        "ip_continent" => "",
-        "ip_continent_name" => "",
-        "ip_region_code" => "",
-        "ip_region_name" => "",
-        "ip_city" => "",
-        "ip_postal_code" => "",
-        "ip_lat" => 0.0,
-        "ip_lon" => 0.0,
-        "ip_accuracy_radius" => 0,
-        "ip_timezone" => "",
-        "ip_asn" => 0,
-        "ip_asn_org" => "",
-        "ip_org" => "",
-        "ip_is_datacenter" => 0,
-        "ip_is_vpn" => 0,
-        "ip_is_tor" => 0,
-        "ip_is_bot" => 0,
-        "ip_is_eu" => 0,
-        "ip_gdpr_anonymized" => 0,
-        "visitor_intent" => "",
-        "user_agent" => "",
-        "browser_fingerprint" => "",
-        "duration_s" => 0,
-        "properties" => "{}",
-        "is_bounce" => 1,
-        "timestamp" => timestamp
-      }
-    end)
   end
 
   # --- Matomo API ---
@@ -291,35 +246,6 @@ defmodule Spectabas.Imports.Matomo do
 
   # --- Helpers ---
 
-  defp build_pool(items, mapper) do
-    items
-    |> Enum.map(mapper)
-    |> Enum.reject(fn tuple -> elem(tuple, tuple_size(tuple) - 1) <= 0 end)
-  end
-
-  defp sample_country([]), do: {"", ""}
-
-  defp sample_country(pool) do
-    total = Enum.sum(Enum.map(pool, fn {_, _, w} -> w end))
-    r = :rand.uniform(total)
-    pick_weighted(pool, r, fn {code, name, w} -> {w, {code, name}} end)
-  end
-
-  defp sample_single([]), do: ""
-
-  defp sample_single(pool) do
-    total = Enum.sum(Enum.map(pool, fn {_, w} -> w end))
-    r = :rand.uniform(total)
-    pick_weighted(pool, r, fn {label, w} -> {w, label} end)
-  end
-
-  defp pick_weighted([], _, _), do: ""
-
-  defp pick_weighted([item | rest], remaining, extractor) do
-    {weight, value} = extractor.(item)
-    if remaining <= weight, do: value, else: pick_weighted(rest, remaining - weight, extractor)
-  end
-
   defp get_int(map, key) do
     case Map.get(map, key) do
       n when is_integer(n) -> n
@@ -328,10 +254,10 @@ defmodule Spectabas.Imports.Matomo do
     end
   end
 
-  defp get_str(map, key, default) do
+  defp get_str(map, key) do
     case Map.get(map, key) do
       s when is_binary(s) and s != "" -> s
-      _ -> default
+      _ -> ""
     end
   end
 
@@ -343,6 +269,7 @@ defmodule Spectabas.Imports.Matomo do
     |> List.first()
     |> then(fn
       "/" <> _ = path -> path
+      "" -> ""
       path -> "/" <> path
     end)
   end
@@ -356,9 +283,6 @@ defmodule Spectabas.Imports.Matomo do
   defp normalize_referrer(""), do: ""
 
   defp normalize_referrer(label) do
-    cond do
-      String.contains?(label, ".") -> label
-      true -> ""
-    end
+    if String.contains?(label, "."), do: label, else: ""
   end
 end
