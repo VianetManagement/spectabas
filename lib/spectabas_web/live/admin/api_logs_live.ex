@@ -429,11 +429,30 @@ defmodule SpectabasWeb.Admin.ApiLogsLive do
             <.detail_row label="IP Address" value={@selected_log.ip_address || "—"} />
             <.detail_row label="User Agent" value={@selected_log.user_agent || "—"} />
             <.detail_row label="Log ID" value={to_string(@selected_log.id)} />
+
+            <div :if={@selected_log.request_body} class="mt-4">
+              <dt class="text-xs font-medium text-gray-500 uppercase mb-1">Request Body</dt>
+              <pre class="bg-gray-900 text-gray-100 rounded-lg p-3 text-xs overflow-x-auto max-h-48"><code>{format_json(@selected_log.request_body)}</code></pre>
+            </div>
+
+            <div :if={@selected_log.response_body} class="mt-4">
+              <dt class="text-xs font-medium text-gray-500 uppercase mb-1">Response Body</dt>
+              <pre class="bg-gray-900 text-gray-100 rounded-lg p-3 text-xs overflow-x-auto max-h-48"><code>{format_json(@selected_log.response_body)}</code></pre>
+            </div>
           </div>
         </div>
       </div>
     </div>
     """
+  end
+
+  defp format_json(nil), do: ""
+
+  defp format_json(str) when is_binary(str) do
+    case Jason.decode(str) do
+      {:ok, data} -> Jason.encode!(data, pretty: true)
+      _ -> str
+    end
   end
 
   defp detail_row(assigns) do

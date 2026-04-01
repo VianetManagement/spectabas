@@ -12,6 +12,8 @@ defmodule Spectabas.Accounts.ApiAccessLog do
     field :ip_address, :string
     field :user_agent, :string
     field :duration_ms, :integer
+    field :request_body, :string
+    field :response_body, :string
     timestamps(updated_at: false)
   end
 end

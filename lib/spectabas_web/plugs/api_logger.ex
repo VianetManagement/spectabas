@@ -1,21 +1,35 @@
 defmodule SpectabasWeb.Plugs.ApiLogger do
   @behaviour Plug
 
+  @max_body_size 4096
+
   def init(opts), do: opts
 
   def call(conn, _opts) do
     start_time = System.monotonic_time(:millisecond)
 
+    # Capture request body before it's consumed (params are already parsed)
+    request_body =
+      case conn.params do
+        %Plug.Conn.Unfetched{} -> nil
+        params -> params |> Jason.encode!() |> String.slice(0, @max_body_size)
+      end
+
     Plug.Conn.register_before_send(conn, fn conn ->
-      # Only log if an API key was used (api_key assign exists)
       if api_key = conn.assigns[:api_key] do
         duration = System.monotonic_time(:millisecond) - start_time
 
-        # Extract site_id from path params
         site_id = conn.path_params["site_id"]
         site_id = if site_id, do: String.to_integer(site_id), else: nil
 
-        # Fire and forget — don't block the response
+        # Capture response body (truncated)
+        response_body =
+          if is_binary(conn.resp_body) do
+            String.slice(conn.resp_body, 0, @max_body_size)
+          else
+            nil
+          end
+
         Task.start(fn ->
           Spectabas.Repo.insert(%Spectabas.Accounts.ApiAccessLog{
             api_key_id: api_key.id,
@@ -27,7 +41,9 @@ defmodule SpectabasWeb.Plugs.ApiLogger do
             status_code: conn.status,
             ip_address: get_client_ip(conn),
             user_agent: get_user_agent(conn),
-            duration_ms: duration
+            duration_ms: duration,
+            request_body: request_body,
+            response_body: response_body
           })
         end)
       end

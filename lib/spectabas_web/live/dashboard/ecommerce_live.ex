@@ -53,9 +53,16 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
         _ -> []
       end
 
+    orders =
+      case Analytics.ecommerce_orders(site, user, period) do
+        {:ok, rows} -> rows
+        _ -> []
+      end
+
     socket
     |> assign(:ecommerce, stats)
     |> assign(:top_products, products)
+    |> assign(:orders, orders)
   end
 
   @impl true
@@ -159,10 +166,102 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
             </tbody>
           </table>
         </div>
+
+        <%!-- Recent Orders --%>
+        <div class="bg-white rounded-lg shadow overflow-x-auto mt-6">
+          <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">Recent Orders</h2>
+          </div>
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Order ID
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Visitor
+                </th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                  Revenue
+                </th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                  Tax
+                </th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                  Shipping
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Items
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Time
+                </th>
+              </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+              <tr :if={@orders == []}>
+                <td colspan="7" class="px-6 py-8 text-center text-gray-500">
+                  No orders yet.
+                </td>
+              </tr>
+              <tr :for={order <- @orders} class="hover:bg-gray-50">
+                <td class="px-6 py-4 text-sm font-mono text-gray-900">
+                  {order["order_id"]}
+                </td>
+                <td class="px-6 py-4 text-sm">
+                  <.link
+                    :if={order["visitor_id"] && order["visitor_id"] != ""}
+                    navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{order["visitor_id"]}"}
+                    class="text-indigo-600 hover:text-indigo-800 font-mono text-xs"
+                  >
+                    {String.slice(order["visitor_id"] || "", 0, 8)}...
+                  </.link>
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums font-medium">
+                  {@site.currency} {format_money(order["revenue"])}
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-500 text-right tabular-nums">
+                  {format_money(order["tax"])}
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-500 text-right tabular-nums">
+                  {format_money(order["shipping"])}
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-500">
+                  {parse_items_summary(order["items"])}
+                </td>
+                <td class="px-6 py-4 text-xs text-gray-500">
+                  {order["timestamp"]}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </.dashboard_layout>
     """
   end
+
+  defp parse_items_summary(nil), do: "—"
+  defp parse_items_summary(""), do: "—"
+  defp parse_items_summary("[]"), do: "—"
+
+  defp parse_items_summary(items_json) when is_binary(items_json) do
+    case Jason.decode(items_json) do
+      {:ok, items} when is_list(items) ->
+        items
+        |> Enum.map(fn item ->
+          name = item["name"] || "?"
+          qty = item["quantity"] || 1
+          "#{qty}x #{name}"
+        end)
+        |> Enum.join(", ")
+
+      _ ->
+        "—"
+    end
+  end
+
+  defp parse_items_summary(_), do: "—"
 
   defp format_money(%Decimal{} = d), do: Decimal.round(d, 2) |> Decimal.to_string()
   defp format_money(n) when is_number(n), do: :erlang.float_to_binary(n / 1, decimals: 2)

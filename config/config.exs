@@ -66,7 +66,9 @@ config :spectabas, Oban,
        # Every 15 minutes — check for email reports due for sending
        {"*/15 * * * *", Spectabas.Workers.EmailReportDispatcher},
        # Daily at 7am UTC — detect potential spam referrer domains
-       {"0 7 * * *", Spectabas.Workers.SpamDetector}
+       {"0 7 * * *", Spectabas.Workers.SpamDetector},
+       # Daily at 3am UTC — delete API access logs older than 30 days
+       {"0 3 * * *", Spectabas.Workers.ApiLogCleanup}
      ]}
   ]
 

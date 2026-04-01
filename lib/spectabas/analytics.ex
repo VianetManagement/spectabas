@@ -1052,23 +1052,17 @@ defmodule Spectabas.Analytics do
 
       sql = """
       SELECT
-        item.1 AS name,
-        sum(item.2) AS quantity,
-        sum(item.3) AS revenue
+        JSONExtractString(item, 'name') AS name,
+        sum(toUInt32OrZero(JSONExtractString(item, 'quantity'))) AS quantity,
+        sum(toDecimal64OrZero(JSONExtractString(item, 'price'), 2) *
+            toUInt32OrZero(JSONExtractString(item, 'quantity'))) AS revenue
       FROM ecommerce_events
-      ARRAY JOIN JSONExtractArrayRaw(items, '') AS raw_item
-      CROSS JOIN (
-        SELECT
-          JSONExtractString(raw_item, 'name') AS item_1,
-          toUInt32OrZero(JSONExtractString(raw_item, 'quantity')) AS item_2,
-          toDecimal64OrZero(JSONExtractString(raw_item, 'price'), 2) *
-            toUInt32OrZero(JSONExtractString(raw_item, 'quantity')) AS item_3
-      ) AS item
+      ARRAY JOIN JSONExtractArrayRaw(items) AS item
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
         AND (currency = #{ClickHouse.param(site_currency)} OR currency = '')
-        AND item.1 != ''
+        AND name != ''
       GROUP BY name
       ORDER BY revenue DESC
       LIMIT 50

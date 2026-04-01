@@ -297,36 +297,22 @@ defmodule Spectabas.Events.Ingest do
               existing_by_cookie.id
             else
               # New cookie — check fingerprint for dedup
-              existing_by_fp = if fp, do: Visitors.find_by_fingerprint(site.id, fp), else: nil
+              # New cookie = new visitor. Do NOT merge by fingerprint in cookie mode —
+              # fingerprint dedup causes false merges when different people on the same
+              # device model/browser share a fingerprint (e.g. two iPhone 15 users).
+              case Visitors.get_or_create(site.id, payload.vid, :off, client_ip) do
+                {:ok, visitor} ->
+                  if fp do
+                    visitor
+                    |> Visitor.changeset(%{fingerprint_id: fp})
+                    |> Spectabas.Repo.update()
+                  end
 
-              if existing_by_fp do
-                # Fingerprint match! Update existing visitor with new cookie_id
-                existing_by_fp
-                |> Visitor.changeset(%{
-                  cookie_id: payload.vid,
-                  last_seen_at: DateTime.utc_now() |> DateTime.truncate(:second),
-                  last_ip: client_ip
-                })
-                |> Spectabas.Repo.update()
+                  Cache.put(site.id, payload.vid, visitor.id)
+                  visitor.id
 
-                Cache.put(site.id, payload.vid, existing_by_fp.id)
-                existing_by_fp.id
-              else
-                # Truly new visitor
-                case Visitors.get_or_create(site.id, payload.vid, :off, client_ip) do
-                  {:ok, visitor} ->
-                    if fp do
-                      visitor
-                      |> Visitor.changeset(%{fingerprint_id: fp})
-                      |> Spectabas.Repo.update()
-                    end
-
-                    Cache.put(site.id, payload.vid, visitor.id)
-                    visitor.id
-
-                  _ ->
-                    payload.vid
-                end
+                _ ->
+                  payload.vid
               end
             end
         end
