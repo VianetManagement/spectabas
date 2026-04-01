@@ -847,6 +847,8 @@ defmodule Spectabas.Analytics do
   Last 20 events ordered by timestamp desc (realtime feed).
   """
   def realtime_events(%Site{} = site) do
+    tz = tz_sql(site)
+
     sql = """
     SELECT
       event_type,
@@ -856,7 +858,7 @@ defmodule Spectabas.Analytics do
       device_type,
       browser,
       visitor_id,
-      timestamp
+      toTimezone(timestamp, #{tz}) AS timestamp
     FROM events
     WHERE site_id = #{ClickHouse.param(site.id)}
       AND timestamp >= now() - INTERVAL 5 MINUTE
@@ -871,14 +873,16 @@ defmodule Spectabas.Analytics do
   Active visitors grouped: one row per visitor with their latest activity.
   """
   def realtime_visitors_grouped(%Site{} = site) do
+    tz = tz_sql(site)
+
     sql = """
     SELECT
       visitor_id,
       argMax(url_path, timestamp) AS current_page,
       argMax(event_type, timestamp) AS last_event_type,
       countIf(event_type = 'pageview') AS pageviews,
-      min(timestamp) AS session_start,
-      max(timestamp) AS last_activity,
+      toTimezone(min(timestamp), #{tz}) AS session_start,
+      toTimezone(max(timestamp), #{tz}) AS last_activity,
       any(ip_country) AS country,
       any(ip_city) AS city,
       any(browser) AS browser,
@@ -1077,6 +1081,7 @@ defmodule Spectabas.Analytics do
 
     with :ok <- authorize(site, user) do
       site_currency = site.currency || "USD"
+      tz = tz_sql(site)
 
       sql = """
       SELECT
@@ -1089,7 +1094,7 @@ defmodule Spectabas.Analytics do
         discount,
         currency,
         items,
-        timestamp
+        toTimezone(timestamp, #{tz}) AS timestamp
       FROM ecommerce_events
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
@@ -1109,10 +1114,11 @@ defmodule Spectabas.Analytics do
 
     with :ok <- authorize(site, user) do
       site_currency = site.currency || "USD"
+      tz = tz_sql(site)
 
       sql = """
       SELECT
-        toDate(timestamp) AS day,
+        toDate(toTimezone(timestamp, #{tz})) AS day,
         count() AS orders,
         sum(revenue) AS revenue
       FROM ecommerce_events
@@ -1158,8 +1164,11 @@ defmodule Spectabas.Analytics do
 
   @doc "Ecommerce orders for a specific visitor."
   def visitor_orders(%Site{} = site, visitor_id) when is_binary(visitor_id) do
+    tz = tz_sql(site)
+
     sql = """
-    SELECT order_id, revenue, subtotal, tax, shipping, discount, currency, items, timestamp
+    SELECT order_id, revenue, subtotal, tax, shipping, discount, currency, items,
+      toTimezone(timestamp, #{tz}) AS timestamp
     FROM ecommerce_events
     WHERE site_id = #{ClickHouse.param(site.id)}
       AND visitor_id = #{ClickHouse.param(visitor_id)}
@@ -1174,6 +1183,8 @@ defmodule Spectabas.Analytics do
   All events for a specific visitor_id, ordered by timestamp.
   """
   def visitor_timeline(%Site{} = site, visitor_id) when is_binary(visitor_id) do
+    tz = tz_sql(site)
+
     sql = """
     SELECT
       event_type, event_name, url_path, url_host, referrer_domain, referrer_url,
@@ -1182,7 +1193,7 @@ defmodule Spectabas.Analytics do
       screen_width, screen_height, duration_s,
       ip_address, ip_country, ip_country_name, ip_region_name, ip_city,
       ip_timezone, ip_org, ip_is_datacenter, ip_is_vpn, ip_is_tor, ip_is_bot,
-      session_id, visitor_intent, user_agent, timestamp
+      session_id, visitor_intent, user_agent, toTimezone(timestamp, #{tz}) AS timestamp
     FROM events
     WHERE site_id = #{ClickHouse.param(site.id)}
       AND visitor_id = #{ClickHouse.param(visitor_id)}
@@ -1197,10 +1208,12 @@ defmodule Spectabas.Analytics do
   Aggregated visitor profile stats from ClickHouse events.
   """
   def visitor_profile(%Site{} = site, visitor_id) when is_binary(visitor_id) do
+    tz = tz_sql(site)
+
     sql = """
     SELECT
-      min(timestamp) AS first_seen,
-      max(timestamp) AS last_seen,
+      toTimezone(min(timestamp), #{tz}) AS first_seen,
+      toTimezone(max(timestamp), #{tz}) AS last_seen,
       countIf(event_type = 'pageview') AS total_pageviews,
       uniq(session_id) AS total_sessions,
       maxIf(duration_s, event_type = 'duration') AS total_duration,
@@ -1244,11 +1257,13 @@ defmodule Spectabas.Analytics do
   All IP addresses used by a specific visitor, with first/last seen and event counts.
   """
   def visitor_ips(%Site{} = site, visitor_id) when is_binary(visitor_id) do
+    tz = tz_sql(site)
+
     sql = """
     SELECT
       ip_address,
-      min(timestamp) AS first_seen,
-      max(timestamp) AS last_seen,
+      toTimezone(min(timestamp), #{tz}) AS first_seen,
+      toTimezone(max(timestamp), #{tz}) AS last_seen,
       count() AS events,
       any(ip_country) AS country,
       any(ip_city) AS city,
@@ -1272,11 +1287,13 @@ defmodule Spectabas.Analytics do
   """
   def visitors_by_ip(%Site{} = site, ip_address)
       when is_binary(ip_address) and ip_address != "" do
+    tz = tz_sql(site)
+
     sql = """
     SELECT
       visitor_id,
-      min(timestamp) AS first_seen,
-      max(timestamp) AS last_seen,
+      toTimezone(min(timestamp), #{tz}) AS first_seen,
+      toTimezone(max(timestamp), #{tz}) AS last_seen,
       countIf(event_type = 'pageview') AS pageviews,
       any(browser) AS browser,
       any(os) AS os,
@@ -1323,11 +1340,13 @@ defmodule Spectabas.Analytics do
   """
   def visitors_by_fingerprint(%Site{} = site, fingerprint)
       when is_binary(fingerprint) and fingerprint != "" do
+    tz = tz_sql(site)
+
     sql = """
     SELECT
       visitor_id,
-      min(timestamp) AS first_seen,
-      max(timestamp) AS last_seen,
+      toTimezone(min(timestamp), #{tz}) AS first_seen,
+      toTimezone(max(timestamp), #{tz}) AS last_seen,
       countIf(event_type = 'pageview') AS pageviews,
       any(browser) AS browser,
       any(os) AS os,
@@ -1425,11 +1444,13 @@ defmodule Spectabas.Analytics do
       end
 
     with :ok <- authorize(site, user) do
+      tz = tz_sql(site)
+
       sql = """
       SELECT
         visitor_id,
-        min(timestamp) AS first_seen,
-        max(timestamp) AS last_seen,
+        toTimezone(min(timestamp), #{tz}) AS first_seen,
+        toTimezone(max(timestamp), #{tz}) AS last_seen,
         countIf(event_type = 'pageview') AS pageviews,
         maxIf(duration_s, event_type = 'duration') AS duration,
         argMinIf(url_path, timestamp, event_type = 'pageview') AS entry_page,
@@ -2018,6 +2039,9 @@ defmodule Spectabas.Analytics do
   end
 
   defp format_datetime(dt_string) when is_binary(dt_string), do: dt_string
+
+  # ClickHouse toTimezone() snippet for converting UTC timestamps to site timezone
+  defp tz_sql(%Site{} = site), do: ClickHouse.param(site.timezone || "UTC")
 
   @doc """
   Overview stats for shared/public dashboards (no user access check).
