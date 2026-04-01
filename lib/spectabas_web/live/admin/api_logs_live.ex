@@ -8,8 +8,28 @@ defmodule SpectabasWeb.Admin.ApiLogsLive do
 
   @per_page 50
 
+  @timezones [
+    "America/New_York",
+    "America/Chicago",
+    "America/Denver",
+    "America/Los_Angeles",
+    "America/Phoenix",
+    "America/Anchorage",
+    "Pacific/Honolulu",
+    "UTC",
+    "Europe/London",
+    "Europe/Paris",
+    "Europe/Berlin",
+    "Asia/Tokyo",
+    "Asia/Shanghai",
+    "Australia/Sydney"
+  ]
+
   @impl true
   def mount(_params, _session, socket) do
+    user = socket.assigns.current_scope.user
+    tz = user.timezone || "America/New_York"
+
     {:ok,
      socket
      |> assign(:page_title, "API Access Logs")
@@ -17,6 +37,9 @@ defmodule SpectabasWeb.Admin.ApiLogsLive do
      |> assign(:filter_path, nil)
      |> assign(:page, 1)
      |> assign(:selected_log, nil)
+     |> assign(:user, user)
+     |> assign(:timezone, tz)
+     |> assign(:timezones, @timezones)
      |> load_logs()
      |> load_stats()}
   end
@@ -53,6 +76,11 @@ defmodule SpectabasWeb.Admin.ApiLogsLive do
 
   def handle_event("close_detail", _params, socket) do
     {:noreply, assign(socket, :selected_log, nil)}
+  end
+
+  def handle_event("change_timezone", %{"timezone" => tz}, socket) do
+    Spectabas.Accounts.update_user_timezone(socket.assigns.user, tz)
+    {:noreply, assign(socket, :timezone, tz)}
   end
 
   def handle_event("prev_page", _params, socket) do
@@ -158,7 +186,18 @@ defmodule SpectabasWeb.Admin.ApiLogsLive do
         </.link>
       </div>
 
-      <h1 class="text-2xl font-bold text-gray-900 mb-8">API Access Logs</h1>
+      <div class="flex items-center justify-between mb-8">
+        <h1 class="text-2xl font-bold text-gray-900">API Access Logs</h1>
+        <form phx-change="change_timezone" class="flex items-center gap-2">
+          <label class="text-xs text-gray-500">Timezone:</label>
+          <select
+            name="timezone"
+            class="text-xs border-gray-300 rounded-md shadow-sm py-1 px-2"
+          >
+            <option :for={tz <- @timezones} value={tz} selected={tz == @timezone}>{tz}</option>
+          </select>
+        </form>
+      </div>
 
       <%!-- Stats cards --%>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -331,7 +370,7 @@ defmodule SpectabasWeb.Admin.ApiLogsLive do
               ]}
             >
               <td class="px-4 py-2 text-xs text-gray-500">
-                {Calendar.strftime(log.inserted_at, "%m-%d %H:%M:%S")}
+                {format_local_time(log.inserted_at, @timezone)}
               </td>
               <td class="px-4 py-2 text-xs">
                 <span class={[
@@ -408,7 +447,7 @@ defmodule SpectabasWeb.Admin.ApiLogsLive do
           <div class="px-6 py-4 space-y-3 max-h-[70vh] overflow-y-auto">
             <.detail_row
               label="Time"
-              value={Calendar.strftime(@selected_log.inserted_at, "%Y-%m-%d %H:%M:%S UTC")}
+              value={format_local_time(@selected_log.inserted_at, @timezone, :full)}
             />
             <.detail_row label="Method" value={@selected_log.method} />
             <.detail_row label="Path" value={@selected_log.path} />
@@ -463,4 +502,21 @@ defmodule SpectabasWeb.Admin.ApiLogsLive do
     </div>
     """
   end
+
+  defp format_local_time(dt, tz, format \\ :short)
+
+  defp format_local_time(%DateTime{} = dt, tz, format) do
+    case DateTime.shift_zone(dt, tz) do
+      {:ok, local} ->
+        case format do
+          :full -> Calendar.strftime(local, "%Y-%m-%d %H:%M:%S %Z")
+          _ -> Calendar.strftime(local, "%m-%d %H:%M:%S")
+        end
+
+      _ ->
+        Calendar.strftime(dt, "%m-%d %H:%M:%S UTC")
+    end
+  end
+
+  defp format_local_time(_, _, _), do: "-"
 end

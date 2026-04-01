@@ -21,6 +21,7 @@ defmodule Spectabas.Accounts.User do
     field :last_sign_in_at, :utc_datetime
     field :last_sign_in_ip, :string
     field :force_2fa, :boolean, default: false
+    field :timezone, :string, default: "America/New_York"
 
     has_many :site_permissions, Spectabas.Accounts.UserSitePermission
     has_many :webauthn_credentials, Spectabas.Accounts.WebauthnCredential
@@ -125,9 +126,17 @@ defmodule Spectabas.Accounts.User do
   """
   def profile_changeset(user, attrs) do
     user
-    |> cast(attrs, [:role, :display_name, :last_sign_in_at, :last_sign_in_ip, :force_2fa])
+    |> cast(attrs, [
+      :role,
+      :display_name,
+      :last_sign_in_at,
+      :last_sign_in_ip,
+      :force_2fa,
+      :timezone
+    ])
     |> validate_inclusion(:role, [:superadmin, :admin, :analyst, :viewer])
     |> validate_length(:display_name, max: 255)
+    |> validate_length(:timezone, max: 50)
   end
 
   @doc """

@@ -374,6 +374,12 @@ defmodule Spectabas.Accounts do
   @doc """
   Update a user's role. Only admins/superadmins should call this.
   """
+  def update_user_timezone(%User{} = user, timezone) do
+    user
+    |> User.profile_changeset(%{timezone: timezone})
+    |> Repo.update()
+  end
+
   def update_user_role(%User{} = admin, %User{} = user, new_role) do
     user
     |> User.profile_changeset(%{role: new_role})

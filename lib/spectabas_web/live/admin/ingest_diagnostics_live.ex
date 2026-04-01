@@ -3,17 +3,40 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
 
   alias Spectabas.Events.IngestBuffer
   alias Spectabas.Visitors.Cache, as: VisitorCache
+  alias Spectabas.Accounts
   import Spectabas.TypeHelpers
 
   @refresh_ms 2_000
 
+  @timezones [
+    "America/New_York",
+    "America/Chicago",
+    "America/Denver",
+    "America/Los_Angeles",
+    "America/Phoenix",
+    "America/Anchorage",
+    "Pacific/Honolulu",
+    "UTC",
+    "Europe/London",
+    "Europe/Paris",
+    "Europe/Berlin",
+    "Asia/Tokyo",
+    "Asia/Shanghai",
+    "Australia/Sydney"
+  ]
+
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket), do: schedule_refresh()
+    user = socket.assigns.current_scope.user
+    tz = user.timezone || "America/New_York"
 
     {:ok,
      socket
      |> assign(:page_title, "Ingest Diagnostics")
+     |> assign(:user, user)
+     |> assign(:timezone, tz)
+     |> assign(:timezones, @timezones)
      |> load_metrics()}
   end
 
@@ -21,6 +44,12 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
   def handle_info(:refresh, socket) do
     schedule_refresh()
     {:noreply, load_metrics(socket)}
+  end
+
+  @impl true
+  def handle_event("change_timezone", %{"timezone" => tz}, socket) do
+    Accounts.update_user_timezone(socket.assigns.user, tz)
+    {:noreply, assign(socket, :timezone, tz)}
   end
 
   defp schedule_refresh, do: Process.send_after(self(), :refresh, @refresh_ms)
@@ -102,6 +131,13 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
         _ -> 0
       end
 
+    tz = socket.assigns[:timezone] || "America/New_York"
+
+    events_per_min =
+      Enum.map(events_per_min, fn row ->
+        Map.update(row, "minute", "", &convert_to_tz(&1, tz))
+      end)
+
     socket
     |> assign(:buffer_size, buffer_size)
     |> assign(:buffer_full, buffer_full)
@@ -138,7 +174,18 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
           <h1 class="text-2xl font-bold text-gray-900">Ingest Diagnostics</h1>
           <p class="text-sm text-gray-500 mt-1">Live metrics — refreshes every 2 seconds</p>
         </div>
-        <span class="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse"></span>
+        <div class="flex items-center gap-3">
+          <form phx-change="change_timezone" class="flex items-center gap-2">
+            <label class="text-xs text-gray-500">Timezone:</label>
+            <select
+              name="timezone"
+              class="text-xs border-gray-300 rounded-md shadow-sm py-1 px-2"
+            >
+              <option :for={tz <- @timezones} value={tz} selected={tz == @timezone}>{tz}</option>
+            </select>
+          </form>
+          <span class="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse"></span>
+        </div>
       </div>
 
       <%!-- Pipeline Status --%>
@@ -246,6 +293,43 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
     </div>
     """
   end
+
+  defp convert_to_tz(timestamp_str, tz) when is_binary(timestamp_str) do
+    case NaiveDateTime.from_iso8601(timestamp_str) do
+      {:ok, naive} ->
+        case DateTime.from_naive(naive, "Etc/UTC") do
+          {:ok, utc_dt} ->
+            case DateTime.shift_zone(utc_dt, tz) do
+              {:ok, local} -> Calendar.strftime(local, "%Y-%m-%d %H:%M:%S")
+              _ -> timestamp_str
+            end
+
+          _ ->
+            timestamp_str
+        end
+
+      _ ->
+        # Try space-separated format "2026-03-31 21:44:00"
+        case NaiveDateTime.from_iso8601(String.replace(timestamp_str, " ", "T")) do
+          {:ok, naive} ->
+            case DateTime.from_naive(naive, "Etc/UTC") do
+              {:ok, utc_dt} ->
+                case DateTime.shift_zone(utc_dt, tz) do
+                  {:ok, local} -> Calendar.strftime(local, "%Y-%m-%d %H:%M:%S")
+                  _ -> timestamp_str
+                end
+
+              _ ->
+                timestamp_str
+            end
+
+          _ ->
+            timestamp_str
+        end
+    end
+  end
+
+  defp convert_to_tz(other, _tz), do: other
 
   defp metric_card(assigns) do
     color_class =
