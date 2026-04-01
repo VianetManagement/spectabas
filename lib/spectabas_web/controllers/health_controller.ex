@@ -564,7 +564,7 @@ defmodule SpectabasWeb.HealthController do
       })
       |> Spectabas.Repo.update()
 
-    json(conn, %{ok: true, native_start_date: "2026-03-29", import_end_date: "2026-03-28"})
+    json(conn, %{ok: true, native_start_date: "2026-03-30", import_end_date: "2026-03-29"})
   end
 
   def import_matomo_test(conn, %{"token" => token, "action" => "import"})
