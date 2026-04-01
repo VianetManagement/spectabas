@@ -108,14 +108,14 @@ defmodule Spectabas.Visitors do
   Returns `{:ok, %Visitor{}}` or `{:error, reason}`.
   """
   def identify(site_id, visitor_id, traits, client_ip \\ nil) do
-    # Look up by cookie_id (what the tracker sets in _sab cookie) scoped to site
+    # Try cookie_id first (from _sab cookie), then fall back to primary key (from ClickHouse visitor_id)
     visitor =
       Repo.one(
         from(v in Visitor,
           where: v.site_id == ^site_id and v.cookie_id == ^visitor_id,
           limit: 1
         )
-      )
+      ) || try_get_by_uuid(site_id, visitor_id)
 
     case visitor do
       nil ->
@@ -249,6 +249,13 @@ defmodule Spectabas.Visitors do
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  # Try to look up visitor by UUID primary key. Returns nil if not a valid UUID.
+  defp try_get_by_uuid(site_id, visitor_id) do
+    Repo.get_by(Visitor, id: visitor_id, site_id: site_id)
+  rescue
+    Ecto.Query.CastError -> nil
+  end
 
   defp update_known_ips(existing, nil), do: existing
 
