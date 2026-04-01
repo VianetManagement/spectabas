@@ -419,9 +419,17 @@ defmodule Spectabas.Accounts do
     end
   end
 
-  @doc """
-  List all site permissions for a given site.
-  """
+  @doc "List all site permissions for a user."
+  def list_user_permissions(%User{id: user_id}) do
+    Repo.all(
+      from(p in UserSitePermission,
+        where: p.user_id == ^user_id,
+        preload: [:site]
+      )
+    )
+  end
+
+  @doc "List all site permissions for a site."
   def list_site_permissions(%{id: site_id}) do
     Repo.all(
       from(p in UserSitePermission,

@@ -1,7 +1,7 @@
 defmodule SpectabasWeb.Admin.UsersLive do
   use SpectabasWeb, :live_view
 
-  alias Spectabas.Accounts
+  alias Spectabas.{Accounts, Sites}
 
   @roles ~w(superadmin admin analyst viewer)
 
@@ -9,6 +9,7 @@ defmodule SpectabasWeb.Admin.UsersLive do
   def mount(_params, _session, socket) do
     users = Accounts.list_users()
     pending = Accounts.list_pending_invitations()
+    all_sites = Spectabas.Repo.all(Sites.Site)
 
     {:ok,
      socket
@@ -16,10 +17,13 @@ defmodule SpectabasWeb.Admin.UsersLive do
      |> assign(:users, users)
      |> assign(:pending_invitations, pending)
      |> assign(:roles, @roles)
+     |> assign(:all_sites, all_sites)
      |> assign(:show_invite, false)
      |> assign(:invite_email, "")
      |> assign(:invite_role, "analyst")
-     |> assign(:invite_error, nil)}
+     |> assign(:invite_error, nil)
+     |> assign(:editing_permissions_for, nil)
+     |> assign(:user_permissions, %{})}
   end
 
   @impl true
@@ -122,6 +126,53 @@ defmodule SpectabasWeb.Admin.UsersLive do
 
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Failed to update role: #{inspect(reason)}")}
+    end
+  end
+
+  def handle_event("toggle_permissions", %{"user-id" => user_id}, socket) do
+    user_id = String.to_integer(user_id)
+
+    if socket.assigns.editing_permissions_for == user_id do
+      {:noreply, assign(socket, :editing_permissions_for, nil)}
+    else
+      user = Accounts.get_user!(user_id)
+      perms = Accounts.list_user_permissions(user)
+      site_ids = Enum.map(perms, & &1.site_id) |> MapSet.new()
+
+      {:noreply,
+       socket
+       |> assign(:editing_permissions_for, user_id)
+       |> assign(:user_permissions, Map.put(socket.assigns.user_permissions, user_id, site_ids))}
+    end
+  end
+
+  def handle_event("toggle_site_access", %{"user-id" => uid, "site-id" => sid}, socket) do
+    admin = socket.assigns.current_scope.user
+    user = Accounts.get_user!(uid)
+    site = Sites.get_site!(sid)
+
+    current_perms = Map.get(socket.assigns.user_permissions, user.id, MapSet.new())
+
+    if MapSet.member?(current_perms, site.id) do
+      Accounts.revoke_permission(admin, user, site)
+      new_perms = MapSet.delete(current_perms, site.id)
+
+      {:noreply,
+       assign(
+         socket,
+         :user_permissions,
+         Map.put(socket.assigns.user_permissions, user.id, new_perms)
+       )}
+    else
+      Accounts.grant_permission(admin, user, site, user.role)
+      new_perms = MapSet.put(current_perms, site.id)
+
+      {:noreply,
+       assign(
+         socket,
+         :user_permissions,
+         Map.put(socket.assigns.user_permissions, user.id, new_perms)
+       )}
     end
   end
 
@@ -254,82 +305,140 @@ defmodule SpectabasWeb.Admin.UsersLive do
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Force 2FA
               </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Site Access
+              </th>
               <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Actions
               </th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
-            <tr :for={user <- @users} class="hover:bg-gray-50">
-              <td class="px-6 py-4">
-                <div class="text-sm font-medium text-gray-900">
-                  {user.display_name || user.email}
-                </div>
-                <div :if={user.display_name} class="text-sm text-gray-500">{user.email}</div>
-              </td>
-              <td class="px-6 py-4">
-                <form phx-change="change_role" phx-submit="change_role">
-                  <input type="hidden" name="user_id" value={user.id} />
-                  <select
-                    name="role"
+            <%= for user <- @users do %>
+              <tr class="hover:bg-gray-50">
+                <td class="px-6 py-4">
+                  <div class="text-sm font-medium text-gray-900">
+                    {user.display_name || user.email}
+                  </div>
+                  <div :if={user.display_name} class="text-sm text-gray-500">{user.email}</div>
+                </td>
+                <td class="px-6 py-4">
+                  <form phx-change="change_role" phx-submit="change_role">
+                    <input type="hidden" name="user_id" value={user.id} />
+                    <select
+                      name="role"
+                      class={[
+                        "text-xs font-medium rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2.5",
+                        role_color(to_string(user.role))
+                      ]}
+                    >
+                      <option :for={r <- @roles} value={r} selected={to_string(user.role) == r}>
+                        {String.capitalize(r)}
+                      </option>
+                    </select>
+                  </form>
+                </td>
+                <td class="px-6 py-4">
+                  <span
+                    :if={user.totp_enabled}
+                    class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800"
+                  >
+                    Enabled
+                  </span>
+                  <span
+                    :if={!user.totp_enabled}
+                    class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600"
+                  >
+                    Off
+                  </span>
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-500">
+                  {if user.last_sign_in_at,
+                    do: Calendar.strftime(user.last_sign_in_at, "%Y-%m-%d %H:%M"),
+                    else: "Never"}
+                </td>
+                <td class="px-6 py-4">
+                  <button
+                    :if={user.id != @current_scope.user.id}
+                    phx-click="toggle_force_2fa"
+                    phx-value-user-id={user.id}
                     class={[
-                      "text-xs font-medium rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2.5",
-                      role_color(to_string(user.role))
+                      "text-xs font-medium px-2 py-0.5 rounded",
+                      if(user.force_2fa,
+                        do: "bg-amber-100 text-amber-800",
+                        else: "bg-gray-100 text-gray-500 hover:bg-amber-50"
+                      )
                     ]}
                   >
-                    <option :for={r <- @roles} value={r} selected={to_string(user.role) == r}>
-                      {String.capitalize(r)}
-                    </option>
-                  </select>
-                </form>
-              </td>
-              <td class="px-6 py-4">
-                <span
-                  :if={user.totp_enabled}
-                  class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800"
-                >
-                  Enabled
-                </span>
-                <span
-                  :if={!user.totp_enabled}
-                  class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600"
-                >
-                  Off
-                </span>
-              </td>
-              <td class="px-6 py-4 text-sm text-gray-500">
-                {if user.last_sign_in_at,
-                  do: Calendar.strftime(user.last_sign_in_at, "%Y-%m-%d %H:%M"),
-                  else: "Never"}
-              </td>
-              <td class="px-6 py-4">
-                <button
-                  :if={user.id != @current_scope.user.id}
-                  phx-click="toggle_force_2fa"
-                  phx-value-user-id={user.id}
-                  class={[
-                    "text-xs font-medium px-2 py-0.5 rounded",
-                    if(user.force_2fa,
-                      do: "bg-amber-100 text-amber-800",
-                      else: "bg-gray-100 text-gray-500 hover:bg-amber-50"
-                    )
-                  ]}
-                >
-                  {if user.force_2fa, do: "Required", else: "Optional"}
-                </button>
-              </td>
-              <td class="px-6 py-4 text-right">
-                <button
-                  :if={user.id != @current_scope.user.id}
-                  phx-click="delete_user"
-                  phx-value-id={user.id}
-                  data-confirm={"Are you sure you want to delete #{user.email}?"}
-                  class="text-red-600 hover:text-red-800 text-sm"
-                >
-                  Delete
-                </button>
-              </td>
-            </tr>
+                    {if user.force_2fa, do: "Required", else: "Optional"}
+                  </button>
+                </td>
+                <td class="px-6 py-4">
+                  <span
+                    :if={to_string(user.role) in ["superadmin", "admin"]}
+                    class="text-xs text-gray-400"
+                  >
+                    All sites
+                  </span>
+                  <button
+                    :if={to_string(user.role) in ["analyst", "viewer"]}
+                    phx-click="toggle_permissions"
+                    phx-value-user-id={user.id}
+                    class={[
+                      "text-xs font-medium px-2 py-0.5 rounded",
+                      if(@editing_permissions_for == user.id,
+                        do: "bg-indigo-100 text-indigo-700",
+                        else: "bg-gray-100 text-gray-600 hover:bg-indigo-50"
+                      )
+                    ]}
+                  >
+                    <% perm_count =
+                      Map.get(@user_permissions, user.id, MapSet.new()) |> MapSet.size() %>
+                    {if @editing_permissions_for == user.id,
+                      do: "Close",
+                      else: if(perm_count > 0, do: "#{perm_count} site(s)", else: "Configure")}
+                  </button>
+                </td>
+                <td class="px-6 py-4 text-right">
+                  <button
+                    :if={user.id != @current_scope.user.id}
+                    phx-click="delete_user"
+                    phx-value-id={user.id}
+                    data-confirm={"Are you sure you want to delete #{user.email}?"}
+                    class="text-red-600 hover:text-red-800 text-sm"
+                  >
+                    Delete
+                  </button>
+                </td>
+              </tr>
+              <tr :if={@editing_permissions_for == user.id}>
+                <td colspan="7" class="px-6 py-4 bg-indigo-50">
+                  <div class="text-sm font-medium text-gray-700 mb-2">
+                    Site access for {user.email}:
+                  </div>
+                  <div class="flex flex-wrap gap-2">
+                    <button
+                      :for={site <- @all_sites}
+                      phx-click="toggle_site_access"
+                      phx-value-user-id={user.id}
+                      phx-value-site-id={site.id}
+                      class={[
+                        "px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors",
+                        if(MapSet.member?(Map.get(@user_permissions, user.id, MapSet.new()), site.id),
+                          do: "bg-indigo-600 text-white border-indigo-600",
+                          else: "bg-white text-gray-700 border-gray-300 hover:border-indigo-400"
+                        )
+                      ]}
+                    >
+                      {site.name}
+                    </button>
+                  </div>
+                  <p class="text-xs text-gray-500 mt-2">
+                    Click a site to toggle access. Changes take effect immediately.
+                  </p>
+                </td>
+              </tr>
+            <% end %>
           </tbody>
         </table>
       </div>

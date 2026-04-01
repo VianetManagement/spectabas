@@ -154,6 +154,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **WebAuthn/Passkeys** — FIDO2 hardware keys and platform authenticators via `wax_` library
 - Users can register multiple WebAuthn credentials from account settings
 - **Admin force 2FA** — admins can require 2FA for specific users from the admin panel
+- **Granular site access** — Analyst/Viewer roles require explicit per-site permissions (toggled from /admin/users). Superadmin/Admin have all-site access.
 
 ### wax_ Configuration
 - Requires `origin` setting in `config/config.exs` (production) and `config/test.exs` (test)

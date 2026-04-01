@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v4.1.0 — 2026-04-01 UTC",
+       [
+         %{
+           title: "Feature: granular site access for Analyst/Viewer roles",
+           description:
+             "Admins can now control which sites each Analyst and Viewer can access from the Users admin page. Click 'Configure' next to any non-admin user to toggle site access with one click. Superadmin and Admin roles retain access to all sites."
+         }
+       ]},
       {"v4.0.0 — 2026-04-01 UTC",
        [
          %{
