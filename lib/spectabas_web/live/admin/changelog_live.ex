@@ -45,6 +45,24 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v3.1.0 — 2026-03-31 UTC",
+       [
+         %{
+           title: "Feature: ecommerce stats on main dashboard",
+           description:
+             "Sites with ecommerce enabled now show revenue, orders, and average order value cards on the main overview dashboard."
+         },
+         %{
+           title: "Feature: identified users count",
+           description:
+             "Main dashboard shows how many visitors have been identified (associated with an email) and what percentage of total visitors that represents."
+         },
+         %{
+           title: "Feature: ecommerce revenue chart",
+           description:
+             "Ecommerce page now includes a combined bar/line chart showing daily revenue (bars) and order count (line) over the selected period."
+         }
+       ]},
       {"v3.0.1 — 2026-03-31 UTC",
        [
          %{

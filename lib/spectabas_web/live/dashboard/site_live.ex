@@ -53,6 +53,8 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
        |> assign(:locations, [])
        |> assign(:timezones, [])
        |> assign(:intents, [])
+       |> assign(:ecommerce, nil)
+       |> assign(:identified_users, 0)
        |> load_critical_stats()
        |> then(fn s ->
          if connected?(s), do: send(self(), :load_deferred)
@@ -360,6 +362,22 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         Task.async(fn ->
           safe_query(fn -> Analytics.intent_breakdown(site, user, date_range) end)
           |> Enum.take(10)
+        end),
+      ecommerce:
+        if site.ecommerce_enabled do
+          Task.async(fn ->
+            case Analytics.ecommerce_stats(site, user, date_range) do
+              {:ok, data} -> data
+              _ -> nil
+            end
+          end)
+        end,
+      identified_users:
+        Task.async(fn ->
+          case Analytics.identified_visitors_count(site, user, date_range) do
+            {:ok, count} -> count
+            _ -> 0
+          end
         end)
     }
 
@@ -373,6 +391,8 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     locations = safe_yield(tasks.locations, [])
     timezones = safe_yield(tasks.timezones, [])
     intents = safe_yield(tasks.intents, [])
+    ecommerce = if tasks.ecommerce, do: safe_yield(tasks.ecommerce, nil), else: nil
+    identified_users = safe_yield(tasks.identified_users, 0)
 
     socket
     |> assign(:top_pages, top_pages)
@@ -384,6 +404,8 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     |> assign(:locations, locations)
     |> assign(:timezones, timezones)
     |> assign(:intents, intents)
+    |> assign(:ecommerce, ecommerce)
+    |> assign(:identified_users, identified_users)
     |> push_chart_data(socket.assigns.timeseries, locations, timezones)
   end
 
@@ -601,6 +623,51 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
             current={@stats.avg_duration}
             period={period_label}
           />
+        </div>
+
+        <%!-- Identified Users + Ecommerce Row --%>
+        <div
+          :if={@identified_users > 0 || @ecommerce}
+          class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"
+        >
+          <div :if={@identified_users > 0} class="bg-white rounded-lg shadow p-3 sm:p-4">
+            <dt class="text-xs sm:text-sm font-medium text-gray-500 truncate">Identified Users</dt>
+            <dd class="mt-1 text-xl sm:text-2xl font-bold text-indigo-600">
+              {format_number(@identified_users)}
+            </dd>
+            <dd class="mt-1 text-xs text-gray-500">
+              {if @stats.unique_visitors > 0,
+                do:
+                  "#{Float.round(@identified_users / @stats.unique_visitors * 100, 1)}% of visitors",
+                else: "of visitors"}
+            </dd>
+          </div>
+          <div :if={@ecommerce} class="bg-white rounded-lg shadow p-3 sm:p-4">
+            <dt class="text-xs sm:text-sm font-medium text-gray-500 truncate">Revenue</dt>
+            <dd class="mt-1 text-xl sm:text-2xl font-bold text-green-600">
+              {@site.currency} {format_money(@ecommerce["total_revenue"])}
+            </dd>
+          </div>
+          <div :if={@ecommerce} class="bg-white rounded-lg shadow p-3 sm:p-4">
+            <dt class="text-xs sm:text-sm font-medium text-gray-500 truncate">Orders</dt>
+            <dd class="mt-1 text-xl sm:text-2xl font-bold text-gray-900">
+              {format_number(to_num(@ecommerce["total_orders"]))}
+            </dd>
+          </div>
+          <div :if={@ecommerce} class="bg-white rounded-lg shadow p-3 sm:p-4">
+            <dt class="text-xs sm:text-sm font-medium text-gray-500 truncate">Avg Order</dt>
+            <dd class="mt-1 text-xl sm:text-2xl font-bold text-gray-900">
+              {@site.currency} {format_money(@ecommerce["avg_order_value"])}
+            </dd>
+            <dd class="mt-1">
+              <.link
+                navigate={~p"/dashboard/sites/#{@site.id}/ecommerce"}
+                class="text-xs text-indigo-600 hover:text-indigo-800"
+              >
+                View details &rarr;
+              </.link>
+            </dd>
+          </div>
         </div>
 
         <%!-- Time-series Chart --%>
@@ -930,6 +997,17 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     country = loc["ip_country"] || ""
     [city, region, country] |> Enum.reject(&(&1 == "")) |> Enum.join(", ")
   end
+
+  defp format_money(n) when is_number(n), do: :erlang.float_to_binary(n / 1, decimals: 2)
+
+  defp format_money(n) when is_binary(n) do
+    case Float.parse(n) do
+      {f, _} -> :erlang.float_to_binary(f, decimals: 2)
+      :error -> "0.00"
+    end
+  end
+
+  defp format_money(_), do: "0.00"
 
   defp region_display(row) do
     region = row["ip_region_name"] || ""

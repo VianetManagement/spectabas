@@ -34,6 +34,23 @@ defmodule Spectabas.Visitors do
     end
   end
 
+  @doc "Count visitors with email set, filtered to given site_id and visitor_id list."
+  def count_identified(site_id, visitor_ids) when is_list(visitor_ids) do
+    visitor_ids = Enum.reject(visitor_ids, &(is_nil(&1) or &1 == ""))
+
+    if visitor_ids == [] do
+      0
+    else
+      from(v in Visitor,
+        where:
+          v.site_id == ^site_id and v.id in ^visitor_ids and not is_nil(v.email) and
+            v.email != "",
+        select: count(v.id)
+      )
+      |> Repo.one()
+    end
+  end
+
   @doc """
   Find an existing visitor by fingerprint ID for a site.
   Used to deduplicate visitors who lost their cookie.

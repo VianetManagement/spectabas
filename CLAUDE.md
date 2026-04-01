@@ -134,6 +134,9 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Cross-linking** — click any dimension to navigate to filtered views (ASN→visitors, page→transitions, source→visitor log)
 - **IP Cross-referencing** — visitor profiles show other visitors sharing the same IP
 - **EU Flag** — GDPR compliance indicator from MaxMind
+- **Identified Users** — dashboard shows count and percentage of visitors with associated email (via server-side identify API)
+- **Ecommerce on Dashboard** — sites with ecommerce enabled show revenue/orders/AOV cards on the main overview
+- **Ecommerce Revenue Chart** — combined bar (revenue) + line (orders) chart on the ecommerce page
 
 ## Authentication
 

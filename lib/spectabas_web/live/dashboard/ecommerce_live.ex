@@ -59,11 +59,43 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
         _ -> []
       end
 
+    timeseries =
+      case Analytics.ecommerce_timeseries(site, user, period) do
+        {:ok, rows} -> rows
+        _ -> []
+      end
+
     socket
     |> assign(:ecommerce, stats)
     |> assign(:top_products, products)
     |> assign(:orders, orders)
+    |> assign(:timeseries, timeseries)
+    |> push_ecommerce_chart(timeseries)
   end
+
+  defp push_ecommerce_chart(socket, timeseries) do
+    if Phoenix.LiveView.connected?(socket) do
+      push_event(socket, "ecommerce-chart-data", %{
+        labels: Enum.map(timeseries, & &1["day"]),
+        revenue: Enum.map(timeseries, &parse_float(&1["revenue"])),
+        orders: Enum.map(timeseries, &to_num(&1["orders"]))
+      })
+    else
+      socket
+    end
+  end
+
+  defp parse_float(nil), do: 0.0
+  defp parse_float(n) when is_number(n), do: n / 1
+
+  defp parse_float(n) when is_binary(n) do
+    case Float.parse(n) do
+      {f, _} -> f
+      :error -> 0.0
+    end
+  end
+
+  defp parse_float(_), do: 0.0
 
   @impl true
   def render(assigns) do
@@ -129,6 +161,18 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
             <dd class="mt-1 text-3xl font-bold text-gray-900">
               {@site.currency} {format_money(@ecommerce["avg_order_value"])}
             </dd>
+          </div>
+        </div>
+
+        <%!-- Revenue & Orders Chart --%>
+        <div
+          class="bg-white rounded-lg shadow p-5 mb-8"
+          id="ecommerce-chart-hook"
+          phx-hook="EcommerceChart"
+        >
+          <h2 class="text-sm font-medium text-gray-500 mb-3">Revenue & Orders</h2>
+          <div class="h-48 sm:h-[260px] relative">
+            <canvas></canvas>
           </div>
         </div>
 

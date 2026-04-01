@@ -1103,6 +1103,59 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  @doc "Revenue timeseries for ecommerce chart — bucketed by day."
+  def ecommerce_timeseries(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      site_currency = site.currency || "USD"
+
+      sql = """
+      SELECT
+        toDate(timestamp) AS day,
+        count() AS orders,
+        sum(revenue) AS revenue
+      FROM ecommerce_events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND (currency = #{ClickHouse.param(site_currency)} OR currency = '')
+      GROUP BY day
+      ORDER BY day
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Count of unique visitors who have been identified (have email in Postgres)."
+  def identified_visitors_count(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      vid_sql = """
+      SELECT DISTINCT visitor_id
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND event_type = 'pageview'
+        AND ip_is_bot = 0
+      """
+
+      case ClickHouse.query(vid_sql) do
+        {:ok, rows} ->
+          visitor_ids = Enum.map(rows, & &1["visitor_id"]) |> Enum.uniq()
+          # Check how many have emails in Postgres
+          count = Spectabas.Visitors.count_identified(site.id, visitor_ids)
+          {:ok, count}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
+  end
+
   @doc """
   All events for a specific visitor_id, ordered by timestamp.
   """

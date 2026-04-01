@@ -518,7 +518,7 @@ defmodule SpectabasWeb.DocsLive do
 
             ### `Spectabas.ecommerce.addOrder(order, opts)`
 
-            Track a completed order. Order data appears in the **Ecommerce** dashboard with revenue totals, average order value, and top products.
+            Track a completed order. Order data appears in the **Ecommerce** dashboard with a revenue/orders chart, revenue totals, average order value, top products, and recent orders. A summary also appears on the main site dashboard.
 
             | Property | Type | Required | Description |
             |----------|------|----------|-------------|
@@ -676,6 +676,12 @@ defmodule SpectabasWeb.DocsLive do
             - **Avg Duration** — average time visitors spend on your site
 
             When **Compare** is enabled (on by default), each card shows the percentage change vs the equivalent previous period. For example, if viewing "7d", it compares to the 7 days before that.
+
+            ### Identified Users & Ecommerce
+
+            If visitors have been identified (via the server-side identify API), an **Identified Users** card appears showing how many visitors have an associated email and what percentage of total visitors that represents.
+
+            If **ecommerce tracking** is enabled for the site, additional cards appear: **Revenue**, **Orders**, and **Avg Order** with a link to the full ecommerce dashboard.
 
             ### Time Period
 

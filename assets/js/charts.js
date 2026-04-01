@@ -164,6 +164,108 @@ export const BarChart = {
   },
 }
 
+// --- Ecommerce Revenue + Orders Chart ---
+export const EcommerceChart = {
+  mounted() {
+    this.chart = null
+    this.handleEvent("ecommerce-chart-data", (data) => this.setData(data))
+  },
+  setData(data) {
+    const canvas = this.el.querySelector("canvas")
+    if (!canvas) return
+
+    if (this.chart) {
+      this.chart.data.labels = data.labels
+      this.chart.data.datasets[0].data = data.revenue
+      this.chart.data.datasets[1].data = data.orders
+      this.chart.resize()
+      this.chart.update()
+      return
+    }
+
+    this.chart = new Chart(canvas, {
+      type: "bar",
+      data: {
+        labels: data.labels,
+        datasets: [
+          {
+            label: "Revenue",
+            data: data.revenue,
+            backgroundColor: "rgba(16, 185, 129, 0.7)",
+            borderColor: "#10b981",
+            borderWidth: 1,
+            borderRadius: 4,
+            yAxisID: "y",
+            order: 2,
+          },
+          {
+            label: "Orders",
+            data: data.orders,
+            type: "line",
+            borderColor: "#6366f1",
+            backgroundColor: "rgba(99, 102, 241, 0.1)",
+            fill: true,
+            tension: 0.3,
+            pointRadius: data.orders.length > 30 ? 0 : 3,
+            pointHoverRadius: 5,
+            borderWidth: 2,
+            yAxisID: "y1",
+            order: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 300 },
+        interaction: { intersect: false, mode: "index" },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { maxTicksLimit: 10, color: "#9ca3af" },
+          },
+          y: {
+            beginAtZero: true,
+            position: "left",
+            grid: { color: "#f3f4f6" },
+            ticks: { color: "#10b981", precision: 0 },
+            title: { display: true, text: "Revenue", color: "#10b981", font: { size: 11 } },
+          },
+          y1: {
+            beginAtZero: true,
+            position: "right",
+            grid: { display: false },
+            ticks: { color: "#6366f1", precision: 0 },
+            title: { display: true, text: "Orders", color: "#6366f1", font: { size: 11 } },
+          },
+        },
+        plugins: {
+          tooltip: {
+            backgroundColor: "#1f2937",
+            titleColor: "#f9fafb",
+            bodyColor: "#d1d5db",
+            padding: 10,
+            cornerRadius: 8,
+          },
+          legend: {
+            display: true,
+            position: "top",
+            align: "end",
+            labels: {
+              usePointStyle: true,
+              boxWidth: 20,
+              color: "#6b7280",
+            },
+          },
+        },
+      },
+    })
+  },
+  destroyed() {
+    if (this.chart) this.chart.destroy()
+  },
+}
+
 // --- Bubble/Scatter Map ---
 // Region presets for map zoom
 const MAP_REGIONS = {
