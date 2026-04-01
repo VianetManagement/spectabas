@@ -45,6 +45,29 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v4.0.0 — 2026-04-01 UTC",
+       [
+         %{
+           title: "Feature: Revenue Attribution",
+           description:
+             "New dashboard page showing which traffic sources generate paying customers. Tracks visitors → orders → revenue → conversion rate by source, campaign, or medium."
+         },
+         %{
+           title: "Feature: Revenue Cohorts",
+           description:
+             "Customer lifetime value analysis. Groups customers by first-purchase week and tracks revenue per customer over time in a cohort heatmap."
+         },
+         %{
+           title: "Feature: Buyer Patterns",
+           description:
+             "Compares buyer vs non-buyer behavior. Shows pages where buyers over-index (lift analysis) and side-by-side engagement stats (sessions, pages, duration)."
+         },
+         %{
+           title: "Feature: Churn Risk",
+           description:
+             "Identifies customers with declining engagement (fewer sessions, fewer pages in last 14 days vs prior 14 days). Shows risk level, email for identified customers, and links to visitor profiles."
+         }
+       ]},
       {"v3.7.0 — 2026-04-01 UTC",
        [
          %{

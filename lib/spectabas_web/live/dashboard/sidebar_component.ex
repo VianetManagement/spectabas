@@ -217,6 +217,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
               label="Retention"
               active={@active == "cohort"}
             />
+            <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/churn-risk"}
+              label="Churn Risk"
+              active={@active == "churn-risk"}
+            />
           </.nav_section>
 
           <.nav_section label="Conversions" color="text-rose-500">
@@ -234,6 +239,21 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
               to={~p"/dashboard/sites/#{@site.id}/ecommerce"}
               label="Ecommerce"
               active={@active == "ecommerce"}
+            />
+            <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/revenue-attribution"}
+              label="Revenue Attribution"
+              active={@active == "revenue-attribution"}
+            />
+            <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/revenue-cohorts"}
+              label="Revenue Cohorts"
+              active={@active == "revenue-cohorts"}
+            />
+            <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/buyer-patterns"}
+              label="Buyer Patterns"
+              active={@active == "buyer-patterns"}
             />
           </.nav_section>
 
@@ -407,6 +427,10 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
       {~p"/dashboard/sites/#{site_id}/goals", "Goals"},
       {~p"/dashboard/sites/#{site_id}/funnels", "Funnels"},
       {~p"/dashboard/sites/#{site_id}/ecommerce", "Ecommerce"},
+      {~p"/dashboard/sites/#{site_id}/revenue-attribution", "Revenue Attribution"},
+      {~p"/dashboard/sites/#{site_id}/revenue-cohorts", "Revenue Cohorts"},
+      {~p"/dashboard/sites/#{site_id}/buyer-patterns", "Buyer Patterns"},
+      {~p"/dashboard/sites/#{site_id}/churn-risk", "Churn Risk"},
       {~p"/dashboard/sites/#{site_id}/email-reports", "Email Reports"},
       {~p"/dashboard/sites/#{site_id}/settings", "Settings"}
     ]

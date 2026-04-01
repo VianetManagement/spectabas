@@ -117,7 +117,8 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Behavior**: Pages, Entry/Exit, Page Transitions, Site Search, Outbound Links, Downloads, Events, Performance (RUM)
 - **Acquisition**: All Channels, Sources (6 UTM tabs), Attribution, Campaigns (UTM builder)
 - **Audience**: Geography, Visitor Map, Devices, Network, Bot Traffic, Visitor Log, Cohort Retention
-- **Conversions**: Goals, Funnels, Ecommerce
+- **Conversions**: Goals, Funnels, Ecommerce, Revenue Attribution, Revenue Cohorts, Buyer Patterns
+- **Audience** (new): Churn Risk (engagement decline detection for customers)
 - **Tools**: Reports, Email Reports, Exports, Settings
 
 ### Email Reports
@@ -139,6 +140,10 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Ecommerce Revenue Chart** — combined bar (revenue) + line (orders) chart on the ecommerce page
 - **Ecommerce Email Association** — transaction API accepts `email` to link orders to visitor profiles; orders show on visitor detail page
 - **Product Categories** — ecommerce items support optional `category` field for sub-types (e.g. new_subscription vs renewal); Top Products groups by name+category
+- **Revenue Attribution** — which traffic sources generate paying customers; conversion rate, AOV, total revenue by source/campaign/medium
+- **Revenue Cohorts** — LTV by first-purchase cohort week; heatmap of revenue per customer over time
+- **Buyer Patterns** — lift analysis comparing buyer vs non-buyer page visits; side-by-side engagement stats
+- **Churn Risk** — flags customers with 50%+ engagement decline (sessions, pages) over 14-day windows
 
 ## Authentication
 

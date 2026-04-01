@@ -1136,6 +1136,211 @@ defmodule Spectabas.Analytics do
     ClickHouse.query(sql)
   end
 
+  # ---- Revenue & Conversion Analytics ----
+
+  @doc "Revenue attribution by traffic source."
+  def revenue_by_source(%Site{} = site, %User{} = user, date_range, group_by \\ "source") do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      source_expr =
+        case group_by do
+          "campaign" ->
+            "if(utm_campaign != '', utm_campaign, 'none')"
+
+          "medium" ->
+            "if(utm_medium != '', utm_medium, 'none')"
+
+          _ ->
+            "if(referrer_domain != '', referrer_domain, if(utm_source != '', utm_source, 'Direct'))"
+        end
+
+      sql = """
+      SELECT
+        source,
+        uniq(e.visitor_id) AS visitors,
+        countDistinct(ec.order_id) AS orders,
+        sum(ec.revenue) AS total_revenue,
+        round(avg(ec.revenue), 2) AS avg_order_value,
+        round(countDistinct(ec.order_id) / greatest(uniq(e.visitor_id), 1) * 100, 2) AS conversion_rate
+      FROM (
+        SELECT visitor_id, argMin(#{source_expr}, timestamp) AS source
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND event_type = 'pageview' AND ip_is_bot = 0
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY visitor_id
+      ) AS e
+      LEFT JOIN (
+        SELECT visitor_id, order_id, revenue
+        FROM ecommerce_events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      ) AS ec ON e.visitor_id = ec.visitor_id
+      GROUP BY source
+      ORDER BY total_revenue DESC
+      LIMIT 50
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Revenue cohorts: group customers by first-purchase week, track revenue over time."
+  def cohort_revenue(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        toMonday(first_purchase) AS cohort_week,
+        intDiv(dateDiff('day', first_purchase, toDate(e.timestamp)), 7) AS week_number,
+        uniq(e.visitor_id) AS customers,
+        sum(e.revenue) AS revenue,
+        round(sum(e.revenue) / greatest(uniq(e.visitor_id), 1), 2) AS revenue_per_customer
+      FROM ecommerce_events AS e
+      INNER JOIN (
+        SELECT visitor_id, min(toDate(timestamp)) AS first_purchase
+        FROM ecommerce_events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+        GROUP BY visitor_id
+      ) AS fp ON e.visitor_id = fp.visitor_id
+      WHERE e.site_id = #{ClickHouse.param(site.id)}
+        AND e.timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND e.timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      GROUP BY cohort_week, week_number
+      ORDER BY cohort_week, week_number
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Buyer vs non-buyer page visit patterns (lift analysis)."
+  def buyer_page_patterns(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        e.url_path,
+        uniqIf(e.visitor_id, is_buyer = 1) AS buyer_visitors,
+        uniqIf(e.visitor_id, is_buyer = 0) AS nonbuyer_visitors,
+        countIf(is_buyer = 1) AS buyer_pageviews,
+        countIf(is_buyer = 0) AS nonbuyer_pageviews,
+        round(uniqIf(e.visitor_id, is_buyer = 1) / greatest(uniqIf(e.visitor_id, is_buyer = 0), 1), 3) AS lift
+      FROM (
+        SELECT
+          events.visitor_id,
+          events.url_path,
+          if(ec.visitor_id != '', 1, 0) AS is_buyer
+        FROM events
+        LEFT JOIN (
+          SELECT DISTINCT visitor_id
+          FROM ecommerce_events
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+            AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        ) AS ec ON events.visitor_id = ec.visitor_id
+        WHERE events.site_id = #{ClickHouse.param(site.id)}
+          AND events.event_type = 'pageview' AND events.ip_is_bot = 0
+          AND events.timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND events.timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      ) AS e
+      GROUP BY e.url_path
+      HAVING buyer_visitors >= 2
+      ORDER BY lift DESC
+      LIMIT 50
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Behavioral summary: avg sessions/pages/duration for buyers vs non-buyers."
+  def buyer_vs_nonbuyer_stats(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        is_buyer,
+        round(avg(sessions), 1) AS avg_sessions,
+        round(avg(pages), 1) AS avg_pages,
+        round(avg(total_duration), 0) AS avg_duration
+      FROM (
+        SELECT
+          events.visitor_id,
+          if(ec.visitor_id != '', 1, 0) AS is_buyer,
+          uniq(events.session_id) AS sessions,
+          countIf(events.event_type = 'pageview') AS pages,
+          sum(events.duration_s) AS total_duration
+        FROM events
+        LEFT JOIN (
+          SELECT DISTINCT visitor_id
+          FROM ecommerce_events
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+            AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        ) AS ec ON events.visitor_id = ec.visitor_id
+        WHERE events.site_id = #{ClickHouse.param(site.id)}
+          AND events.ip_is_bot = 0
+          AND events.timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND events.timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY events.visitor_id, is_buyer
+      )
+      GROUP BY is_buyer
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Churn risk: customers with declining engagement (recent vs prior 14-day window)."
+  def churn_risk_visitors(%Site{} = site, %User{} = user) do
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        visitor_id,
+        recent_sessions,
+        prior_sessions,
+        recent_pages,
+        prior_pages,
+        round((prior_sessions - recent_sessions) / greatest(prior_sessions, 1) * 100, 1) AS session_decline_pct,
+        round((prior_pages - recent_pages) / greatest(prior_pages, 1) * 100, 1) AS pages_decline_pct,
+        max_recent_ts
+      FROM (
+        SELECT
+          visitor_id,
+          countIf(timestamp >= now() - INTERVAL 14 DAY) AS recent_sessions,
+          countIf(timestamp >= now() - INTERVAL 28 DAY AND timestamp < now() - INTERVAL 14 DAY) AS prior_sessions,
+          sumIf(1, event_type = 'pageview' AND timestamp >= now() - INTERVAL 14 DAY) AS recent_pages,
+          sumIf(1, event_type = 'pageview' AND timestamp >= now() - INTERVAL 28 DAY AND timestamp < now() - INTERVAL 14 DAY) AS prior_pages,
+          max(timestamp) AS max_recent_ts
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND timestamp >= now() - INTERVAL 28 DAY
+          AND ip_is_bot = 0
+          AND visitor_id IN (
+            SELECT DISTINCT visitor_id
+            FROM ecommerce_events
+            WHERE site_id = #{ClickHouse.param(site.id)}
+          )
+        GROUP BY visitor_id
+        HAVING prior_sessions >= 2
+      )
+      WHERE recent_sessions < prior_sessions * 0.5
+         OR recent_pages < prior_pages * 0.3
+      ORDER BY session_decline_pct DESC
+      LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
   @doc "Look up ecommerce totals for a list of visitor IDs. Returns map of visitor_id => %{orders, revenue}."
   def ecommerce_for_visitors(%Site{} = site, visitor_ids) when is_list(visitor_ids) do
     visitor_ids = Enum.reject(visitor_ids, &(&1 == "" or is_nil(&1)))
