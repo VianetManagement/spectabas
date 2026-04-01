@@ -16,6 +16,7 @@ defmodule SpectabasWeb.Admin.ApiLogsLive do
      |> assign(:filter_method, nil)
      |> assign(:filter_path, nil)
      |> assign(:page, 1)
+     |> assign(:selected_log, nil)
      |> load_logs()
      |> load_stats()}
   end
@@ -35,6 +36,23 @@ defmodule SpectabasWeb.Admin.ApiLogsLive do
      socket
      |> assign(:page, socket.assigns.page + 1)
      |> load_logs()}
+  end
+
+  def handle_event("select_log", %{"id" => id}, socket) do
+    id = String.to_integer(id)
+
+    selected =
+      if socket.assigns.selected_log && socket.assigns.selected_log.id == id do
+        nil
+      else
+        Enum.find(socket.assigns.logs, &(&1.id == id))
+      end
+
+    {:noreply, assign(socket, :selected_log, selected)}
+  end
+
+  def handle_event("close_detail", _params, socket) do
+    {:noreply, assign(socket, :selected_log, nil)}
   end
 
   def handle_event("prev_page", _params, socket) do
@@ -303,7 +321,15 @@ defmodule SpectabasWeb.Admin.ApiLogsLive do
             <tr :if={@logs == []}>
               <td colspan="7" class="px-4 py-8 text-center text-gray-500">No API calls logged.</td>
             </tr>
-            <tr :for={log <- @logs} class="hover:bg-gray-50">
+            <tr
+              :for={log <- @logs}
+              phx-click="select_log"
+              phx-value-id={log.id}
+              class={[
+                "hover:bg-gray-50 cursor-pointer",
+                if(@selected_log && @selected_log.id == log.id, do: "bg-indigo-50", else: "")
+              ]}
+            >
               <td class="px-4 py-2 text-xs text-gray-500">
                 {Calendar.strftime(log.inserted_at, "%m-%d %H:%M:%S")}
               </td>
@@ -359,6 +385,62 @@ defmodule SpectabasWeb.Admin.ApiLogsLive do
           </div>
         </div>
       </div>
+
+      <%!-- Detail panel --%>
+      <div
+        :if={@selected_log}
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+        phx-click="close_detail"
+      >
+        <div
+          class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden"
+          phx-click-away="close_detail"
+        >
+          <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+            <h3 class="font-semibold text-gray-900">API Call Detail</h3>
+            <button
+              phx-click="close_detail"
+              class="text-gray-400 hover:text-gray-600 text-xl leading-none"
+            >
+              &times;
+            </button>
+          </div>
+          <div class="px-6 py-4 space-y-3 max-h-[70vh] overflow-y-auto">
+            <.detail_row
+              label="Time"
+              value={Calendar.strftime(@selected_log.inserted_at, "%Y-%m-%d %H:%M:%S UTC")}
+            />
+            <.detail_row label="Method" value={@selected_log.method} />
+            <.detail_row label="Path" value={@selected_log.path} />
+            <.detail_row label="Status" value={to_string(@selected_log.status_code)} />
+            <.detail_row
+              label="Duration"
+              value={if @selected_log.duration_ms, do: "#{@selected_log.duration_ms}ms", else: "—"}
+            />
+            <.detail_row label="API Key" value={@selected_log.key_prefix || "—"} />
+            <.detail_row
+              label="User ID"
+              value={if @selected_log.user_id, do: to_string(@selected_log.user_id), else: "—"}
+            />
+            <.detail_row
+              label="Site ID"
+              value={if @selected_log.site_id, do: to_string(@selected_log.site_id), else: "—"}
+            />
+            <.detail_row label="IP Address" value={@selected_log.ip_address || "—"} />
+            <.detail_row label="User Agent" value={@selected_log.user_agent || "—"} />
+            <.detail_row label="Log ID" value={to_string(@selected_log.id)} />
+          </div>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  defp detail_row(assigns) do
+    ~H"""
+    <div class="flex">
+      <dt class="w-28 shrink-0 text-xs font-medium text-gray-500 uppercase pt-0.5">{@label}</dt>
+      <dd class="text-sm text-gray-900 break-all">{@value}</dd>
     </div>
     """
   end
