@@ -35,7 +35,7 @@ config :spectabas, Spectabas.ClickHouse,
 
 config :spectabas, Spectabas.Events.IngestBuffer,
   flush_interval_ms: 500,
-  max_batch_size: 200
+  max_batch_size: 500
 
 config :hammer,
   backend: {Hammer.Backend.ETS, [expiry_ms: 60_000 * 60 * 4, cleanup_interval_ms: 60_000 * 10]}
