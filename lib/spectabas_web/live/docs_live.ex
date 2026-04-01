@@ -1084,6 +1084,20 @@ defmodule SpectabasWeb.DocsLive do
 
             Go to **Account > Settings** and generate an API key. The key starts with `sab_live_`.
 
+            ### Token Scopes
+
+            API keys use granular scopes to control access:
+
+            | Scope | Grants access to |
+            |-------|-----------------|
+            | `read:stats` | GET stats, pages, sources, channels |
+            | `read:visitors` | GET visitor log, visitor details |
+            | `write:events` | POST events, ecommerce transactions |
+            | `write:identify` | POST server-side visitor identification |
+            | `admin:sites` | Site management endpoints |
+
+            Tokens can also be **restricted to specific sites** and given an **expiry date**.
+
             ### Making Requests
 
             ```bash
@@ -1096,8 +1110,10 @@ defmodule SpectabasWeb.DocsLive do
             | Status | Meaning |
             |--------|---------|
             | 401 | Invalid or missing API key |
-            | 403 | API key doesn't have access to this site |
+            | 403 | API key doesn't have access to this site or required scope |
             | 404 | Site not found |
+
+            > **Access Logging:** All API requests are logged with request/response bodies. Logs are retained for 30 days and viewable by admins at `/admin/api-logs`.
             """
           },
           %{

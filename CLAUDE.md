@@ -20,8 +20,8 @@ Spectabas is a multi-tenant, privacy-first web analytics SaaS platform built wit
 1. Website loads `/assets/v1.js` from analytics subdomain
 2. Script sends beacon to `/c/e?s=<public_key>` (obfuscated endpoints)
 3. CollectController validates payload, checks origin, resolves site by public key
-4. Ingest.process enriches event (IP geo, UA parsing, session resolution, intent classification, fingerprint-based visitor dedup)
-5. IngestBuffer batches events, flushes to ClickHouse every 500ms
+4. Ingest.process enriches event (IP geo, UA parsing, session resolution, intent classification, visitor dedup)
+5. IngestBuffer batches events (1000 batch size), async flushes to ClickHouse via dedicated connection pool (100 connections)
 6. Dashboard LiveViews query ClickHouse events table directly
 
 ### IP Enrichment Pipeline
@@ -38,6 +38,7 @@ Spectabas is a multi-tenant, privacy-first web analytics SaaS platform built wit
 - `/c/i` — user identification
 - `/c/x` — cross-domain token
 - `/c/o` — opt-out cookie
+- `/api/v1/sites/:id/identify` — server-side visitor identification (POST)
 
 ### ClickHouse Schema
 - Tables created by Elixir app on startup (`ensure_schema!` in ClickHouse module)
@@ -58,7 +59,7 @@ mix ecto.setup
 mix phx.server
 ```
 
-Tests: `mix test` (390 tests, no ClickHouse needed)
+Tests: `mix test` (458 tests, no ClickHouse needed)
 Format: `mix format`
 Compile check: `mix compile --warnings-as-errors`
 
@@ -95,6 +96,8 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - `/health/dashboard-test` — tests all analytics queries
 - `/health/audit-test` — tests audit logging
 - `/health/backfill-geo` — re-enriches events with empty geo data
+- `/admin/ingest` — live ingest diagnostics (BEAM memory, buffer size, ETS cache stats, ClickHouse pool)
+- `/admin/api-logs` — API access logs with request/response detail modal (30-day retention)
 
 ### GeoIP Database Updates
 - DB-IP + MaxMind refresh via Oban cron on 1st and 15th of each month at 06:00 UTC
@@ -148,6 +151,10 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 ### API Keys
 - Users can create/revoke API keys from account settings
 - Used for programmatic access to analytics data
+- **Granular scopes**: `read:stats`, `read:visitors`, `write:events`, `write:identify`, `admin:sites`
+- **Site restrictions**: tokens can be scoped to specific sites
+- **Expiry**: optional expiration date on tokens
+- **Access logging**: every API call logged with request/response bodies, 30-day retention, viewable at `/admin/api-logs`
 
 ## Security
 
@@ -203,9 +210,13 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Sidebar layout**: All dashboard pages use `<.dashboard_layout>` from SidebarComponent
 - **Async dashboard**: Mount loads critical stats only; deferred stats load via `handle_info(:load_deferred)`
 - **Chart updates**: Use `push_event` to push data to Chart.js hooks (not data attributes)
-- **Visitor dedup**: GDPR-off visitors without cookies are matched by fingerprint via `Visitors.find_by_fingerprint/2` before creating a new record
+- **Visitor dedup**: In GDPR-off (cookie) mode, new cookie = new visitor. No fingerprint merging. Fingerprint-based dedup only applies in GDPR-on (cookieless) mode via `Visitors.find_by_fingerprint/2`
 - **Timezone handling**: Requires `tzdata` library — without it, `DateTime.shift_zone` silently fails to UTC. All dashboard date boundaries use site timezone via `dates_to_utc_range/3`. Rolling periods (24h, 7d, 30d) are UTC-relative and timezone-independent. Only "Today" and date-picker ranges need timezone conversion.
 - **Query consistency**: ALL analytics queries showing visitor/pageview/session counts MUST include `ip_is_bot = 0` and filter to pageview events. Exceptions: network_stats (shows bot %), realtime (all live activity), visitor detail pages, RUM queries. This ensures numbers match across dashboard, channels, sources, geography, etc.
 - **Bot vs datacenter**: `ip_is_bot` is set ONLY from UA detection (navigator.webdriver, headless browser). Datacenter IPs are tracked via `ip_is_datacenter` but are NOT automatically flagged as bots — VPN and corporate proxy users are real visitors.
 - **Origin validation**: Allows any subdomain of the parent domain (e.g., `app.example.com` is allowed when analytics domain is `b.example.com`). Cross-domain sites list is for entirely separate domains.
+- **API token scopes**: Enforce scope checks in API controllers. `read:stats` for GET stats/pages/sources, `read:visitors` for visitor log, `write:events` for event collection, `write:identify` for server-side identify, `admin:sites` for site management. Tokens can be restricted to specific site IDs.
+- **API access logging**: Every API call is logged (endpoint, method, request body, response status, response body). Stored in PostgreSQL with 30-day retention via Oban cleanup worker. Admin UI at `/admin/api-logs` with detail modal.
+- **High-throughput ingest**: Async flush, 1000 batch size, ETS visitor cache, dedicated ClickHouse connection pool (100 connections), per-site rate limiting (1000 events/sec).
+- **occurred_at backdating**: All events support optional `occurred_at` field (Unix UTC seconds) to backdate events up to 7 days.
 - **RUM collection**: Tracker sends `_rum` (nav timing) and `_cwv` (Core Web Vitals) custom events. Uses `performance.getEntriesByType("navigation")` with `performance.timing` fallback. IMPORTANT: PerformanceNavigationTiming uses `nav.startTime` (always 0) for the navigation baseline — NOT `nav.navigationStart` which only exists on the deprecated `performance.timing`. Queries use `quantileIf` to exclude zeros. ClickHouse `quantileIf` returns `nan` when no rows match — `parse_rows` sanitizes `nan`→`null` before JSON parsing.

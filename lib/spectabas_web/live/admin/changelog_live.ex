@@ -45,6 +45,40 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v3.0.1 — 2026-03-31 UTC",
+       [
+         %{
+           title: "Fix: visitor dedup in cookie mode",
+           description:
+             "In GDPR-off (cookie) mode, new cookies no longer merge visitors by fingerprint. New cookie = new visitor. Fingerprint-based dedup is now only used in GDPR-on (cookieless) mode."
+         }
+       ]},
+      {"v3.0.0 — 2026-03-31 UTC",
+       [
+         %{
+           title: "Feature: API token scopes",
+           description:
+             "Granular permission scopes on API keys: read:stats, read:visitors, write:events, write:identify, admin:sites. Tokens can be restricted to specific sites with optional expiry dates."
+         },
+         %{
+           title: "Feature: API access logging",
+           description:
+             "Every API call is logged with request/response bodies. 30-day retention. Admin UI at /admin/api-logs with detail modal for inspecting individual requests."
+         },
+         %{
+           title: "Feature: ingest diagnostics dashboard",
+           description:
+             "New /admin/ingest page shows live BEAM memory, buffer size, ETS visitor cache stats, and ClickHouse connection pool metrics."
+         }
+       ]},
+      {"v2.9.0 — 2026-03-31 UTC",
+       [
+         %{
+           title: "Performance: high-throughput ingest pipeline",
+           description:
+             "Async flush, 1000 batch size (up from default), ETS-based visitor cache, dedicated ClickHouse connection pool (100 connections), and per-site rate limiting at 1000 events/sec."
+         }
+       ]},
       {"v2.8.0 — 2026-03-31 UTC",
        [
          %{
