@@ -552,6 +552,34 @@ defmodule SpectabasWeb.HealthController do
     json(conn, %{result: inspect(result)})
   end
 
+  def import_matomo_test(conn, %{"token" => token, "action" => "drop_old_partitions"})
+      when token == @import_token do
+    # Drop monthly partitions that ONLY contain imported data (no native data)
+    # Apr 2025 through Feb 2026 — safe to drop entirely
+    # March 2026 (202603) is NOT dropped because it has native data from Mar 28+
+    db = Spectabas.ClickHouse.database()
+
+    partitions =
+      ~w(202504 202505 202506 202507 202508 202509 202510 202511 202512 202601 202602)
+
+    results =
+      Enum.map(partitions, fn part ->
+        sql = "ALTER TABLE #{db}.events DROP PARTITION '#{part}'"
+        {part, Spectabas.ClickHouse.execute(sql)}
+      end)
+
+    # For March 2026, only delete imported rows (keep native data from Mar 28+)
+    march_result =
+      Spectabas.ClickHouse.execute(
+        "ALTER TABLE #{db}.events DELETE WHERE site_id = 4 AND visitor_id LIKE 'imported\\_%' AND toYYYYMM(timestamp) = 202603"
+      )
+
+    json(conn, %{
+      dropped_partitions: inspect(results),
+      march_2026_cleanup: inspect(march_result)
+    })
+  end
+
   def import_matomo_test(conn, %{"token" => token, "action" => "import"})
       when token == @import_token do
     # Import April 2025 through March 27, 2026 (before native tracking)
