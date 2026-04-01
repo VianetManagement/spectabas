@@ -552,6 +552,32 @@ defmodule SpectabasWeb.HealthController do
     json(conn, %{result: inspect(result)})
   end
 
+  def import_matomo_test(conn, %{"token" => token, "action" => "fix_grants"})
+      when token == @import_token do
+    # Run the grant with the admin/default user via ensure_schema path
+    cfg = Application.get_env(:spectabas, Spectabas.ClickHouse, [])
+    db = cfg[:database] || "spectabas"
+    writer = cfg[:username] || "spectabas_writer"
+
+    admin_req =
+      Req.new(
+        base_url: cfg[:url],
+        params: [user: "default", password: ""]
+      )
+
+    sql =
+      "GRANT INSERT, SELECT, ALTER UPDATE, ALTER DELETE, ALTER DROP PARTITION ON #{db}.* TO #{writer}"
+
+    result =
+      case Req.post(Req.merge(admin_req, params: [query: sql]), body: "") do
+        {:ok, %{status: 200}} -> :ok
+        {:ok, %{status: s, body: b}} -> {:error, "#{s}: #{b}"}
+        {:error, r} -> {:error, inspect(r)}
+      end
+
+    json(conn, %{grant_result: inspect(result)})
+  end
+
   def import_matomo_test(conn, %{"token" => token, "action" => "drop_old_partitions"})
       when token == @import_token do
     # Drop monthly partitions that ONLY contain imported data (no native data)
