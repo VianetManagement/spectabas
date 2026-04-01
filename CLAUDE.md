@@ -154,11 +154,15 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 
 ### API Keys
 - Users can create/revoke API keys from account settings
-- Used for programmatic access to analytics data
+- Creation UI with scope checkboxes, site restriction checkboxes, optional expiry date
 - **Granular scopes**: `read:stats`, `read:visitors`, `write:events`, `write:identify`, `admin:sites`
 - **Site restrictions**: tokens can be scoped to specific sites
 - **Expiry**: optional expiration date on tokens
+- **Key list UI**: shows scope badges, site restriction count, expiry status (expired=red, upcoming=yellow)
 - **Access logging**: every API call logged with request/response bodies, 30-day retention, viewable at `/admin/api-logs`
+
+### User Preferences
+- **Timezone**: stored per-user (`timezone` field, default `America/New_York`). Used by admin pages (ingest diagnostics, API logs) for local time display. Selectable via dropdown on admin pages.
 
 ## Security
 
@@ -215,7 +219,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Async dashboard**: Mount loads critical stats only; deferred stats load via `handle_info(:load_deferred)`
 - **Chart updates**: Use `push_event` to push data to Chart.js hooks (not data attributes)
 - **Visitor dedup**: In GDPR-off (cookie) mode, new cookie = new visitor. No fingerprint merging. Fingerprint-based dedup only applies in GDPR-on (cookieless) mode via `Visitors.find_by_fingerprint/2`
-- **Timezone handling**: Requires `tzdata` library — without it, `DateTime.shift_zone` silently fails to UTC. All dashboard date boundaries use site timezone via `dates_to_utc_range/3`. Rolling periods (24h, 7d, 30d) are UTC-relative and timezone-independent. Only "Today" and date-picker ranges need timezone conversion.
+- **Timezone handling**: Requires `tzdata` library — without it, `DateTime.shift_zone` silently fails to UTC. All dashboard date boundaries use site timezone via `dates_to_utc_range/3`. Rolling periods (24h, 7d, 30d) are UTC-relative and timezone-independent. Only "Today" and date-picker ranges need timezone conversion. All ClickHouse queries that return displayed timestamps use `toTimezone(timestamp, site.timezone)` via the `tz_sql/1` helper. Admin pages use user's personal timezone preference for Postgres timestamps.
 - **Query consistency**: ALL analytics queries showing visitor/pageview/session counts MUST include `ip_is_bot = 0` and filter to pageview events. Exceptions: network_stats (shows bot %), realtime (all live activity), visitor detail pages, RUM queries. This ensures numbers match across dashboard, channels, sources, geography, etc.
 - **Bot vs datacenter**: `ip_is_bot` is set ONLY from UA detection (navigator.webdriver, headless browser). Datacenter IPs are tracked via `ip_is_datacenter` but are NOT automatically flagged as bots — VPN and corporate proxy users are real visitors.
 - **Origin validation**: Allows any subdomain of the parent domain (e.g., `app.example.com` is allowed when analytics domain is `b.example.com`). Cross-domain sites list is for entirely separate domains.

@@ -45,6 +45,32 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v3.4.0 — 2026-03-31 UTC",
+       [
+         %{
+           title: "Feature: API key scopes/restrictions UI",
+           description:
+             "API key creation form now includes scope checkboxes (read:stats, read:visitors, write:events, write:identify, admin:sites), site restriction checkboxes, and optional expiry date. Key list displays scopes, site restrictions, and expiry status with color-coded badges."
+         }
+       ]},
+      {"v3.3.0 — 2026-03-31 UTC",
+       [
+         %{
+           title: "Feature: user timezone preference",
+           description:
+             "Admin pages (ingest diagnostics, API logs) now include a timezone picker. All timestamps display in the chosen timezone. Preference is saved to user profile."
+         },
+         %{
+           title: "Fix: all dashboard timestamps now use site timezone",
+           description:
+             "Fixed 11 ClickHouse queries that returned raw UTC timestamps. Visitor log, visitor profiles, ecommerce orders, realtime feed, and all cross-reference pages now display times in the site's configured timezone."
+         },
+         %{
+           title: "Fix: visitor unique constraint race condition",
+           description:
+             "Concurrent event ingestion no longer crashes on duplicate visitor inserts. Added unique_constraint declarations, insert-conflict retry, and best-effort fingerprint updates."
+         }
+       ]},
       {"v3.2.0 — 2026-03-31 UTC",
        [
          %{

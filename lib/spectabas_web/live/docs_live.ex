@@ -1088,7 +1088,11 @@ defmodule SpectabasWeb.DocsLive do
 
             ### Getting an API Key
 
-            Go to **Account > Settings** and generate an API key. The key starts with `sab_live_`.
+            Go to **Account > Settings** and generate an API key. The key starts with `sab_live_`. The creation form lets you configure:
+
+            - **Scopes** — checkboxes for each permission (admin:sites unchecked by default)
+            - **Site restrictions** — optionally limit the key to specific sites
+            - **Expiry date** — optional expiration after which the key stops working
 
             ### Token Scopes
 
@@ -1570,6 +1574,10 @@ defmodule SpectabasWeb.DocsLive do
             - **IP Blocklist** — block specific IPs from being tracked
             - **Ecommerce** — enable ecommerce tracking with currency setting
             - **Email Reports** — configured on a separate page under Tools in the sidebar
+
+            ### User Timezone
+
+            Each user has a personal timezone preference (set from admin pages via the timezone dropdown). This controls timestamp display on admin pages like Ingest Diagnostics and API Access Logs. Site-specific pages (dashboards, visitor log) use the site's configured timezone instead.
             """
           },
           %{
