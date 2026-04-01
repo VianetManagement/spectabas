@@ -540,6 +540,27 @@ defmodule SpectabasWeb.HealthController do
 
   @import_token "sab_import_test_92f7a3b1"
 
+  def import_matomo_test(conn, %{"token" => token, "action" => "check"})
+      when token == @import_token do
+    # Debug: check what's in ClickHouse for the imported date
+    queries = %{
+      total_march_1:
+        Spectabas.ClickHouse.query(
+          "SELECT count() AS c FROM events WHERE site_id = 4 AND toDate(timestamp) = '2025-03-01'"
+        ),
+      sample:
+        Spectabas.ClickHouse.query(
+          "SELECT event_type, url_path, ip_country, browser, timestamp FROM events WHERE site_id = 4 AND toDate(timestamp) = '2025-03-01' LIMIT 5"
+        ),
+      visitor_prefix:
+        Spectabas.ClickHouse.query(
+          "SELECT count() AS c FROM events WHERE site_id = 4 AND visitor_id LIKE 'imported_%'"
+        )
+    }
+
+    json(conn, %{queries: inspect(queries, pretty: true, limit: :infinity)})
+  end
+
   def import_matomo_test(conn, %{"token" => token}) when token == @import_token do
     result =
       Task.async(fn ->
