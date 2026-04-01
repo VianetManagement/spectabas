@@ -350,7 +350,7 @@ defmodule SpectabasWeb.Admin.ApiLogsLive do
               &larr; Prev
             </button>
             <button
-              :if={length(@logs) == @per_page}
+              :if={length(@logs) == 50}
               phx-click="next_page"
               class="px-3 py-1 text-sm bg-gray-100 rounded hover:bg-gray-200"
             >
