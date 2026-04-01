@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v3.5.0 — 2026-03-31 UTC",
+       [
+         %{
+           title: "Fix: bounce rate calculation",
+           description:
+             "Bounce rate now uses the industry-standard definition: sessions with exactly 1 pageview. Previously, duration events and custom events incorrectly disqualified sessions from being bounces, resulting in artificially low bounce rates (~11% vs the expected ~45%)."
+         }
+       ]},
       {"v3.4.0 — 2026-03-31 UTC",
        [
          %{

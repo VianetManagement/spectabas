@@ -28,7 +28,7 @@ defmodule Spectabas.Analytics do
         sum(pv) AS pageviews,
         uniqExact(visitor_id) AS unique_visitors,
         count() AS total_sessions,
-        round(countIf(pv = 1 AND dur = 0 AND ce = 0) / greatest(count(), 1) * 100, 1) AS bounce_rate,
+        round(countIf(pv = 1) / greatest(count(), 1) * 100, 1) AS bounce_rate,
         round(avgIf(dur, dur > 0), 0) AS avg_duration
       FROM (
         SELECT
@@ -2054,7 +2054,7 @@ defmodule Spectabas.Analytics do
       sum(pv) AS pageviews,
       uniqExact(visitor_id) AS unique_visitors,
       count() AS total_sessions,
-      round(countIf(pv = 1 AND dur = 0) / greatest(count(), 1) * 100, 1) AS bounce_rate,
+      round(countIf(pv = 1) / greatest(count(), 1) * 100, 1) AS bounce_rate,
       round(avgIf(dur, dur > 0), 0) AS avg_duration
     FROM (
       SELECT
