@@ -50,7 +50,7 @@ config :spectabas, :rate_limits,
 
 config :spectabas, Oban,
   repo: Spectabas.Repo,
-  queues: [default: 10, mailer: 5, reports: 3, exports: 2, maintenance: 2],
+  queues: [default: 10, mailer: 5, reports: 3, exports: 2, maintenance: 2, ad_sync: 3],
   plugins: [
     Oban.Plugins.Pruner,
     {Oban.Plugins.Cron,
@@ -68,7 +68,9 @@ config :spectabas, Oban,
        # Daily at 7am UTC — detect potential spam referrer domains
        {"0 7 * * *", Spectabas.Workers.SpamDetector},
        # Daily at 3am UTC — delete API access logs older than 30 days
-       {"0 3 * * *", Spectabas.Workers.ApiLogCleanup}
+       {"0 3 * * *", Spectabas.Workers.ApiLogCleanup},
+       # Every 6 hours — sync ad spend data from connected platforms
+       {"0 */6 * * *", Spectabas.Workers.AdSpendSync}
      ]}
   ]
 

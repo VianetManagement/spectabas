@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v4.3.0 — 2026-04-01 UTC",
+       [
+         %{
+           title: "Feature: Ad platform integrations (Google Ads, Bing, Meta)",
+           description:
+             "Connect Google Ads, Microsoft/Bing Ads, and Meta/Facebook Ads accounts via OAuth2. Daily ad spend data (spend, clicks, impressions by campaign) synced every 6 hours. Encrypted token storage. ROAS calculation on Revenue Attribution page. Env vars: GOOGLE_ADS_CLIENT_ID/SECRET/DEVELOPER_TOKEN, BING_ADS_CLIENT_ID/SECRET/DEVELOPER_TOKEN, META_ADS_APP_ID/SECRET."
+         }
+       ]},
       {"v4.2.0 — 2026-04-01 UTC",
        [
          %{

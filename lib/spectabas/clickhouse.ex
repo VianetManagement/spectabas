@@ -251,6 +251,24 @@ defmodule Spectabas.ClickHouse do
       PARTITION BY toYYYYMM(date)
       ORDER BY (site_id, date, device_type, browser, os)
       """,
+      # Ad spend data from connected ad platforms
+      """
+      CREATE TABLE IF NOT EXISTS #{db}.ad_spend (
+        site_id UInt64,
+        date Date,
+        platform LowCardinality(String),
+        account_id String,
+        campaign_id String,
+        campaign_name String DEFAULT '',
+        spend Decimal(12, 2) DEFAULT 0,
+        clicks UInt64 DEFAULT 0,
+        impressions UInt64 DEFAULT 0,
+        currency LowCardinality(String) DEFAULT 'USD',
+        synced_at DateTime DEFAULT now()
+      ) ENGINE = ReplacingMergeTree(synced_at)
+      PARTITION BY toYYYYMM(date)
+      ORDER BY (site_id, date, platform, campaign_id)
+      """,
       # Users and grants
       "CREATE USER IF NOT EXISTS #{cfg[:username]} IDENTIFIED WITH plaintext_password BY '#{cfg[:password]}'",
       "CREATE USER IF NOT EXISTS #{cfg[:read_username]} IDENTIFIED WITH plaintext_password BY '#{cfg[:read_password]}'",
@@ -442,7 +460,7 @@ defmodule Spectabas.ClickHouse do
     "'#{e}'"
   end
 
-  @allowed_tables ~w(events daily_stats source_stats country_stats device_stats network_stats ecommerce_events imported_daily_stats imported_pages imported_sources imported_countries imported_devices)
+  @allowed_tables ~w(events daily_stats source_stats country_stats device_stats network_stats ecommerce_events imported_daily_stats imported_pages imported_sources imported_countries imported_devices ad_spend)
   defp sanitize_table(t) when t in @allowed_tables, do: t
   defp sanitize_table(t), do: raise(ArgumentError, "Unknown ClickHouse table: #{t}")
 

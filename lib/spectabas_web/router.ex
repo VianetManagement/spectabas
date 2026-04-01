@@ -105,6 +105,7 @@ defmodule SpectabasWeb.Router do
     end
 
     post "/users/update-password", UserSessionController, :update_password
+    get "/auth/ad/:platform/callback", AdIntegrationController, :callback
   end
 
   scope "/", SpectabasWeb do

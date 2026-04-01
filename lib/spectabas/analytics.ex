@@ -1202,6 +1202,30 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  @doc "Ad spend by campaign for ROAS calculation."
+  def ad_spend_by_campaign(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        campaign_name,
+        platform,
+        sum(spend) AS total_spend,
+        sum(clicks) AS total_clicks,
+        sum(impressions) AS total_impressions
+      FROM ad_spend
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND date >= #{ClickHouse.param(Date.to_iso8601(DateTime.to_date(date_range.from)))}
+        AND date <= #{ClickHouse.param(Date.to_iso8601(DateTime.to_date(date_range.to)))}
+      GROUP BY campaign_name, platform
+      ORDER BY total_spend DESC
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
   @doc "Revenue summary by channel type (Direct, Organic, Paid, Social, Referral, Email)."
   def revenue_by_channel(%Site{} = site, %User{} = user, date_range) do
     date_range = ensure_date_range(date_range)
