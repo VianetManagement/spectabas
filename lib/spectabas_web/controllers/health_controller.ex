@@ -538,6 +538,23 @@ defmodule SpectabasWeb.HealthController do
     end
   end
 
+  def import_matomo_test(conn, _params) do
+    # Test import: one day of Matomo data for roommates.com
+    result =
+      Task.async(fn ->
+        Spectabas.Imports.Matomo.import_day(
+          4,
+          "https://a.roommates.com",
+          2,
+          "8ed134b2e37850878a2c035ab4c13cd1",
+          ~D[2025-03-01]
+        )
+      end)
+      |> Task.await(120_000)
+
+    json(conn, %{result: inspect(result)})
+  end
+
   defp test_sites do
     Spectabas.Repo.all(Spectabas.Sites.Site)
     |> Enum.map(fn s -> %{id: s.id, domain: s.domain, public_key: s.public_key} end)

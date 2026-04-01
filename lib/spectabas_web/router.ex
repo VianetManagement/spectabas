@@ -44,6 +44,7 @@ defmodule SpectabasWeb.Router do
     get "/backfill-geo", HealthController, :backfill_geo
     get "/dashboard-test", HealthController, :test_dashboard
     get "/audit-test", HealthController, :test_audit
+    get "/import-matomo-test", HealthController, :import_matomo_test
   end
 
   # Collect endpoint — CORS, rate-limited, no CSRF
