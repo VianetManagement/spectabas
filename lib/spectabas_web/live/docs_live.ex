@@ -1,15 +1,54 @@
 defmodule SpectabasWeb.DocsLive do
   use SpectabasWeb, :live_view
 
+  @category_slugs %{
+    "getting-started" => "Getting Started",
+    "dashboard" => "Dashboard",
+    "api" => "REST API",
+    "admin" => "Administration"
+  }
+
   @impl true
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(:page_title, "Documentation")
      |> assign(:search, "")
-     |> assign(:active_section, "getting-started")
-     |> assign(:sections, sections())
-     |> assign(:filtered_sections, sections())}
+     |> assign(:active_section, nil)
+     |> assign(:all_sections, sections())}
+  end
+
+  @impl true
+  def handle_params(params, _uri, socket) do
+    category_slug = params["category"]
+
+    if category_slug do
+      category_name = @category_slugs[category_slug]
+
+      visible =
+        Enum.filter(sections(), &(&1.category == category_name))
+
+      first_id =
+        case visible do
+          [%{items: [%{id: id} | _]} | _] -> id
+          _ -> nil
+        end
+
+      {:noreply,
+       socket
+       |> assign(:page_title, "Docs: #{category_name || category_slug}")
+       |> assign(:category_slug, category_slug)
+       |> assign(:sections, visible)
+       |> assign(:filtered_sections, visible)
+       |> assign(:active_section, socket.assigns.active_section || first_id)}
+    else
+      {:noreply,
+       socket
+       |> assign(:page_title, "Documentation")
+       |> assign(:category_slug, nil)
+       |> assign(:sections, sections())
+       |> assign(:filtered_sections, sections())
+       |> assign(:active_section, socket.assigns.active_section || "getting-started")}
+    end
   end
 
   @impl true
@@ -25,12 +64,14 @@ defmodule SpectabasWeb.DocsLive do
 
   defp do_search(query, socket) do
     q = String.downcase(String.trim(query))
+    # Always search all sections, even on index page
+    all = socket.assigns.all_sections
 
     filtered =
       if q == "" do
-        sections()
+        socket.assigns.sections
       else
-        sections()
+        all
         |> Enum.map(fn section ->
           matching_items =
             Enum.filter(section.items, fn item ->
@@ -46,20 +87,45 @@ defmodule SpectabasWeb.DocsLive do
     {:noreply, socket |> assign(:search, query) |> assign(:filtered_sections, filtered)}
   end
 
+  defp category_slug_for(category_name) do
+    Enum.find_value(@category_slugs, "getting-started", fn {slug, name} ->
+      if name == category_name, do: slug
+    end)
+  end
+
+  defp category_description("Getting Started"),
+    do: "Installation, tracker setup, and JavaScript API reference."
+
+  defp category_description("Dashboard"),
+    do: "All analytics pages: pages, sources, geography, devices, visitors, and more."
+
+  defp category_description("REST API"),
+    do: "Authentication, endpoints for stats, ecommerce, visitor identification."
+
+  defp category_description("Administration"),
+    do: "Site settings, user roles, email reports, spam filtering, 2FA."
+
+  defp category_description(_), do: ""
+
   @impl true
   def render(assigns) do
     ~H"""
     <div class="flex min-h-[calc(100vh-56px)]">
-      <%!-- Docs sidebar --%>
-      <aside class="hidden lg:flex lg:flex-col lg:w-64 bg-white border-r border-gray-200 flex-shrink-0">
+      <%!-- Sidebar (only on category pages) --%>
+      <aside
+        :if={@category_slug}
+        class="hidden lg:flex lg:flex-col lg:w-64 bg-white border-r border-gray-200 flex-shrink-0"
+      >
         <div class="p-4 border-b border-gray-200">
-          <h2 class="text-sm font-semibold text-gray-900">Documentation</h2>
+          <.link navigate={~p"/docs"} class="text-xs text-indigo-600 hover:text-indigo-800">
+            &larr; All Docs
+          </.link>
+          <h2 class="text-sm font-semibold text-gray-900 mt-1">
+            {@filtered_sections |> List.first(%{}) |> Map.get(:category, "Documentation")}
+          </h2>
         </div>
-        <nav class="flex-1 p-3 overflow-y-auto space-y-4">
+        <nav class="flex-1 p-3 overflow-y-auto space-y-1">
           <div :for={section <- @filtered_sections}>
-            <p class="px-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-1">
-              {section.category}
-            </p>
             <button
               :for={item <- section.items}
               phx-click="nav"
@@ -89,7 +155,7 @@ defmodule SpectabasWeb.DocsLive do
               phx-debounce="200"
               name="q"
               value={@search}
-              placeholder="Search documentation..."
+              placeholder="Search all documentation..."
               class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 py-2.5 px-4"
             />
             <p :if={@search != "" && @filtered_sections == []} class="text-sm text-gray-500 mt-3">
@@ -97,35 +163,89 @@ defmodule SpectabasWeb.DocsLive do
             </p>
           </div>
 
-          <%!-- Mobile: jump-to-section selector (hidden on desktop where sidebar handles this) --%>
-          <div :if={@search == ""} class="lg:hidden mb-6">
-            <select
-              phx-change="nav"
-              name="section"
-              class="block w-full rounded-lg border-gray-300 text-sm py-2.5 focus:border-indigo-500 focus:ring-indigo-500"
-            >
-              <option value="" disabled selected>Jump to section...</option>
-              <%= for section <- @filtered_sections do %>
-                <optgroup label={section.category}>
-                  <%= for item <- section.items do %>
-                    <option value={item.id}>{item.title}</option>
-                  <% end %>
-                </optgroup>
-              <% end %>
-            </select>
+          <%!-- Search results (cross-category, shown with category links) --%>
+          <div :if={@search != "" && !@category_slug}>
+            <div :for={section <- @filtered_sections}>
+              <div :for={item <- section.items}>
+                <.link
+                  navigate={"/docs/#{category_slug_for(section.category)}##{item.id}"}
+                  class="block mb-4 bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:border-indigo-300 transition-colors"
+                >
+                  <h3 class="font-semibold text-gray-900">{item.title}</h3>
+                  <p class="text-xs text-indigo-600 mt-0.5">{section.category}</p>
+                </.link>
+              </div>
+            </div>
           </div>
 
-          <div :for={section <- @filtered_sections}>
-            <div :for={item <- section.items}>
-              <article id={item.id} class="mb-12 scroll-mt-8">
-                <h2 class="text-2xl font-bold text-gray-900 mb-1">{item.title}</h2>
-                <p class="text-xs text-gray-500 uppercase mb-4">{section.category}</p>
-                <div class="prose prose-sm prose-indigo max-w-none">
-                  <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                    {raw(render_markdown(item.body))}
+          <%!-- Index: category cards (when not searching) --%>
+          <div :if={!@category_slug && @search == ""}>
+            <h1 class="text-2xl font-bold text-gray-900 mb-2">Documentation</h1>
+            <p class="text-sm text-gray-500 mb-8">
+              Choose a section to get started, or search above.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <.link
+                :for={
+                  {slug, name} <- [
+                    {"getting-started", "Getting Started"},
+                    {"dashboard", "Dashboard"},
+                    {"api", "REST API"},
+                    {"admin", "Administration"}
+                  ]
+                }
+                navigate={~p"/docs/#{slug}"}
+                class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:border-indigo-300 hover:shadow transition-all"
+              >
+                <h2 class="text-lg font-semibold text-gray-900">{name}</h2>
+                <p class="text-sm text-gray-500 mt-1">
+                  {category_description(name)}
+                </p>
+                <p class="text-xs text-indigo-600 mt-3">
+                  {Enum.find(@all_sections, %{items: []}, &(&1.category == name)).items |> length()} articles &rarr;
+                </p>
+              </.link>
+            </div>
+          </div>
+
+          <%!-- Category content --%>
+          <div :if={@category_slug}>
+            <%!-- Mobile: jump-to-section --%>
+            <div :if={@search == ""} class="lg:hidden mb-6">
+              <.link
+                navigate={~p"/docs"}
+                class="text-xs text-indigo-600 hover:text-indigo-800 mb-2 block"
+              >
+                &larr; All Docs
+              </.link>
+              <select
+                phx-change="nav"
+                name="section"
+                class="block w-full rounded-lg border-gray-300 text-sm py-2.5 focus:border-indigo-500 focus:ring-indigo-500"
+              >
+                <option value="" disabled selected>Jump to section...</option>
+                <%= for section <- @filtered_sections do %>
+                  <optgroup label={section.category}>
+                    <%= for item <- section.items do %>
+                      <option value={item.id}>{item.title}</option>
+                    <% end %>
+                  </optgroup>
+                <% end %>
+              </select>
+            </div>
+
+            <div :for={section <- @filtered_sections}>
+              <div :for={item <- section.items}>
+                <article id={item.id} class="mb-12 scroll-mt-8">
+                  <h2 class="text-2xl font-bold text-gray-900 mb-1">{item.title}</h2>
+                  <p class="text-xs text-gray-500 uppercase mb-4">{section.category}</p>
+                  <div class="prose prose-sm prose-indigo max-w-none">
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                      {raw(render_markdown(item.body))}
+                    </div>
                   </div>
-                </div>
-              </article>
+                </article>
+              </div>
             </div>
           </div>
         </div>

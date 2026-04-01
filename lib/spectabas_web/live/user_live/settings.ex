@@ -590,7 +590,7 @@ defmodule SpectabasWeb.UserLive.Settings do
 
   def handle_event("revoke_api_key", %{"id" => id}, socket) do
     user = socket.assigns.current_scope.user
-    api_key = Spectabas.Repo.get!(Spectabas.APIKeys.APIKey, id)
+    api_key = Spectabas.Repo.get!(Spectabas.Accounts.APIKey, id)
 
     case APIKeys.revoke(user, api_key) do
       {:ok, _} ->

@@ -302,25 +302,33 @@ defmodule SpectabasWeb.DashboardPagesTest do
   end
 
   describe "docs page" do
-    test "renders documentation", %{conn: conn} do
+    test "renders documentation index with category cards", %{conn: conn} do
       {:ok, _view, html} = live(conn, ~p"/docs")
       assert html =~ "Documentation"
+      assert html =~ "Getting Started"
+      assert html =~ "Dashboard"
+      assert html =~ "REST API"
+      assert html =~ "Administration"
+    end
+
+    test "renders Getting Started category page", %{conn: conn} do
+      {:ok, _view, html} = live(conn, ~p"/docs/getting-started")
       assert html =~ "Quick Start Guide"
     end
 
-    test "renders JavaScript API section", %{conn: conn} do
-      {:ok, _view, html} = live(conn, ~p"/docs")
+    test "renders JavaScript API section on getting-started page", %{conn: conn} do
+      {:ok, _view, html} = live(conn, ~p"/docs/getting-started")
       assert html =~ "JavaScript API"
       assert html =~ "Spectabas.track"
     end
 
-    test "renders Performance RUM section", %{conn: conn} do
-      {:ok, _view, html} = live(conn, ~p"/docs")
+    test "renders Performance RUM section on dashboard page", %{conn: conn} do
+      {:ok, _view, html} = live(conn, ~p"/docs/dashboard")
       assert html =~ "Performance (RUM)"
       assert html =~ "Core Web Vitals"
     end
 
-    test "search filters articles", %{conn: conn} do
+    test "search filters articles across all categories", %{conn: conn} do
       {:ok, view, _html} = live(conn, ~p"/docs")
       html = render_keyup(view, "search", %{"q" => "ecommerce"})
       assert html =~ "Ecommerce"
