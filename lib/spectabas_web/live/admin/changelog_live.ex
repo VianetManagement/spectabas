@@ -66,6 +66,11 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
            title: "Feature: Churn Risk",
            description:
              "Identifies customers with declining engagement (fewer sessions, fewer pages in last 14 days vs prior 14 days). Shows risk level, email for identified customers, and links to visitor profiles."
+         },
+         %{
+           title: "Feature: Funnel revenue + abandoned export",
+           description:
+             "Funnels now show revenue from visitors who reached each step (for ecommerce-enabled sites). Each step has an 'Export drop-off' button that downloads a CSV of visitor IDs and emails who abandoned at that step."
          }
        ]},
       {"v3.7.0 — 2026-04-01 UTC",

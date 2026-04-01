@@ -92,10 +92,46 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
         _ -> []
       end
 
+    # Enrich funnel with revenue data if ecommerce enabled
+    funnel_data =
+      if socket.assigns.site.ecommerce_enabled do
+        enrich_funnel_with_revenue(socket.assigns.site, funnel_data)
+      else
+        funnel_data
+      end
+
     {:noreply,
      socket
      |> assign(:selected_funnel, funnel)
      |> assign(:funnel_data, funnel_data)}
+  end
+
+  def handle_event("export_abandoned", %{"step" => step_str}, socket) do
+    step = String.to_integer(step_str)
+    funnel = socket.assigns.selected_funnel
+    site = socket.assigns.site
+
+    # Get visitor IDs who reached this step but not the next
+    case Analytics.funnel_abandoned_at_step(site, socket.assigns.user, funnel, step) do
+      {:ok, visitor_ids} ->
+        email_map = Spectabas.Visitors.emails_for_visitor_ids(visitor_ids)
+
+        csv_rows =
+          Enum.map(visitor_ids, fn vid ->
+            email = get_in(email_map, [vid, :email]) || ""
+            "#{vid},#{email}"
+          end)
+
+        csv = "visitor_id,email\n" <> Enum.join(csv_rows, "\n")
+        filename = "abandoned_step_#{step}_#{Date.to_iso8601(Date.utc_today())}.csv"
+
+        {:noreply,
+         socket
+         |> push_event("download", %{filename: filename, content: csv, mime: "text/csv"})}
+
+      _ ->
+        {:noreply, put_flash(socket, :error, "Could not export abandoned visitors.")}
+    end
   end
 
   def handle_event("close_funnel", _params, socket) do
@@ -230,9 +266,18 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
                   <span class="text-sm text-gray-900">
                     {Map.get(step, "name", "Step #{idx + 1}")}
                   </span>
-                  <span class="text-sm font-medium text-gray-900">
-                    {format_number(to_num(Map.get(step, "visitors", 0)))}
-                  </span>
+                  <div class="flex items-center gap-3">
+                    <span
+                      :if={step["revenue"]}
+                      class="text-xs font-medium text-green-600"
+                      title="Revenue from visitors who reached this step"
+                    >
+                      {@site.currency} {step["revenue"]}
+                    </span>
+                    <span class="text-sm font-medium text-gray-900">
+                      {format_number(to_num(Map.get(step, "visitors", 0)))}
+                    </span>
+                  </div>
                 </div>
                 <div class="w-full bg-gray-200 rounded-full h-2">
                   <div
@@ -245,6 +290,15 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
               <span class="text-sm text-gray-500 w-12 text-right">
                 {Map.get(step, "percentage", 0)}%
               </span>
+              <button
+                :if={idx < length(@funnel_data) - 1}
+                phx-click="export_abandoned"
+                phx-value-step={idx + 1}
+                class="text-xs text-indigo-600 hover:text-indigo-800 whitespace-nowrap"
+                title="Export visitors who dropped off at this step"
+              >
+                Export drop-off
+              </button>
             </div>
           </div>
           <p :if={!@funnel_data || @funnel_data == []} class="text-sm text-gray-500">
@@ -308,4 +362,43 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
     </.dashboard_layout>
     """
   end
+
+  defp enrich_funnel_with_revenue(site, funnel_data) do
+    # Get all visitor IDs from each step level and check their revenue
+    Enum.map(funnel_data, fn step ->
+      visitor_ids = Map.get(step, "visitor_ids", [])
+
+      if visitor_ids != [] do
+        case Analytics.ecommerce_for_visitors(site, visitor_ids) do
+          {:ok, ecom_map} ->
+            total_revenue =
+              ecom_map
+              |> Map.values()
+              |> Enum.reduce(0, fn %{revenue: r}, acc ->
+                acc + parse_revenue(r)
+              end)
+
+            Map.put(step, "revenue", format_money(total_revenue))
+
+          _ ->
+            step
+        end
+      else
+        step
+      end
+    end)
+  end
+
+  defp format_money(n) when is_number(n), do: :erlang.float_to_binary(n / 1, decimals: 2)
+  defp format_money(_), do: "0.00"
+
+  defp parse_revenue(n) when is_binary(n) do
+    case Float.parse(n) do
+      {f, _} -> f
+      :error -> 0.0
+    end
+  end
+
+  defp parse_revenue(n) when is_number(n), do: n / 1
+  defp parse_revenue(_), do: 0.0
 end

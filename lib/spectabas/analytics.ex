@@ -1376,6 +1376,50 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  @doc "Get visitor_ids who reached funnel step N but NOT step N+1."
+  def funnel_abandoned_at_step(%Site{} = site, %User{} = user, funnel, target_step) do
+    date_range = ensure_date_range(:month)
+    steps = funnel.steps || []
+
+    with :ok <- authorize(site, user) do
+      step_conditions = build_funnel_conditions(steps)
+
+      sql = """
+      SELECT visitor_id
+      FROM (
+        SELECT visitor_id, windowFunnel(86400)(timestamp, #{step_conditions}) AS level
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY visitor_id
+      )
+      WHERE level = #{ClickHouse.param(target_step)}
+      LIMIT 1000
+      """
+
+      case ClickHouse.query(sql) do
+        {:ok, rows} -> {:ok, Enum.map(rows, & &1["visitor_id"])}
+        error -> error
+      end
+    end
+  end
+
+  defp build_funnel_conditions(steps) do
+    steps
+    |> Enum.map(fn step ->
+      type = step["type"] || Map.get(step, :type, "pageview")
+      value = step["value"] || Map.get(step, :value, "")
+
+      case type do
+        "pageview" -> "event_type = 'pageview' AND url_path = #{ClickHouse.param(value)}"
+        "custom_event" -> "event_type = 'custom' AND event_name = #{ClickHouse.param(value)}"
+        _ -> "1=0"
+      end
+    end)
+    |> Enum.join(", ")
+  end
+
   @doc """
   Funnel stats using ClickHouse windowFunnel().
   Steps is a list of event conditions (e.g., event_type/url_path matches).
