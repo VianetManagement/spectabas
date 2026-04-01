@@ -1891,35 +1891,52 @@ defmodule SpectabasWeb.DocsLive do
             #### Prerequisites (one-time, per platform)
 
             **Google Ads:**
-            1. Create a project in [Google Cloud Console](https://console.cloud.google.com)
-            2. Enable the Google Ads API
-            3. Create OAuth 2.0 credentials (Web application type)
-            4. Set the authorized redirect URI to `https://www.spectabas.com/auth/ad/google_ads/callback`
-            5. Get a Developer Token from [Google Ads API Center](https://ads.google.com/aw/apicenter)
-            6. In Spectabas: go to **Site Settings > Ad Platform Integrations > Google Ads > Configure** and enter the Client ID, Client Secret, and Developer Token
+
+            You need a Google Cloud project and a Google Ads developer token.
+
+            1. Sign in to [Google Cloud Console](https://console.cloud.google.com) and create a new project (or use an existing one)
+            2. Go to **APIs & Services > Library** and enable the **Google Ads API**
+            3. Go to **APIs & Services > Credentials > Create Credentials > OAuth 2.0 Client ID**
+            4. Choose **Web application** as the type
+            5. Under **Authorized redirect URIs**, add: `https://www.spectabas.com/auth/ad/google_ads/callback`
+            6. Copy the **Client ID** and **Client Secret**
+            7. Sign in to [Google Ads API Center](https://ads.google.com/aw/apicenter) and apply for a **Developer Token** (Basic access is self-approved and sufficient)
+            8. In Spectabas: go to your site's **Settings > Ad Platform Integrations > Google Ads > Configure** and paste the Client ID, Client Secret, and Developer Token
 
             **Microsoft/Bing Ads:**
-            1. Register an app in [Azure Active Directory](https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps)
-            2. Add the redirect URI: `https://www.spectabas.com/auth/ad/bing_ads/callback`
-            3. Get a Developer Token from the [Bing Ads Developer Portal](https://developers.ads.microsoft.com)
-            4. In Spectabas: go to **Site Settings > Ad Platform Integrations > Microsoft Ads > Configure** and enter the Client ID, Client Secret, and Developer Token
+
+            You need an Azure AD app registration and a Bing Ads developer token.
+
+            1. Sign in to the [Azure Portal](https://portal.azure.com) and go to **Azure Active Directory > App registrations > New registration**
+            2. Enter a name (e.g., "Spectabas Ad Sync") and select **Accounts in any organizational directory**
+            3. Under **Redirect URI**, add: `https://www.spectabas.com/auth/ad/bing_ads/callback` (type: Web)
+            4. After creating, go to **Certificates & secrets > New client secret** and copy the **Value**
+            5. Copy the **Application (client) ID** from the app's Overview page
+            6. Sign up at the [Microsoft Advertising Developer Portal](https://developers.ads.microsoft.com) and request a **Developer Token**
+            7. In Spectabas: go to your site's **Settings > Ad Platform Integrations > Microsoft Ads > Configure** and paste the Client ID, Client Secret, and Developer Token
 
             **Meta/Facebook Ads:**
-            1. Create an app at [Meta for Developers](https://developers.facebook.com)
-            2. Add Facebook Login product, set redirect URI to `https://www.spectabas.com/auth/ad/meta_ads/callback`
-            3. Request the `ads_read` permission
-            4. In Spectabas: go to **Site Settings > Ad Platform Integrations > Meta Ads > Configure** and enter the App ID and App Secret
 
-            > **All credentials are encrypted** and stored per-site. No environment variables needed. Each site can have its own OAuth app or share one.
+            You need a Meta developer app with the Marketing API.
+
+            1. Sign in to [Meta for Developers](https://developers.facebook.com) and click **Create App**
+            2. Choose **Business** as the app type
+            3. Go to **Add Products > Facebook Login > Set Up**
+            4. Under **Valid OAuth Redirect URIs**, add: `https://www.spectabas.com/auth/ad/meta_ads/callback`
+            5. Go to **App Settings > Basic** and copy the **App ID** and **App Secret**
+            6. Go to **App Review > Permissions and Features** and request the **ads_read** permission (required for accessing ad insights)
+            7. In Spectabas: go to your site's **Settings > Ad Platform Integrations > Meta Ads > Configure** and paste the App ID and App Secret
+
+            > **All credentials are encrypted** at rest using AES-256-GCM and stored per-site in the database. No environment variables or server access needed. Each site can use its own OAuth apps or share credentials across sites.
 
             #### Connecting an Account
 
             1. Go to your site's **Settings** page
             2. Scroll to **Ad Platform Integrations**
-            3. Click **Configure** to enter your OAuth app credentials
-            4. Click **Save Credentials**
-            5. Click **Connect** to start the OAuth flow
-            4. Complete the OAuth authorization flow (you'll be redirected to the ad platform to grant access)
+            3. Click **Configure** on the platform you want to set up
+            4. Enter your OAuth credentials and click **Save Credentials**
+            5. Click **Connect** — you'll be redirected to the ad platform to authorize access
+            6. After granting access, you'll be returned to Spectabas and the card will show "Connected"
             5. Once connected, the card shows "Connected" with the account name and last sync time
 
             ### What Gets Synced

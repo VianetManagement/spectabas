@@ -555,71 +555,110 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
 
                 <%!-- Credential Configuration Form --%>
                 <%= if @configuring_platform == platform do %>
-                  <form phx-submit="save_ad_credentials" class="mt-3 space-y-2">
+                  <form
+                    phx-submit="save_ad_credentials"
+                    class="mt-4 space-y-3 border-t border-gray-100 pt-3"
+                  >
                     <input type="hidden" name="platform" value={platform} />
                     <% creds = Spectabas.AdIntegrations.Credentials.get_for_platform(@site, platform) %>
+                    <p class="text-xs text-gray-500">
+                      <%= case platform do %>
+                        <% "google_ads" -> %>
+                          Get credentials from
+                          <a
+                            href="https://console.cloud.google.com/apis/credentials"
+                            target="_blank"
+                            class="text-indigo-600 underline"
+                          >
+                            Google Cloud Console
+                          </a>
+                          and your developer token from <a
+                            href="https://ads.google.com/aw/apicenter"
+                            target="_blank"
+                            class="text-indigo-600 underline"
+                          >Google Ads API Center</a>.
+                        <% "bing_ads" -> %>
+                          Register an app in
+                          <a
+                            href="https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps"
+                            target="_blank"
+                            class="text-indigo-600 underline"
+                          >
+                            Azure Portal
+                          </a>
+                          and get your developer token from <a
+                            href="https://developers.ads.microsoft.com"
+                            target="_blank"
+                            class="text-indigo-600 underline"
+                          >Microsoft Advertising</a>.
+                        <% "meta_ads" -> %>
+                          Create an app at <a
+                            href="https://developers.facebook.com/apps"
+                            target="_blank"
+                            class="text-indigo-600 underline"
+                          >Meta for Developers</a>. See
+                          <a href="/docs/admin#ad-integrations" class="text-indigo-600 underline">
+                            setup guide
+                          </a>
+                          for details.
+                      <% end %>
+                    </p>
                     <%= if platform in ["google_ads", "bing_ads"] do %>
                       <div>
-                        <label class="block text-[10px] font-medium text-gray-500">Client ID</label>
+                        <label class="block text-xs font-medium text-gray-700">Client ID</label>
                         <input
                           type="text"
                           name="client_id"
                           value={creds["client_id"] || ""}
-                          class="mt-0.5 block w-full rounded border-gray-300 text-xs px-2 py-1.5"
-                          placeholder="OAuth Client ID"
+                          class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                          placeholder="e.g. 123456789.apps.googleusercontent.com"
                         />
                       </div>
                       <div>
-                        <label class="block text-[10px] font-medium text-gray-500">
-                          Client Secret
-                        </label>
+                        <label class="block text-xs font-medium text-gray-700">Client Secret</label>
                         <input
                           type="password"
                           name="client_secret"
                           value={creds["client_secret"] || ""}
-                          class="mt-0.5 block w-full rounded border-gray-300 text-xs px-2 py-1.5"
-                          placeholder="OAuth Client Secret"
+                          class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                          placeholder="OAuth client secret"
                         />
                       </div>
                       <div>
-                        <label class="block text-[10px] font-medium text-gray-500">
-                          Developer Token
-                        </label>
+                        <label class="block text-xs font-medium text-gray-700">Developer Token</label>
                         <input
                           type="password"
                           name="developer_token"
                           value={creds["developer_token"] || ""}
-                          class="mt-0.5 block w-full rounded border-gray-300 text-xs px-2 py-1.5"
-                          placeholder="API Developer Token"
+                          class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                          placeholder="API developer token"
                         />
                       </div>
                     <% else %>
                       <div>
-                        <label class="block text-[10px] font-medium text-gray-500">App ID</label>
+                        <label class="block text-xs font-medium text-gray-700">App ID</label>
                         <input
                           type="text"
                           name="app_id"
                           value={creds["app_id"] || ""}
-                          class="mt-0.5 block w-full rounded border-gray-300 text-xs px-2 py-1.5"
-                          placeholder="Meta App ID"
+                          class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                          placeholder="e.g. 1234567890"
                         />
                       </div>
                       <div>
-                        <label class="block text-[10px] font-medium text-gray-500">
-                          App Secret
-                        </label>
+                        <label class="block text-xs font-medium text-gray-700">App Secret</label>
                         <input
                           type="password"
                           name="app_secret"
                           value={creds["app_secret"] || ""}
-                          class="mt-0.5 block w-full rounded border-gray-300 text-xs px-2 py-1.5"
-                          placeholder="Meta App Secret"
+                          class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                          placeholder="Meta app secret"
                         />
                       </div>
                     <% end %>
                     <button
                       type="submit"
-                      class="w-full px-2 py-1 text-xs font-medium rounded bg-gray-800 text-white hover:bg-gray-700"
+                      class="w-full inline-flex justify-center items-center px-4 py-2 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm"
                     >
                       Save Credentials
                     </button>
