@@ -21,7 +21,7 @@ Spectabas is a multi-tenant, privacy-first web analytics SaaS platform built wit
 2. Script sends beacon to `/c/e?s=<public_key>` (obfuscated endpoints)
 3. CollectController validates payload, checks origin, resolves site by public key
 4. Ingest.process enriches event (IP geo, UA parsing, session resolution, intent classification, visitor dedup)
-5. IngestBuffer batches events (1000 batch size), async flushes to ClickHouse via dedicated connection pool (100 connections)
+5. IngestBuffer batches events (500 batch size), async flushes to ClickHouse via dedicated connection pool (100 connections)
 6. Dashboard LiveViews query ClickHouse events table directly
 
 ### IP Enrichment Pipeline
@@ -197,7 +197,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Cross-linking** — click any dimension value to navigate to filtered views across analytics pages
 - **Mobile responsiveness** — scrollable tables, collapsible mobile nav bar
 - **Accessible top nav** — WCAG AA contrast compliance
-- **Documentation page** — comprehensive docs at `/docs`
+- **Documentation pages** — docs split into `/docs` (index), `/docs/getting-started`, `/docs/dashboard`, `/docs/api`, `/docs/admin` with cross-category search
 - **Changelog** — versioned changelog at `/admin/changelog`, updated on every push
 
 ## Important Patterns
@@ -227,7 +227,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Origin validation**: Allows any subdomain of the parent domain (e.g., `app.example.com` is allowed when analytics domain is `b.example.com`). Cross-domain sites list is for entirely separate domains.
 - **API token scopes**: Enforce scope checks in API controllers. `read:stats` for GET stats/pages/sources, `read:visitors` for visitor log, `write:events` for event collection, `write:identify` for server-side identify, `admin:sites` for site management. Tokens can be restricted to specific site IDs.
 - **API access logging**: Every API call is logged (endpoint, method, request body, response status, response body). Stored in PostgreSQL with 30-day retention via Oban cleanup worker. Admin UI at `/admin/api-logs` with detail modal.
-- **High-throughput ingest**: Async flush, 1000 batch size, ETS visitor cache, dedicated ClickHouse connection pool (100 connections), per-site rate limiting (1000 events/sec).
+- **High-throughput ingest**: Async flush, 500 batch size, ETS visitor cache, dedicated ClickHouse connection pool (100 connections), per-site rate limiting (1000 events/sec).
 - **occurred_at backdating**: All events support optional `occurred_at` field (Unix UTC seconds) to backdate events up to 7 days.
 - **Ecommerce email association**: Transaction API accepts optional `email` field. If `visitor_id` + `email` both provided, identifies the visitor. If only `email`, looks up by email. Orders appear on visitor profile pages.
 - **RUM collection**: Tracker sends `_rum` (nav timing) and `_cwv` (Core Web Vitals) custom events. Uses `performance.getEntriesByType("navigation")` with `performance.timing` fallback. IMPORTANT: PerformanceNavigationTiming uses `nav.startTime` (always 0) for the navigation baseline — NOT `nav.navigationStart` which only exists on the deprecated `performance.timing`. Queries use `quantileIf` to exclude zeros. ClickHouse `quantileIf` returns `nan` when no rows match — `parse_rows` sanitizes `nan`→`null` before JSON parsing.
