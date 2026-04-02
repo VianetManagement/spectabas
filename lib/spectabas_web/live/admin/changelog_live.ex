@@ -63,6 +63,11 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Bumped Meta/Facebook Graph API from v21.0 to latest v25.0. Bing Ads v13 confirmed current."
          },
          %{
+           title: "Feature: Google Ads account picker",
+           description:
+             "When connecting Google Ads with multiple accounts under a manager (MCC), shows an account selection page with descriptive names instead of auto-picking the first one."
+         },
+         %{
            title: "Fix: Full ad platform adapter audit",
            description:
              "Google Ads: parse string metric values (costMicros, clicks, impressions) instead of assuming integers. " <>

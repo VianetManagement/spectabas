@@ -166,7 +166,7 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleAds do
   end
   defp parse_int(_), do: 0
 
-  @doc "Fetch accessible customer IDs after OAuth. Returns list of %{id, name}."
+  @doc "Fetch accessible customer IDs after OAuth. Returns list of %{id, descriptive_name}."
   def list_accessible_customers(access_token, developer_token) do
     url = "#{@api_base}/customers:listAccessibleCustomers"
 
@@ -178,11 +178,13 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleAds do
          ) do
       {:ok, %{status: 200, body: %{"resourceNames" => names}}} ->
         customers =
-          Enum.map(names, fn name ->
-            # "customers/1234567890" -> "1234567890"
+          names
+          |> Enum.map(fn name ->
             id = String.replace_prefix(name, "customers/", "")
-            %{id: id, name: id}
+            descriptive = fetch_customer_name(id, access_token, developer_token)
+            %{id: id, name: descriptive || id}
           end)
+          |> Enum.reject(&(&1.name == ""))
 
         {:ok, customers}
 
@@ -191,6 +193,30 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleAds do
 
       {:error, reason} ->
         {:error, inspect(reason)}
+    end
+  end
+
+  defp fetch_customer_name(customer_id, access_token, developer_token) do
+    url = "#{@api_base}/customers/#{customer_id}/googleAds:searchStream"
+
+    case Req.post(url,
+           json: %{query: "SELECT customer.id, customer.descriptive_name FROM customer LIMIT 1"},
+           headers: [
+             {"authorization", "Bearer #{access_token}"},
+             {"developer-token", developer_token},
+             {"login-customer-id", customer_id}
+           ]
+         ) do
+      {:ok, %{status: 200, body: body}} when is_list(body) ->
+        body
+        |> Enum.find_value(fn batch ->
+          batch
+          |> Map.get("results", [])
+          |> Enum.find_value(fn r -> get_in(r, ["customer", "descriptiveName"]) end)
+        end)
+
+      _ ->
+        nil
     end
   end
 

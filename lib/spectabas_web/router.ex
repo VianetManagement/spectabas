@@ -105,6 +105,8 @@ defmodule SpectabasWeb.Router do
     end
 
     post "/users/update-password", UserSessionController, :update_password
+    get "/auth/ad/google_ads/pick_account", AdIntegrationController, :pick_account
+    post "/auth/ad/google_ads/select_account", AdIntegrationController, :select_account
     get "/auth/ad/:platform/callback", AdIntegrationController, :callback
   end
 
