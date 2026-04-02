@@ -29,7 +29,7 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
        |> assign(:user, user)
        |> assign(:date_range, "30d")
        |> assign(:group_by, "source")
-       |> assign(:touch, "first")
+       |> assign(:touch, "last")
        |> assign(:utm_tabs, @utm_tabs)
        |> load_data()}
     end
@@ -85,7 +85,7 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
 
     # Revenue attributed via click IDs (gclid/msclkid/fbclid)
     ad_revenue =
-      case Analytics.ad_revenue_by_platform(site, user, period) do
+      case Analytics.ad_revenue_by_platform(site, user, period, touch: touch) do
         {:ok, data} -> data
         _ -> []
       end

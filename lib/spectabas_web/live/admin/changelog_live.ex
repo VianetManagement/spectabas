@@ -63,6 +63,12 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Bumped Meta/Facebook Graph API from v21.0 to latest v25.0. Bing Ads v13 confirmed current."
          },
          %{
+           title: "Fix: Revenue Attribution defaults to last-touch, click ID respects toggle",
+           description:
+             "Industry standard: last-touch attribution as default (was first-touch). " <>
+               "Click ID revenue query now uses argMax/argMin to respect the First Touch / Last Touch toggle."
+         },
+         %{
            title: "Feature: Click ID attribution (gclid/msclkid/fbclid)",
            description:
              "Tracker now captures ad platform click IDs from landing URLs. Stored in ClickHouse for platform-level ROAS. " <>

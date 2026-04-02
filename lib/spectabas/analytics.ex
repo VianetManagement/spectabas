@@ -1248,8 +1248,10 @@ defmodule Spectabas.Analytics do
   end
 
   @doc "Revenue attributed to ad platforms via click IDs (gclid/msclkid/fbclid)."
-  def ad_revenue_by_platform(%Site{} = site, %User{} = user, date_range) do
+  def ad_revenue_by_platform(%Site{} = site, %User{} = user, date_range, opts \\ []) do
     date_range = ensure_date_range(date_range)
+    touch = Keyword.get(opts, :touch, "last")
+    agg_fn = if touch == "last", do: "argMax", else: "argMin"
 
     with :ok <- authorize(site, user) do
       sql = """
@@ -1259,7 +1261,7 @@ defmodule Spectabas.Analytics do
         countDistinct(ec.order_id) AS orders,
         sum(ec.revenue) AS total_revenue
       FROM (
-        SELECT visitor_id, any(click_id_type) AS click_id_type
+        SELECT visitor_id, #{agg_fn}(click_id_type, timestamp) AS click_id_type
         FROM events
         WHERE site_id = #{ClickHouse.param(site.id)}
           AND click_id != '' AND click_id_type != ''
