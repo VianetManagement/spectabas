@@ -1483,7 +1483,7 @@ defmodule Spectabas.Analytics do
       # first click event and first purchase per visitor, then aggregate by group
       sql = """
       SELECT
-        #{group_col} AS #{result_col},
+        group_val AS #{result_col},
         count() AS converters,
         round(avg(days_to_convert), 1) AS avg_days,
         round(median(days_to_convert), 1) AS median_days,
@@ -1511,7 +1511,7 @@ defmodule Spectabas.Analytics do
           AND e.timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
         GROUP BY e.visitor_id
       )
-      GROUP BY #{result_col}
+      GROUP BY group_val
       ORDER BY converters DESC
       LIMIT 50
       """
@@ -1579,7 +1579,13 @@ defmodule Spectabas.Analytics do
         SELECT
           session_id,
           any(visitor_id) AS vid,
-          arrayStringConcat(arraySlice(groupArray(url_path ORDER BY timestamp ASC), 1, 5), ' → ') AS journey,
+          arrayStringConcat(
+            arraySlice(
+              arrayMap(x -> x.2, arraySort(x -> x.1, arrayZip(groupArray(timestamp), groupArray(url_path)))),
+              1, 5
+            ),
+            ' → '
+          ) AS journey,
           max(visitor_id IN (
             SELECT DISTINCT visitor_id FROM ecommerce_events
             WHERE site_id = #{ClickHouse.param(site.id)}
