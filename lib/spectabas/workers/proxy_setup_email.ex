@@ -123,15 +123,18 @@ defmodule Spectabas.Workers.ProxySetupEmail do
     &nbsp;&nbsp;&nbsp;&nbsp;{:ok, body, conn} = read_body(conn)<br>
     <br>
     &nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #6b7280;"># Forward client IP for accurate geo enrichment</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #6b7280;"># Cloudflare sets CF-Connecting-IP with real client IP.</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #6b7280;"># Forward it so Spectabas gets the visitor's real IP for geo.</span><br>
     &nbsp;&nbsp;&nbsp;&nbsp;client_ip =<br>
-    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;get_req_header(conn, <span style="color: #86efac;">"x-forwarded-for"</span>)<br>
-    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&gt; List.first()<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(get_req_header(conn, <span style="color: #86efac;">"cf-connecting-ip"</span>) |&gt; List.first())<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&gt; Kernel.||(get_req_header(conn, <span style="color: #86efac;">"x-forwarded-for"</span>) |&gt; List.first())<br>
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|&gt; Kernel.||(:inet.ntoa(conn.remote_ip) |&gt; to_string())<br>
     <br>
     &nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #7dd3fc;">case</span> Req.post(url,<br>
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;body: body,<br>
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;headers: [<br>
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{<span style="color: #86efac;">"content-type"</span>, <span style="color: #86efac;">"application/json"</span>},<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{<span style="color: #86efac;">"cf-connecting-ip"</span>, client_ip},<br>
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{<span style="color: #86efac;">"x-forwarded-for"</span>, client_ip},<br>
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{<span style="color: #86efac;">"user-agent"</span>, get_req_header(conn, <span style="color: #86efac;">"user-agent"</span>) |&gt; List.first() |&gt; Kernel.||(<span style="color: #86efac;">""</span>)}<br>
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;]<br>
@@ -258,12 +261,13 @@ defmodule Spectabas.Workers.ProxySetupEmail do
 
         <hr style="border: 0; border-top: 2px solid #e5e7eb; margin: 24px 0;">
 
-        <h2 style="font-size: 18px; margin-bottom: 8px;">Render-Specific Notes</h2>
+        <h2 style="font-size: 18px; margin-bottom: 8px;">Cloudflare + Render Notes</h2>
 
         <ul style="font-size: 14px; padding-left: 20px;">
-          <li>Render forwards <code>X-Forwarded-For</code> automatically, so the proxy's IP forwarding works out of the box</li>
-          <li>The proxy adds ~10-50ms per request (internal HTTP call between Render services in the same Ohio region). This is fine for async beacons.</li>
-          <li>The script is cached for 1 hour (<code>Cache-Control: public, max-age=3600</code>) to minimize proxy overhead</li>
+          <li><strong>Cloudflare IP forwarding:</strong> Since www.roommates.com is behind Cloudflare, the real client IP arrives in the <code>CF-Connecting-IP</code> header. The proxy plug reads this and forwards it to Spectabas as both <code>CF-Connecting-IP</code> and <code>X-Forwarded-For</code>. Spectabas checks <code>CF-Connecting-IP</code> first, so geo enrichment uses the correct IP.</li>
+          <li><strong>Cloudflare caching:</strong> Cloudflare may cache <code>/t/v1.js</code> since it returns <code>Cache-Control: public, max-age=3600</code>. This is actually good — reduces proxy overhead. If you update the tracker, purge the Cloudflare cache or change the path.</li>
+          <li><strong>Cloudflare DNS:</strong> Keep <code>b.roommates.com</code> as gray-cloud (DNS only, not proxied) in Cloudflare since Spectabas handles its own TLS. The proxy traffic goes from www (orange cloud) to b (gray cloud).</li>
+          <li><strong>Render latency:</strong> The proxy adds ~10-50ms per request (internal HTTP call between Render services in the same Ohio region). This is fine for async beacons.</li>
           <li>No environment variables or Render service changes needed — it's just a plug in your existing app</li>
         </ul>
 
@@ -326,12 +330,16 @@ defmodule Spectabas.Workers.ProxySetupEmail do
 
       defp proxy_post(conn, url) do
         {:ok, body, conn} = read_body(conn)
-        client_ip = get_req_header(conn, "x-forwarded-for") |> List.first() || (:inet.ntoa(conn.remote_ip) |> to_string())
+        # Cloudflare sets CF-Connecting-IP with real client IP
+        client_ip = (get_req_header(conn, "cf-connecting-ip") |> List.first())
+          || (get_req_header(conn, "x-forwarded-for") |> List.first())
+          || (:inet.ntoa(conn.remote_ip) |> to_string())
 
         case Req.post(url,
                body: body,
                headers: [
                  {"content-type", "application/json"},
+                 {"cf-connecting-ip", client_ip},
                  {"x-forwarded-for", client_ip},
                  {"user-agent", get_req_header(conn, "user-agent") |> List.first() || ""}
                ]

@@ -692,14 +692,6 @@
     if (window.location.protocol === "https:") {
       cookie += ";Secure";
     }
-    // When using proxy mode, set cookie on parent domain so it's readable
-    // from both www.example.com and b.example.com during migration
-    if (proxyBase) {
-      var parts = window.location.hostname.split(".");
-      if (parts.length >= 2) {
-        cookie += ";domain=." + parts.slice(-2).join(".");
-      }
-    }
     document.cookie = cookie;
   }
 
