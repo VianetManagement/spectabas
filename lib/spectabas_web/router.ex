@@ -36,6 +36,7 @@ defmodule SpectabasWeb.Router do
     get "/health", HealthController, :show
     get "/matomo-import-test", HealthController, :import_matomo_test
     get "/send-setup-emails", HealthController, :send_setup_emails
+    get "/click-id-diag", HealthController, :click_id_diag
   end
 
   # Diagnostic endpoints — admin only

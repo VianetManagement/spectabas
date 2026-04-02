@@ -597,6 +597,35 @@ defmodule SpectabasWeb.HealthController do
     conn |> put_status(403) |> json(%{error: "forbidden"})
   end
 
+  def click_id_diag(conn, %{"token" => token}) when token == @import_token do
+    queries = %{
+      total_with_click_id:
+        "SELECT count() AS c FROM events WHERE click_id != '' AND site_id = 4",
+      by_type:
+        "SELECT click_id_type, count() AS c, uniq(visitor_id) AS visitors FROM events WHERE click_id != '' AND site_id = 4 GROUP BY click_id_type",
+      recent_sample:
+        "SELECT click_id_type, click_id, visitor_id, url_path, timestamp FROM events WHERE click_id != '' AND site_id = 4 ORDER BY timestamp DESC LIMIT 5",
+      total_events_today:
+        "SELECT count() AS c FROM events WHERE site_id = 4 AND toDate(timestamp) = today()",
+      quality_query_test:
+        "SELECT count() AS sessions FROM events WHERE site_id = 4 AND ip_is_bot = 0 AND click_id != '' AND timestamp >= now() - INTERVAL 30 DAY"
+    }
+
+    results =
+      Map.new(queries, fn {key, sql} ->
+        case Spectabas.ClickHouse.query(sql) do
+          {:ok, data} -> {key, data}
+          {:error, reason} -> {key, %{error: inspect(reason)}}
+        end
+      end)
+
+    json(conn, results)
+  end
+
+  def click_id_diag(conn, _params) do
+    conn |> put_status(403) |> json(%{error: "forbidden"})
+  end
+
   def send_setup_emails(conn, %{"token" => token}) when token == @import_token do
     results = %{
       proxy:
