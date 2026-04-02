@@ -56,6 +56,11 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
            title: "Fix: Google Ads API version v17 → v23",
            description:
              "Google Ads API v17 was sunset and returning 404. Updated to current v23."
+         },
+         %{
+           title: "Chore: Meta Ads Graph API v21.0 → v25.0",
+           description:
+             "Bumped Meta/Facebook Graph API from v21.0 to latest v25.0. Bing Ads v13 confirmed current."
          }
        ]},
       {"v4.3.0 — 2026-04-01 UTC",

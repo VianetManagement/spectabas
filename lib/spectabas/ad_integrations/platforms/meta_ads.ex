@@ -3,8 +3,8 @@ defmodule Spectabas.AdIntegrations.Platforms.MetaAds do
 
   require Logger
 
-  @graph_url "https://graph.facebook.com/v21.0"
-  @authorize_url "https://www.facebook.com/v21.0/dialog/oauth"
+  @graph_url "https://graph.facebook.com/v25.0"
+  @authorize_url "https://www.facebook.com/v25.0/dialog/oauth"
 
   alias Spectabas.AdIntegrations.Credentials
 
