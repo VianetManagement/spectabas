@@ -1059,9 +1059,9 @@ defmodule SpectabasWeb.DocsLive do
             body: """
             Visitor locations with drill-down navigation:
 
-            1. **Country level** — click a country to see its regions/states
-            2. **Region level** — click a region to see cities
-            3. **City level** — most granular view
+            - **Country level** — click a country to see its regions/states
+            - **Region level** — click a region to see cities
+            - **City level** — most granular view
 
             Countries are shown with full names and ISO codes (e.g., "United States (US)").
 
@@ -1389,10 +1389,10 @@ defmodule SpectabasWeb.DocsLive do
 
             ### How It Works
 
-            1. A visitor browses your site. The Spectabas tracker script sets a `_sab` cookie with a unique visitor ID.
-            2. When the visitor logs in, your server reads the `_sab` cookie from the HTTP request.
-            3. Your server sends a POST to Spectabas with the cookie value + the user's email.
-            4. Spectabas links the email to the anonymous visitor record, so you can see who that visitor is in the visitor log.
+            - A visitor browses your site. The Spectabas tracker script sets a `_sab` cookie with a unique visitor ID.
+            - When the visitor logs in, your server reads the `_sab` cookie from the HTTP request.
+            - Your server sends a POST to Spectabas with the cookie value + the user's email.
+            - Spectabas links the email to the anonymous visitor record, so you can see who that visitor is in the visitor log.
 
             ### Example (Elixir/Phoenix)
 
@@ -2037,131 +2037,144 @@ defmodule SpectabasWeb.DocsLive do
 
             ### How It Works
 
-            1. An admin connects each ad account via OAuth2 from **Site Settings > Ad Platform Integrations**
-            2. Spectabas syncs daily campaign spend data (spend, clicks, impressions) every 6 hours
-            3. The **Revenue Attribution** page joins ad spend with purchase data to calculate ROAS per campaign
+            - An admin connects each ad account via OAuth2 from **Site Settings > Ad Platform Integrations**
+            - Spectabas syncs daily campaign spend data (spend, clicks, impressions) every 6 hours
+            - The **Revenue Attribution** page joins ad spend with purchase data to calculate ROAS per campaign
 
             ### Setting Up
 
-            #### Prerequisites (one-time, per platform)
+            ### Google Ads (3 credentials: Client ID, Client Secret, Developer Token)
 
-            **Google Ads Setup (3 credentials needed: Client ID, Client Secret, Developer Token)**
+            **Step 1: Create a Google Cloud project**
 
-            *Step 1: Create a Google Cloud project*
-            1. Go to [Google Cloud Console](https://console.cloud.google.com)
-            2. Click the project dropdown at the top left, then **New Project**
-            3. Name it something like "Spectabas Analytics" and click **Create**
-            4. Make sure the new project is selected in the dropdown
+            - Go to Google Cloud Console (`console.cloud.google.com`)
+            - Click the project dropdown at the top left, then **New Project**
+            - Name it something like "Spectabas Analytics" and click **Create**
+            - Make sure the new project is selected in the dropdown
 
-            *Step 2: Enable the Google Ads API*
-            1. In the left sidebar, go to **APIs & Services > Library**
-            2. Search for "Google Ads API"
-            3. Click on it and press **Enable**
+            **Step 2: Enable the Google Ads API**
 
-            *Step 3: Create OAuth credentials*
-            1. Go to **APIs & Services > Credentials** in the left sidebar
-            2. Click **+ Create Credentials > OAuth 2.0 Client ID**
-            3. If prompted, configure the OAuth consent screen first (choose "External", fill in app name and email)
-            4. For Application type, select **Web application**
-            5. Name it "Spectabas"
-            6. Under **Authorized redirect URIs**, click **Add URI** and enter: `https://www.spectabas.com/auth/ad/google_ads/callback`
-            7. Click **Create**
-            8. A dialog shows your **Client ID** and **Client Secret** — copy both
+            - In the left sidebar, go to **APIs & Services > Library**
+            - Search for "Google Ads API"
+            - Click on it and press **Enable**
 
-            *Step 4: Get a Developer Token*
-            1. Sign in to [Google Ads](https://ads.google.com) with the account that manages your ad campaigns
-            2. Go to **Tools & Settings > Setup > API Center** (or visit [ads.google.com/aw/apicenter](https://ads.google.com/aw/apicenter) directly)
-            3. If you don't have a developer token yet, click **Apply for access**
-            4. Choose **Basic access** (self-approved, sufficient for Spectabas)
-            5. Copy your **Developer Token**
+            **Step 3: Create OAuth credentials**
 
-            *Step 5: Enter in Spectabas*
-            1. Go to your site's **Settings** page
-            2. Scroll to **Ad Platform Integrations > Google Ads**
-            3. Click **Configure**
-            4. Paste the Client ID, Client Secret, and Developer Token
-            5. Click **Save Credentials**
-            6. Click **Connect** to authorize
+            - Go to **APIs & Services > Credentials** in the left sidebar
+            - Click **+ Create Credentials > OAuth 2.0 Client ID**
+            - If prompted, configure the OAuth consent screen first (choose "External", fill in app name and email)
+            - For Application type, select **Web application**
+            - Name it "Spectabas"
+            - Under **Authorized redirect URIs**, click **Add URI** and enter: `https://www.spectabas.com/auth/ad/google_ads/callback`
+            - Click **Create**
+            - A dialog shows your **Client ID** and **Client Secret** — copy both
 
-            ---
+            **Step 4: Get a Developer Token**
 
-            **Microsoft/Bing Ads Setup (3 credentials needed: Client ID, Client Secret, Developer Token)**
+            - Sign in to Google Ads (`ads.google.com`) with the account that manages your ad campaigns
+            - Go to **Tools & Settings > Setup > API Center** (or visit `ads.google.com/aw/apicenter` directly)
+            - If you don't have a developer token yet, click **Apply for access**
+            - Choose **Basic access** (self-approved, sufficient for Spectabas)
+            - Copy your **Developer Token**
 
-            *Step 1: Register an app in Azure*
-            1. Go to the [Azure Portal](https://portal.azure.com)
-            2. Search for "App registrations" in the top search bar and click it
-            3. Click **+ New registration**
-            4. Name: "Spectabas Ad Sync"
-            5. Supported account types: **Accounts in any organizational directory** (Multitenant)
-            6. Redirect URI: select **Web** and enter `https://www.spectabas.com/auth/ad/bing_ads/callback`
-            7. Click **Register**
+            **Step 5: Enter in Spectabas**
 
-            *Step 2: Get the Client ID*
-            1. On the app's **Overview** page, copy the **Application (client) ID** — this is your Client ID
-
-            *Step 3: Create a Client Secret*
-            1. In the left sidebar, click **Certificates & secrets**
-            2. Click **+ New client secret**
-            3. Enter a description (e.g., "Spectabas") and choose an expiry (24 months recommended)
-            4. Click **Add**
-            5. Copy the **Value** (not the Secret ID) — this is your Client Secret. It's only shown once.
-
-            *Step 4: Get a Developer Token*
-            1. Go to the [Microsoft Advertising Developer Portal](https://developers.ads.microsoft.com)
-            2. Sign in with your Microsoft Advertising account
-            3. Request a **Developer Token** if you don't have one
-            4. Copy the token
-
-            *Step 5: Enter in Spectabas*
-            1. Go to your site's **Settings > Ad Platform Integrations > Microsoft Ads**
-            2. Click **Configure**
-            3. Paste the Client ID, Client Secret, and Developer Token
-            4. Click **Save Credentials**, then **Connect**
+            - Go to your site's **Settings** page
+            - Scroll to **Ad Platform Integrations > Google Ads**
+            - Click **Configure**
+            - Paste the Client ID, Client Secret, and Developer Token
+            - Click **Save Credentials**
+            - Click **Connect** to authorize
 
             ---
 
-            **Meta/Facebook Ads Setup (2 credentials needed: App ID, App Secret)**
+            ### Microsoft/Bing Ads (3 credentials: Client ID, Client Secret, Developer Token)
 
-            *Step 1: Create a Meta Developer App*
-            1. Go to [Meta for Developers](https://developers.facebook.com) and log in
-            2. Click **My Apps** in the top right, then **Create App**
-            3. Select **Other** for "What do you want your app to do?"
-            4. Select **Business** as the app type
-            5. Enter an app name (e.g., "Spectabas Analytics") and click **Create App**
+            **Step 1: Register an app in Azure**
 
-            *Step 2: Set up Facebook Login*
-            1. On the app dashboard, find **Facebook Login** and click **Set Up**
-            2. Choose **Web**
-            3. In the left sidebar, go to **Facebook Login > Settings**
-            4. Under **Valid OAuth Redirect URIs**, add: `https://www.spectabas.com/auth/ad/meta_ads/callback`
-            5. Click **Save Changes**
+            - Go to Azure Portal (`portal.azure.com`)
+            - Search for "App registrations" in the top search bar and click it
+            - Click **+ New registration**
+            - Name: "Spectabas Ad Sync"
+            - Supported account types: **Accounts in any organizational directory** (Multitenant)
+            - Redirect URI: select **Web** and enter `https://www.spectabas.com/auth/ad/bing_ads/callback`
+            - Click **Register**
 
-            *Step 3: Get App ID and Secret*
-            1. In the left sidebar, go to **App Settings > Basic**
-            2. Your **App ID** is shown at the top
-            3. Click **Show** next to **App Secret** and copy it
+            **Step 2: Get the Client ID**
 
-            *Step 4: Request ads_read permission*
-            1. In the left sidebar, go to **App Review > Permissions and Features**
-            2. Search for **ads_read** and click **Request** (this allows reading ad insights data)
-            3. Follow the review process (for Business-type apps with your own ad account, this is typically auto-approved)
+            - On the app's **Overview** page, copy the **Application (client) ID** — this is your Client ID
 
-            *Step 5: Enter in Spectabas*
-            1. Go to your site's **Settings > Ad Platform Integrations > Meta Ads**
-            2. Click **Configure**
-            3. Paste the App ID and App Secret
-            4. Click **Save Credentials**, then **Connect**
+            **Step 3: Create a Client Secret**
+
+            - In the left sidebar, click **Certificates & secrets**
+            - Click **+ New client secret**
+            - Enter a description (e.g., "Spectabas") and choose an expiry (24 months recommended)
+            - Click **Add**
+            - Copy the **Value** (not the Secret ID) — this is your Client Secret. It's only shown once.
+
+            **Step 4: Get a Developer Token**
+
+            - Go to Microsoft Advertising Developer Portal (`developers.ads.microsoft.com`)
+            - Sign in with your Microsoft Advertising account
+            - Request a **Developer Token** if you don't have one
+            - Copy the token
+
+            **Step 5: Enter in Spectabas**
+
+            - Go to your site's **Settings > Ad Platform Integrations > Microsoft Ads**
+            - Click **Configure**
+            - Paste the Client ID, Client Secret, and Developer Token
+            - Click **Save Credentials**, then **Connect**
+
+            ---
+
+            ### Meta/Facebook Ads (2 credentials: App ID, App Secret)
+
+            **Step 1: Create a Meta Developer App**
+
+            - Go to Meta for Developers (`developers.facebook.com`) and log in
+            - Click **My Apps** in the top right, then **Create App**
+            - Select **Other** for "What do you want your app to do?"
+            - Select **Business** as the app type
+            - Enter an app name (e.g., "Spectabas Analytics") and click **Create App**
+
+            **Step 2: Set up Facebook Login**
+
+            - On the app dashboard, find **Facebook Login** and click **Set Up**
+            - Choose **Web**
+            - In the left sidebar, go to **Facebook Login > Settings**
+            - Under **Valid OAuth Redirect URIs**, add: `https://www.spectabas.com/auth/ad/meta_ads/callback`
+            - Click **Save Changes**
+
+            **Step 3: Get App ID and Secret**
+
+            - In the left sidebar, go to **App Settings > Basic**
+            - Your **App ID** is shown at the top
+            - Click **Show** next to **App Secret** and copy it
+
+            **Step 4: Request ads_read permission**
+
+            - In the left sidebar, go to **App Review > Permissions and Features**
+            - Search for **ads_read** and click **Request** (this allows reading ad insights data)
+            - Follow the review process (for Business-type apps with your own ad account, this is typically auto-approved)
+
+            **Step 5: Enter in Spectabas**
+
+            - Go to your site's **Settings > Ad Platform Integrations > Meta Ads**
+            - Click **Configure**
+            - Paste the App ID and App Secret
+            - Click **Save Credentials**, then **Connect**
 
             > **All credentials are encrypted** at rest using AES-256-GCM and stored per-site in the database. No environment variables or server access needed. Each site can use its own OAuth apps or share credentials across sites.
 
-            #### Connecting an Account
+            ### Connecting an Account
 
-            1. Go to your site's **Settings** page
-            2. Scroll to **Ad Platform Integrations**
-            3. Click **Configure** on the platform you want to set up
-            4. Enter your OAuth credentials and click **Save Credentials**
-            5. Click **Connect** — you'll be redirected to the ad platform to authorize access
-            6. After granting access, you'll be returned to Spectabas and the card will show "Connected" with the account name and last sync time
+            - Go to your site's **Settings** page
+            - Scroll to **Ad Platform Integrations**
+            - Click **Configure** on the platform you want to set up
+            - Enter your OAuth credentials and click **Save Credentials**
+            - Click **Connect** — you'll be redirected to the ad platform to authorize access
+            - After granting access, you'll be returned to Spectabas and the card will show "Connected" with the account name and last sync time
 
             ### What Gets Synced
 
@@ -2242,10 +2255,10 @@ defmodule SpectabasWeb.DocsLive do
             body: """
             Generate API keys from **Account > Settings > API Keys**.
 
-            1. Click **+ New Key**
-            2. Enter a name (e.g., "Production", "CI/CD")
-            3. Copy the key immediately — it's only shown once
-            4. Use the key in the `Authorization: Bearer <key>` header
+            - Click **+ New Key**
+            - Enter a name (e.g., "Production", "CI/CD")
+            - Copy the key immediately — it's only shown once
+            - Use the key in the `Authorization: Bearer <key>` header
 
             Keys can be revoked at any time. Revoked keys stop working immediately.
 
@@ -2261,27 +2274,30 @@ defmodule SpectabasWeb.DocsLive do
             ### TOTP (Authenticator App)
 
             Use any TOTP-compatible app (Google Authenticator, Authy, 1Password, Bitwarden):
-            1. Go to **Account > Settings > Two-Factor Authentication**
-            2. Click **Set Up 2FA**
-            3. Scan the QR code with your authenticator app
-            4. Enter the 6-digit code to confirm
+
+            - Go to **Account > Settings > Two-Factor Authentication**
+            - Click **Set Up 2FA**
+            - Scan the QR code with your authenticator app
+            - Enter the 6-digit code to confirm
 
             ### Passkeys / Security Keys
 
             Use a passkey (Bitwarden, 1Password, YubiKey, Touch ID, Windows Hello):
-            1. Go to **Account > Settings > Security Keys (Passkeys)**
-            2. Click **+ Add Key**
-            3. Follow your browser's prompt to create or select a passkey
-            4. Name the key for identification
+
+            - Go to **Account > Settings > Security Keys (Passkeys)**
+            - Click **+ Add Key**
+            - Follow your browser's prompt to create or select a passkey
+            - Name the key for identification
 
             You can register multiple security keys. Each can be removed individually.
 
             ### Admin: Force 2FA
 
             Administrators can require 2FA for specific users:
-            1. Go to **Admin > Users**
-            2. Click the **Optional/Required** toggle in the Force 2FA column
-            3. Users with "Required" must set up 2FA before accessing the dashboard
+
+            - Go to **Admin > Users**
+            - Click the **Optional/Required** toggle in the Force 2FA column
+            - Users with "Required" must set up 2FA before accessing the dashboard
             """
           },
           %{
