@@ -116,6 +116,39 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
         []
       end
 
+    # Click ID stats (last 7 days)
+    click_id_stats =
+      if ch_status == :ok do
+        case Spectabas.ClickHouse.query("""
+             SELECT
+               click_id_type,
+               count() AS events,
+               uniq(visitor_id) AS visitors
+             FROM events
+             WHERE click_id != '' AND click_id_type != ''
+               AND timestamp >= now() - INTERVAL 7 DAY
+             GROUP BY click_id_type
+             ORDER BY events DESC
+             """) do
+          {:ok, rows} -> rows
+          _ -> []
+        end
+      else
+        []
+      end
+
+    click_id_today =
+      if ch_status == :ok do
+        case Spectabas.ClickHouse.query(
+               "SELECT count() AS c FROM events WHERE click_id != '' AND toDate(timestamp) = today()"
+             ) do
+          {:ok, [%{"c" => c}]} -> to_num(c)
+          _ -> 0
+        end
+      else
+        0
+      end
+
     # Failed events in Postgres
     failed_count =
       try do
@@ -157,6 +190,8 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
     |> assign(:events_per_min, events_per_min)
     |> assign(:failed_count, failed_count)
     |> assign(:flush_tasks, flush_tasks)
+    |> assign(:click_id_stats, click_id_stats)
+    |> assign(:click_id_today, click_id_today)
   end
 
   @impl true
@@ -248,6 +283,35 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
         </div>
       </div>
 
+      <%!-- Click ID Attribution --%>
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">Click ID Attribution</h2>
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+        <.metric_card
+          label="Click IDs Today"
+          value={format_number(@click_id_today)}
+          color={if @click_id_today > 0, do: "green", else: "gray"}
+          sublabel="events with gclid/msclkid/fbclid"
+        />
+        <div class="bg-white rounded-lg shadow p-4 md:col-span-2">
+          <dt class="text-xs font-medium text-gray-500 uppercase">By Platform (last 7 days)</dt>
+          <div class="mt-2 space-y-1.5">
+            <div :for={row <- @click_id_stats} class="flex items-center justify-between text-sm">
+              <div class="flex items-center gap-2">
+                <span class={["w-2 h-2 rounded-full", click_id_color(row["click_id_type"])]}></span>
+                <span class="text-gray-700 font-medium">{click_id_label(row["click_id_type"])}</span>
+              </div>
+              <div class="flex gap-4 tabular-nums">
+                <span class="text-gray-900 font-bold">{format_number(to_num(row["events"]))} events</span>
+                <span class="text-gray-500">{format_number(to_num(row["visitors"]))} visitors</span>
+              </div>
+            </div>
+            <div :if={@click_id_stats == []} class="text-sm text-gray-400">
+              No click ID data yet. Events will appear here as visitors arrive from ad clicks with gclid, msclkid, or fbclid parameters.
+            </div>
+          </div>
+        </div>
+      </div>
+
       <%!-- BEAM Runtime --%>
       <h2 class="text-lg font-semibold text-gray-900 mb-4">BEAM Runtime</h2>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -330,6 +394,16 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
   end
 
   defp convert_to_tz(other, _tz), do: other
+
+  defp click_id_label("google_ads"), do: "Google Ads (gclid)"
+  defp click_id_label("bing_ads"), do: "Microsoft Ads (msclkid)"
+  defp click_id_label("meta_ads"), do: "Meta Ads (fbclid)"
+  defp click_id_label(other), do: other
+
+  defp click_id_color("google_ads"), do: "bg-blue-500"
+  defp click_id_color("bing_ads"), do: "bg-cyan-500"
+  defp click_id_color("meta_ads"), do: "bg-indigo-500"
+  defp click_id_color(_), do: "bg-gray-400"
 
   defp metric_card(assigns) do
     color_class =

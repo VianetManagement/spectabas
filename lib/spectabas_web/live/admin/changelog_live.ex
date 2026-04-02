@@ -63,6 +63,13 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Bumped Meta/Facebook Graph API from v21.0 to latest v25.0. Bing Ads v13 confirmed current."
          },
          %{
+           title: "Feature: Click ID diagnostics on ingest page + self-referral filtering",
+           description:
+             "Ingest diagnostics (/admin/ingest) now shows Click ID Attribution section: events today with click IDs, " <>
+               "and per-platform breakdown (last 7 days) with event count and unique visitors. " <>
+               "Also fixed self-referral bug where the site's own domain appeared as a top traffic source."
+         },
+         %{
            title: "Docs: new Conversions documentation category",
            description:
              "Dedicated /docs/conversions page with comprehensive docs for Goals & Funnels, Ecommerce Tracking, " <>

@@ -46,7 +46,7 @@ defmodule Spectabas.Events.Ingest do
     {click_id, click_id_type} = extract_click_id(payload)
 
     {_url_parsed, url_path, url_host, url_scheme} = normalize_url(payload.u, gdpr_mode)
-    referrer_domain = parse_referrer_domain(payload.r)
+    referrer_domain = parse_referrer_domain(payload.r, site)
 
     now = resolve_timestamp(payload._oa)
 
@@ -469,13 +469,37 @@ defmodule Spectabas.Events.Ingest do
   defp merge_search_query(props, ""), do: props
   defp merge_search_query(props, query), do: Map.put(props, "_search_query", query)
 
-  defp parse_referrer_domain(nil), do: ""
-  defp parse_referrer_domain(""), do: ""
+  defp parse_referrer_domain(nil, _site), do: ""
+  defp parse_referrer_domain("", _site), do: ""
 
-  defp parse_referrer_domain(referrer) do
+  defp parse_referrer_domain(referrer, site) do
     case URI.parse(referrer) do
-      %URI{host: host} when is_binary(host) -> host
-      _ -> ""
+      %URI{host: host} when is_binary(host) ->
+        # Strip self-referrals — the site's own domain and its parent domain
+        # e.g. for analytics subdomain b.roommates.com, strip both
+        # b.roommates.com and roommates.com (and www.roommates.com)
+        site_domain = site.domain || ""
+        parent = parent_domain(site_domain)
+
+        cond do
+          host == site_domain -> ""
+          host == parent -> ""
+          host == "www.#{parent}" -> ""
+          true -> host
+        end
+
+      _ ->
+        ""
+    end
+  end
+
+  defp parent_domain(domain) do
+    parts = String.split(domain, ".")
+
+    if length(parts) > 2 do
+      parts |> Enum.drop(1) |> Enum.join(".")
+    else
+      domain
     end
   end
 
