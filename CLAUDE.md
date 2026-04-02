@@ -146,7 +146,8 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Churn Risk** — flags customers with 50%+ engagement decline (sessions, pages) over 14-day windows
 - **Funnel Revenue** — funnels show revenue from visitors at each step (ecommerce sites only)
 - **Abandoned Funnel Export** — CSV export of visitor IDs + emails who dropped off at each funnel step
-- **Ad Platform Integrations** — Google Ads, Bing Ads, Meta/Facebook Ads OAuth2 connections with daily spend sync for ROAS calculation. Encrypted token storage (AES-256-GCM). Settings UI per site. Oban sync every 6h.
+- **Ad Platform Integrations** — Google Ads, Bing Ads, Meta/Facebook Ads OAuth2 connections with daily spend sync. Encrypted token storage (AES-256-GCM). Settings UI per site with Sync Now button. Oban sync every 6h. Google Ads account picker for MCC/multi-account setups.
+- **ROAS on Revenue Attribution** — Ad Spend Overview card (total spend, revenue, ROAS, clicks, impressions, per-platform breakdown). Campaign tab shows inline Spend/ROAS/CPC columns. Standalone Ad Spend by Campaign table on other tabs. ROAS color-coded.
 
 ## Authentication
 

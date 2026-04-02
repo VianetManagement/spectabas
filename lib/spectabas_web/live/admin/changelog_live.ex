@@ -63,6 +63,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Bumped Meta/Facebook Graph API from v21.0 to latest v25.0. Bing Ads v13 confirmed current."
          },
          %{
+           title: "Feature: ROAS + ad spend on Revenue Attribution page",
+           description:
+             "Revenue Attribution now shows ad spend data from all connected platforms (Google Ads, Bing, Meta). " <>
+               "Ad Spend Overview card with total spend, revenue, ROAS, clicks, impressions, and per-platform breakdown. " <>
+               "Campaign tab shows inline Spend, ROAS, and CPC columns merged with revenue data. " <>
+               "Standalone Ad Spend by Campaign table on other tabs with CPC and CTR. ROAS color-coded (green 3x+, yellow 1-3x, red <1x)."
+         },
+         %{
            title: "Feature: Google Ads account picker",
            description:
              "When connecting Google Ads with multiple accounts under a manager (MCC), shows an account selection page with descriptive names instead of auto-picking the first one."

@@ -64,7 +64,50 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
         _ -> []
       end
 
-    # Compute totals for summary
+    # Ad spend data
+    ad_campaigns =
+      case Analytics.ad_spend_by_campaign(site, user, period) do
+        {:ok, data} -> data
+        _ -> []
+      end
+
+    ad_platforms =
+      case Analytics.ad_spend_by_platform(site, user, period) do
+        {:ok, data} -> data
+        _ -> []
+      end
+
+    ad_totals =
+      case Analytics.ad_spend_totals(site, user, period) do
+        {:ok, [row | _]} -> row
+        _ -> %{}
+      end
+
+    # Build spend lookup keyed by campaign_name for merging into rows
+    spend_by_campaign = Map.new(ad_campaigns, fn c -> {c["campaign_name"], c} end)
+
+    # Merge ad spend into revenue rows when viewing by campaign
+    rows =
+      if group == "campaign" do
+        Enum.map(rows, fn row ->
+          source = row["source"] || ""
+          spend_row = Map.get(spend_by_campaign, source, %{})
+          spend = parse_float(spend_row["total_spend"])
+          revenue = parse_float(row["total_revenue"])
+          roas = if spend > 0, do: Float.round(revenue / spend, 2), else: nil
+
+          row
+          |> Map.put("ad_spend", spend)
+          |> Map.put("ad_clicks", to_num(spend_row["total_clicks"]))
+          |> Map.put("ad_impressions", to_num(spend_row["total_impressions"]))
+          |> Map.put("roas", roas)
+          |> Map.put("cpc", if(to_num(spend_row["total_clicks"]) > 0, do: Float.round(spend / to_num(spend_row["total_clicks"]), 2), else: nil))
+        end)
+      else
+        rows
+      end
+
+    # Compute totals
     total_revenue =
       Enum.reduce(channels, 0, fn c, acc -> acc + parse_float(c["total_revenue"]) end)
 
@@ -74,12 +117,23 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
     total_visitors =
       Enum.reduce(channels, 0, fn c, acc -> acc + to_num(c["visitors"]) end)
 
+    total_spend = parse_float(ad_totals["total_spend"])
+    total_roas = if total_spend > 0, do: Float.round(total_revenue / total_spend, 2), else: nil
+    has_ad_data = total_spend > 0
+
     socket
     |> assign(:rows, rows)
     |> assign(:channels, channels)
     |> assign(:total_revenue, total_revenue)
     |> assign(:total_orders, total_orders)
     |> assign(:total_visitors, total_visitors)
+    |> assign(:ad_platforms, ad_platforms)
+    |> assign(:ad_campaigns, ad_campaigns)
+    |> assign(:total_spend, total_spend)
+    |> assign(:total_ad_clicks, to_num(ad_totals["total_clicks"]))
+    |> assign(:total_ad_impressions, to_num(ad_totals["total_impressions"]))
+    |> assign(:total_roas, total_roas)
+    |> assign(:has_ad_data, has_ad_data)
   end
 
   @impl true
@@ -131,6 +185,63 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
                 {elem(r, 1)}
               </button>
             </nav>
+          </div>
+        </div>
+
+        <%!-- Ad Spend Summary (only shown when ad data exists) --%>
+        <div :if={@has_ad_data} class="bg-white rounded-lg shadow p-5 mb-6">
+          <h2 class="text-sm font-semibold text-gray-900 mb-3">Ad Spend Overview</h2>
+          <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div>
+              <dt class="text-xs text-gray-500">Total Spend</dt>
+              <dd class="text-lg font-bold text-gray-900">
+                {@site.currency} {format_money(@total_spend)}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-xs text-gray-500">Total Revenue</dt>
+              <dd class="text-lg font-bold text-green-600">
+                {@site.currency} {format_money(@total_revenue)}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-xs text-gray-500">ROAS</dt>
+              <dd class={[
+                "text-lg font-bold",
+                cond do
+                  @total_roas == nil -> "text-gray-400"
+                  @total_roas >= 3 -> "text-green-600"
+                  @total_roas >= 1 -> "text-yellow-600"
+                  true -> "text-red-600"
+                end
+              ]}>
+                {if @total_roas, do: "#{@total_roas}x", else: "--"}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-xs text-gray-500">Ad Clicks</dt>
+              <dd class="text-lg font-bold text-gray-900">{format_number(@total_ad_clicks)}</dd>
+            </div>
+            <div>
+              <dt class="text-xs text-gray-500">Impressions</dt>
+              <dd class="text-lg font-bold text-gray-900">{format_number(@total_ad_impressions)}</dd>
+            </div>
+          </div>
+
+          <%!-- Per-platform breakdown --%>
+          <div :if={length(@ad_platforms) > 1} class="mt-4 pt-3 border-t border-gray-100">
+            <div class="flex flex-wrap gap-4">
+              <div :for={p <- @ad_platforms} class="flex items-center gap-2 text-sm">
+                <span class={["w-2 h-2 rounded-full", platform_color(p["platform"])]}></span>
+                <span class="text-gray-700 font-medium">{platform_label(p["platform"])}</span>
+                <span class="text-gray-500">
+                  {@site.currency} {format_money(p["total_spend"])}
+                </span>
+                <span class="text-gray-400">
+                  {format_number(to_num(p["total_clicks"]))} clicks
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -201,14 +312,26 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
                 <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                   Conv Rate
                 </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Rev Share
-                </th>
+                <%= if @group_by == "campaign" and @has_ad_data do %>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Ad Spend
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    ROAS
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    CPC
+                  </th>
+                <% else %>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Rev Share
+                  </th>
+                <% end %>
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr :if={@rows == []}>
-                <td colspan="7" class="px-6 py-8 text-center text-gray-500">
+                <td colspan={if(@group_by == "campaign" and @has_ad_data, do: "9", else: "7")} class="px-6 py-8 text-center text-gray-500">
                   No revenue data for this period.
                 </td>
               </tr>
@@ -231,23 +354,104 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
                 <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
                   {row["conversion_rate"]}%
                 </td>
-                <td class="px-6 py-4 text-right">
-                  <div class="flex items-center justify-end gap-2">
-                    <div class="w-16 bg-gray-200 rounded-full h-1.5">
-                      <div
-                        class="bg-indigo-500 h-1.5 rounded-full"
-                        style={"width: #{rev_share_pct(row["total_revenue"], @total_revenue)}%"}
-                      >
+                <%= if @group_by == "campaign" and @has_ad_data do %>
+                  <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                    <%= if row["ad_spend"] && row["ad_spend"] > 0 do %>
+                      {@site.currency} {format_money(row["ad_spend"])}
+                    <% else %>
+                      <span class="text-gray-300">--</span>
+                    <% end %>
+                  </td>
+                  <td class="px-6 py-4 text-sm text-right tabular-nums">
+                    <%= if row["roas"] do %>
+                      <span class={roas_color(row["roas"])}>{row["roas"]}x</span>
+                    <% else %>
+                      <span class="text-gray-300">--</span>
+                    <% end %>
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                    <%= if row["cpc"] do %>
+                      {@site.currency} {format_money(row["cpc"])}
+                    <% else %>
+                      <span class="text-gray-300">--</span>
+                    <% end %>
+                  </td>
+                <% else %>
+                  <td class="px-6 py-4 text-right">
+                    <div class="flex items-center justify-end gap-2">
+                      <div class="w-16 bg-gray-200 rounded-full h-1.5">
+                        <div
+                          class="bg-indigo-500 h-1.5 rounded-full"
+                          style={"width: #{rev_share_pct(row["total_revenue"], @total_revenue)}%"}
+                        >
+                        </div>
                       </div>
+                      <span class="text-xs text-gray-500 tabular-nums w-10 text-right">
+                        {rev_share_pct(row["total_revenue"], @total_revenue)}%
+                      </span>
                     </div>
-                    <span class="text-xs text-gray-500 tabular-nums w-10 text-right">
-                      {rev_share_pct(row["total_revenue"], @total_revenue)}%
-                    </span>
-                  </div>
-                </td>
+                  </td>
+                <% end %>
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <%!-- Campaign Ad Spend Table (shown when not on Campaign tab but has ad data) --%>
+        <div :if={@has_ad_data and @group_by != "campaign"} class="mt-8">
+          <h2 class="text-lg font-semibold text-gray-900 mb-4">Ad Spend by Campaign</h2>
+          <div class="bg-white rounded-lg shadow overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Campaign</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Platform</th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Spend</th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Clicks</th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Impressions</th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">CPC</th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">CTR</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr :if={@ad_campaigns == []}>
+                  <td colspan="7" class="px-6 py-6 text-center text-gray-500">
+                    No ad campaign data for this period.
+                  </td>
+                </tr>
+                <tr :for={c <- @ad_campaigns} class="hover:bg-gray-50">
+                  <td class="px-6 py-4 text-sm font-medium text-gray-900">
+                    {c["campaign_name"] || "(unnamed)"}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-600">
+                    <span class="inline-flex items-center gap-1.5">
+                      <span class={["w-2 h-2 rounded-full", platform_color(c["platform"])]}></span>
+                      {platform_label(c["platform"])}
+                    </span>
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                    {@site.currency} {format_money(c["total_spend"])}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                    {format_number(to_num(c["total_clicks"]))}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                    {format_number(to_num(c["total_impressions"]))}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                    <% clicks = to_num(c["total_clicks"]) %>
+                    <% spend = parse_float(c["total_spend"]) %>
+                    {if clicks > 0, do: "#{@site.currency} #{format_money(spend / clicks)}", else: "--"}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                    <% clicks = to_num(c["total_clicks"]) %>
+                    <% imps = to_num(c["total_impressions"]) %>
+                    {if imps > 0, do: "#{Float.round(clicks / imps * 100, 2)}%", else: "--"}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <p class="text-xs text-gray-500 mt-3">
@@ -255,6 +459,9 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
           attribution: revenue is credited to the {if @touch == "first",
             do: "first",
             else: "most recent"} traffic source the customer came from before purchasing.
+          <%= if @has_ad_data do %>
+            ROAS = Revenue / Ad Spend. Campaign spend is matched by utm_campaign name.
+          <% end %>
         </p>
       </div>
     </.dashboard_layout>
@@ -287,4 +494,18 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
   end
 
   defp rev_share_pct(_, _), do: 0.0
+
+  defp roas_color(roas) when roas >= 3, do: "font-bold text-green-600"
+  defp roas_color(roas) when roas >= 1, do: "font-medium text-yellow-600"
+  defp roas_color(_), do: "font-medium text-red-600"
+
+  defp platform_label("google_ads"), do: "Google Ads"
+  defp platform_label("bing_ads"), do: "Microsoft Ads"
+  defp platform_label("meta_ads"), do: "Meta Ads"
+  defp platform_label(p), do: p
+
+  defp platform_color("google_ads"), do: "bg-blue-500"
+  defp platform_color("bing_ads"), do: "bg-cyan-500"
+  defp platform_color("meta_ads"), do: "bg-indigo-500"
+  defp platform_color(_), do: "bg-gray-400"
 end

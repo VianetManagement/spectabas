@@ -1226,6 +1226,50 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  @doc "Ad spend totals across all platforms for a site."
+  def ad_spend_totals(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        sum(spend) AS total_spend,
+        sum(clicks) AS total_clicks,
+        sum(impressions) AS total_impressions,
+        count(DISTINCT platform) AS platforms
+      FROM ad_spend
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND date >= #{ClickHouse.param(Date.to_iso8601(DateTime.to_date(date_range.from)))}
+        AND date <= #{ClickHouse.param(Date.to_iso8601(DateTime.to_date(date_range.to)))}
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Ad spend by platform for per-platform summary cards."
+  def ad_spend_by_platform(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        platform,
+        sum(spend) AS total_spend,
+        sum(clicks) AS total_clicks,
+        sum(impressions) AS total_impressions
+      FROM ad_spend
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND date >= #{ClickHouse.param(Date.to_iso8601(DateTime.to_date(date_range.from)))}
+        AND date <= #{ClickHouse.param(Date.to_iso8601(DateTime.to_date(date_range.to)))}
+      GROUP BY platform
+      ORDER BY total_spend DESC
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
   @doc "Revenue summary by channel type (Direct, Organic, Paid, Social, Referral, Email)."
   def revenue_by_channel(%Site{} = site, %User{} = user, date_range) do
     date_range = ensure_date_range(date_range)
