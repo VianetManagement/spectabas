@@ -249,17 +249,38 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
               <.field label="Original Referrer" value={@profile["original_referrer"] || "Direct"} />
               <.field label="First Page" value={@profile["first_page"] || "-"} mono={true} />
               <.field label="Last Page" value={@profile["last_page"] || "-"} mono={true} />
-              <div :if={@profile["utm_sources"] && @profile["utm_sources"] != []}>
-                <dt class="text-xs font-medium text-gray-500">UTM Sources</dt>
-                <dd class="mt-0.5 flex flex-wrap gap-1">
-                  <span
-                    :for={src <- List.wrap(@profile["utm_sources"])}
-                    class="px-2 py-0.5 rounded text-xs bg-indigo-50 text-indigo-700"
-                  >
-                    {src}
+              <%!-- Ad Click ID Attribution --%>
+              <div :if={@profile["first_click_id"] && @profile["first_click_id"] != ""}>
+                <dt class="text-xs font-medium text-gray-500">Ad Click ID</dt>
+                <dd class="mt-0.5 flex items-center gap-2">
+                  <span class={[
+                    "px-2 py-0.5 rounded text-xs font-medium",
+                    click_platform_class(@profile["first_click_id_type"])
+                  ]}>
+                    {click_platform_label(@profile["first_click_id_type"])}
+                  </span>
+                  <span class="text-xs font-mono text-gray-500 truncate max-w-[200px]">
+                    {@profile["first_click_id"]}
                   </span>
                 </dd>
               </div>
+              <div :if={(@profile["click_id_platforms"] || []) != [] && length(@profile["click_id_platforms"] || []) > 1}>
+                <dt class="text-xs font-medium text-gray-500">All Ad Platforms</dt>
+                <dd class="mt-0.5 flex flex-wrap gap-1">
+                  <span
+                    :for={p <- @profile["click_id_platforms"]}
+                    class={["px-2 py-0.5 rounded text-xs font-medium", click_platform_class(p)]}
+                  >
+                    {click_platform_label(p)}
+                  </span>
+                </dd>
+              </div>
+              <%!-- UTM Parameters --%>
+              <.utm_tags label="UTM Source" values={@profile["utm_sources"]} />
+              <.utm_tags label="UTM Medium" values={@profile["utm_mediums"]} />
+              <.utm_tags label="UTM Campaign" values={@profile["utm_campaigns"]} />
+              <.utm_tags label="UTM Term" values={@profile["utm_terms"]} />
+              <.utm_tags label="UTM Content" values={@profile["utm_contents"]} />
               <div :if={@profile["top_pages"] && @profile["top_pages"] != []}>
                 <dt class="text-xs font-medium text-gray-500">Top Pages</dt>
                 <dd class="mt-0.5 space-y-0.5">
@@ -643,6 +664,35 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
   end
 
   defp parse_items(_), do: "-"
+
+  defp utm_tags(assigns) do
+    values = List.wrap(assigns[:values] || []) |> Enum.reject(&(&1 == "" || is_nil(&1)))
+    assigns = assign(assigns, :values, values)
+
+    ~H"""
+    <div :if={@values != []}>
+      <dt class="text-xs font-medium text-gray-500">{@label}</dt>
+      <dd class="mt-0.5 flex flex-wrap gap-1">
+        <span
+          :for={v <- @values}
+          class="px-2 py-0.5 rounded text-xs bg-indigo-50 text-indigo-700"
+        >
+          {v}
+        </span>
+      </dd>
+    </div>
+    """
+  end
+
+  defp click_platform_label("google_ads"), do: "Google Ads"
+  defp click_platform_label("bing_ads"), do: "Microsoft Ads"
+  defp click_platform_label("meta_ads"), do: "Meta Ads"
+  defp click_platform_label(other), do: other || "Unknown"
+
+  defp click_platform_class("google_ads"), do: "bg-blue-100 text-blue-800"
+  defp click_platform_class("bing_ads"), do: "bg-cyan-100 text-cyan-800"
+  defp click_platform_class("meta_ads"), do: "bg-indigo-100 text-indigo-800"
+  defp click_platform_class(_), do: "bg-gray-100 text-gray-800"
 
   defp load_visitor_ips(site, visitor_id) do
     case Analytics.visitor_ips(site, visitor_id) do

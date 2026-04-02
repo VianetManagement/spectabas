@@ -2026,7 +2026,14 @@ defmodule Spectabas.Analytics do
       any(browser_fingerprint) AS browser_fingerprint,
       groupUniqArray(10)(url_path) AS top_pages,
       groupUniqArray(5)(referrer_domain) AS referrers,
-      groupUniqArray(5)(utm_source) AS utm_sources
+      groupUniqArrayIf(5)(utm_source, utm_source != '') AS utm_sources,
+      groupUniqArrayIf(5)(utm_medium, utm_medium != '') AS utm_mediums,
+      groupUniqArrayIf(5)(utm_campaign, utm_campaign != '') AS utm_campaigns,
+      groupUniqArrayIf(5)(utm_term, utm_term != '') AS utm_terms,
+      groupUniqArrayIf(5)(utm_content, utm_content != '') AS utm_contents,
+      argMinIf(click_id, timestamp, click_id != '') AS first_click_id,
+      argMinIf(click_id_type, timestamp, click_id != '') AS first_click_id_type,
+      groupUniqArrayIf(3)(click_id_type, click_id_type != '') AS click_id_platforms
     FROM events
     WHERE site_id = #{ClickHouse.param(site.id)}
       AND visitor_id = #{ClickHouse.param(visitor_id)}
