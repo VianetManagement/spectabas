@@ -1150,6 +1150,8 @@ defmodule Spectabas.Analytics do
     touch = Keyword.get(opts, :touch, "first")
 
     with :ok <- authorize(site, user) do
+      ref = clean_referrer_sql(site)
+
       source_expr =
         case group_by do
           "campaign" ->
@@ -1165,7 +1167,7 @@ defmodule Spectabas.Analytics do
             "if(utm_content != '', utm_content, '(none)')"
 
           _ ->
-            "if(referrer_domain != '', referrer_domain, if(utm_source != '', utm_source, 'Direct'))"
+            "if(#{ref} != '', #{ref}, if(utm_source != '', utm_source, 'Direct'))"
         end
 
       # "any" touch: keep all distinct sources per visitor (multi-touch)
@@ -1358,6 +1360,8 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
+      ref = clean_referrer_sql(site)
+
       sql = """
       SELECT
         channel,
@@ -1371,10 +1375,10 @@ defmodule Spectabas.Analytics do
           argMin(
             multiIf(
               utm_medium IN ('cpc', 'ppc', 'paid', 'paidsearch', 'cpm'), 'Paid',
-              utm_medium = 'email' OR referrer_domain IN ('mail.google.com', 'mail.yahoo.com', 'outlook.live.com'), 'Email',
-              referrer_domain IN ('google.com', 'bing.com', 'duckduckgo.com', 'yahoo.com', 'baidu.com'), 'Organic Search',
-              referrer_domain IN ('facebook.com', 'instagram.com', 'twitter.com', 'linkedin.com', 'pinterest.com', 'tiktok.com', 'reddit.com', 't.co'), 'Social',
-              referrer_domain != '', 'Referral',
+              utm_medium = 'email' OR #{ref} IN ('mail.google.com', 'mail.yahoo.com', 'outlook.live.com'), 'Email',
+              #{ref} IN ('google.com', 'bing.com', 'duckduckgo.com', 'yahoo.com', 'baidu.com'), 'Organic Search',
+              #{ref} IN ('facebook.com', 'instagram.com', 'twitter.com', 'linkedin.com', 'pinterest.com', 'tiktok.com', 'reddit.com', 't.co'), 'Social',
+              #{ref} != '', 'Referral',
               'Direct'
             ),
             timestamp
@@ -2836,6 +2840,30 @@ defmodule Spectabas.Analytics do
 
   # ClickHouse toTimezone() snippet for converting UTC timestamps to site timezone
   defp tz_sql(%Site{} = site), do: ClickHouse.param(site.timezone || "UTC")
+
+  # SQL expression that strips self-referrals from referrer_domain.
+  # Returns the referrer_domain if it's not the site itself, empty string otherwise.
+  # Covers: analytics subdomain (b.example.com), parent (example.com), www.parent
+  defp clean_referrer_sql(%Site{} = site) do
+    domain = site.domain || ""
+    parent = parent_domain(domain)
+
+    domains =
+      [domain, parent, "www.#{parent}"]
+      |> Enum.uniq()
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.map(&ClickHouse.param/1)
+
+    case domains do
+      [] -> "referrer_domain"
+      list -> "if(referrer_domain NOT IN (#{Enum.join(list, ", ")}), referrer_domain, '')"
+    end
+  end
+
+  defp parent_domain(domain) do
+    parts = String.split(domain, ".")
+    if length(parts) > 2, do: parts |> Enum.drop(1) |> Enum.join("."), else: domain
+  end
 
   # Generic import-aware query: runs native query on native range, import query on
   # import range, merges results by key. Returns {:ok, merged_rows} or {:error, reason}.
