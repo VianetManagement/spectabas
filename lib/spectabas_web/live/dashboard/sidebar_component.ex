@@ -317,7 +317,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
           <nav :if={breadcrumb_category(@active)} class="flex items-center gap-1.5 text-xs text-gray-400 mb-1">
             <.link navigate={~p"/dashboard/sites/#{@site.id}"} class="hover:text-indigo-600">{@site.name}</.link>
             <span>/</span>
-            <span class={breadcrumb_color(@active)}>{breadcrumb_category(@active)}</span>
+            <.link navigate={category_path(@site.id, @active)} class={"hover:underline #{breadcrumb_color(@active)}"}>{breadcrumb_category(@active)}</.link>
             <span>/</span>
             <span class="text-gray-600">{@page_title}</span>
           </nav>
@@ -533,6 +533,22 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
     "Ad Effectiveness" => "text-violet-500",
     "Tools" => "text-gray-500"
   }
+
+  @category_slugs %{
+    "Overview" => "overview",
+    "Behavior" => "behavior",
+    "Acquisition" => "acquisition",
+    "Audience" => "audience",
+    "Conversions" => "conversions",
+    "Ad Effectiveness" => "ad-effectiveness",
+    "Tools" => "tools"
+  }
+
+  defp category_path(site_id, active) do
+    cat = breadcrumb_category(active)
+    slug = @category_slugs[cat] || "overview"
+    "/dashboard/sites/#{site_id}/c/#{slug}"
+  end
 
   defp breadcrumb_color(active) do
     cat = breadcrumb_category(active)
