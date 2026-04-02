@@ -2281,33 +2281,34 @@ defmodule SpectabasWeb.DocsLive do
 
             ### Meta/Facebook Ads (2 credentials: App ID, App Secret)
 
-            **Step 1: Create a Meta Developer App**
+            **Step 1: Create a Business App**
 
             - Go to Meta for Developers (`developers.facebook.com`) and log in
             - Click **My Apps** in the top right, then **Create App**
             - Select **Other** for "What do you want your app to do?"
-            - Select **Business** as the app type
+            - Select **Business** as the app type (required for ad data access — Consumer apps cannot read ad insights)
             - Enter an app name (e.g., "Spectabas Analytics") and click **Create App**
 
-            **Step 2: Set up Facebook Login**
+            **Step 2: Add the Marketing API product**
 
-            - On the app dashboard, find **Facebook Login** and click **Set Up**
-            - Choose **Web**
+            - On your app's dashboard, find the **Add Products** section
+            - Find **Marketing API** and click **Set Up**
+            - This enables the `/act_*/insights` endpoint that Spectabas uses to pull campaign spend data
+
+            **Step 3: Add Facebook Login product**
+
+            - On the same dashboard, find **Facebook Login** and click **Set Up**
+            - Choose **Web** as the platform
             - In the left sidebar, go to **Facebook Login > Settings**
             - Under **Valid OAuth Redirect URIs**, add: `https://www.spectabas.com/auth/ad/meta_ads/callback`
             - Click **Save Changes**
 
-            **Step 3: Get App ID and Secret**
+            **Step 4: Get App ID and Secret**
 
             - In the left sidebar, go to **App Settings > Basic**
-            - Your **App ID** is shown at the top
+            - Your **App ID** is shown at the top of the page
             - Click **Show** next to **App Secret** and copy it
-
-            **Step 4: Request ads_read permission**
-
-            - In the left sidebar, go to **App Review > Permissions and Features**
-            - Search for **ads_read** and click **Request** (this allows reading ad insights data)
-            - Follow the review process (for Business-type apps with your own ad account, this is typically auto-approved)
+            - Both values are needed for Spectabas
 
             **Step 5: Enter in Spectabas**
 
@@ -2315,6 +2316,9 @@ defmodule SpectabasWeb.DocsLive do
             - Click **Configure**
             - Paste the App ID and App Secret
             - Click **Save Credentials**, then **Connect**
+            - You'll be redirected to Facebook to authorize — grant the `ads_read` permission
+
+            > **No app review needed.** The `ads_read` permission works with Standard Access for reading your own ad account data. You do NOT need to submit for Advanced Access or go through Meta's app review process unless you plan to access other people's ad accounts.
 
             > **All credentials are encrypted** at rest using AES-256-GCM and stored per-site in the database. No environment variables or server access needed. Each site can use its own OAuth apps or share credentials across sites.
 
