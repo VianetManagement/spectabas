@@ -31,6 +31,8 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
        |> assign(:group_by, "source")
        |> assign(:touch, "last")
        |> assign(:utm_tabs, @utm_tabs)
+       |> assign(:sort_by, "total_revenue")
+       |> assign(:sort_dir, "desc")
        |> load_data()}
     end
   end
@@ -46,6 +48,23 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
 
   def handle_event("change_touch", %{"touch" => touch}, socket) do
     {:noreply, socket |> assign(:touch, touch) |> load_data()}
+  end
+
+  def handle_event("sort", %{"col" => col}, socket) do
+    {sort_by, sort_dir} = socket.assigns |> Map.take([:sort_by, :sort_dir]) |> Map.values() |> List.to_tuple()
+
+    new_dir =
+      if col == sort_by do
+        if sort_dir == "desc", do: "asc", else: "desc"
+      else
+        "desc"
+      end
+
+    {:noreply,
+     socket
+     |> assign(:sort_by, col)
+     |> assign(:sort_dir, new_dir)
+     |> sort_rows()}
   end
 
   defp load_data(socket) do
@@ -148,6 +167,7 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
     has_ad_data = total_spend > 0
 
     socket
+    |> assign(:rows_unsorted, rows)
     |> assign(:rows, rows)
     |> assign(:channels, channels)
     |> assign(:total_revenue, total_revenue)
@@ -161,6 +181,31 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
     |> assign(:total_ad_impressions, to_num(ad_totals["total_impressions"]))
     |> assign(:total_roas, total_roas)
     |> assign(:has_ad_data, has_ad_data)
+    |> sort_rows()
+  end
+
+  defp sort_rows(socket) do
+    rows = socket.assigns[:rows_unsorted] || socket.assigns[:rows] || []
+    sort_by = socket.assigns[:sort_by] || "total_revenue"
+    sort_dir = socket.assigns[:sort_dir] || "desc"
+
+    sorted =
+      Enum.sort_by(rows, fn row ->
+        val = row[sort_by]
+
+        cond do
+          is_nil(val) -> 0
+          is_number(val) -> val
+          is_binary(val) ->
+            case Float.parse(val) do
+              {f, _} -> f
+              :error -> 0
+            end
+          true -> 0
+        end
+      end, if(sort_dir == "asc", do: :asc, else: :desc))
+
+    assign(socket, :rows, sorted)
   end
 
   @impl true
@@ -344,34 +389,16 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
           <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
               <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  {String.capitalize(@group_by)}
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Visitors
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Orders
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Revenue
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  AOV
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Conv Rate
-                </th>
+                <.sort_th col="source" label={String.capitalize(@group_by)} align="left" sort_by={@sort_by} sort_dir={@sort_dir} />
+                <.sort_th col="visitors" label="Visitors" sort_by={@sort_by} sort_dir={@sort_dir} />
+                <.sort_th col="orders" label="Orders" sort_by={@sort_by} sort_dir={@sort_dir} />
+                <.sort_th col="total_revenue" label="Revenue" sort_by={@sort_by} sort_dir={@sort_dir} />
+                <.sort_th col="avg_order_value" label="AOV" sort_by={@sort_by} sort_dir={@sort_dir} />
+                <.sort_th col="conversion_rate" label="Conv Rate" sort_by={@sort_by} sort_dir={@sort_dir} />
                 <%= if @group_by == "campaign" and @has_ad_data do %>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Ad Spend
-                  </th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    ROAS
-                  </th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    CPC
-                  </th>
+                  <.sort_th col="ad_spend" label="Ad Spend" sort_by={@sort_by} sort_dir={@sort_dir} />
+                  <.sort_th col="roas" label="ROAS" sort_by={@sort_by} sort_dir={@sort_dir} />
+                  <.sort_th col="cpc" label="CPC" sort_by={@sort_by} sort_dir={@sort_dir} />
                 <% else %>
                   <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                     Rev Share
@@ -567,6 +594,25 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
   defp roas_color(roas) when roas >= 3, do: "font-bold text-green-600"
   defp roas_color(roas) when roas >= 1, do: "font-medium text-yellow-600"
   defp roas_color(_), do: "font-medium text-red-600"
+
+  defp sort_th(assigns) do
+    assigns = assigns |> Map.put_new(:align, "right")
+    active = assigns.col == assigns.sort_by
+    arrow = if active, do: (if assigns.sort_dir == "asc", do: " \u2191", else: " \u2193"), else: ""
+
+    assigns = assign(assigns, :active, active)
+    assigns = assign(assigns, :arrow, arrow)
+
+    ~H"""
+    <th
+      phx-click="sort"
+      phx-value-col={@col}
+      class={"px-6 py-3 text-#{@align} text-xs font-medium uppercase cursor-pointer select-none hover:text-indigo-600 #{if @active, do: "text-indigo-700", else: "text-gray-500"}"}
+    >
+      {@label}{@arrow}
+    </th>
+    """
+  end
 
   defp ad_pill_class("google_ads"), do: "bg-blue-100 text-blue-700"
   defp ad_pill_class("bing_ads"), do: "bg-cyan-100 text-cyan-700"
