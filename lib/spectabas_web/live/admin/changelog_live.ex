@@ -70,6 +70,13 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
                "Enables same-origin tracking that ad blockers cannot detect."
          },
          %{
+           title: "Feature: breadcrumbs on all dashboard pages",
+           description:
+             "Every dashboard page now shows a breadcrumb trail: Site Name / Category / Page Title. " <>
+               "Category names match sidebar sections and use matching colors. " <>
+               "Dashboard overview page omits the breadcrumb (it's the root)."
+         },
+         %{
            title: "Fix: sortable columns, paid/organic split with pills, query performance",
            description:
              "Revenue Attribution: all columns sortable (click to toggle asc/desc). Source table now splits rows by paid vs organic " <>

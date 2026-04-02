@@ -312,8 +312,15 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
 
       <%!-- Main content area --%>
       <div class="flex-1 flex flex-col min-w-0">
-        <%!-- Page header with title + description --%>
+        <%!-- Page header with breadcrumb + title + description --%>
         <div :if={@page_title} class="hidden lg:block bg-white border-b border-gray-200 px-6 py-4">
+          <nav :if={breadcrumb_category(@active)} class="flex items-center gap-1.5 text-xs text-gray-400 mb-1">
+            <.link navigate={~p"/dashboard/sites/#{@site.id}"} class="hover:text-indigo-600">{@site.name}</.link>
+            <span>/</span>
+            <span class={breadcrumb_color(@active)}>{breadcrumb_category(@active)}</span>
+            <span>/</span>
+            <span class="text-gray-600">{@page_title}</span>
+          </nav>
           <h1 class="text-xl font-bold text-gray-900">{@page_title}</h1>
           <p :if={@page_description} class="text-sm text-gray-500 mt-1 max-w-3xl">
             {@page_description}
@@ -475,6 +482,50 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
       {render_slot(@inner_block)}
     </div>
     """
+  end
+
+  # Breadcrumb: maps active key → category name
+  @breadcrumb_map %{
+    # Overview
+    "overview" => nil, "insights" => "Overview", "journeys" => "Overview", "realtime" => "Overview",
+    # Behavior
+    "pages" => "Behavior", "entry-exit" => "Behavior", "transitions" => "Behavior",
+    "search" => "Behavior", "outbound-links" => "Behavior", "downloads" => "Behavior",
+    "events" => "Behavior", "performance" => "Behavior",
+    # Acquisition
+    "channels" => "Acquisition", "sources" => "Acquisition",
+    "attribution" => "Acquisition", "campaigns" => "Acquisition",
+    # Audience
+    "geo" => "Audience", "map" => "Audience", "devices" => "Audience",
+    "network" => "Audience", "bot-traffic" => "Audience", "visitor-log" => "Audience",
+    "cohort" => "Audience", "churn-risk" => "Audience",
+    # Conversions
+    "goals" => "Conversions", "funnels" => "Conversions", "ecommerce" => "Conversions",
+    "revenue-attribution" => "Conversions", "revenue-cohorts" => "Conversions",
+    "buyer-patterns" => "Conversions",
+    # Ad Effectiveness
+    "visitor-quality" => "Ad Effectiveness", "time-to-convert" => "Ad Effectiveness",
+    "ad-visitor-paths" => "Ad Effectiveness", "ad-churn" => "Ad Effectiveness",
+    "organic-lift" => "Ad Effectiveness",
+    # Tools
+    "reports" => "Tools", "email-reports" => "Tools", "exports" => "Tools", "settings" => "Tools"
+  }
+
+  defp breadcrumb_category(active), do: @breadcrumb_map[active]
+
+  @breadcrumb_colors %{
+    "Overview" => "text-indigo-500",
+    "Behavior" => "text-blue-500",
+    "Acquisition" => "text-emerald-500",
+    "Audience" => "text-amber-500",
+    "Conversions" => "text-rose-500",
+    "Ad Effectiveness" => "text-violet-500",
+    "Tools" => "text-gray-500"
+  }
+
+  defp breadcrumb_color(active) do
+    cat = breadcrumb_category(active)
+    @breadcrumb_colors[cat] || "text-gray-400"
   end
 
   defp nav_item(assigns) do
