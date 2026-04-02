@@ -258,7 +258,18 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
                   |> Enum.join(" / ")}
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-500 truncate max-w-[100px]">
-                  {v["referrer"] || "Direct"}
+                  <span class="flex items-center gap-1.5">
+                    {v["referrer"] || "Direct"}
+                    <span
+                      :if={v["click_id_type"] && v["click_id_type"] != ""}
+                      class={[
+                        "inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0",
+                        ad_pill(v["click_id_type"])
+                      ]}
+                    >
+                      {ad_label(v["click_id_type"])}
+                    </span>
+                  </span>
                 </td>
                 <td class="px-4 py-3">
                   <span
@@ -352,6 +363,16 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
 
   defp format_revenue(n) when is_number(n), do: :erlang.float_to_binary(n / 1, decimals: 2)
   defp format_revenue(_), do: "0.00"
+
+  defp ad_pill("google_ads"), do: "bg-blue-100 text-blue-700"
+  defp ad_pill("bing_ads"), do: "bg-cyan-100 text-cyan-700"
+  defp ad_pill("meta_ads"), do: "bg-indigo-100 text-indigo-700"
+  defp ad_pill(_), do: "bg-gray-100 text-gray-600"
+
+  defp ad_label("google_ads"), do: "Google"
+  defp ad_label("bing_ads"), do: "Bing"
+  defp ad_label("meta_ads"), do: "Meta"
+  defp ad_label(other), do: other
 
   defp intent_pill("buying"), do: "bg-green-100 text-green-800"
   defp intent_pill("researching"), do: "bg-blue-100 text-blue-800"
