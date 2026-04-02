@@ -71,7 +71,7 @@ defmodule SpectabasWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
-    get "/pricing", PageController, :pricing
+    # get "/pricing", PageController, :pricing  # Temporarily removed — service is free
     get "/privacy", PageController, :privacy
     get "/terms", PageController, :terms
     get "/email-reports/unsubscribe/:token", EmailReportController, :unsubscribe
