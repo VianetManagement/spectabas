@@ -36,7 +36,7 @@ defmodule Spectabas.Workers.ProxySetupEmail do
       <div style="padding: 32px; border: 1px solid #e5e7eb; border-top: 0; border-radius: 0 0 8px 8px;">
 
         <h2 style="font-size: 18px; margin-bottom: 8px;">How It Works</h2>
-        <p style="font-size: 14px;">Instead of loading the tracker from <code style="background: #f3f4f6; padding: 2px 6px; border-radius: 4px;">b.roommates.com</code> (which ad blockers can target), you proxy it through your main domain:</p>
+        <p style="font-size: 14px;">Instead of loading the tracker from <code style="background: #f3f4f6; padding: 2px 6px; border-radius: 4px;">www.spectabas.com</code> (which ad blockers can target), you proxy it through your main domain:</p>
 
         <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin: 16px 0;">
           <thead>
@@ -48,19 +48,19 @@ defmodule Spectabas.Workers.ProxySetupEmail do
           <tbody>
             <tr style="border-bottom: 1px solid #f3f4f6;">
               <td style="padding: 8px;"><code>www.roommates.com/t/v1.js</code></td>
-              <td style="padding: 8px;"><code>b.roommates.com/assets/v1.js</code></td>
+              <td style="padding: 8px;"><code>www.spectabas.com/assets/v1.js</code></td>
             </tr>
             <tr style="border-bottom: 1px solid #f3f4f6;">
               <td style="padding: 8px;"><code>www.roommates.com/t/c/e</code></td>
-              <td style="padding: 8px;"><code>b.roommates.com/c/e</code></td>
+              <td style="padding: 8px;"><code>www.spectabas.com/c/e</code></td>
             </tr>
             <tr style="border-bottom: 1px solid #f3f4f6;">
               <td style="padding: 8px;"><code>www.roommates.com/t/c/i</code></td>
-              <td style="padding: 8px;"><code>b.roommates.com/c/i</code></td>
+              <td style="padding: 8px;"><code>www.spectabas.com/c/i</code></td>
             </tr>
             <tr style="border-bottom: 1px solid #f3f4f6;">
               <td style="padding: 8px;"><code>www.roommates.com/t/c/*</code></td>
-              <td style="padding: 8px;"><code>b.roommates.com/c/*</code></td>
+              <td style="padding: 8px;"><code>www.spectabas.com/c/*</code></td>
             </tr>
           </tbody>
         </table>
@@ -76,12 +76,12 @@ defmodule Spectabas.Workers.ProxySetupEmail do
         <div style="background: #1e293b; color: #e2e8f0; padding: 16px; border-radius: 6px; font-family: monospace; font-size: 12px; overflow-x: auto; margin: 12px 0; line-height: 1.5;">
     <span style="color: #7dd3fc;">defmodule</span> RoommatesWeb.Plugs.AnalyticsProxy <span style="color: #7dd3fc;">do</span><br>
     &nbsp;&nbsp;<span style="color: #6b7280;"># Reverse proxy for Spectabas analytics.</span><br>
-    &nbsp;&nbsp;<span style="color: #6b7280;"># Forwards /t/* requests to b.roommates.com</span><br>
+    &nbsp;&nbsp;<span style="color: #6b7280;"># Forwards /t/* requests to www.spectabas.com</span><br>
     &nbsp;&nbsp;<span style="color: #6b7280;"># so tracking is same-origin and ad-blocker-proof.</span><br>
     <br>
     &nbsp;&nbsp;<span style="color: #7dd3fc;">import</span> Plug.Conn<br>
     <br>
-    &nbsp;&nbsp;<span style="color: #fbbf24;">@analytics_host</span> <span style="color: #86efac;">"https://b.roommates.com"</span><br>
+    &nbsp;&nbsp;<span style="color: #fbbf24;">@analytics_host</span> <span style="color: #86efac;">"https://www.spectabas.com"</span><br>
     <br>
     &nbsp;&nbsp;<span style="color: #7dd3fc;">def</span> <span style="color: #93c5fd;">init</span>(opts), <span style="color: #7dd3fc;">do</span>: opts<br>
     <br>
@@ -185,20 +185,22 @@ defmodule Spectabas.Workers.ProxySetupEmail do
 
         <div style="background: #1e293b; color: #e2e8f0; padding: 16px; border-radius: 6px; font-family: monospace; font-size: 13px; overflow-x: auto; margin: 12px 0; line-height: 1.5;">
     <span style="color: #6b7280;">&lt;!-- Old (can be blocked) --&gt;</span><br>
-    <span style="color: #f87171; text-decoration: line-through;">&lt;script defer data-id="YOUR_KEY" data-gdpr="off"<br>
+    <span style="color: #f87171; text-decoration: line-through;">&lt;script defer data-id="YOUR_KEY"<br>
     &nbsp;&nbsp;src="https://b.roommates.com/assets/v1.js"&gt;&lt;/script&gt;</span><br>
     <br>
     <span style="color: #6b7280;">&lt;!-- New (ad-blocker-proof) --&gt;</span><br>
-    <span style="color: #86efac;">&lt;script defer data-id="YOUR_KEY" data-gdpr="off"<br>
+    <span style="color: #86efac;">&lt;script defer data-id="YOUR_KEY"<br>
     &nbsp;&nbsp;data-proxy="https://www.roommates.com/t"<br>
     &nbsp;&nbsp;src="https://www.roommates.com/t/v1.js"&gt;&lt;/script&gt;</span>
         </div>
 
-        <p style="font-size: 14px;">Two changes:</p>
+        <p style="font-size: 14px;">Just three attributes:</p>
         <ul style="font-size: 14px; padding-left: 20px;">
-          <li><code>src</code> now points to your main domain (<code>/t/v1.js</code>) instead of the analytics subdomain</li>
-          <li><code>data-proxy="https://www.roommates.com/t"</code> tells the tracker to send beacons to your proxy path instead of the analytics subdomain</li>
+          <li><code>data-id</code> — your site's public key (same as before)</li>
+          <li><code>data-proxy</code> — tells the tracker to send beacons to your proxy path instead of the analytics subdomain</li>
+          <li><code>src</code> — loads the script from your main domain via the proxy (<code>/t/v1.js</code>)</li>
         </ul>
+        <p style="font-size: 13px; color: #6b7280;">No <code>data-gdpr</code> needed — defaults to "off" (cookie-based tracking).</p>
 
         <hr style="border: 0; border-top: 2px solid #e5e7eb; margin: 24px 0;">
 
@@ -254,7 +256,7 @@ defmodule Spectabas.Workers.ProxySetupEmail do
             </tr>
             <tr style="border-bottom: 1px solid #f3f4f6;">
               <td style="padding: 8px; font-weight: 600;">Origin validation</td>
-              <td style="padding: 8px;">Spectabas validates the <code>Origin</code>/<code>Referer</code> header. Since beacons come from <code>www.roommates.com</code> (which is the parent domain of <code>b.roommates.com</code>), origin checks pass automatically.</td>
+              <td style="padding: 8px;">Proxy makes server-to-server calls with no Origin/Referer/Sec-Fetch-Site headers. Spectabas's origin check allows these automatically (same as cURL or API calls).</td>
             </tr>
           </tbody>
         </table>
@@ -266,7 +268,7 @@ defmodule Spectabas.Workers.ProxySetupEmail do
         <ul style="font-size: 14px; padding-left: 20px;">
           <li><strong>Cloudflare IP forwarding:</strong> Since www.roommates.com is behind Cloudflare, the real client IP arrives in the <code>CF-Connecting-IP</code> header. The proxy plug reads this and forwards it to Spectabas as both <code>CF-Connecting-IP</code> and <code>X-Forwarded-For</code>. Spectabas checks <code>CF-Connecting-IP</code> first, so geo enrichment uses the correct IP.</li>
           <li><strong>Cloudflare caching:</strong> Cloudflare may cache <code>/t/v1.js</code> since it returns <code>Cache-Control: public, max-age=3600</code>. This is actually good — reduces proxy overhead. If you update the tracker, purge the Cloudflare cache or change the path.</li>
-          <li><strong>Cloudflare DNS:</strong> Keep <code>b.roommates.com</code> as gray-cloud (DNS only, not proxied) in Cloudflare since Spectabas handles its own TLS. The proxy traffic goes from www (orange cloud) to b (gray cloud).</li>
+          <li><strong>Cloudflare DNS:</strong> The proxy goes directly to <code>www.spectabas.com</code> (Render's domain), bypassing Cloudflare entirely for the server-to-server hop. No DNS changes needed.</li>
           <li><strong>Render latency:</strong> The proxy adds ~10-50ms per request (internal HTTP call between Render services in the same Ohio region). This is fine for async beacons.</li>
           <li>No environment variables or Render service changes needed — it's just a plug in your existing app</li>
         </ul>
@@ -293,7 +295,7 @@ defmodule Spectabas.Workers.ProxySetupEmail do
     defmodule RoommatesWeb.Plugs.AnalyticsProxy do
       import Plug.Conn
 
-      @analytics_host "https://b.roommates.com"
+      @analytics_host "https://www.spectabas.com"
 
       def init(opts), do: opts
 
@@ -364,8 +366,7 @@ defmodule Spectabas.Workers.ProxySetupEmail do
       plug RoommatesWeb.Plugs.AnalyticsProxy
 
     STEP 3: Update tracking snippet:
-      <script defer data-id="YOUR_KEY" data-gdpr="off"
-        data-proxy="https://www.roommates.com/t"
+      <script defer data-id="YOUR_KEY"        data-proxy="https://www.roommates.com/t"
         src="https://www.roommates.com/t/v1.js"></script>
 
     STEP 4: Ensure Req is in mix.exs deps:

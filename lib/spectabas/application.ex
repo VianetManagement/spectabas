@@ -42,12 +42,9 @@ defmodule Spectabas.Application do
 
   defp schedule_one_shot_emails do
     try do
+      # v2: updated proxy email with Cloudflare + www.spectabas.com + simplified snippet
       Oban.insert(
-        Spectabas.Workers.AdSetupEmail.new(%{}, unique: [period: :infinity, keys: []])
-      )
-
-      Oban.insert(
-        Spectabas.Workers.ProxySetupEmail.new(%{}, unique: [period: :infinity, keys: []])
+        Spectabas.Workers.ProxySetupEmail.new(%{"v" => 2}, unique: [period: :infinity, keys: ["v"]])
       )
     rescue
       _ -> :ok
