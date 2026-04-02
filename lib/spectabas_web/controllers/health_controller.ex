@@ -600,7 +600,7 @@ defmodule SpectabasWeb.HealthController do
   def click_id_diag(conn, %{"token" => token}) when token == @import_token do
     q1 =
       case Spectabas.ClickHouse.query(
-             "SELECT click_id_type, count() AS c, uniq(visitor_id) AS v FROM events WHERE click_id != '' AND site_id = 4 GROUP BY click_id_type"
+             "SELECT click_id_type, count() AS c, uniq(visitor_id) AS v FROM events WHERE click_id != '' AND site_id = 4 AND timestamp >= now() - INTERVAL 7 DAY GROUP BY click_id_type"
            ) do
         {:ok, data} -> data
         {:error, r} -> [%{"error" => inspect(r) |> String.slice(0, 200)}]
