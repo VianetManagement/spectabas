@@ -32,7 +32,27 @@ defmodule SpectabasWeb.AdIntegrationController do
     |> redirect(to: ~p"/dashboard")
   end
 
-  defp exchange_code(site, "google_ads", code), do: GoogleAds.exchange_code(site, code)
+  defp exchange_code(site, "google_ads", code) do
+    with {:ok, tokens} <- GoogleAds.exchange_code(site, code) do
+      creds = Spectabas.AdIntegrations.Credentials.get_for_platform(site, "google_ads")
+      dev_token = creds["developer_token"]
+
+      case GoogleAds.list_accessible_customers(tokens.access_token, dev_token) do
+        {:ok, [first | _] = customers} ->
+          Logger.info("[AdIntegration] Google Ads: #{length(customers)} accessible customers, using #{first.id}")
+          {:ok, Map.merge(tokens, %{account_id: first.id, account_name: "Google Ads #{first.id}"})}
+
+        {:ok, []} ->
+          {:error, "No Google Ads accounts found for this user"}
+
+        {:error, reason} ->
+          Logger.warning("[AdIntegration] Google Ads listAccessibleCustomers failed: #{inspect(reason)}")
+          # Fall back to saving without account_id — user can set it manually
+          {:ok, tokens}
+      end
+    end
+  end
+
   defp exchange_code(site, "bing_ads", code), do: BingAds.exchange_code(site, code)
   defp exchange_code(site, "meta_ads", code), do: MetaAds.exchange_code(site, code)
   defp exchange_code(_, _, _), do: {:error, "Unknown platform"}

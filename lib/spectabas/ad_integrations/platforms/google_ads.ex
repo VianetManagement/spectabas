@@ -72,6 +72,14 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleAds do
   end
 
   def fetch_daily_spend(site, integration, %Date{} = date) do
+    if integration.account_id in [nil, ""] do
+      {:error, "No Google Ads customer ID set. Please disconnect and reconnect Google Ads."}
+    else
+      do_fetch_daily_spend(site, integration, date)
+    end
+  end
+
+  defp do_fetch_daily_spend(site, integration, date) do
     access_token = Spectabas.AdIntegrations.decrypt_access_token(integration)
     creds = Credentials.get_for_platform(site, "google_ads")
     dev_token = creds["developer_token"]
@@ -157,6 +165,34 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleAds do
     end
   end
   defp parse_int(_), do: 0
+
+  @doc "Fetch accessible customer IDs after OAuth. Returns list of %{id, name}."
+  def list_accessible_customers(access_token, developer_token) do
+    url = "#{@api_base}/customers:listAccessibleCustomers"
+
+    case Req.get(url,
+           headers: [
+             {"authorization", "Bearer #{access_token}"},
+             {"developer-token", developer_token}
+           ]
+         ) do
+      {:ok, %{status: 200, body: %{"resourceNames" => names}}} ->
+        customers =
+          Enum.map(names, fn name ->
+            # "customers/1234567890" -> "1234567890"
+            id = String.replace_prefix(name, "customers/", "")
+            %{id: id, name: id}
+          end)
+
+        {:ok, customers}
+
+      {:ok, %{status: status, body: body}} ->
+        {:error, "Google Ads #{status}: #{extract_error_detail(body)}"}
+
+      {:error, reason} ->
+        {:error, inspect(reason)}
+    end
+  end
 
   defp redirect_uri do
     host = Application.get_env(:spectabas, SpectabasWeb.Endpoint)[:url][:host] || "localhost"
