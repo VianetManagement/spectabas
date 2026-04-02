@@ -76,34 +76,46 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleAds do
     creds = Credentials.get_for_platform(site, "google_ads")
     dev_token = creds["developer_token"]
     customer_id = integration.account_id |> String.replace("-", "")
+    login_customer_id = (integration.extra || %{})["login_customer_id"] || customer_id
 
-    gaql = """
-    SELECT campaign.id, campaign.name, metrics.cost_micros, metrics.clicks, metrics.impressions, segments.date
-    FROM campaign
-    WHERE segments.date = '#{Date.to_iso8601(date)}'
-    """
+    gaql =
+      "SELECT campaign.id, campaign.name, metrics.cost_micros, metrics.clicks, metrics.impressions " <>
+        "FROM campaign WHERE segments.date = '#{Date.to_iso8601(date)}'"
 
     url = "#{@api_base}/customers/#{customer_id}/googleAds:searchStream"
 
-    case Req.post(url,
-           json: %{query: gaql},
-           headers: [
-             {"authorization", "Bearer #{access_token}"},
-             {"developer-token", dev_token}
-           ]
-         ) do
+    headers = [
+      {"authorization", "Bearer #{access_token}"},
+      {"developer-token", dev_token},
+      {"login-customer-id", String.replace(login_customer_id, "-", "")}
+    ]
+
+    case Req.post(url, json: %{query: gaql}, headers: headers) do
       {:ok, %{status: 200, body: body}} ->
         rows = parse_google_response(body)
         {:ok, rows}
 
       {:ok, %{status: status, body: body}} ->
-        Logger.warning("[GoogleAds] API #{status}: #{inspect(body) |> String.slice(0, 300)}")
-        {:error, "API error #{status}"}
+        detail = extract_error_detail(body)
+        Logger.warning("[GoogleAds] API #{status}: #{detail}")
+        {:error, "Google Ads #{status}: #{String.slice(detail, 0, 120)}"}
 
       {:error, reason} ->
-        {:error, reason}
+        {:error, inspect(reason)}
     end
   end
+
+  defp extract_error_detail(%{"error" => %{"message" => msg}}), do: msg
+
+  defp extract_error_detail(body) when is_list(body) do
+    body
+    |> Enum.find_value(fn
+      %{"error" => %{"message" => msg}} -> msg
+      _ -> nil
+    end) || inspect(body) |> String.slice(0, 200)
+  end
+
+  defp extract_error_detail(body), do: inspect(body) |> String.slice(0, 200)
 
   defp parse_google_response(body) when is_list(body) do
     Enum.flat_map(body, fn batch ->
