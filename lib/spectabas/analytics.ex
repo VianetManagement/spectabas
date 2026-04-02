@@ -1172,25 +1172,29 @@ defmodule Spectabas.Analytics do
 
       # "any" touch: keep all distinct sources per visitor (multi-touch)
       # first/last: pick one source per visitor via argMin/argMax
+      # Also captures click_id_type to split paid vs organic rows
       visitor_source_subquery =
         if touch == "any" do
           """
-          SELECT visitor_id, source
+          SELECT visitor_id, source, ad_platform
           FROM (
-            SELECT visitor_id, #{source_expr} AS source
+            SELECT visitor_id, #{source_expr} AS source, click_id_type AS ad_platform
             FROM events
             WHERE site_id = #{ClickHouse.param(site.id)}
               AND event_type = 'pageview' AND ip_is_bot = 0
               AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
               AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
           )
-          GROUP BY visitor_id, source
+          GROUP BY visitor_id, source, ad_platform
           """
         else
           agg_fn = if touch == "last", do: "argMax", else: "argMin"
 
           """
-          SELECT visitor_id, #{agg_fn}(#{source_expr}, timestamp) AS source
+          SELECT
+            visitor_id,
+            #{agg_fn}(#{source_expr}, timestamp) AS source,
+            #{agg_fn}(click_id_type, timestamp) AS ad_platform
           FROM events
           WHERE site_id = #{ClickHouse.param(site.id)}
             AND event_type = 'pageview' AND ip_is_bot = 0
@@ -1203,6 +1207,7 @@ defmodule Spectabas.Analytics do
       sql = """
       SELECT
         source,
+        ad_platform,
         uniq(e.visitor_id) AS visitors,
         countDistinct(ec.order_id) AS orders,
         sum(ec.revenue) AS total_revenue,
@@ -1218,7 +1223,7 @@ defmodule Spectabas.Analytics do
           AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
           AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
       ) AS ec ON e.visitor_id = ec.visitor_id
-      GROUP BY source
+      GROUP BY source, ad_platform
       ORDER BY total_revenue DESC
       LIMIT 50
       """

@@ -283,53 +283,15 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
             </p>
           </div>
 
-          <%!-- Per-platform breakdown --%>
+          <%!-- Per-platform summary (compact) --%>
           <div :if={@ad_platforms != []} class="mt-4 pt-3 border-t border-gray-100">
-            <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">By Platform (click ID attribution)</h3>
-            <table class="min-w-full text-sm">
-              <thead>
-                <tr class="border-b border-gray-100">
-                  <th class="py-1.5 text-left text-xs text-gray-500 font-medium">Platform</th>
-                  <th class="py-1.5 text-right text-xs text-gray-500 font-medium">Spend</th>
-                  <th class="py-1.5 text-right text-xs text-gray-500 font-medium">Ad Revenue</th>
-                  <th class="py-1.5 text-right text-xs text-gray-500 font-medium">ROAS</th>
-                  <th class="py-1.5 text-right text-xs text-gray-500 font-medium">Visitors</th>
-                  <th class="py-1.5 text-right text-xs text-gray-500 font-medium">Orders</th>
-                  <th class="py-1.5 text-right text-xs text-gray-500 font-medium">Clicks</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr :for={p <- @ad_platforms} class="border-b border-gray-50">
-                  <td class="py-1.5">
-                    <span class="flex items-center gap-1.5">
-                      <span class={["w-2 h-2 rounded-full", platform_color(p["platform"])]}></span>
-                      <span class="font-medium text-gray-900">{platform_label(p["platform"])}</span>
-                    </span>
-                  </td>
-                  <td class="py-1.5 text-right tabular-nums text-gray-700">
-                    {@site.currency} {format_money(p["total_spend"])}
-                  </td>
-                  <td class="py-1.5 text-right tabular-nums">
-                    <span class={if p["attributed_revenue"] && p["attributed_revenue"] > 0, do: "text-green-600 font-medium", else: "text-gray-300"}>
-                      {if p["attributed_revenue"] && p["attributed_revenue"] > 0, do: "#{@site.currency} #{format_money(p["attributed_revenue"])}", else: "--"}
-                    </span>
-                  </td>
-                  <td class="py-1.5 text-right tabular-nums">
-                    <span :if={p["roas"]} class={roas_color(p["roas"])}>{p["roas"]}x</span>
-                    <span :if={!p["roas"]} class="text-gray-300">--</span>
-                  </td>
-                  <td class="py-1.5 text-right tabular-nums text-gray-700">
-                    {format_number(to_num(p["attributed_visitors"]))}
-                  </td>
-                  <td class="py-1.5 text-right tabular-nums text-gray-700">
-                    {format_number(to_num(p["attributed_orders"]))}
-                  </td>
-                  <td class="py-1.5 text-right tabular-nums text-gray-500">
-                    {format_number(to_num(p["total_clicks"]))}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            <div class="flex flex-wrap gap-4">
+              <div :for={p <- @ad_platforms} class="flex items-center gap-2 text-sm">
+                <span class={["inline-flex items-center px-2 py-0.5 rounded text-xs font-medium", ad_pill_class(p["platform"])]}>{platform_label(p["platform"])}</span>
+                <span class="text-gray-500">{@site.currency} {format_money(p["total_spend"])} spend</span>
+                <span class="text-gray-400">{format_number(to_num(p["total_clicks"]))} clicks</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -425,7 +387,15 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
               </tr>
               <tr :for={row <- @rows} class="hover:bg-gray-50">
                 <td class="px-6 py-4 text-sm font-medium text-gray-900">
-                  {row["source"] || "Direct"}
+                  <span class="flex items-center gap-2">
+                    {row["source"] || "Direct"}
+                    <span
+                      :if={row["ad_platform"] && row["ad_platform"] != ""}
+                      class={["inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold shrink-0", ad_pill_class(row["ad_platform"])]}
+                    >
+                      {ad_pill_label(row["ad_platform"])}
+                    </span>
+                  </span>
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
                   {format_number(to_num(row["visitors"]))}
@@ -597,6 +567,16 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
   defp roas_color(roas) when roas >= 3, do: "font-bold text-green-600"
   defp roas_color(roas) when roas >= 1, do: "font-medium text-yellow-600"
   defp roas_color(_), do: "font-medium text-red-600"
+
+  defp ad_pill_class("google_ads"), do: "bg-blue-100 text-blue-700"
+  defp ad_pill_class("bing_ads"), do: "bg-cyan-100 text-cyan-700"
+  defp ad_pill_class("meta_ads"), do: "bg-indigo-100 text-indigo-700"
+  defp ad_pill_class(_), do: "bg-gray-100 text-gray-600"
+
+  defp ad_pill_label("google_ads"), do: "Google Ads"
+  defp ad_pill_label("bing_ads"), do: "Bing Ads"
+  defp ad_pill_label("meta_ads"), do: "Meta Ads"
+  defp ad_pill_label(other), do: other
 
   defp platform_label("google_ads"), do: "Google Ads"
   defp platform_label("bing_ads"), do: "Microsoft Ads"
