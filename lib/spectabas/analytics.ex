@@ -1170,9 +1170,12 @@ defmodule Spectabas.Analytics do
             "if(#{ref} != '', #{ref}, if(utm_source != '', utm_source, 'Direct'))"
         end
 
-      # "any" touch: keep all distinct sources per visitor (multi-touch)
-      # first/last: pick one source per visitor via argMin/argMax
-      # Also captures click_id_type to split paid vs organic rows
+      # Only consider events with a real attribution signal (external referrer,
+      # UTM param, or click ID). Internal navigations (self-referrals cleaned to
+      # empty, no UTMs) evaluate to "Direct" and would incorrectly override real
+      # sources in first/last touch attribution.
+      has_signal = "(#{ref} != '' OR utm_source != '' OR utm_medium != '' OR utm_campaign != '' OR click_id != '')"
+
       visitor_source_subquery =
         if touch == "any" do
           """
@@ -1184,17 +1187,21 @@ defmodule Spectabas.Analytics do
               AND event_type = 'pageview' AND ip_is_bot = 0
               AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
               AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+              AND #{has_signal}
           )
           GROUP BY visitor_id, source, ad_platform
           """
         else
-          agg_fn = if touch == "last", do: "argMax", else: "argMin"
+          agg_fn_if = if touch == "last", do: "argMaxIf", else: "argMinIf"
 
           """
           SELECT
             visitor_id,
-            #{agg_fn}(#{source_expr}, timestamp) AS source,
-            #{agg_fn}(click_id_type, timestamp) AS ad_platform
+            ifNull(
+              #{agg_fn_if}(#{source_expr}, timestamp, #{has_signal}),
+              'Direct'
+            ) AS source,
+            #{agg_fn_if}(click_id_type, timestamp, #{has_signal}) AS ad_platform
           FROM events
           WHERE site_id = #{ClickHouse.param(site.id)}
             AND event_type = 'pageview' AND ip_is_bot = 0
@@ -1782,6 +1789,21 @@ defmodule Spectabas.Analytics do
     with :ok <- authorize(site, user) do
       ref = clean_referrer_sql(site)
 
+      # Only attribute from events with a real signal — exclude internal navigations
+      # that evaluate to "Direct" after self-referral cleaning
+      has_signal = "(#{ref} != '' OR utm_source != '' OR utm_medium != '' OR utm_campaign != '' OR click_id != '')"
+
+      channel_expr = """
+      multiIf(
+              utm_medium IN ('cpc', 'ppc', 'paid', 'paidsearch', 'cpm'), 'Paid',
+              utm_medium = 'email' OR #{ref} IN ('mail.google.com', 'mail.yahoo.com', 'outlook.live.com'), 'Email',
+              #{ref} IN ('google.com', 'bing.com', 'duckduckgo.com', 'yahoo.com', 'baidu.com'), 'Organic Search',
+              #{ref} IN ('facebook.com', 'instagram.com', 'twitter.com', 'linkedin.com', 'pinterest.com', 'tiktok.com', 'reddit.com', 't.co'), 'Social',
+              #{ref} != '', 'Referral',
+              'Direct'
+            )
+      """
+
       sql = """
       SELECT
         channel,
@@ -1792,16 +1814,9 @@ defmodule Spectabas.Analytics do
       FROM (
         SELECT
           visitor_id,
-          argMin(
-            multiIf(
-              utm_medium IN ('cpc', 'ppc', 'paid', 'paidsearch', 'cpm'), 'Paid',
-              utm_medium = 'email' OR #{ref} IN ('mail.google.com', 'mail.yahoo.com', 'outlook.live.com'), 'Email',
-              #{ref} IN ('google.com', 'bing.com', 'duckduckgo.com', 'yahoo.com', 'baidu.com'), 'Organic Search',
-              #{ref} IN ('facebook.com', 'instagram.com', 'twitter.com', 'linkedin.com', 'pinterest.com', 'tiktok.com', 'reddit.com', 't.co'), 'Social',
-              #{ref} != '', 'Referral',
-              'Direct'
-            ),
-            timestamp
+          ifNull(
+            argMinIf(#{channel_expr}, timestamp, #{has_signal}),
+            'Direct'
           ) AS channel
         FROM events
         WHERE site_id = #{ClickHouse.param(site.id)}
