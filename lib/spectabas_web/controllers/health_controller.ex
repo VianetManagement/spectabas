@@ -614,7 +614,25 @@ defmodule SpectabasWeb.HealthController do
         {:error, r} -> [%{"error" => inspect(r) |> String.slice(0, 200)}]
       end
 
-    json(conn, %{by_type: q1, today: q2})
+    q3 =
+      case Spectabas.ClickHouse.query("""
+           WITH ad_sessions AS (
+             SELECT session_id, any(visitor_id) AS visitor_id, any(click_id_type) AS group_key,
+               countIf(event_type = 'pageview') AS pages, maxIf(duration_s, event_type = 'duration') AS duration,
+               any(visitor_intent) AS intent
+             FROM events WHERE site_id = 4 AND ip_is_bot = 0 AND click_id != ''
+               AND timestamp >= now() - INTERVAL 30 DAY
+             GROUP BY session_id HAVING countIf(event_type = 'pageview') > 0
+           )
+           SELECT group_key, count() AS sessions, uniqExact(visitor_id) AS visitors,
+             round(avg(pages), 1) AS avg_pages
+           FROM ad_sessions GROUP BY group_key
+           """) do
+        {:ok, data} -> data
+        {:error, r} -> [%{"error" => inspect(r) |> String.slice(0, 200)}]
+      end
+
+    json(conn, %{by_type: q1, today: q2, quality_test: q3})
   end
 
   def click_id_diag(conn, _params) do
