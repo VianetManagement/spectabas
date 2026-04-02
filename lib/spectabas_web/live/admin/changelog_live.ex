@@ -51,6 +51,11 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
            title: "Enhancement: Ad sync — manual Sync Now button + status messaging",
            description:
              "Settings page now shows 'Waiting for first sync' when an ad platform is connected but hasn't synced yet. Added 'Sync Now' button to trigger an immediate sync instead of waiting for the 6-hour cron cycle."
+         },
+         %{
+           title: "Fix: Google Ads API version v17 → v23",
+           description:
+             "Google Ads API v17 was sunset and returning 404. Updated to current v23."
          }
        ]},
       {"v4.3.0 — 2026-04-01 UTC",

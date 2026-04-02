@@ -5,7 +5,7 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleAds do
 
   @authorize_url "https://accounts.google.com/o/oauth2/v2/auth"
   @token_url "https://oauth2.googleapis.com/token"
-  @api_base "https://googleads.googleapis.com/v17"
+  @api_base "https://googleads.googleapis.com/v23"
   @scope "https://www.googleapis.com/auth/adwords"
 
   alias Spectabas.AdIntegrations.Credentials
