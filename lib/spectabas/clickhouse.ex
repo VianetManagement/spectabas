@@ -292,7 +292,8 @@ defmodule Spectabas.ClickHouse do
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_referrer referrer_domain TYPE bloom_filter GRANULARITY 4",
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_event_type event_type TYPE bloom_filter GRANULARITY 4",
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_event_name event_name TYPE bloom_filter GRANULARITY 4",
-      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_url_path url_path TYPE bloom_filter GRANULARITY 4"
+      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_url_path url_path TYPE bloom_filter GRANULARITY 4",
+      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_click_id click_id TYPE bloom_filter GRANULARITY 4"
     ]
 
     if connected do
