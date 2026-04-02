@@ -1479,55 +1479,39 @@ defmodule Spectabas.Analytics do
           do: {"if(utm_campaign != '', utm_campaign, '(none)')", "campaign"},
           else: {"click_id_type", "platform"}
 
+      # Simple approach: get ad visitors who also purchased, compute days between
+      # first click event and first purchase per visitor, then aggregate by group
       sql = """
-      WITH first_click AS (
-        SELECT
-          visitor_id,
-          #{group_col} AS group_key,
-          min(timestamp) AS first_click_at,
-          min(session_id) AS first_session
-        FROM events
-        WHERE site_id = #{ClickHouse.param(site.id)}
-          AND event_type = 'pageview' AND ip_is_bot = 0
-          AND click_id != ''
-          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-        GROUP BY visitor_id, #{group_col}
-      ),
-      first_purchase AS (
-        SELECT
-          visitor_id,
-          min(timestamp) AS first_purchase_at
-        FROM ecommerce_events
-        WHERE site_id = #{ClickHouse.param(site.id)}
-          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-        GROUP BY visitor_id
-      ),
-      sessions_between AS (
-        SELECT
-          fc.visitor_id,
-          fc.group_key,
-          dateDiff('day', fc.first_click_at, fp.first_purchase_at) AS days_to_convert,
-          uniqExact(e.session_id) AS sessions_to_convert
-        FROM first_click AS fc
-        INNER JOIN first_purchase AS fp ON fc.visitor_id = fp.visitor_id
-        LEFT JOIN events AS e ON e.visitor_id = fc.visitor_id
-          AND e.site_id = #{ClickHouse.param(site.id)}
-          AND e.event_type = 'pageview' AND e.ip_is_bot = 0
-          AND e.timestamp >= fc.first_click_at
-          AND e.timestamp <= fp.first_purchase_at
-        GROUP BY fc.visitor_id, fc.group_key, days_to_convert
-      )
       SELECT
-        group_key AS #{result_col},
+        #{group_col} AS #{result_col},
         count() AS converters,
         round(avg(days_to_convert), 1) AS avg_days,
         round(median(days_to_convert), 1) AS median_days,
-        round(avg(sessions_to_convert), 1) AS avg_sessions,
-        round(median(sessions_to_convert), 1) AS median_sessions
-      FROM sessions_between
-      GROUP BY group_key
+        round(avg(sessions), 1) AS avg_sessions,
+        round(median(sessions), 1) AS median_sessions
+      FROM (
+        SELECT
+          e.visitor_id,
+          any(#{group_col}) AS group_val,
+          dateDiff('day', min(e.timestamp), min(ec.purchase_at)) AS days_to_convert,
+          uniqExact(e.session_id) AS sessions
+        FROM events AS e
+        INNER JOIN (
+          SELECT visitor_id, min(timestamp) AS purchase_at
+          FROM ecommerce_events
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+            AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+          GROUP BY visitor_id
+        ) AS ec ON e.visitor_id = ec.visitor_id
+        WHERE e.site_id = #{ClickHouse.param(site.id)}
+          AND e.event_type = 'pageview' AND e.ip_is_bot = 0
+          AND e.click_id != ''
+          AND e.timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND e.timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY e.visitor_id
+      )
+      GROUP BY #{result_col}
       ORDER BY converters DESC
       LIMIT 50
       """
@@ -1542,55 +1526,35 @@ defmodule Spectabas.Analytics do
 
     with :ok <- authorize(site, user) do
       sql = """
-      WITH first_click AS (
+      SELECT bucket, bucket_order, count() AS visitors
+      FROM (
         SELECT
-          visitor_id,
-          min(timestamp) AS first_click_at
-        FROM events
-        WHERE site_id = #{ClickHouse.param(site.id)}
-          AND event_type = 'pageview' AND ip_is_bot = 0
-          AND click_id != ''
-          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-        GROUP BY visitor_id
-      ),
-      first_purchase AS (
-        SELECT
-          visitor_id,
-          min(timestamp) AS first_purchase_at
-        FROM ecommerce_events
-        WHERE site_id = #{ClickHouse.param(site.id)}
-          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-        GROUP BY visitor_id
-      ),
-      conversions AS (
-        SELECT
-          dateDiff('day', fc.first_click_at, fp.first_purchase_at) AS days_to_convert
-        FROM first_click AS fc
-        INNER JOIN first_purchase AS fp ON fc.visitor_id = fp.visitor_id
+          multiIf(
+            days = 0, 'Same day', days = 1, '1 day', days <= 3, '2-3 days',
+            days <= 7, '4-7 days', days <= 14, '8-14 days', days <= 30, '15-30 days', '30+ days'
+          ) AS bucket,
+          multiIf(days = 0, 1, days = 1, 2, days <= 3, 3, days <= 7, 4, days <= 14, 5, days <= 30, 6, 7) AS bucket_order
+        FROM (
+          SELECT
+            e.visitor_id,
+            dateDiff('day', min(e.timestamp), min(ec.purchase_at)) AS days
+          FROM events AS e
+          INNER JOIN (
+            SELECT visitor_id, min(timestamp) AS purchase_at
+            FROM ecommerce_events
+            WHERE site_id = #{ClickHouse.param(site.id)}
+              AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+              AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+            GROUP BY visitor_id
+          ) AS ec ON e.visitor_id = ec.visitor_id
+          WHERE e.site_id = #{ClickHouse.param(site.id)}
+            AND e.event_type = 'pageview' AND e.ip_is_bot = 0
+            AND e.click_id != ''
+            AND e.timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+            AND e.timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+          GROUP BY e.visitor_id
+        )
       )
-      SELECT
-        multiIf(
-          days_to_convert = 0, 'Same day',
-          days_to_convert = 1, '1 day',
-          days_to_convert <= 3, '2-3 days',
-          days_to_convert <= 7, '4-7 days',
-          days_to_convert <= 14, '8-14 days',
-          days_to_convert <= 30, '15-30 days',
-          '30+ days'
-        ) AS bucket,
-        multiIf(
-          days_to_convert = 0, 1,
-          days_to_convert = 1, 2,
-          days_to_convert <= 3, 3,
-          days_to_convert <= 7, 4,
-          days_to_convert <= 14, 5,
-          days_to_convert <= 30, 6,
-          7
-        ) AS bucket_order,
-        count() AS visitors
-      FROM conversions
       GROUP BY bucket, bucket_order
       ORDER BY bucket_order
       """
@@ -1604,51 +1568,34 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
+      # Flat query: build paths from events with click_id, check purchaser status inline
       sql = """
-      WITH ad_sessions AS (
-        SELECT DISTINCT session_id, visitor_id
+      SELECT
+        journey,
+        count() AS visitors,
+        countIf(is_purchaser = 1) AS converters,
+        round(countIf(is_purchaser = 1) / greatest(count(), 1) * 100, 1) AS conversion_rate
+      FROM (
+        SELECT
+          session_id,
+          any(visitor_id) AS vid,
+          arrayStringConcat(arraySlice(groupArray(url_path ORDER BY timestamp ASC), 1, 5), ' → ') AS journey,
+          max(visitor_id IN (
+            SELECT DISTINCT visitor_id FROM ecommerce_events
+            WHERE site_id = #{ClickHouse.param(site.id)}
+              AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+              AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+          )) AS is_purchaser
         FROM events
         WHERE site_id = #{ClickHouse.param(site.id)}
           AND event_type = 'pageview' AND ip_is_bot = 0
           AND click_id != ''
           AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
           AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-      ),
-      session_paths AS (
-        SELECT
-          e.session_id,
-          e.visitor_id,
-          arrayStringConcat(
-            arraySlice(
-              groupArray(e.url_path ORDER BY e.timestamp ASC),
-              1, 5
-            ),
-            ' → '
-          ) AS path
-        FROM events AS e
-        INNER JOIN ad_sessions AS s ON e.session_id = s.session_id
-        WHERE e.site_id = #{ClickHouse.param(site.id)}
-          AND e.event_type = 'pageview' AND e.ip_is_bot = 0
-          AND e.timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-          AND e.timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-        GROUP BY e.session_id, e.visitor_id
-      ),
-      purchasers AS (
-        SELECT DISTINCT visitor_id
-        FROM ecommerce_events
-        WHERE site_id = #{ClickHouse.param(site.id)}
-          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY session_id
       )
-      SELECT
-        sp.path AS journey,
-        count() AS visitors,
-        countIf(p.visitor_id != '') AS converters,
-        round(countIf(p.visitor_id != '') / greatest(count(), 1) * 100, 1) AS conversion_rate
-      FROM session_paths AS sp
-      LEFT JOIN purchasers AS p ON sp.visitor_id = p.visitor_id
-      GROUP BY sp.path
-      ORDER BY visitor_count DESC
+      GROUP BY journey
+      ORDER BY visitors DESC
       LIMIT 20
       """
 
@@ -1662,11 +1609,11 @@ defmodule Spectabas.Analytics do
 
     with :ok <- authorize(site, user) do
       sql = """
-      WITH bounced_sessions AS (
+      SELECT landing_page, platform, count() AS bounces
+      FROM (
         SELECT
-          session_id,
-          any(click_id_type) AS platform,
-          any(url_path) AS landing_page
+          any(url_path) AS landing_page,
+          any(click_id_type) AS platform
         FROM events
         WHERE site_id = #{ClickHouse.param(site.id)}
           AND event_type = 'pageview' AND ip_is_bot = 0
@@ -1676,13 +1623,8 @@ defmodule Spectabas.Analytics do
         GROUP BY session_id
         HAVING count() = 1
       )
-      SELECT
-        landing_page,
-        platform,
-        count() AS bounces
-      FROM bounced_sessions
       GROUP BY landing_page, platform
-      ORDER BY bounce_count DESC
+      ORDER BY bounces DESC
       LIMIT 20
       """
 

@@ -51,6 +51,8 @@ Spectabas is a multi-tenant, privacy-first web analytics SaaS platform built wit
 ### ClickHouse Data Types from JSON
 **Important**: ClickHouse returns all values as strings in JSON format. Always use `to_num/1` or `to_float/1` helpers before arithmetic. This has caused multiple bugs.
 
+**Important**: Ad effectiveness queries must use flat GROUP BY, not CTEs with JOINs — CTEs time out on ClickHouse with large event tables. A bloom_filter skip index on `click_id` speeds up `click_id != ''` filters.
+
 ## Development
 
 ```bash
@@ -150,6 +152,8 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **ROAS on Revenue Attribution** — Ad Spend Overview card (total spend, ad-attributed revenue, ROAS, clicks, impressions, per-platform breakdown). Campaign tab shows inline Spend/ROAS/CPC columns. Standalone Ad Spend by Campaign table on other tabs. ROAS color-coded.
 - **Click ID Attribution** — Tracker captures gclid (Google), msclkid (Bing), fbclid (Meta) from landing URLs. Stored in ClickHouse `click_id`/`click_id_type` columns. Revenue from visitors with click IDs attributed to the platform for ROAS calculation.
 - **Ad Effectiveness Suite** — 5 pages under new sidebar section: Visitor Quality (engagement scoring 0-100), Time to Convert (days/sessions to purchase), Ad Visitor Paths (page sequences by outcome), Ad-to-Churn (campaign churn correlation), Organic Lift (ad spend vs organic traffic correlation)
+- **Revenue Attribution Enhancements** — sortable columns, paid vs organic row split with colored platform pills (Google/Bing/Meta) across all UTM tabs
+- **Reverse Proxy (data-proxy)** — tracker supports `data-proxy` attribute for same-origin tracking through main domain, bypasses ad blockers
 
 ## Authentication
 

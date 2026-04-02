@@ -70,6 +70,13 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
                "Enables same-origin tracking that ad blockers cannot detect."
          },
          %{
+           title: "Fix: sortable columns, paid/organic split with pills, query performance",
+           description:
+             "Revenue Attribution: all columns sortable (click to toggle asc/desc). Source table now splits rows by paid vs organic " <>
+               "with colored pills (Google Ads, Bing Ads, Meta Ads) across all tabs. Visitor Quality query rewritten as flat GROUP BY " <>
+               "(was CTE-based and timing out). Added bloom_filter skip index on click_id for faster ad queries."
+         },
+         %{
            title: "Feature: 5 Ad Effectiveness pages — Visitor Quality, Time to Convert, Ad Paths, Ad-to-Churn, Organic Lift",
            description:
              "New 'Ad Effectiveness' sidebar section with 5 pages that go beyond standard ROAS. " <>

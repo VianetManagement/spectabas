@@ -1907,6 +1907,12 @@ defmodule SpectabasWeb.DocsLive do
             | **Conv Rate** | Percentage of visitors who purchased |
             | **Rev Share** | This source's share of total revenue (bar chart) |
 
+            All columns are **sortable** — click any header to sort ascending/descending.
+
+            ### Paid vs Organic Split
+
+            Sources are automatically split into paid and organic rows. Visitors who arrived via an ad click ID (gclid, msclkid, fbclid) get a separate row with a colored pill: **Google Ads** (blue), **Bing Ads** (cyan), **Meta Ads** (indigo). Organic visitors from the same source appear as a separate row without a pill. This lets you directly compare paid vs organic performance from the same traffic source.
+
             ### UTM Dimension Tabs
 
             Toggle between 5 views: **Source** (referrer domain or utm_source), **Medium** (utm_medium), **Campaign** (utm_campaign), **Term** (utm_term), **Content** (utm_content).
