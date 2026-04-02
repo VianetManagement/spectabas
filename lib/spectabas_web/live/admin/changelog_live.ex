@@ -63,6 +63,13 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Bumped Meta/Facebook Graph API from v21.0 to latest v25.0. Bing Ads v13 confirmed current."
          },
          %{
+           title: "Feature: Any-touch attribution model + last-touch default",
+           description:
+             "Revenue Attribution now has three toggle options: First Touch, Last Touch (default), and Any Touch. " <>
+               "Any Touch shows every source a converting visitor ever touched — a single conversion can appear under multiple sources. " <>
+               "Useful for understanding the full customer journey and whether ad clicks appeared anywhere in the path to conversion."
+         },
+         %{
            title: "Fix: Revenue Attribution defaults to last-touch, click ID respects toggle",
            description:
              "Industry standard: last-touch attribution as default (was first-touch). " <>

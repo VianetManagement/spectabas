@@ -1167,7 +1167,35 @@ defmodule Spectabas.Analytics do
             "if(referrer_domain != '', referrer_domain, if(utm_source != '', utm_source, 'Direct'))"
         end
 
-      agg_fn = if touch == "last", do: "argMax", else: "argMin"
+      # "any" touch: keep all distinct sources per visitor (multi-touch)
+      # first/last: pick one source per visitor via argMin/argMax
+      visitor_source_subquery =
+        if touch == "any" do
+          """
+          SELECT visitor_id, source
+          FROM (
+            SELECT visitor_id, #{source_expr} AS source
+            FROM events
+            WHERE site_id = #{ClickHouse.param(site.id)}
+              AND event_type = 'pageview' AND ip_is_bot = 0
+              AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+              AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+          )
+          GROUP BY visitor_id, source
+          """
+        else
+          agg_fn = if touch == "last", do: "argMax", else: "argMin"
+
+          """
+          SELECT visitor_id, #{agg_fn}(#{source_expr}, timestamp) AS source
+          FROM events
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND event_type = 'pageview' AND ip_is_bot = 0
+            AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+            AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+          GROUP BY visitor_id
+          """
+        end
 
       sql = """
       SELECT
@@ -1178,13 +1206,7 @@ defmodule Spectabas.Analytics do
         round(avg(ec.revenue), 2) AS avg_order_value,
         round(countDistinct(ec.order_id) / greatest(uniq(e.visitor_id), 1) * 100, 2) AS conversion_rate
       FROM (
-        SELECT visitor_id, #{agg_fn}(#{source_expr}, timestamp) AS source
-        FROM events
-        WHERE site_id = #{ClickHouse.param(site.id)}
-          AND event_type = 'pageview' AND ip_is_bot = 0
-          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-        GROUP BY visitor_id
+        #{visitor_source_subquery}
       ) AS e
       LEFT JOIN (
         SELECT visitor_id, order_id, revenue
@@ -1251,7 +1273,36 @@ defmodule Spectabas.Analytics do
   def ad_revenue_by_platform(%Site{} = site, %User{} = user, date_range, opts \\ []) do
     date_range = ensure_date_range(date_range)
     touch = Keyword.get(opts, :touch, "last")
-    agg_fn = if touch == "last", do: "argMax", else: "argMin"
+
+    visitor_click_subquery =
+      if touch == "any" do
+        """
+        SELECT visitor_id, click_id_type
+        FROM (
+          SELECT visitor_id, click_id_type
+          FROM events
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND click_id != '' AND click_id_type != ''
+            AND event_type = 'pageview' AND ip_is_bot = 0
+            AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+            AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        )
+        GROUP BY visitor_id, click_id_type
+        """
+      else
+        agg_fn = if touch == "last", do: "argMax", else: "argMin"
+
+        """
+        SELECT visitor_id, #{agg_fn}(click_id_type, timestamp) AS click_id_type
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND click_id != '' AND click_id_type != ''
+          AND event_type = 'pageview' AND ip_is_bot = 0
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY visitor_id
+        """
+      end
 
     with :ok <- authorize(site, user) do
       sql = """
@@ -1261,14 +1312,7 @@ defmodule Spectabas.Analytics do
         countDistinct(ec.order_id) AS orders,
         sum(ec.revenue) AS total_revenue
       FROM (
-        SELECT visitor_id, #{agg_fn}(click_id_type, timestamp) AS click_id_type
-        FROM events
-        WHERE site_id = #{ClickHouse.param(site.id)}
-          AND click_id != '' AND click_id_type != ''
-          AND event_type = 'pageview' AND ip_is_bot = 0
-          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-        GROUP BY visitor_id
+        #{visitor_click_subquery}
       ) AS e
       LEFT JOIN (
         SELECT visitor_id, order_id, revenue

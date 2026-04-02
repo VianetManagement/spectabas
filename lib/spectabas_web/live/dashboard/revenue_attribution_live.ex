@@ -181,7 +181,7 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
             <%!-- First/Last Touch Toggle --%>
             <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">
               <button
-                :for={{id, label} <- [{"first", "First Touch"}, {"last", "Last Touch"}]}
+                :for={{id, label} <- [{"first", "First Touch"}, {"last", "Last Touch"}, {"any", "Any Touch"}]}
                 phx-click="change_touch"
                 phx-value-touch={id}
                 class={[
@@ -303,7 +303,7 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
           <span class="text-indigo-700">{format_number(@total_orders)} orders</span>
           <span class="text-indigo-700">{format_number(@total_visitors)} visitors</span>
           <span class="text-indigo-700">
-            {if @touch == "first", do: "First-touch", else: "Last-touch"} attribution
+            {touch_label(@touch)} attribution
           </span>
         </div>
 
@@ -491,12 +491,10 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
         </div>
 
         <p class="text-xs text-gray-500 mt-3">
-          <strong>{if @touch == "first", do: "First-touch", else: "Last-touch"}</strong>
-          attribution: revenue is credited to the {if @touch == "first",
-            do: "first",
-            else: "most recent"} traffic source the customer came from before purchasing.
+          <strong>{touch_label(@touch)}</strong>
+          attribution: {touch_description(@touch)}
           <%= if @has_ad_data do %>
-            ROAS = Revenue / Ad Spend. Campaign spend is matched by utm_campaign name.
+            ROAS = Revenue / Ad Spend.
           <% end %>
         </p>
       </div>
@@ -530,6 +528,19 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
   end
 
   defp rev_share_pct(_, _), do: 0.0
+
+  defp touch_label("first"), do: "First-touch"
+  defp touch_label("last"), do: "Last-touch"
+  defp touch_label("any"), do: "Any-touch"
+
+  defp touch_description("first"),
+    do: "revenue is credited to the first traffic source the customer came from."
+
+  defp touch_description("last"),
+    do: "revenue is credited to the most recent traffic source before purchasing."
+
+  defp touch_description("any"),
+    do: "revenue is credited to every source the customer touched. Totals may exceed actual revenue since one conversion can appear under multiple sources."
 
   defp roas_color(roas) when roas >= 3, do: "font-bold text-green-600"
   defp roas_color(roas) when roas >= 1, do: "font-medium text-yellow-600"
