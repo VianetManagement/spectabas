@@ -145,6 +145,7 @@ defmodule SpectabasWeb.Router do
       on_mount: [{SpectabasWeb.UserAuth, :require_authenticated}] do
       live "/", Dashboard.IndexLive, :index
       live "/sites/:site_id", Dashboard.SiteLive, :show
+      live "/sites/:site_id/c/:category", Dashboard.CategoryLive, :index
       live "/sites/:site_id/realtime", Dashboard.RealtimeLive, :show
       live "/sites/:site_id/pages", Dashboard.PagesLive, :index
       live "/sites/:site_id/channels", Dashboard.ChannelsLive, :index

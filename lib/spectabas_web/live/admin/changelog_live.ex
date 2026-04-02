@@ -70,6 +70,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
                "Enables same-origin tracking that ad blockers cannot detect."
          },
          %{
+           title: "Feature: category landing pages with page descriptions",
+           description:
+             "Each sidebar category (Overview, Behavior, Acquisition, Audience, Conversions, Ad Effectiveness, Tools) " <>
+               "now has a landing page at /sites/:id/c/:category with a 2-column card grid. Each card links to a page " <>
+               "with a detailed description of what it shows and how to use it. Sidebar category labels are clickable links. " <>
+               "Makes the dashboard self-explanatory for new users."
+         },
+         %{
            title: "Feature: breadcrumbs on all dashboard pages",
            description:
              "Every dashboard page now shows a breadcrumb trail: Site Name / Category / Page Title. " <>

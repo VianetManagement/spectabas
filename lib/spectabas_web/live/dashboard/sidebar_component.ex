@@ -92,7 +92,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
 
         <%!-- Navigation --%>
         <nav class="flex-1 p-3 space-y-0.5 overflow-y-auto">
-          <.nav_section label="Overview" color="text-indigo-500">
+          <.nav_section label="Overview" color="text-indigo-500" to={~p"/dashboard/sites/#{@site.id}/c/overview"}>
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}"}
               label="Dashboard"
@@ -115,7 +115,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
             />
           </.nav_section>
 
-          <.nav_section label="Behavior" color="text-blue-500">
+          <.nav_section label="Behavior" color="text-blue-500" to={~p"/dashboard/sites/#{@site.id}/c/behavior"}>
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/pages"}
               label="Pages"
@@ -158,7 +158,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
             />
           </.nav_section>
 
-          <.nav_section label="Acquisition" color="text-emerald-500">
+          <.nav_section label="Acquisition" color="text-emerald-500" to={~p"/dashboard/sites/#{@site.id}/c/acquisition"}>
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/channels"}
               label="All Channels"
@@ -181,7 +181,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
             />
           </.nav_section>
 
-          <.nav_section label="Audience" color="text-amber-500">
+          <.nav_section label="Audience" color="text-amber-500" to={~p"/dashboard/sites/#{@site.id}/c/audience"}>
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/geo"}
               label="Geography"
@@ -224,7 +224,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
             />
           </.nav_section>
 
-          <.nav_section label="Conversions" color="text-rose-500">
+          <.nav_section label="Conversions" color="text-rose-500" to={~p"/dashboard/sites/#{@site.id}/c/conversions"}>
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/goals"}
               label="Goals"
@@ -257,7 +257,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
             />
           </.nav_section>
 
-          <.nav_section label="Ad Effectiveness" color="text-violet-500">
+          <.nav_section label="Ad Effectiveness" color="text-violet-500" to={~p"/dashboard/sites/#{@site.id}/c/ad-effectiveness"}>
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/visitor-quality"}
               label="Visitor Quality"
@@ -285,7 +285,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
             />
           </.nav_section>
 
-          <.nav_section label="Tools">
+          <.nav_section label="Tools" to={~p"/dashboard/sites/#{@site.id}/c/tools"}>
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/reports"}
               label="Reports"
@@ -472,13 +472,19 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
   end
 
   defp nav_section(assigns) do
-    assigns = Map.put_new(assigns, :color, "text-gray-400")
+    assigns = assigns |> Map.put_new(:color, "text-gray-400") |> Map.put_new(:to, nil)
 
     ~H"""
     <div class="pt-4 first:pt-0">
-      <p class={["px-2 text-[10px] font-bold uppercase tracking-wider mb-1", @color]}>
-        {@label}
-      </p>
+      <%= if @to do %>
+        <.link navigate={@to} class={["px-2 text-[10px] font-bold uppercase tracking-wider mb-1 hover:underline", @color]}>
+          {@label}
+        </.link>
+      <% else %>
+        <p class={["px-2 text-[10px] font-bold uppercase tracking-wider mb-1", @color]}>
+          {@label}
+        </p>
+      <% end %>
       {render_slot(@inner_block)}
     </div>
     """
@@ -508,7 +514,12 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
     "ad-visitor-paths" => "Ad Effectiveness", "ad-churn" => "Ad Effectiveness",
     "organic-lift" => "Ad Effectiveness",
     # Tools
-    "reports" => "Tools", "email-reports" => "Tools", "exports" => "Tools", "settings" => "Tools"
+    "reports" => "Tools", "email-reports" => "Tools", "exports" => "Tools", "settings" => "Tools",
+    # Category landing pages
+    "overview-landing" => nil, "behavior-landing" => "Behavior",
+    "acquisition-landing" => "Acquisition", "audience-landing" => "Audience",
+    "conversions-landing" => "Conversions", "ad-effectiveness-landing" => "Ad Effectiveness",
+    "tools-landing" => "Tools"
   }
 
   defp breadcrumb_category(active), do: @breadcrumb_map[active]
