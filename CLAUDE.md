@@ -115,13 +115,15 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - Segment filters (filter by any dimension) with saved segment presets
 - Visitor intent breakdown
 
-### Analytics Pages (sidebar navigation)
+### Analytics Pages (sidebar navigation, 38 pages across 7 categories)
+- **Overview**: Dashboard, Insights (8 anomaly types), Journeys, Realtime
 - **Behavior**: Pages, Entry/Exit, Page Transitions, Site Search, Outbound Links, Downloads, Events, Performance (RUM)
 - **Acquisition**: All Channels, Sources (6 UTM tabs), Attribution, Campaigns (UTM builder)
-- **Audience**: Geography, Visitor Map, Devices, Network, Bot Traffic, Visitor Log, Cohort Retention
-- **Conversions**: Goals, Funnels, Ecommerce, Revenue Attribution, Revenue Cohorts, Buyer Patterns
-- **Audience** (new): Churn Risk (engagement decline detection for customers)
+- **Audience**: Geography, Visitor Map, Devices, Network, Bot Traffic, Visitor Log, Cohort Retention, Churn Risk
+- **Conversions**: Goals, Funnels, Ecommerce, Revenue Attribution (sortable, paid/organic split with pills), Revenue Cohorts, Buyer Patterns
+- **Ad Effectiveness**: Visitor Quality (0-100 scoring), Time to Convert, Ad Visitor Paths, Ad-to-Churn, Organic Lift
 - **Tools**: Reports, Email Reports, Exports, Settings
+- Each category has a landing page at `/sites/:id/c/:category` with descriptions for every page
 
 ### Email Reports
 - Per-user, per-site email digest subscriptions (daily/weekly/monthly)
@@ -213,8 +215,9 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Cross-linking** — click any dimension value to navigate to filtered views across analytics pages
 - **Mobile responsiveness** — scrollable tables, collapsible mobile nav bar
 - **Accessible top nav** — WCAG AA contrast compliance
-- **Documentation pages** — docs split into `/docs` (index), `/docs/getting-started`, `/docs/dashboard`, `/docs/api`, `/docs/admin` with cross-category search
-- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push
+- **Documentation pages** — docs split into `/docs` (index), `/docs/getting-started`, `/docs/dashboard`, `/docs/conversions`, `/docs/api`, `/docs/admin` with cross-category search. Requires login (behind :require_authenticated_user). Public pages: `/privacy`, `/terms`, homepage.
+- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v4.4.0)
+- **Legal** — Privacy Policy at `/privacy` and Terms of Service at `/terms` (public, no auth required). Entity: Spectabas, Kent County MI. Contact: howdy@spectabas.com. Arbitration clause (AAA, Kent County). 18+ age restriction.
 
 ## Important Patterns
 
