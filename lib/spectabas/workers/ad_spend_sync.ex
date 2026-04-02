@@ -20,6 +20,9 @@ defmodule Spectabas.Workers.AdSpendSync do
     :ok
   end
 
+  @doc "Sync a single integration for a given date. Called by AdSpendSyncOne."
+  def sync_one(integration, date), do: sync_integration(integration, date)
+
   defp sync_integration(integration, date) do
     # Refresh token if expired
     integration =

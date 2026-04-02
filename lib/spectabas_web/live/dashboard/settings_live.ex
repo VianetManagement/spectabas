@@ -91,6 +91,16 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
      |> assign(:ad_integrations, Spectabas.AdIntegrations.list_for_site(socket.assigns.site.id))}
   end
 
+  def handle_event("sync_ad_now", %{"id" => id}, socket) do
+    integration = Spectabas.AdIntegrations.get!(id) |> Spectabas.Repo.preload(:site)
+
+    Oban.insert(Spectabas.Workers.AdSpendSyncOne.new(%{"integration_id" => integration.id}))
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "#{platform_label(integration.platform)} sync queued. Refresh in a minute to see results.")}
+  end
+
   def handle_event("save_ad_credentials", %{"platform" => platform} = params, socket) do
     site = socket.assigns.site
 
@@ -531,7 +541,10 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                       Account: <span class="text-gray-700">{integration.account_name}</span>
                     </div>
                     <div :if={integration.last_synced_at}>
-                      Last sync: {Calendar.strftime(integration.last_synced_at, "%Y-%m-%d %H:%M")}
+                      Last sync: {Calendar.strftime(integration.last_synced_at, "%Y-%m-%d %H:%M")} UTC
+                    </div>
+                    <div :if={!integration.last_synced_at && !integration.last_error}>
+                      <span class="text-amber-600">Waiting for first sync (runs every 6h, or click Sync Now)</span>
                     </div>
                     <div
                       :if={integration.last_error}
@@ -540,14 +553,23 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                       Error: {String.slice(integration.last_error || "", 0, 80)}
                     </div>
                   </div>
-                  <button
-                    phx-click="disconnect_ad"
-                    phx-value-id={integration.id}
-                    data-confirm={"Disconnect #{label}? Ad spend data will stop syncing."}
-                    class="text-xs text-red-600 hover:text-red-800 font-medium"
-                  >
-                    Disconnect
-                  </button>
+                  <div class="flex items-center gap-3">
+                    <button
+                      phx-click="sync_ad_now"
+                      phx-value-id={integration.id}
+                      class="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                    >
+                      Sync Now
+                    </button>
+                    <button
+                      phx-click="disconnect_ad"
+                      phx-value-id={integration.id}
+                      data-confirm={"Disconnect #{label}? Ad spend data will stop syncing."}
+                      class="text-xs text-red-600 hover:text-red-800 font-medium"
+                    >
+                      Disconnect
+                    </button>
+                  </div>
                 <% else %>
                   <%= if ad_platform_configured?(@site, platform) do %>
                     <a

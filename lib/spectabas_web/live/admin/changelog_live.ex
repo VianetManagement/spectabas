@@ -45,6 +45,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v4.3.1 — 2026-04-01 UTC",
+       [
+         %{
+           title: "Enhancement: Ad sync — manual Sync Now button + status messaging",
+           description:
+             "Settings page now shows 'Waiting for first sync' when an ad platform is connected but hasn't synced yet. Added 'Sync Now' button to trigger an immediate sync instead of waiting for the 6-hour cron cycle."
+         }
+       ]},
       {"v4.3.0 — 2026-04-01 UTC",
        [
          %{
