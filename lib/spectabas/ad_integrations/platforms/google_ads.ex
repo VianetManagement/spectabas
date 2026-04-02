@@ -79,7 +79,7 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleAds do
     login_customer_id = (integration.extra || %{})["login_customer_id"] || customer_id
 
     gaql =
-      "SELECT campaign.id, campaign.name, metrics.cost_micros, metrics.clicks, metrics.impressions " <>
+      "SELECT campaign.id, campaign.name, metrics.cost_micros, metrics.clicks, metrics.impressions, segments.date " <>
         "FROM campaign WHERE segments.date = '#{Date.to_iso8601(date)}'"
 
     url = "#{@api_base}/customers/#{customer_id}/googleAds:searchStream"
