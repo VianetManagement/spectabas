@@ -597,6 +597,27 @@ defmodule SpectabasWeb.HealthController do
     conn |> put_status(403) |> json(%{error: "forbidden"})
   end
 
+  def send_setup_emails(conn, %{"token" => token}) when token == @import_token do
+    results = %{
+      proxy:
+        case Spectabas.Workers.ProxySetupEmail.perform(%Oban.Job{args: %{}}) do
+          :ok -> "sent"
+          {:error, reason} -> "error: #{inspect(reason)}"
+        end,
+      ad_setup:
+        case Spectabas.Workers.AdSetupEmail.perform(%Oban.Job{args: %{}}) do
+          :ok -> "sent"
+          {:error, reason} -> "error: #{inspect(reason)}"
+        end
+    }
+
+    json(conn, %{status: "done", results: results})
+  end
+
+  def send_setup_emails(conn, _params) do
+    conn |> put_status(403) |> json(%{error: "forbidden"})
+  end
+
   defp test_sites do
     Spectabas.Repo.all(Spectabas.Sites.Site)
     |> Enum.map(fn s -> %{id: s.id, domain: s.domain, public_key: s.public_key} end)
