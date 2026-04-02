@@ -2283,42 +2283,59 @@ defmodule SpectabasWeb.DocsLive do
 
             **Step 1: Create a Business App**
 
-            - Go to Meta for Developers (`developers.facebook.com`) and log in
+            - Go to Meta for Developers (`developers.facebook.com`) and log in with the Facebook account that manages your ads
             - Click **My Apps** in the top right, then **Create App**
-            - Select **Other** for "What do you want your app to do?"
-            - Select **Business** as the app type (required for ad data access — Consumer apps cannot read ad insights)
-            - Enter an app name (e.g., "Spectabas Analytics") and click **Create App**
+            - Meta may show either a use-case flow or a type-selection flow:
+            - **If you see "What do you want your app to do?"** — select **Other**, then select **Business** as the app type
+            - **If you see use-case options** — select **Advertise** or **Other** and choose **Business** when prompted
+            - Enter an app name (e.g., "Spectabas Analytics")
+            - Associate it with your Business portfolio if prompted (this is the Business Manager account that owns your ad accounts)
+            - Click **Create App**
+
+            > **Business app type is required.** Consumer apps cannot access the Marketing API or ad insights. If you accidentally created a Consumer app, delete it and start over with Business.
 
             **Step 2: Add the Marketing API product**
 
-            - On your app's dashboard, find the **Add Products** section
+            - On your app's dashboard, scroll to the **Add Products** section
             - Find **Marketing API** and click **Set Up**
-            - This enables the `/act_*/insights` endpoint that Spectabas uses to pull campaign spend data
+            - This enables the ad insights endpoints — no additional configuration needed within this product
+            - The Marketing API does NOT create a separate token — Spectabas uses the OAuth2 token from Facebook Login
 
             **Step 3: Add Facebook Login product**
 
-            - On the same dashboard, find **Facebook Login** and click **Set Up**
+            - On the same dashboard, find **Facebook Login for Business** (or **Facebook Login**) and click **Set Up**
             - Choose **Web** as the platform
             - In the left sidebar, go to **Facebook Login > Settings**
             - Under **Valid OAuth Redirect URIs**, add: `https://www.spectabas.com/auth/ad/meta_ads/callback`
+            - Make sure **Client OAuth Login** and **Web OAuth Login** are both **ON**
             - Click **Save Changes**
 
-            **Step 4: Get App ID and Secret**
+            **Step 4: Switch to Live Mode**
+
+            - At the top of the App Dashboard, you'll see a toggle that says **Development** or **In Development**
+            - Switch it to **Live**
+            - Meta may require you to complete **Business Verification** first (verify your company identity at `business.facebook.com/settings/info`)
+            - If you're the only person connecting (app admin), Development Mode works, but Live Mode is needed if other team members will connect their own accounts
+
+            **Step 5: Get App ID and Secret**
 
             - In the left sidebar, go to **App Settings > Basic**
             - Your **App ID** is shown at the top of the page
             - Click **Show** next to **App Secret** and copy it
             - Both values are needed for Spectabas
 
-            **Step 5: Enter in Spectabas**
+            **Step 6: Enter in Spectabas**
 
             - Go to your site's **Settings > Ad Platform Integrations > Meta Ads**
             - Click **Configure**
             - Paste the App ID and App Secret
             - Click **Save Credentials**, then **Connect**
-            - You'll be redirected to Facebook to authorize — grant the `ads_read` permission
+            - You'll be redirected to Facebook to authorize — grant the `ads_read` permission when prompted
+            - Spectabas will fetch your accessible ad accounts and connect
 
-            > **No app review needed.** The `ads_read` permission works with Standard Access for reading your own ad account data. You do NOT need to submit for Advanced Access or go through Meta's app review process unless you plan to access other people's ad accounts.
+            > **No app review needed.** The `ads_read` permission works with Standard Access for reading your own ad account data. You do NOT need to submit for Advanced Access or go through Meta's app review process. The Marketing API product does not create its own token — the OAuth2 user token from Facebook Login handles everything.
+
+            > **Token refresh:** Spectabas exchanges the initial token for a 60-day long-lived token. The sync worker automatically refreshes this before it expires. If a token does expire, disconnect and reconnect from the Settings page.
 
             > **All credentials are encrypted** at rest using AES-256-GCM and stored per-site in the database. No environment variables or server access needed. Each site can use its own OAuth apps or share credentials across sites.
 
