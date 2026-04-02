@@ -284,25 +284,52 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
           </div>
 
           <%!-- Per-platform breakdown --%>
-          <div :if={length(@ad_platforms) > 1} class="mt-4 pt-3 border-t border-gray-100">
-            <div class="flex flex-wrap gap-4">
-              <div :for={p <- @ad_platforms} class="flex items-center gap-2 text-sm">
-                <span class={["w-2 h-2 rounded-full", platform_color(p["platform"])]}></span>
-                <span class="text-gray-700 font-medium">{platform_label(p["platform"])}</span>
-                <span class="text-gray-500">
-                  Spend: {@site.currency} {format_money(p["total_spend"])}
-                </span>
-                <span :if={p["attributed_revenue"] && p["attributed_revenue"] > 0} class="text-green-600">
-                  Rev: {@site.currency} {format_money(p["attributed_revenue"])}
-                </span>
-                <span :if={p["roas"]} class={roas_color(p["roas"])}>
-                  {p["roas"]}x ROAS
-                </span>
-                <span class="text-gray-400">
-                  {format_number(to_num(p["total_clicks"]))} clicks
-                </span>
-              </div>
-            </div>
+          <div :if={@ad_platforms != []} class="mt-4 pt-3 border-t border-gray-100">
+            <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">By Platform (click ID attribution)</h3>
+            <table class="min-w-full text-sm">
+              <thead>
+                <tr class="border-b border-gray-100">
+                  <th class="py-1.5 text-left text-xs text-gray-500 font-medium">Platform</th>
+                  <th class="py-1.5 text-right text-xs text-gray-500 font-medium">Spend</th>
+                  <th class="py-1.5 text-right text-xs text-gray-500 font-medium">Ad Revenue</th>
+                  <th class="py-1.5 text-right text-xs text-gray-500 font-medium">ROAS</th>
+                  <th class="py-1.5 text-right text-xs text-gray-500 font-medium">Visitors</th>
+                  <th class="py-1.5 text-right text-xs text-gray-500 font-medium">Orders</th>
+                  <th class="py-1.5 text-right text-xs text-gray-500 font-medium">Clicks</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr :for={p <- @ad_platforms} class="border-b border-gray-50">
+                  <td class="py-1.5">
+                    <span class="flex items-center gap-1.5">
+                      <span class={["w-2 h-2 rounded-full", platform_color(p["platform"])]}></span>
+                      <span class="font-medium text-gray-900">{platform_label(p["platform"])}</span>
+                    </span>
+                  </td>
+                  <td class="py-1.5 text-right tabular-nums text-gray-700">
+                    {@site.currency} {format_money(p["total_spend"])}
+                  </td>
+                  <td class="py-1.5 text-right tabular-nums">
+                    <span class={if p["attributed_revenue"] && p["attributed_revenue"] > 0, do: "text-green-600 font-medium", else: "text-gray-300"}>
+                      {if p["attributed_revenue"] && p["attributed_revenue"] > 0, do: "#{@site.currency} #{format_money(p["attributed_revenue"])}", else: "--"}
+                    </span>
+                  </td>
+                  <td class="py-1.5 text-right tabular-nums">
+                    <span :if={p["roas"]} class={roas_color(p["roas"])}>{p["roas"]}x</span>
+                    <span :if={!p["roas"]} class="text-gray-300">--</span>
+                  </td>
+                  <td class="py-1.5 text-right tabular-nums text-gray-700">
+                    {format_number(to_num(p["attributed_visitors"]))}
+                  </td>
+                  <td class="py-1.5 text-right tabular-nums text-gray-700">
+                    {format_number(to_num(p["attributed_orders"]))}
+                  </td>
+                  <td class="py-1.5 text-right tabular-nums text-gray-500">
+                    {format_number(to_num(p["total_clicks"]))}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
 
