@@ -147,7 +147,8 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Funnel Revenue** — funnels show revenue from visitors at each step (ecommerce sites only)
 - **Abandoned Funnel Export** — CSV export of visitor IDs + emails who dropped off at each funnel step
 - **Ad Platform Integrations** — Google Ads, Bing Ads, Meta/Facebook Ads OAuth2 connections with daily spend sync. Encrypted token storage (AES-256-GCM). Settings UI per site with Sync Now button. Oban sync every 6h. Google Ads account picker for MCC/multi-account setups.
-- **ROAS on Revenue Attribution** — Ad Spend Overview card (total spend, revenue, ROAS, clicks, impressions, per-platform breakdown). Campaign tab shows inline Spend/ROAS/CPC columns. Standalone Ad Spend by Campaign table on other tabs. ROAS color-coded.
+- **ROAS on Revenue Attribution** — Ad Spend Overview card (total spend, ad-attributed revenue, ROAS, clicks, impressions, per-platform breakdown). Campaign tab shows inline Spend/ROAS/CPC columns. Standalone Ad Spend by Campaign table on other tabs. ROAS color-coded.
+- **Click ID Attribution** — Tracker captures gclid (Google), msclkid (Bing), fbclid (Meta) from landing URLs. Stored in ClickHouse `click_id`/`click_id_type` columns. Revenue from visitors with click IDs attributed to the platform for ROAS calculation.
 
 ## Authentication
 
@@ -224,6 +225,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **SPA pageview tracking**: Only pathname changes trigger new pageviews. Query-string-only pushState changes are ignored. This matches standard analytics behavior (Matomo, GA).
 - **Saved segments**: Ownership enforced — `get_segment!/3` scopes by user_id and site_id. Never load segments by ID alone.
 - **Tracker GDPR default**: `data-gdpr` defaults to `"off"` (cookie-based). Sites needing fingerprint-only mode must explicitly set `data-gdpr="on"`.
+- **Click ID capture**: Tracker extracts gclid/msclkid/fbclid from URL, persists in sessionStorage, sends as `_cid`/`_cidt` fields. Ingest stores in `click_id`/`click_id_type` ClickHouse columns. Revenue Attribution uses click IDs for platform-level ROAS.
 - **Ad blocker evasion**: Script at `/assets/v1.js`, beacon uses public_key not domain, endpoints obfuscated
 - **Cloudflare support**: Checks `CF-Connecting-IP` header before `x-forwarded-for`
 - **Sidebar layout**: All dashboard pages use `<.dashboard_layout>` from SidebarComponent

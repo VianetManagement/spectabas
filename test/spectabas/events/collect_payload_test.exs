@@ -57,5 +57,51 @@ defmodule Spectabas.Events.CollectPayloadTest do
     test "rejects non-map input" do
       assert {:error, :invalid_payload} = CollectPayload.validate("not a map")
     end
+
+    test "accepts click ID fields (gclid)" do
+      params = %{
+        "t" => "pageview",
+        "u" => "https://example.com",
+        "_cid" => "EAIaIQobChMI123456",
+        "_cidt" => "google_ads"
+      }
+
+      assert {:ok, %CollectPayload{} = payload} = CollectPayload.validate(params)
+      assert payload._cid == "EAIaIQobChMI123456"
+      assert payload._cidt == "google_ads"
+    end
+
+    test "accepts msclkid click ID" do
+      params = %{
+        "t" => "pageview",
+        "u" => "https://example.com",
+        "_cid" => "msclk_abc123",
+        "_cidt" => "bing_ads"
+      }
+
+      assert {:ok, %CollectPayload{} = payload} = CollectPayload.validate(params)
+      assert payload._cid == "msclk_abc123"
+      assert payload._cidt == "bing_ads"
+    end
+
+    test "accepts fbclid click ID" do
+      params = %{
+        "t" => "pageview",
+        "u" => "https://example.com",
+        "_cid" => "fb.1.123456.789",
+        "_cidt" => "meta_ads"
+      }
+
+      assert {:ok, %CollectPayload{} = payload} = CollectPayload.validate(params)
+      assert payload._cid == "fb.1.123456.789"
+      assert payload._cidt == "meta_ads"
+    end
+
+    test "click ID defaults to empty string" do
+      params = %{"t" => "pageview", "u" => "https://example.com"}
+      assert {:ok, %CollectPayload{} = payload} = CollectPayload.validate(params)
+      assert payload._cid == ""
+      assert payload._cidt == ""
+    end
   end
 end

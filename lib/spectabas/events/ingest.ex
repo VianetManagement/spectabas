@@ -40,9 +40,10 @@ defmodule Spectabas.Events.Ingest do
     visitor_id = resolve_visitor(site, payload, gdpr_mode, client_ip, ua_string)
     session = resolve_session(site.id, visitor_id, payload, ua_data, ip_data)
 
-    # Extract UTMs and search query from the ORIGINAL URL before GDPR stripping
+    # Extract UTMs, search query, and ad click IDs from the ORIGINAL URL before GDPR stripping
     utms = extract_utms(payload.u, payload)
     search_query = extract_search_query(payload.u)
+    {click_id, click_id_type} = extract_click_id(payload)
 
     {_url_parsed, url_path, url_host, url_scheme} = normalize_url(payload.u, gdpr_mode)
     referrer_domain = parse_referrer_domain(payload.r)
@@ -84,7 +85,9 @@ defmodule Spectabas.Events.Ingest do
             payload._fp && payload._fp != "" -> payload._fp
             payload.vid && String.starts_with?(to_string(payload.vid), "fp_") -> payload.vid
             true -> ""
-          end
+          end,
+        click_id: click_id,
+        click_id_type: click_id_type
       }
       |> Map.merge(ip_data)
 
@@ -506,6 +509,39 @@ defmodule Spectabas.Events.Ingest do
     |> Spectabas.Repo.update()
   rescue
     Ecto.ConstraintError -> :ok
+  end
+
+  # Extract ad platform click IDs (gclid, msclkid, fbclid) from payload or URL
+  @click_id_params [{"gclid", "google_ads"}, {"msclkid", "bing_ads"}, {"fbclid", "meta_ads"}]
+
+  defp extract_click_id(payload) do
+    # Prefer client-sent click ID (persisted in sessionStorage across pages)
+    cid = payload._cid || ""
+    cidt = payload._cidt || ""
+
+    if cid != "" do
+      {cid, cidt}
+    else
+      # Fall back to extracting from URL query params
+      url_params =
+        case payload.u do
+          url when is_binary(url) and url != "" ->
+            case URI.parse(url) do
+              %URI{query: q} when is_binary(q) -> URI.decode_query(q)
+              _ -> %{}
+            end
+
+          _ ->
+            %{}
+        end
+
+      Enum.find_value(@click_id_params, {"", ""}, fn {param, platform} ->
+        case url_params[param] do
+          val when is_binary(val) and val != "" -> {val, platform}
+          _ -> nil
+        end
+      end)
+    end
   end
 
   defp extract_utms(url, payload) do

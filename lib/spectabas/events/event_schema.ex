@@ -74,6 +74,10 @@ defmodule Spectabas.Events.EventSchema do
       "user_agent" => truncate(to_string(event[:user_agent] || ""), 512),
       "browser_fingerprint" => to_string(event[:browser_fingerprint] || ""),
 
+      # ad platform click IDs
+      "click_id" => truncate(to_string(event[:click_id] || ""), 512),
+      "click_id_type" => to_string(event[:click_id_type] || ""),
+
       # custom properties (JSON string)
       "properties" => Jason.encode!(event[:props] || event[:properties] || %{})
     }

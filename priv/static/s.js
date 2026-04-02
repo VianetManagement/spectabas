@@ -66,13 +66,27 @@
     } catch (e) {}
   }
 
-  // Persist UTMs in sessionStorage (GDPR-off only)
-  if (gdpr === "off" && window.location.search.indexOf("utm_") !== -1) {
-    var utmParams = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
-    utmParams.forEach(function (key) {
+  // Persist UTMs and ad click IDs in sessionStorage (GDPR-off only)
+  if (gdpr === "off") {
+    var search = window.location.search;
+    if (search.indexOf("utm_") !== -1) {
+      var utmParams = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
+      utmParams.forEach(function (key) {
+        try {
+          var match = search.match(new RegExp("[?&]" + key + "=([^&]+)"));
+          if (match) sessionStorage.setItem("_sab_" + key, decodeURIComponent(match[1]));
+        } catch (e) {}
+      });
+    }
+    // Persist ad platform click IDs — these prove the visitor came from a paid ad
+    var clickIds = [["gclid", "google_ads"], ["msclkid", "bing_ads"], ["fbclid", "meta_ads"]];
+    clickIds.forEach(function (pair) {
       try {
-        var match = window.location.search.match(new RegExp("[?&]" + key + "=([^&]+)"));
-        if (match) sessionStorage.setItem("_sab_" + key, decodeURIComponent(match[1]));
+        var match = search.match(new RegExp("[?&]" + pair[0] + "=([^&]+)"));
+        if (match) {
+          sessionStorage.setItem("_sab_click_id", decodeURIComponent(match[1]));
+          sessionStorage.setItem("_sab_click_id_type", pair[1]);
+        }
       } catch (e) {}
     });
   }
@@ -202,7 +216,7 @@
       if (extra._oa) payload._oa = extra._oa;
     }
 
-    // Add UTMs from sessionStorage
+    // Add UTMs and click IDs from sessionStorage
     if (gdpr === "off") {
       try {
         var utms = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
@@ -210,6 +224,12 @@
           var val = sessionStorage.getItem("_sab_" + key);
           if (val) payload.p[key] = val;
         });
+        var cid = sessionStorage.getItem("_sab_click_id");
+        var cidType = sessionStorage.getItem("_sab_click_id_type");
+        if (cid) {
+          payload._cid = cid;
+          payload._cidt = cidType || "";
+        }
       } catch (e) {}
     }
 

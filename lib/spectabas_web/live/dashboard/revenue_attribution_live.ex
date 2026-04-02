@@ -83,6 +83,13 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
         _ -> %{}
       end
 
+    # Revenue attributed via click IDs (gclid/msclkid/fbclid)
+    ad_revenue =
+      case Analytics.ad_revenue_by_platform(site, user, period) do
+        {:ok, data} -> data
+        _ -> []
+      end
+
     # Build spend lookup keyed by campaign_name for merging into rows
     spend_by_campaign = Map.new(ad_campaigns, fn c -> {c["campaign_name"], c} end)
 
@@ -118,7 +125,26 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
       Enum.reduce(channels, 0, fn c, acc -> acc + to_num(c["visitors"]) end)
 
     total_spend = parse_float(ad_totals["total_spend"])
-    total_roas = if total_spend > 0, do: Float.round(total_revenue / total_spend, 2), else: nil
+
+    # Merge spend + click-ID revenue per platform
+    revenue_by_plat = Map.new(ad_revenue, fn r -> {r["platform"], r} end)
+
+    ad_platforms_merged =
+      Enum.map(ad_platforms, fn p ->
+        rev = Map.get(revenue_by_plat, p["platform"], %{})
+        spend = parse_float(p["total_spend"])
+        revenue = parse_float(rev["total_revenue"])
+        roas = if spend > 0 and revenue > 0, do: Float.round(revenue / spend, 2), else: nil
+
+        p
+        |> Map.put("attributed_revenue", revenue)
+        |> Map.put("attributed_orders", to_num(rev["orders"]))
+        |> Map.put("attributed_visitors", to_num(rev["visitors"]))
+        |> Map.put("roas", roas)
+      end)
+
+    total_ad_revenue = Enum.reduce(ad_revenue, 0, fn r, acc -> acc + parse_float(r["total_revenue"]) end)
+    total_roas = if total_spend > 0 and total_ad_revenue > 0, do: Float.round(total_ad_revenue / total_spend, 2), else: nil
     has_ad_data = total_spend > 0
 
     socket
@@ -127,7 +153,8 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
     |> assign(:total_revenue, total_revenue)
     |> assign(:total_orders, total_orders)
     |> assign(:total_visitors, total_visitors)
-    |> assign(:ad_platforms, ad_platforms)
+    |> assign(:ad_platforms, ad_platforms_merged)
+    |> assign(:total_ad_revenue, total_ad_revenue)
     |> assign(:ad_campaigns, ad_campaigns)
     |> assign(:total_spend, total_spend)
     |> assign(:total_ad_clicks, to_num(ad_totals["total_clicks"]))
@@ -199,9 +226,12 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
               </dd>
             </div>
             <div>
-              <dt class="text-xs text-gray-500">Total Revenue</dt>
+              <dt class="text-xs text-gray-500">Ad Revenue</dt>
               <dd class="text-lg font-bold text-green-600">
-                {@site.currency} {format_money(@total_revenue)}
+                {@site.currency} {format_money(@total_ad_revenue)}
+              </dd>
+              <dd :if={@total_ad_revenue == 0} class="text-[10px] text-gray-400">
+                Awaiting click ID data
               </dd>
             </div>
             <div>
@@ -235,7 +265,13 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
                 <span class={["w-2 h-2 rounded-full", platform_color(p["platform"])]}></span>
                 <span class="text-gray-700 font-medium">{platform_label(p["platform"])}</span>
                 <span class="text-gray-500">
-                  {@site.currency} {format_money(p["total_spend"])}
+                  Spend: {@site.currency} {format_money(p["total_spend"])}
+                </span>
+                <span :if={p["attributed_revenue"] && p["attributed_revenue"] > 0} class="text-green-600">
+                  Rev: {@site.currency} {format_money(p["attributed_revenue"])}
+                </span>
+                <span :if={p["roas"]} class={roas_color(p["roas"])}>
+                  {p["roas"]}x ROAS
                 </span>
                 <span class="text-gray-400">
                   {format_number(to_num(p["total_clicks"]))} clicks

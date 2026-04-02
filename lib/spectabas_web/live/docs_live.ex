@@ -2024,15 +2024,32 @@ defmodule SpectabasWeb.DocsLive do
 
             ### ROAS on Revenue Attribution
 
-            Once ad spend is synced, the **Revenue Attribution** page (under Conversions) shows additional columns when viewing by Campaign:
+            The **Revenue Attribution** page (under Conversions) shows ad performance data in two ways:
 
-            - **Ad Spend** — total spend from the connected platform
+            **Ad Spend Overview** (top of page):
+            - Total spend, ad-attributed revenue, ROAS, clicks, and impressions across all platforms
+            - Per-platform breakdown with color-coded ROAS (green 3x+, yellow 1-3x, red <1x)
+
+            **Campaign tab** — additional columns:
+            - **Ad Spend** — total spend for that campaign
             - **ROAS** — Return on Ad Spend (revenue / spend)
-            - **CPA** — Cost per Acquisition (spend / orders)
-            - **Ad Clicks** — clicks from the platform
-            - **Impressions** — ad impressions
+            - **CPC** — Cost per Click (spend / clicks)
 
-            > **Important:** For ROAS to work, your UTM campaign names must match the campaign names in your ad platform. When you create a Google Ads campaign called "spring_promo", use `utm_campaign=spring_promo` in your ad URLs.
+            **Other tabs** — standalone Ad Spend by Campaign table with spend, clicks, impressions, CPC, and CTR.
+
+            ### Click ID Attribution (gclid / msclkid / fbclid)
+
+            Spectabas automatically captures ad platform click IDs from landing page URLs:
+
+            - **gclid** — Google Ads auto-tagging
+            - **msclkid** — Microsoft/Bing Ads auto-tagging
+            - **fbclid** — Meta/Facebook Ads click tracking
+
+            When a visitor arrives with a click ID, Spectabas tags them as coming from that ad platform. If that visitor later makes a purchase, the revenue is attributed to the platform. This gives you **platform-level ROAS** (e.g., "Google Ads spent $5,000, generated $15,000 revenue").
+
+            Click IDs are persisted in the visitor's session, so they're tracked even if the visitor browses multiple pages before converting.
+
+            > **For campaign-level ROAS:** Add UTM parameters to your ad URLs. When combined with click IDs, UTM tags tell Spectabas *which specific campaign* drove the conversion, while the click ID verifies it was a real paid click. Set up URL templates in your ad platform using `{campaignname}` (Google), `{CampaignName}` (Bing), or manual UTM tags (Meta).
 
             ### Token Security
 
@@ -2040,16 +2057,6 @@ defmodule SpectabasWeb.DocsLive do
             - Tokens are never logged or exposed in the UI
             - Refresh tokens are used automatically when access tokens expire
             - Disconnecting an account immediately deletes all stored tokens
-
-            ### UTM Campaign Matching
-
-            Spectabas correlates ad spend with revenue by matching the **campaign name** from the ad platform with the **utm_campaign** parameter in your ad URLs. For this to work:
-
-            1. When you create a campaign in Google/Bing/Meta called `spring_promo`
-            2. Your ad destination URLs must include `?utm_campaign=spring_promo`
-            3. Spectabas sees visitors arriving with that UTM, tracks their purchases, and joins it with the spend data from the ad platform
-
-            If you use Google Ads auto-tagging (gclid), the campaign name is used directly. For Bing and Meta, make sure your UTM parameters match exactly.
 
             ### Sync Schedule
 

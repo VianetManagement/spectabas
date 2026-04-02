@@ -92,5 +92,40 @@ defmodule Spectabas.Events.EventSchemaTest do
 
       assert row["browser_fingerprint"] == ""
     end
+
+    test "includes click_id and click_id_type in output" do
+      event = %{site_id: 1, click_id: "EAIaIQobChMI123", click_id_type: "google_ads"}
+      row = EventSchema.to_row(event)
+
+      assert row["click_id"] == "EAIaIQobChMI123"
+      assert row["click_id_type"] == "google_ads"
+    end
+
+    test "click_id defaults to empty string when absent" do
+      event = %{site_id: 1}
+      row = EventSchema.to_row(event)
+
+      assert row["click_id"] == ""
+      assert row["click_id_type"] == ""
+    end
+
+    test "truncates long click_id to 512 chars" do
+      long_id = String.duplicate("a", 600)
+      event = %{site_id: 1, click_id: long_id, click_id_type: "google_ads"}
+      row = EventSchema.to_row(event)
+
+      assert byte_size(row["click_id"]) == 512
+      assert row["click_id_type"] == "google_ads"
+    end
+
+    test "maps all three ad platform click ID types" do
+      for {cid, type} <- [{"gclid_val", "google_ads"}, {"msclkid_val", "bing_ads"}, {"fbclid_val", "meta_ads"}] do
+        event = %{site_id: 1, click_id: cid, click_id_type: type}
+        row = EventSchema.to_row(event)
+
+        assert row["click_id"] == cid
+        assert row["click_id_type"] == type
+      end
+    end
   end
 end

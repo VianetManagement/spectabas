@@ -1247,6 +1247,42 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  @doc "Revenue attributed to ad platforms via click IDs (gclid/msclkid/fbclid)."
+  def ad_revenue_by_platform(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        click_id_type AS platform,
+        uniq(e.visitor_id) AS visitors,
+        countDistinct(ec.order_id) AS orders,
+        sum(ec.revenue) AS total_revenue
+      FROM (
+        SELECT visitor_id, any(click_id_type) AS click_id_type
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND click_id != '' AND click_id_type != ''
+          AND event_type = 'pageview' AND ip_is_bot = 0
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY visitor_id
+      ) AS e
+      LEFT JOIN (
+        SELECT visitor_id, order_id, revenue
+        FROM ecommerce_events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      ) AS ec ON e.visitor_id = ec.visitor_id
+      GROUP BY click_id_type
+      ORDER BY total_revenue DESC
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
   @doc "Ad spend by platform for per-platform summary cards."
   def ad_spend_by_platform(%Site{} = site, %User{} = user, date_range) do
     date_range = ensure_date_range(date_range)

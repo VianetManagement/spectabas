@@ -96,6 +96,8 @@ defmodule Spectabas.ClickHouse do
         visitor_intent LowCardinality(String) DEFAULT '',
         user_agent String DEFAULT '',
         browser_fingerprint String DEFAULT '',
+        click_id String DEFAULT '',
+        click_id_type LowCardinality(String) DEFAULT '',
         duration_s UInt32 DEFAULT 0,
         properties String DEFAULT '{}',
         is_bounce UInt8 DEFAULT 1,
@@ -278,6 +280,8 @@ defmodule Spectabas.ClickHouse do
       "ALTER TABLE #{db}.events ADD COLUMN IF NOT EXISTS visitor_intent String DEFAULT '' AFTER ip_gdpr_anonymized",
       "ALTER TABLE #{db}.events ADD COLUMN IF NOT EXISTS user_agent String DEFAULT '' AFTER visitor_intent",
       "ALTER TABLE #{db}.events ADD COLUMN IF NOT EXISTS browser_fingerprint String DEFAULT '' AFTER user_agent",
+      "ALTER TABLE #{db}.events ADD COLUMN IF NOT EXISTS click_id String DEFAULT '' AFTER browser_fingerprint",
+      "ALTER TABLE #{db}.events ADD COLUMN IF NOT EXISTS click_id_type LowCardinality(String) DEFAULT '' AFTER click_id",
       # Data retention: delete events older than 2 years
       "ALTER TABLE #{db}.events MODIFY TTL timestamp + INTERVAL 2 YEAR",
       # Skip indexes for common query patterns

@@ -63,6 +63,13 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Bumped Meta/Facebook Graph API from v21.0 to latest v25.0. Bing Ads v13 confirmed current."
          },
          %{
+           title: "Feature: Click ID attribution (gclid/msclkid/fbclid)",
+           description:
+             "Tracker now captures ad platform click IDs from landing URLs. Stored in ClickHouse for platform-level ROAS. " <>
+               "Revenue Attribution page shows ad-attributed revenue per platform. " <>
+               "20 new tests for click ID payload, schema mapping, and ad integrations."
+         },
+         %{
            title: "Feature: ROAS + ad spend on Revenue Attribution page",
            description:
              "Revenue Attribution now shows ad spend data from all connected platforms (Google Ads, Bing, Meta). " <>
