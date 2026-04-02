@@ -135,13 +135,17 @@ defmodule Spectabas.AdIntegrations.Platforms.MetaAds do
         {:ok, rows}
 
       {:ok, %{status: status, body: body}} ->
-        Logger.warning("[MetaAds] API #{status}: #{inspect(body) |> String.slice(0, 300)}")
-        {:error, "API error #{status}"}
+        detail = extract_error(body)
+        Logger.warning("[MetaAds] API #{status}: #{detail}")
+        {:error, "Meta Ads #{status}: #{String.slice(detail, 0, 120)}"}
 
       {:error, reason} ->
-        {:error, reason}
+        {:error, inspect(reason)}
     end
   end
+
+  defp extract_error(%{"error" => %{"message" => msg}}), do: msg
+  defp extract_error(body), do: inspect(body) |> String.slice(0, 200)
 
   defp parse_decimal(n) when is_number(n), do: n
 

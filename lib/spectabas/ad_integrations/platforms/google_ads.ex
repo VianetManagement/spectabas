@@ -127,15 +127,36 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleAds do
         %{
           campaign_id: to_string(campaign["id"] || ""),
           campaign_name: campaign["name"] || "",
-          spend: (metrics["costMicros"] || 0) / 1_000_000,
-          clicks: metrics["clicks"] || 0,
-          impressions: metrics["impressions"] || 0
+          spend: parse_micros(metrics["costMicros"]),
+          clicks: parse_int(metrics["clicks"]),
+          impressions: parse_int(metrics["impressions"])
         }
       end)
     end)
   end
 
   defp parse_google_response(_), do: []
+
+  # Google Ads API returns all metric values as strings
+  defp parse_micros(nil), do: 0.0
+  defp parse_micros(n) when is_integer(n), do: n / 1_000_000
+  defp parse_micros(n) when is_binary(n) do
+    case Integer.parse(n) do
+      {i, _} -> i / 1_000_000
+      :error -> 0.0
+    end
+  end
+  defp parse_micros(_), do: 0.0
+
+  defp parse_int(nil), do: 0
+  defp parse_int(n) when is_integer(n), do: n
+  defp parse_int(n) when is_binary(n) do
+    case Integer.parse(n) do
+      {i, _} -> i
+      :error -> 0
+    end
+  end
+  defp parse_int(_), do: 0
 
   defp redirect_uri do
     host = Application.get_env(:spectabas, SpectabasWeb.Endpoint)[:url][:host] || "localhost"

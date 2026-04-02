@@ -12,7 +12,7 @@ defmodule Spectabas.Workers.AdSpendSyncOne do
     integration = AdIntegrations.get!(id) |> Repo.preload(:site)
     yesterday = Date.add(Date.utc_today(), -1)
 
-    # Delegate to the main sync worker's logic
     Spectabas.Workers.AdSpendSync.sync_one(integration, yesterday)
+    :ok
   end
 end

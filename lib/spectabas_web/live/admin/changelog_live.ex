@@ -61,6 +61,13 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
            title: "Chore: Meta Ads Graph API v21.0 → v25.0",
            description:
              "Bumped Meta/Facebook Graph API from v21.0 to latest v25.0. Bing Ads v13 confirmed current."
+         },
+         %{
+           title: "Fix: Full ad platform adapter audit",
+           description:
+             "Google Ads: parse string metric values (costMicros, clicks, impressions) instead of assuming integers. " <>
+               "Bing Ads: rewrote to use correct async submit/poll/download reporting flow (was using non-existent sync endpoint). " <>
+               "Meta Ads: show real API error messages on settings page. All adapters now surface detailed errors."
          }
        ]},
       {"v4.3.0 — 2026-04-01 UTC",
