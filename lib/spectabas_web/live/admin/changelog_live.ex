@@ -63,6 +63,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Bumped Meta/Facebook Graph API from v21.0 to latest v25.0. Bing Ads v13 confirmed current."
          },
          %{
+           title: "Docs: new Conversions documentation category",
+           description:
+             "Dedicated /docs/conversions page with comprehensive docs for Goals & Funnels, Ecommerce Tracking, " <>
+               "Revenue Attribution (attribution models, click ID attribution, UTM+click ID combo, ad spend tables), " <>
+               "Revenue Cohorts, Buyer Patterns, Churn Risk, and Ad Platform Integrations. " <>
+               "Revenue Attribution section extensively expanded with click ID explanation, UTM template examples, and ROAS walkthrough."
+         },
+         %{
            title: "Feature: Any-touch attribution model + last-touch default",
            description:
              "Revenue Attribution now has three toggle options: First Touch, Last Touch (default), and Any Touch. " <>

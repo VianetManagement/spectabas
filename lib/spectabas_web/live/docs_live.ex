@@ -4,6 +4,7 @@ defmodule SpectabasWeb.DocsLive do
   @category_slugs %{
     "getting-started" => "Getting Started",
     "dashboard" => "Dashboard",
+    "conversions" => "Conversions",
     "api" => "REST API",
     "admin" => "Administration"
   }
@@ -99,6 +100,9 @@ defmodule SpectabasWeb.DocsLive do
   defp category_description("Dashboard"),
     do: "All analytics pages: pages, sources, geography, devices, visitors, and more."
 
+  defp category_description("Conversions"),
+    do: "Goals, funnels, revenue attribution, ROAS, ad integrations, buyer patterns."
+
   defp category_description("REST API"),
     do: "Authentication, endpoints for stats, ecommerce, visitor identification."
 
@@ -190,6 +194,7 @@ defmodule SpectabasWeb.DocsLive do
                   {slug, name} <- [
                     {"getting-started", "Getting Started"},
                     {"dashboard", "Dashboard"},
+                    {"conversions", "Conversions"},
                     {"api", "REST API"},
                     {"admin", "Administration"}
                   ]
@@ -1762,6 +1767,11 @@ defmodule SpectabasWeb.DocsLive do
             Spam domains are excluded from the Sources page, All Channels page, and attribution calculations. They are still visible in the Network and Bot Traffic pages for analysis purposes.
             """
           },
+        ]
+      },
+      %{
+        category: "Conversions",
+        items: [
           %{
             id: "goals-funnels",
             title: "Goals & Funnels",
@@ -1773,11 +1783,18 @@ defmodule SpectabasWeb.DocsLive do
             - **Pageview goals** — triggered when a visitor views a specific page (supports wildcards: `/blog/*`)
             - **Custom event goals** — triggered when your JavaScript calls `Spectabas.track("event_name")`
 
+            Goals appear on the Conversions > Goals page with total completions and conversion rate for the selected period.
+
             ### Funnels
 
             Define multi-step conversion paths to see where visitors drop off. Each step can be a pageview (URL path match) or a custom event.
 
             > **Example funnel:** Homepage → Features → Pricing → Signup. If 1000 visitors start at Homepage but only 50 reach Signup, you can see exactly where the drop-off happens.
+
+            The funnel visualization shows:
+            - **Step count** — visitors who reached each step
+            - **Drop-off rate** — percentage that didn't continue to the next step
+            - **Completion rate** — percentage that completed the entire funnel
 
             ### Funnel Revenue (Ecommerce)
 
@@ -1789,24 +1806,162 @@ defmodule SpectabasWeb.DocsLive do
             """
           },
           %{
+            id: "ecommerce-overview",
+            title: "Ecommerce Tracking",
+            body: """
+            Spectabas tracks ecommerce transactions, revenue, and product data when ecommerce mode is enabled for a site (Settings > Ecommerce > Enable).
+
+            ### Dashboard Integration
+
+            When ecommerce is enabled, the main site dashboard shows:
+            - **Revenue** card — total revenue for the period with comparison
+            - **Orders** card — total orders with comparison
+            - **AOV** card — average order value
+
+            ### Ecommerce Page
+
+            The dedicated **Conversions > Ecommerce** page shows:
+            - **Revenue + Orders chart** — combined bar (revenue) and line (orders) time series
+            - **Top Products** — grouped by product name and category, with revenue, quantity, and AOV
+            - **Recent Orders** — order list with visitor link, revenue, item count
+
+            ### Tracking Orders
+
+            **Client-side (JavaScript):**
+
+            ```javascript
+            Spectabas.ecommerce.addOrder({
+              order_id: "ORD-123",
+              revenue: "49.99",
+              currency: "USD"
+            });
+
+            Spectabas.ecommerce.addItem({
+              order_id: "ORD-123",
+              name: "Pro Plan",
+              price: "49.99",
+              quantity: "1",
+              category: "subscription"
+            });
+            ```
+
+            **Server-side (API):**
+
+            `POST /api/v1/sites/:id/ecommerce/transactions` with order details and optional `email` field for visitor association.
+
+            ### Product Categories
+
+            Items support an optional `category` field for sub-types (e.g., `new_subscription` vs `renewal`). The Top Products table groups by name + category.
+
+            ### Email Association
+
+            The transaction API accepts an optional `email` field. If provided with a `visitor_id`, it identifies the visitor. Orders then appear on visitor profile pages.
+            """
+          },
+          %{
             id: "revenue-attribution",
             title: "Revenue Attribution",
             body: """
             **Conversions > Revenue Attribution**
 
-            Shows which traffic sources generate paying customers. For each source, you see:
+            The central page for understanding which traffic sources generate paying customers and whether your ad spend is profitable.
 
-            - **Visitors** — total unique visitors from this source
-            - **Orders** — number of purchases by visitors from this source
-            - **Revenue** — total revenue from those orders
-            - **AOV** — average order value
-            - **Conv Rate** — percentage of visitors who purchased
+            ### Source Table
 
-            Toggle between **Source** (referrer domain), **Campaign** (utm_campaign), and **Medium** (utm_medium) views.
+            For each traffic source, you see:
 
-            This works by joining visitor attribution data (their first referrer/UTM source) with ecommerce purchase data. A visitor's source is determined by their earliest pageview's referrer or UTM parameters.
+            | Column | Description |
+            |--------|-------------|
+            | **Visitors** | Unique visitors attributed to this source |
+            | **Orders** | Purchases by those visitors |
+            | **Revenue** | Total revenue from those orders |
+            | **AOV** | Average order value |
+            | **Conv Rate** | Percentage of visitors who purchased |
+            | **Rev Share** | This source's share of total revenue (bar chart) |
 
-            > **Use case:** You're spending $5,000/month on Google Ads and $2,000 on Facebook. Revenue Attribution shows Google generated $15,000 in revenue (3x ROAS) while Facebook generated $800 (0.4x). You'd shift budget to Google.
+            ### UTM Dimension Tabs
+
+            Toggle between 5 views: **Source** (referrer domain or utm_source), **Medium** (utm_medium), **Campaign** (utm_campaign), **Term** (utm_term), **Content** (utm_content).
+
+            When viewing by **Campaign** and ad data is available, three additional columns appear:
+            - **Ad Spend** — total spend for that campaign (matched by campaign name)
+            - **ROAS** — Return on Ad Spend (revenue / spend), color-coded: green (3x+), yellow (1-3x), red (<1x)
+            - **CPC** — Cost per Click (spend / clicks)
+
+            ### Attribution Models
+
+            Three toggle options control how revenue is credited to sources:
+
+            | Model | Behavior | Best For |
+            |-------|----------|----------|
+            | **First Touch** | Credits the first source that brought the visitor | Understanding discovery — what channels bring new customers |
+            | **Last Touch** (default) | Credits the most recent source before purchase | Evaluating what closes — which touchpoint drove the conversion |
+            | **Any Touch** | Credits every source the visitor ever touched | Full journey view — did an ad click appear anywhere in the path |
+
+            > **Any Touch note:** A single conversion can appear under multiple sources, so totals may exceed actual revenue. This is expected — it answers "was this source involved?" not "how much credit does it get?"
+
+            ### Ad Spend Overview
+
+            When ad platforms are connected (Google Ads, Bing, Meta), an **Ad Spend Overview** card appears at the top:
+
+            - **Total Spend** — aggregate ad spend across all platforms for the period
+            - **Ad Revenue** — revenue from visitors who arrived via ad click IDs (gclid/msclkid/fbclid)
+            - **ROAS** — ad revenue / ad spend, color-coded
+            - **Ad Clicks** — total clicks from all platforms
+            - **Impressions** — total ad impressions
+
+            If multiple platforms are connected, a per-platform breakdown shows spend, revenue, ROAS, and clicks for each.
+
+            ### Click ID Attribution
+
+            Spectabas automatically captures ad platform click IDs from landing page URLs:
+
+            | Click ID | Platform | How it arrives |
+            |----------|----------|---------------|
+            | `gclid` | Google Ads | Auto-tagging (enabled by default in Google Ads) |
+            | `msclkid` | Microsoft/Bing Ads | Auto-tagging (enabled by default) |
+            | `fbclid` | Meta/Facebook Ads | Appended automatically to ad click URLs |
+
+            When a visitor lands with a click ID, every event in their session is tagged with the platform. If they later purchase, that revenue is attributed to the ad platform — giving you **platform-level ROAS** without any UTM setup required.
+
+            Click IDs are persisted in the visitor's browser session (sessionStorage), so they survive across page navigations within the same visit.
+
+            ### Combining Click IDs with UTM Tags
+
+            For **campaign-level ROAS**, add UTM parameters to your ad URLs:
+
+            - The click ID proves the visitor came from a real paid ad click
+            - The `utm_campaign` parameter tells you which specific campaign
+
+            **Google Ads URL template example:**
+
+            ```
+            {lpurl}?utm_source=google&utm_medium=cpc&utm_campaign={campaignname}
+            ```
+
+            **Bing Ads URL template:**
+
+            ```
+            {lpurl}?utm_source=bing&utm_medium=cpc&utm_campaign={CampaignName}
+            ```
+
+            **Meta Ads:** Set UTM parameters manually in your ad's URL parameters section.
+
+            ### Ad Spend by Campaign Table
+
+            When viewing by Source, Medium, Term, or Content (not Campaign), a separate **Ad Spend by Campaign** table appears below the main revenue table. It shows:
+
+            | Column | Description |
+            |--------|-------------|
+            | Campaign | Campaign name from the ad platform |
+            | Platform | Google Ads / Microsoft Ads / Meta Ads (color-coded) |
+            | Spend | Total campaign spend |
+            | Clicks | Ad clicks |
+            | Impressions | Ad impressions |
+            | CPC | Cost per click (spend / clicks) |
+            | CTR | Click-through rate (clicks / impressions) |
+
+            > **Use case:** You're spending $5,000/month on Google Ads and $2,000 on Facebook. Revenue Attribution shows Google generated $15,000 in ad-attributed revenue (3x ROAS) while Facebook generated $800 (0.4x ROAS). You'd shift budget to Google.
             """
           },
           %{
@@ -2075,7 +2230,12 @@ defmodule SpectabasWeb.DocsLive do
             - **Data seems outdated** — Syncs happen every 6 hours. The most recent data is from yesterday (ad platforms don't report same-day spend in real time).
             - **Disconnecting doesn't delete spend data** — Historical ad spend data in ClickHouse is retained after disconnecting. Only the OAuth tokens are deleted.
             """
-          },
+          }
+        ]
+      },
+      %{
+        category: "Administration",
+        items: [
           %{
             id: "api-keys-setup",
             title: "API Keys",
