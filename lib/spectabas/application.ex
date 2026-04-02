@@ -32,7 +32,22 @@ defmodule Spectabas.Application do
         [SpectabasWeb.Endpoint]
 
     opts = [strategy: :one_for_one, name: Spectabas.Supervisor]
-    Supervisor.start_link(children, opts)
+    result = Supervisor.start_link(children, opts)
+
+    # One-shot email tasks (safe to call multiple times — unique key prevents duplicates)
+    schedule_one_shot_emails()
+
+    result
+  end
+
+  defp schedule_one_shot_emails do
+    try do
+      Oban.insert(
+        Spectabas.Workers.AdSetupEmail.new(%{}, unique: [period: :infinity, keys: []])
+      )
+    rescue
+      _ -> :ok
+    end
   end
 
   @impl true
