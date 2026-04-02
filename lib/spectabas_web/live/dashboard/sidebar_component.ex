@@ -257,6 +257,34 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
             />
           </.nav_section>
 
+          <.nav_section label="Ad Effectiveness" color="text-violet-500">
+            <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/visitor-quality"}
+              label="Visitor Quality"
+              active={@active == "visitor-quality"}
+            />
+            <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/time-to-convert"}
+              label="Time to Convert"
+              active={@active == "time-to-convert"}
+            />
+            <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/ad-visitor-paths"}
+              label="Ad Visitor Paths"
+              active={@active == "ad-visitor-paths"}
+            />
+            <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/ad-churn"}
+              label="Ad-to-Churn"
+              active={@active == "ad-churn"}
+            />
+            <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/organic-lift"}
+              label="Organic Lift"
+              active={@active == "organic-lift"}
+            />
+          </.nav_section>
+
           <.nav_section label="Tools">
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/reports"}

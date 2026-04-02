@@ -63,6 +63,16 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Bumped Meta/Facebook Graph API from v21.0 to latest v25.0. Bing Ads v13 confirmed current."
          },
          %{
+           title: "Feature: 5 Ad Effectiveness pages — Visitor Quality, Time to Convert, Ad Paths, Ad-to-Churn, Organic Lift",
+           description:
+             "New 'Ad Effectiveness' sidebar section with 5 pages that go beyond standard ROAS. " <>
+               "Visitor Quality: engagement scoring (0-100) for ad traffic by platform/campaign. " <>
+               "Time to Convert: days/sessions between ad click and purchase with histogram distribution. " <>
+               "Ad Visitor Paths: common page sequences for ad traffic, segmented by converting vs bouncing. " <>
+               "Ad-to-Churn: which ad campaigns bring customers who stick vs churn (14-day decline detection). " <>
+               "Organic Lift: correlates ad spend levels with organic/direct traffic volume."
+         },
+         %{
            title: "Fix: fingerprint entropy + collision handling + docs",
            description:
              "Added AudioContext, WebGL parameter, and font detection signals to browser fingerprinting for higher uniqueness. " <>

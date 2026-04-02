@@ -1355,6 +1355,486 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  @doc "Ad campaign churn: visitors, churned, retained, purchased, churn rate per campaign."
+  def ad_churn_by_campaign(%Site{} = site, %User{} = user, date_range, opts \\ []) do
+    date_range = ensure_date_range(date_range)
+    group_by = Keyword.get(opts, :group_by, "platform")
+
+    with :ok <- authorize(site, user) do
+      {group_col, select_col} =
+        if group_by == "campaign" do
+          {"if(utm_campaign != '', utm_campaign, '(none)')", "campaign"}
+        else
+          {"click_id_type", "platform"}
+        end
+
+      sql = """
+      WITH ad_visitors AS (
+        SELECT
+          #{group_col} AS #{select_col},
+          visitor_id
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND event_type = 'pageview' AND ip_is_bot = 0
+          AND click_id != ''
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY #{select_col}, visitor_id
+      ),
+      recent AS (
+        SELECT
+          visitor_id,
+          countIf(timestamp >= now() - INTERVAL 14 DAY) AS sessions_recent,
+          countIf(timestamp >= now() - INTERVAL 28 DAY AND timestamp < now() - INTERVAL 14 DAY) AS sessions_prior
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND event_type = 'pageview' AND ip_is_bot = 0
+          AND timestamp >= now() - INTERVAL 28 DAY
+          AND visitor_id IN (SELECT visitor_id FROM ad_visitors)
+        GROUP BY visitor_id
+      ),
+      purchases AS (
+        SELECT DISTINCT visitor_id
+        FROM ecommerce_events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      )
+      SELECT
+        av.#{select_col},
+        count(DISTINCT av.visitor_id) AS total_visitors,
+        countIf(r.sessions_prior > 0 AND r.sessions_recent <= r.sessions_prior / 2) AS churned,
+        countIf(NOT (r.sessions_prior > 0 AND r.sessions_recent <= r.sessions_prior / 2)) AS retained,
+        countIf(p.visitor_id != '') AS purchased,
+        round(countIf(r.sessions_prior > 0 AND r.sessions_recent <= r.sessions_prior / 2) / greatest(count(DISTINCT av.visitor_id), 1) * 100, 1) AS churn_rate
+      FROM ad_visitors AS av
+      LEFT JOIN recent AS r ON av.visitor_id = r.visitor_id
+      LEFT JOIN purchases AS p ON av.visitor_id = p.visitor_id
+      GROUP BY av.#{select_col}
+      ORDER BY total_visitors DESC
+      LIMIT 50
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Overall ad churn rate vs organic churn rate comparison."
+  def ad_churn_summary(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      WITH visitor_source AS (
+        SELECT
+          visitor_id,
+          maxIf(1, click_id != '') AS is_ad
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND event_type = 'pageview' AND ip_is_bot = 0
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY visitor_id
+      ),
+      recent AS (
+        SELECT
+          visitor_id,
+          countIf(timestamp >= now() - INTERVAL 14 DAY) AS sessions_recent,
+          countIf(timestamp >= now() - INTERVAL 28 DAY AND timestamp < now() - INTERVAL 14 DAY) AS sessions_prior
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND event_type = 'pageview' AND ip_is_bot = 0
+          AND timestamp >= now() - INTERVAL 28 DAY
+          AND visitor_id IN (SELECT visitor_id FROM visitor_source)
+        GROUP BY visitor_id
+      )
+      SELECT
+        if(vs.is_ad = 1, 'ad', 'organic') AS source_type,
+        count() AS total_visitors,
+        countIf(r.sessions_prior > 0 AND r.sessions_recent <= r.sessions_prior / 2) AS churned,
+        countIf(NOT (r.sessions_prior > 0 AND r.sessions_recent <= r.sessions_prior / 2)) AS retained,
+        round(countIf(r.sessions_prior > 0 AND r.sessions_recent <= r.sessions_prior / 2) / greatest(count(), 1) * 100, 1) AS churn_rate
+      FROM visitor_source AS vs
+      LEFT JOIN recent AS r ON vs.visitor_id = r.visitor_id
+      GROUP BY source_type
+      ORDER BY source_type
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Avg/median days and sessions from first ad click to first purchase, grouped by platform or campaign."
+  def time_to_convert_by_source(%Site{} = site, %User{} = user, date_range, opts \\ []) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      group_col = if opts[:group_by] == "campaign", do: "utm_campaign", else: "click_id_type"
+
+      sql = """
+      WITH first_click AS (
+        SELECT
+          visitor_id,
+          #{group_col} AS group_key,
+          min(timestamp) AS first_click_at,
+          min(session_id) AS first_session
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND event_type = 'pageview' AND ip_is_bot = 0
+          AND click_id != ''
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY visitor_id, #{group_col}
+      ),
+      first_purchase AS (
+        SELECT
+          visitor_id,
+          min(timestamp) AS first_purchase_at
+        FROM ecommerce_events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY visitor_id
+      ),
+      sessions_between AS (
+        SELECT
+          fc.visitor_id,
+          fc.group_key,
+          dateDiff('day', fc.first_click_at, fp.first_purchase_at) AS days_to_convert,
+          uniqExact(e.session_id) AS sessions_to_convert
+        FROM first_click AS fc
+        INNER JOIN first_purchase AS fp ON fc.visitor_id = fp.visitor_id
+        LEFT JOIN events AS e ON e.visitor_id = fc.visitor_id
+          AND e.site_id = #{ClickHouse.param(site.id)}
+          AND e.event_type = 'pageview' AND e.ip_is_bot = 0
+          AND e.timestamp >= fc.first_click_at
+          AND e.timestamp <= fp.first_purchase_at
+        GROUP BY fc.visitor_id, fc.group_key, days_to_convert
+      )
+      SELECT
+        group_key,
+        count() AS converters,
+        round(avg(days_to_convert), 1) AS avg_days,
+        round(median(days_to_convert), 1) AS median_days,
+        round(avg(sessions_to_convert), 1) AS avg_sessions,
+        round(median(sessions_to_convert), 1) AS median_sessions
+      FROM sessions_between
+      GROUP BY group_key
+      ORDER BY converters DESC
+      LIMIT 50
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Histogram of days-to-convert for ad visitors who purchased."
+  def time_to_convert_distribution(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      WITH first_click AS (
+        SELECT
+          visitor_id,
+          min(timestamp) AS first_click_at
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND event_type = 'pageview' AND ip_is_bot = 0
+          AND click_id != ''
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY visitor_id
+      ),
+      first_purchase AS (
+        SELECT
+          visitor_id,
+          min(timestamp) AS first_purchase_at
+        FROM ecommerce_events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY visitor_id
+      ),
+      conversions AS (
+        SELECT
+          dateDiff('day', fc.first_click_at, fp.first_purchase_at) AS days_to_convert
+        FROM first_click AS fc
+        INNER JOIN first_purchase AS fp ON fc.visitor_id = fp.visitor_id
+      )
+      SELECT
+        multiIf(
+          days_to_convert = 0, 'Same day',
+          days_to_convert = 1, '1 day',
+          days_to_convert <= 3, '2-3 days',
+          days_to_convert <= 7, '4-7 days',
+          days_to_convert <= 14, '8-14 days',
+          days_to_convert <= 30, '15-30 days',
+          '30+ days'
+        ) AS bucket,
+        multiIf(
+          days_to_convert = 0, 1,
+          days_to_convert = 1, 2,
+          days_to_convert <= 3, 3,
+          days_to_convert <= 7, 4,
+          days_to_convert <= 14, 5,
+          days_to_convert <= 30, 6,
+          7
+        ) AS bucket_order,
+        count() AS converters
+      FROM conversions
+      GROUP BY bucket, bucket_order
+      ORDER BY bucket_order
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Top page paths for ad visitor sessions with conversion rates."
+  def ad_visitor_paths(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      WITH ad_sessions AS (
+        SELECT DISTINCT session_id, visitor_id
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND event_type = 'pageview' AND ip_is_bot = 0
+          AND click_id != ''
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      ),
+      session_paths AS (
+        SELECT
+          e.session_id,
+          e.visitor_id,
+          arrayStringConcat(
+            arraySlice(
+              groupArray(e.url_path ORDER BY e.timestamp ASC),
+              1, 5
+            ),
+            ' → '
+          ) AS path
+        FROM events AS e
+        INNER JOIN ad_sessions AS s ON e.session_id = s.session_id
+        WHERE e.site_id = #{ClickHouse.param(site.id)}
+          AND e.event_type = 'pageview' AND e.ip_is_bot = 0
+          AND e.timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND e.timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY e.session_id, e.visitor_id
+      ),
+      purchasers AS (
+        SELECT DISTINCT visitor_id
+        FROM ecommerce_events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      )
+      SELECT
+        sp.path,
+        count() AS visitor_count,
+        countIf(p.visitor_id != '') AS converter_count,
+        round(countIf(p.visitor_id != '') / greatest(count(), 1) * 100, 1) AS conversion_rate
+      FROM session_paths AS sp
+      LEFT JOIN purchasers AS p ON sp.visitor_id = p.visitor_id
+      GROUP BY sp.path
+      ORDER BY visitor_count DESC
+      LIMIT 20
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Top landing pages where ad visitors bounced (single-pageview sessions)."
+  def ad_bounce_pages(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      WITH bounced_sessions AS (
+        SELECT
+          session_id,
+          any(click_id_type) AS platform,
+          any(url_path) AS landing_page
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND event_type = 'pageview' AND ip_is_bot = 0
+          AND click_id != ''
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY session_id
+        HAVING count() = 1
+      )
+      SELECT
+        landing_page,
+        platform,
+        count() AS bounce_count
+      FROM bounced_sessions
+      GROUP BY landing_page, platform
+      ORDER BY bounce_count DESC
+      LIMIT 20
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Daily time series of organic visitors, direct visitors, and total ad spend."
+  def organic_lift_timeseries(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      ref = clean_referrer_sql(site)
+
+      sql = """
+      WITH daily_visitors AS (
+        SELECT
+          toDate(timestamp) AS date,
+          uniqExactIf(visitor_id, #{ref} != '' AND click_id = '' AND utm_source = '') AS organic_visitors,
+          uniqExactIf(visitor_id, #{ref} = '' AND click_id = '') AS direct_visitors
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND event_type = 'pageview' AND ip_is_bot = 0
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY date
+      ),
+      daily_spend AS (
+        SELECT
+          date,
+          sum(spend) AS total_spend
+        FROM ad_spend
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND date >= #{ClickHouse.param(Date.to_iso8601(DateTime.to_date(date_range.from)))}
+          AND date <= #{ClickHouse.param(Date.to_iso8601(DateTime.to_date(date_range.to)))}
+        GROUP BY date
+      )
+      SELECT
+        dv.date,
+        dv.organic_visitors,
+        dv.direct_visitors,
+        coalesce(ds.total_spend, 0) AS total_spend
+      FROM daily_visitors AS dv
+      LEFT JOIN daily_spend AS ds ON dv.date = ds.date
+      ORDER BY dv.date
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Compare organic/direct visitors on high-spend vs low-spend days."
+  def organic_lift_comparison(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      ref = clean_referrer_sql(site)
+
+      sql = """
+      WITH daily_spend AS (
+        SELECT
+          date,
+          sum(spend) AS total_spend
+        FROM ad_spend
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND date >= #{ClickHouse.param(Date.to_iso8601(DateTime.to_date(date_range.from)))}
+          AND date <= #{ClickHouse.param(Date.to_iso8601(DateTime.to_date(date_range.to)))}
+        GROUP BY date
+      ),
+      median_spend AS (
+        SELECT median(total_spend) AS med FROM daily_spend
+      ),
+      daily_visitors AS (
+        SELECT
+          toDate(timestamp) AS date,
+          uniqExactIf(visitor_id, #{ref} != '' AND click_id = '' AND utm_source = '') AS organic_visitors,
+          uniqExactIf(visitor_id, #{ref} = '' AND click_id = '') AS direct_visitors
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND event_type = 'pageview' AND ip_is_bot = 0
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY date
+      )
+      SELECT
+        if(ds.total_spend >= ms.med, 'high_spend', 'low_spend') AS spend_group,
+        count() AS day_count,
+        round(avg(ds.total_spend), 2) AS avg_daily_spend,
+        round(avg(dv.organic_visitors), 1) AS avg_organic_visitors,
+        round(avg(dv.direct_visitors), 1) AS avg_direct_visitors
+      FROM daily_visitors AS dv
+      INNER JOIN daily_spend AS ds ON dv.date = ds.date
+      CROSS JOIN median_spend AS ms
+      GROUP BY spend_group
+      ORDER BY spend_group
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Visitor quality metrics per ad platform/campaign with composite quality score."
+  def visitor_quality_by_source(%Site{} = site, %User{} = user, date_range, opts \\ []) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      group_col = if opts[:group_by] == "campaign", do: "utm_campaign", else: "click_id_type"
+
+      sql = """
+      WITH ad_sessions AS (
+        SELECT
+          session_id,
+          any(visitor_id) AS visitor_id,
+          any(#{group_col}) AS group_key,
+          countIf(event_type = 'pageview') AS pages,
+          maxIf(duration_s, event_type = 'duration') AS duration,
+          any(visitor_intent) AS intent
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND ip_is_bot = 0
+          AND click_id != ''
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY session_id
+        HAVING countIf(event_type = 'pageview') > 0
+      ),
+      visitor_sessions AS (
+        SELECT
+          visitor_id,
+          group_key,
+          count() AS session_count
+        FROM ad_sessions
+        GROUP BY visitor_id, group_key
+      )
+      SELECT
+        s.group_key,
+        uniqExact(s.visitor_id) AS visitor_count,
+        round(avg(s.pages), 1) AS avg_pages,
+        round(avgIf(s.duration, s.duration > 0), 0) AS avg_duration,
+        round(countIf(s.pages = 1) / greatest(count(), 1) * 100, 1) AS bounce_rate,
+        round(countIf(vs.session_count > 1) / greatest(uniqExact(s.visitor_id), 1) * 100, 1) AS return_rate,
+        round(countIf(s.intent NOT IN ('', 'browsing', 'bot')) / greatest(count(), 1) * 100, 1) AS high_intent_pct,
+        round(
+          least(avg(s.pages) / 5, 1) * 25
+          + least(avgIf(s.duration, s.duration > 0) / 300, 1) * 25
+          + (1 - countIf(s.pages = 1) / greatest(count(), 1)) * 20
+          + countIf(vs.session_count > 1) / greatest(uniqExact(s.visitor_id), 1) * 15
+          + countIf(s.intent NOT IN ('', 'browsing', 'bot')) / greatest(count(), 1) * 15
+        , 1) AS quality_score
+      FROM ad_sessions AS s
+      LEFT JOIN visitor_sessions AS vs ON s.visitor_id = vs.visitor_id AND s.group_key = vs.group_key
+      GROUP BY s.group_key
+      ORDER BY visitor_count DESC
+      LIMIT 50
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
   @doc "Revenue summary by channel type (Direct, Organic, Paid, Social, Referral, Email)."
   def revenue_by_channel(%Site{} = site, %User{} = user, date_range) do
     date_range = ensure_date_range(date_range)

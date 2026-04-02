@@ -2058,6 +2058,123 @@ defmodule SpectabasWeb.DocsLive do
             """
           },
           %{
+            id: "visitor-quality",
+            title: "Visitor Quality Score",
+            body: """
+            **Ad Effectiveness > Visitor Quality**
+
+            Scores ad visitors (0-100) on engagement signals, grouped by platform or campaign. Answers: "Which ad sources bring genuinely engaged visitors vs low-quality traffic?"
+
+            ### Score Components
+
+            | Component | Weight | How it's measured |
+            |-----------|--------|-------------------|
+            | Pages/session | 25 pts | Normalized to 5 pages = max score |
+            | Duration | 25 pts | Capped at 5 minutes = max score |
+            | Non-bounce | 20 pts | Percentage that viewed more than 1 page |
+            | Return visits | 15 pts | Percentage with 2+ sessions |
+            | High intent | 15 pts | Percentage classified as buying/researching/comparing |
+
+            ### Reading the Table
+
+            - **Score > 60** (green) — high-quality traffic worth scaling
+            - **Score 30-60** (yellow) — moderate quality, may need landing page optimization
+            - **Score < 30** (red) — low engagement, consider pausing or restructuring
+
+            > **Use case:** Google Ads scores 72 but Meta Ads scores 28. Meta is sending visitors who bounce immediately. Either improve Meta ad targeting/landing pages, or shift budget to Google.
+            """
+          },
+          %{
+            id: "time-to-convert",
+            title: "Time to Convert",
+            body: """
+            **Ad Effectiveness > Time to Convert**
+
+            Measures how many days and sessions elapse between a visitor's first ad click and their first purchase.
+
+            ### Distribution Histogram
+
+            Shows converter counts in time buckets: Same day, 1 day, 2-3 days, 4-7 days, 8-14 days, 15-30 days, 30+ days. A concentration in "Same day" means your ads bring ready-to-buy visitors. A spread across longer periods suggests a consideration cycle that needs nurturing.
+
+            ### Per-Source Table
+
+            For each platform/campaign:
+            - **Avg/Median Days** — median is more useful since outliers skew the average
+            - **Avg/Median Sessions** — how many visits before they buy
+
+            > **Use case:** Google Ads visitors convert in 2.3 days (median) but Meta visitors take 8.1 days. Google brings ready-to-buy traffic. For Meta, consider retargeting campaigns to stay visible during the longer decision window.
+            """
+          },
+          %{
+            id: "ad-visitor-paths",
+            title: "Ad Visitor Paths",
+            body: """
+            **Ad Effectiveness > Ad Visitor Paths**
+
+            Shows the most common page sequences (first 5 pages) for visitors who arrived via ad clicks, with conversion rates per path.
+
+            ### All Paths View
+
+            A table of page journeys (e.g., `/landing → /pricing → /signup`) showing how many visitors took each path and what percentage converted. Paths with high conversion rates reveal your best-performing funnels.
+
+            ### Bounce Pages View
+
+            Landing pages where ad visitors left after viewing only one page, grouped by ad platform. High bounce rates on a landing page mean the page doesn't match the ad promise.
+
+            > **Use case:** The path `/landing-page → /pricing → /signup` has a 12% conversion rate, but `/landing-page → /features → /about` has 0.5%. Visitors who go straight to pricing convert — add a stronger pricing CTA on your landing page.
+            """
+          },
+          %{
+            id: "ad-churn",
+            title: "Ad-to-Churn Correlation",
+            body: """
+            **Ad Effectiveness > Ad-to-Churn**
+
+            Cross-references which ad campaigns bring customers who stay active vs which bring customers who churn (50%+ session decline over 14-day windows).
+
+            ### Comparison Cards
+
+            Side-by-side ad churn rate vs organic churn rate. If ad traffic churns significantly more than organic, your ads may be attracting the wrong audience.
+
+            ### Campaign Table
+
+            For each platform/campaign: total visitors, churned, retained, purchased, churn rate. Color-coded: green (<25%), yellow (25-50%), red (>50%).
+
+            > **Use case:** Google campaign "brand-terms" has 12% churn but "broad-match" has 48%. Broad match is attracting visitors who don't stick. Tighten the targeting or adjust the landing page to set better expectations.
+
+            > **Note:** Requires at least 28 days of data. Churn detection compares the most recent 14 days to the prior 14 days for each visitor.
+            """
+          },
+          %{
+            id: "organic-lift",
+            title: "Organic Lift",
+            body: """
+            **Ad Effectiveness > Organic Lift**
+
+            Compares organic and direct traffic on days with high ad spend vs low ad spend. Answers: "Do my ads have a halo effect that drives more organic discovery?"
+
+            ### How It Works
+
+            Days are split at the median daily ad spend:
+            - **High Spend Days** — above median
+            - **Low Spend Days** — below median
+
+            For each group, shows average daily organic visitors and direct visitors.
+
+            ### Lift Calculation
+
+            The headline shows the percentage difference: "Organic traffic is X% higher on high-spend days." A positive lift suggests ads increase brand awareness that drives organic searches.
+
+            ### Daily Breakdown
+
+            Full table of every day with ad spend, organic visitors, direct visitors, and a high/low spend badge.
+
+            > **Important:** Correlation is not causation. Organic traffic may be higher on high-spend days for other reasons (seasonality, content publishing, etc.). Use this as a directional signal, not proof.
+
+            > **Use case:** Organic traffic is 34% higher on days with above-median Google Ads spend. This suggests your ads are generating brand searches that convert organically — your true ROAS may be higher than the click-attributed number shows.
+            """
+          },
+          %{
             id: "ad-integrations",
             title: "Ad Platform Integrations",
             body: """

@@ -149,6 +149,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Ad Platform Integrations** — Google Ads, Bing Ads, Meta/Facebook Ads OAuth2 connections with daily spend sync. Encrypted token storage (AES-256-GCM). Settings UI per site with Sync Now button. Oban sync every 6h. Google Ads account picker for MCC/multi-account setups.
 - **ROAS on Revenue Attribution** — Ad Spend Overview card (total spend, ad-attributed revenue, ROAS, clicks, impressions, per-platform breakdown). Campaign tab shows inline Spend/ROAS/CPC columns. Standalone Ad Spend by Campaign table on other tabs. ROAS color-coded.
 - **Click ID Attribution** — Tracker captures gclid (Google), msclkid (Bing), fbclid (Meta) from landing URLs. Stored in ClickHouse `click_id`/`click_id_type` columns. Revenue from visitors with click IDs attributed to the platform for ROAS calculation.
+- **Ad Effectiveness Suite** — 5 pages under new sidebar section: Visitor Quality (engagement scoring 0-100), Time to Convert (days/sessions to purchase), Ad Visitor Paths (page sequences by outcome), Ad-to-Churn (campaign churn correlation), Organic Lift (ad spend vs organic traffic correlation)
 
 ## Authentication
 

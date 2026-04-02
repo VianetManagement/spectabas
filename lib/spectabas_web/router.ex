@@ -171,6 +171,11 @@ defmodule SpectabasWeb.Router do
       live "/sites/:site_id/revenue-cohorts", Dashboard.RevenueCohortLive, :index
       live "/sites/:site_id/buyer-patterns", Dashboard.BuyerPatternsLive, :index
       live "/sites/:site_id/churn-risk", Dashboard.ChurnRiskLive, :index
+      live "/sites/:site_id/ad-churn", Dashboard.AdChurnLive, :index
+      live "/sites/:site_id/time-to-convert", Dashboard.TimeToConvertLive, :index
+      live "/sites/:site_id/ad-visitor-paths", Dashboard.AdVisitorPathsLive, :index
+      live "/sites/:site_id/organic-lift", Dashboard.OrganicLiftLive, :index
+      live "/sites/:site_id/visitor-quality", Dashboard.VisitorQualityLive, :index
       live "/sites/:site_id/reports", Dashboard.ReportsLive, :index
       live "/sites/:site_id/performance", Dashboard.PerformanceLive, :index
       live "/sites/:site_id/outbound-links", Dashboard.OutboundLinksLive, :index
