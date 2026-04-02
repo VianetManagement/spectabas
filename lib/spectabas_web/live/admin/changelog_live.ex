@@ -45,103 +45,79 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v4.4.0 — 2026-04-02 UTC",
+       [
+         %{
+           title: "Feature: Enhanced Insights with revenue, ad traffic, and churn detection",
+           description:
+             "Insights page now detects 8 types of anomalies: traffic changes, bounce rate shifts, source changes, " <>
+               "page drops, high exit rates, revenue changes, ad traffic shifts (new platforms detected, volume changes), " <>
+               "and customer churn risk spikes. Each insight includes severity, metrics, and actionable recommendations."
+         },
+         %{
+           title: "Feature: Category landing pages for all 7 dashboard sections",
+           description:
+             "Each sidebar category (Overview, Behavior, Acquisition, Audience, Conversions, Ad Effectiveness, Tools) " <>
+               "has a hub page with card grid linking to each page with detailed descriptions. Sidebar labels are clickable."
+         },
+         %{
+           title: "Feature: Breadcrumbs on all dashboard pages",
+           description:
+             "Site Name / Category / Page Title breadcrumb trail on every page. Category link goes to category landing page. Colors match sidebar sections."
+         },
+         %{
+           title: "Feature: Revenue Attribution — sortable columns + paid/organic split",
+           description:
+             "All columns sortable (click header to toggle). Source table splits rows by paid vs organic with colored pills " <>
+               "(Google Ads blue, Bing Ads cyan, Meta Ads indigo). Works across all UTM tabs."
+         },
+         %{
+           title: "Fix: All 5 Ad Effectiveness queries rewritten for ClickHouse performance",
+           description:
+             "Replaced CTE-based queries with flat GROUP BY. Fixed column name mismatches (9 total), " <>
+               "ORDER BY bugs, and groupArray syntax. Added bloom_filter skip index on click_id."
+         },
+         %{
+           title: "Fix: Self-referral filtering in Revenue Attribution queries",
+           description:
+             "Revenue Attribution source and channel queries now exclude the site's own domain. " <>
+               "Historical data with www.roommates.com as source now correctly resolves to Direct."
+         },
+         %{
+           title: "Feature: Reverse proxy (data-proxy) for ad blocker evasion",
+           description:
+             "Tracker supports data-proxy attribute to route beacons through the main domain. " <>
+               "Setup guide email with Phoenix plug code, Cloudflare notes, and simplified snippet."
+         }
+       ]},
       {"v4.3.1 — 2026-04-01 UTC",
        [
          %{
-           title: "Enhancement: Ad sync — manual Sync Now button + status messaging",
+           title: "Feature: Ad platform integrations — Sync Now, account picker, API fixes",
            description:
-             "Settings page now shows 'Waiting for first sync' when an ad platform is connected but hasn't synced yet. Added 'Sync Now' button to trigger an immediate sync instead of waiting for the 6-hour cron cycle."
+             "Settings page: Sync Now button, first-sync status. Google Ads: v17→v23, MCC account picker. " <>
+               "Meta: v21→v25. Bing: v13 confirmed, async reporting rewrite. Full adapter audit with error details."
          },
          %{
-           title: "Fix: Google Ads API version v17 → v23",
+           title: "Feature: Click ID attribution (gclid/msclkid/fbclid) + ROAS",
            description:
-             "Google Ads API v17 was sunset and returning 404. Updated to current v23."
+             "Tracker captures ad click IDs from URLs. ClickHouse click_id/click_id_type columns. " <>
+               "Revenue Attribution: ad spend overview, per-platform ROAS, any-touch model. " <>
+               "Visitor profiles: click ID + full UTM data. Realtime: ad platform pills. 20 new tests."
          },
          %{
-           title: "Chore: Meta Ads Graph API v21.0 → v25.0",
+           title: "Feature: 5 Ad Effectiveness pages",
            description:
-             "Bumped Meta/Facebook Graph API from v21.0 to latest v25.0. Bing Ads v13 confirmed current."
+             "Visitor Quality (0-100 scoring), Time to Convert (days to purchase), Ad Visitor Paths, " <>
+               "Ad-to-Churn (campaign churn correlation), Organic Lift (ad spend vs organic traffic). " <>
+               "9 analytics queries, new sidebar section."
          },
          %{
-           title: "Feature: Reverse proxy support (data-proxy) for ad blocker evasion",
+           title: "Fix: Fingerprint entropy, self-referral filtering, docs markdown",
            description:
-             "Tracker now supports data-proxy attribute to route beacons through your main domain. " <>
-               "In proxy mode, cookies set on parent domain (.example.com) for cross-subdomain readability. " <>
-               "Enables same-origin tracking that ad blockers cannot detect."
-         },
-         %{
-           title: "Feature: category landing pages with page descriptions",
-           description:
-             "Each sidebar category (Overview, Behavior, Acquisition, Audience, Conversions, Ad Effectiveness, Tools) " <>
-               "now has a landing page at /sites/:id/c/:category with a 2-column card grid. Each card links to a page " <>
-               "with a detailed description of what it shows and how to use it. Sidebar category labels are clickable links. " <>
-               "Makes the dashboard self-explanatory for new users."
-         },
-         %{
-           title: "Feature: breadcrumbs on all dashboard pages",
-           description:
-             "Every dashboard page now shows a breadcrumb trail: Site Name / Category / Page Title. " <>
-               "Category names match sidebar sections and use matching colors. " <>
-               "Dashboard overview page omits the breadcrumb (it's the root)."
-         },
-         %{
-           title: "Fix: sortable columns, paid/organic split with pills, query performance",
-           description:
-             "Revenue Attribution: all columns sortable (click to toggle asc/desc). Source table now splits rows by paid vs organic " <>
-               "with colored pills (Google Ads, Bing Ads, Meta Ads) across all tabs. Visitor Quality query rewritten as flat GROUP BY " <>
-               "(was CTE-based and timing out). Added bloom_filter skip index on click_id for faster ad queries."
-         },
-         %{
-           title: "Feature: 5 Ad Effectiveness pages — Visitor Quality, Time to Convert, Ad Paths, Ad-to-Churn, Organic Lift",
-           description:
-             "New 'Ad Effectiveness' sidebar section with 5 pages that go beyond standard ROAS. " <>
-               "Visitor Quality: engagement scoring (0-100) for ad traffic by platform/campaign. " <>
-               "Time to Convert: days/sessions between ad click and purchase with histogram distribution. " <>
-               "Ad Visitor Paths: common page sequences for ad traffic, segmented by converting vs bouncing. " <>
-               "Ad-to-Churn: which ad campaigns bring customers who stick vs churn (14-day decline detection). " <>
-               "Organic Lift: correlates ad spend levels with organic/direct traffic volume."
-         },
-         %{
-           title: "Fix: fingerprint entropy + collision handling + docs",
-           description:
-             "Added AudioContext, WebGL parameter, and font detection signals to browser fingerprinting for higher uniqueness. " <>
-               "Visitor profile now caps cross-reference table at 10 matches — larger groups show 'common device' note. " <>
-               "New Browser Fingerprinting documentation section with signal table and limitations."
-         },
-         %{
-           title: "Feature: Click ID diagnostics on ingest page + self-referral filtering",
-           description:
-             "Ingest diagnostics (/admin/ingest) now shows Click ID Attribution section: events today with click IDs, " <>
-               "and per-platform breakdown (last 7 days) with event count and unique visitors. " <>
-               "Also fixed self-referral bug where the site's own domain appeared as a top traffic source."
-         },
-         %{
-           title: "Docs: new Conversions documentation category",
-           description:
-             "Dedicated /docs/conversions page with comprehensive docs for Goals & Funnels, Ecommerce Tracking, " <>
-               "Revenue Attribution (attribution models, click ID attribution, UTM+click ID combo, ad spend tables), " <>
-               "Revenue Cohorts, Buyer Patterns, Churn Risk, and Ad Platform Integrations. " <>
-               "Revenue Attribution section extensively expanded with click ID explanation, UTM template examples, and ROAS walkthrough."
-         },
-         %{
-           title: "Feature: Any-touch attribution model + last-touch default",
-           description:
-             "Revenue Attribution now has three toggle options: First Touch, Last Touch (default), and Any Touch. " <>
-               "Any Touch shows every source a converting visitor ever touched — a single conversion can appear under multiple sources. " <>
-               "Useful for understanding the full customer journey and whether ad clicks appeared anywhere in the path to conversion."
-         },
-         %{
-           title: "Fix: Revenue Attribution defaults to last-touch, click ID respects toggle",
-           description:
-             "Industry standard: last-touch attribution as default (was first-touch). " <>
-               "Click ID revenue query now uses argMax/argMin to respect the First Touch / Last Touch toggle."
-         },
-         %{
-           title: "Feature: Click ID attribution (gclid/msclkid/fbclid)",
-           description:
-             "Tracker now captures ad platform click IDs from landing URLs. Stored in ClickHouse for platform-level ROAS. " <>
-               "Revenue Attribution page shows ad-attributed revenue per platform. " <>
-               "20 new tests for click ID payload, schema mapping, and ad integrations."
+             "Added AudioContext/WebGL/font fingerprint signals. Self-referral filtering in queries. " <>
+               "All docs markdown fixed (numbered lists, links, italics). New Conversions docs category. " <>
+               "Click ID diagnostics on ingest page."
          },
          %{
            title: "Feature: ROAS + ad spend on Revenue Attribution page",

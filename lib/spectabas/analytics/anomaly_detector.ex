@@ -37,6 +37,9 @@ defmodule Spectabas.Analytics.AnomalyDetector do
         |> check_sources(site, current_from, now, prev_from, prev_to)
         |> check_top_pages(site, current_from, now, prev_from, prev_to)
         |> check_exit_pages(site, current_from, now)
+        |> check_revenue(site, current_from, now, prev_from, prev_to)
+        |> check_ad_traffic(site, current_from, now, prev_from, prev_to)
+        |> check_churn_risk(site)
         |> Enum.sort_by(& &1.severity_rank)
 
       {:ok, anomalies}
@@ -323,6 +326,152 @@ defmodule Spectabas.Analytics.AnomalyDetector do
     end
   end
 
+  # --- Revenue changes ---
+
+  defp check_revenue(anomalies, site, cf, ct, pf, pt) do
+    current_rev = query_revenue(site, cf, ct)
+    previous_rev = query_revenue(site, pf, pt)
+
+    if previous_rev > 0 do
+      pct = Float.round((current_rev - previous_rev) / previous_rev * 100, 1)
+
+      cond do
+        pct <= -30 ->
+          [%{
+            severity: :high, severity_rank: 1, category: "revenue", metric: "revenue",
+            current: current_rev, previous: previous_rev, change_pct: pct,
+            message: "Revenue dropped #{abs(pct)}% this week ($#{Float.round(current_rev, 2)} vs $#{Float.round(previous_rev, 2)})",
+            action: "Check if conversion paths are broken, pricing changed, or ad traffic quality declined"
+          } | anomalies]
+
+        pct >= 50 ->
+          [%{
+            severity: :info, severity_rank: 3, category: "revenue", metric: "revenue",
+            current: current_rev, previous: previous_rev, change_pct: pct,
+            message: "Revenue up #{pct}% this week ($#{Float.round(current_rev, 2)} vs $#{Float.round(previous_rev, 2)})",
+            action: "Investigate what's driving the growth — new campaign, seasonal trend, or product change"
+          } | anomalies]
+
+        true ->
+          anomalies
+      end
+    else
+      if current_rev > 0 do
+        [%{
+          severity: :info, severity_rank: 3, category: "revenue", metric: "revenue",
+          current: current_rev, previous: 0, change_pct: nil,
+          message: "First revenue: $#{Float.round(current_rev, 2)} this week",
+          action: "Your first ecommerce revenue is coming in — check Revenue Attribution to see which sources are converting"
+        } | anomalies]
+      else
+        anomalies
+      end
+    end
+  end
+
+  # --- Ad traffic insights ---
+
+  defp check_ad_traffic(anomalies, site, cf, ct, pf, pt) do
+    current_ads = query_ad_visitors(site, cf, ct)
+    previous_ads = query_ad_visitors(site, pf, pt)
+
+    curr_map = Map.new(current_ads, fn r -> {r["click_id_type"], to_int(r["visitors"])} end)
+    prev_map = Map.new(previous_ads, fn r -> {r["click_id_type"], to_int(r["visitors"])} end)
+
+    platform_labels = %{"google_ads" => "Google Ads", "bing_ads" => "Bing Ads", "meta_ads" => "Meta Ads"}
+
+    # New platforms detected
+    anomalies =
+      Enum.reduce(curr_map, anomalies, fn {platform, count}, acc ->
+        if count > 0 and not Map.has_key?(prev_map, platform) do
+          label = platform_labels[platform] || platform
+          [%{
+            severity: :info, severity_rank: 3, category: "ad traffic", metric: "click_id",
+            current: count, previous: 0, change_pct: nil,
+            message: "New ad traffic: #{count} visitors from #{label} this week (via click ID)",
+            action: "Check Visitor Quality and Time to Convert to evaluate this traffic source"
+          } | acc]
+        else
+          acc
+        end
+      end)
+
+    # Significant ad traffic changes
+    Enum.reduce(curr_map, anomalies, fn {platform, curr_count}, acc ->
+      prev_count = Map.get(prev_map, platform, 0)
+
+      if prev_count >= 10 do
+        pct = Float.round((curr_count - prev_count) / prev_count * 100, 1)
+        label = platform_labels[platform] || platform
+
+        cond do
+          pct <= -50 ->
+            [%{
+              severity: :medium, severity_rank: 2, category: "ad traffic", metric: "click_id",
+              current: curr_count, previous: prev_count, change_pct: pct,
+              message: "#{label} traffic dropped #{abs(pct)}% (#{curr_count} vs #{prev_count} visitors)",
+              action: "Check if campaigns were paused, budgets reduced, or ad accounts have errors"
+            } | acc]
+
+          pct >= 100 ->
+            [%{
+              severity: :info, severity_rank: 3, category: "ad traffic", metric: "click_id",
+              current: curr_count, previous: prev_count, change_pct: pct,
+              message: "#{label} traffic surged #{pct}% (#{curr_count} vs #{prev_count} visitors)",
+              action: "Monitor Visitor Quality to ensure the increased traffic maintains engagement"
+            } | acc]
+
+          true ->
+            acc
+        end
+      else
+        acc
+      end
+    end)
+  end
+
+  # --- Churn risk changes ---
+
+  defp check_churn_risk(anomalies, site) do
+    sql = """
+    SELECT count() AS c
+    FROM (
+      SELECT visitor_id,
+        countIf(timestamp >= now() - INTERVAL 14 DAY) AS recent,
+        countIf(timestamp >= now() - INTERVAL 28 DAY AND timestamp < now() - INTERVAL 14 DAY) AS prior
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND event_type = 'pageview' AND ip_is_bot = 0
+        AND timestamp >= now() - INTERVAL 28 DAY
+        AND visitor_id IN (
+          SELECT DISTINCT visitor_id FROM ecommerce_events
+          WHERE site_id = #{ClickHouse.param(site.id)}
+        )
+      GROUP BY visitor_id
+      HAVING prior >= 3 AND recent <= prior / 2
+    )
+    """
+
+    case ClickHouse.query(sql) do
+      {:ok, [%{"c" => c}]} ->
+        count = to_int(c)
+
+        if count >= 3 do
+          [%{
+            severity: :medium, severity_rank: 2, category: "retention", metric: "churn_risk",
+            current: count, previous: nil, change_pct: nil,
+            message: "#{count} customers flagged as churn risk (50%+ session decline)",
+            action: "Visit Churn Risk page to see affected customers and trigger re-engagement outreach"
+          } | anomalies]
+        else
+          anomalies
+        end
+
+      _ ->
+        anomalies
+    end
+  end
+
   # --- Query helpers ---
 
   defp query_count(site, from, to) do
@@ -390,6 +539,39 @@ defmodule Spectabas.Analytics.AnomalyDetector do
     GROUP BY url_path
     ORDER BY pageviews DESC
     LIMIT 20
+    """
+
+    case ClickHouse.query(sql) do
+      {:ok, rows} -> rows
+      _ -> []
+    end
+  end
+
+  defp query_revenue(site, from, to) do
+    sql = """
+    SELECT sum(revenue) AS r
+    FROM ecommerce_events
+    WHERE site_id = #{ClickHouse.param(site.id)}
+      AND timestamp >= #{ClickHouse.param(fmt(from))}
+      AND timestamp <= #{ClickHouse.param(fmt(to))}
+    """
+
+    case ClickHouse.query(sql) do
+      {:ok, [%{"r" => r}]} -> to_float(r)
+      _ -> 0.0
+    end
+  end
+
+  defp query_ad_visitors(site, from, to) do
+    sql = """
+    SELECT click_id_type, uniq(visitor_id) AS visitors
+    FROM events
+    WHERE site_id = #{ClickHouse.param(site.id)}
+      AND click_id != '' AND click_id_type != ''
+      AND event_type = 'pageview' AND ip_is_bot = 0
+      AND timestamp >= #{ClickHouse.param(fmt(from))}
+      AND timestamp <= #{ClickHouse.param(fmt(to))}
+    GROUP BY click_id_type
     """
 
     case ClickHouse.query(sql) do
