@@ -45,6 +45,10 @@ defmodule Spectabas.Application do
       Oban.insert(
         Spectabas.Workers.AdSetupEmail.new(%{}, unique: [period: :infinity, keys: []])
       )
+
+      Oban.insert(
+        Spectabas.Workers.ProxySetupEmail.new(%{}, unique: [period: :infinity, keys: []])
+      )
     rescue
       _ -> :ok
     end

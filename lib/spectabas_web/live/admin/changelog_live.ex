@@ -63,6 +63,13 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Bumped Meta/Facebook Graph API from v21.0 to latest v25.0. Bing Ads v13 confirmed current."
          },
          %{
+           title: "Feature: Reverse proxy support (data-proxy) for ad blocker evasion",
+           description:
+             "Tracker now supports data-proxy attribute to route beacons through your main domain. " <>
+               "In proxy mode, cookies set on parent domain (.example.com) for cross-subdomain readability. " <>
+               "Enables same-origin tracking that ad blockers cannot detect."
+         },
+         %{
            title: "Feature: 5 Ad Effectiveness pages — Visitor Quality, Time to Convert, Ad Paths, Ad-to-Churn, Organic Lift",
            description:
              "New 'Ad Effectiveness' sidebar section with 5 pages that go beyond standard ROAS. " <>

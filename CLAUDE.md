@@ -227,7 +227,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Saved segments**: Ownership enforced — `get_segment!/3` scopes by user_id and site_id. Never load segments by ID alone.
 - **Tracker GDPR default**: `data-gdpr` defaults to `"off"` (cookie-based). Sites needing fingerprint-only mode must explicitly set `data-gdpr="on"`.
 - **Click ID capture**: Tracker extracts gclid/msclkid/fbclid from URL, persists in sessionStorage, sends as `_cid`/`_cidt` fields. Ingest stores in `click_id`/`click_id_type` ClickHouse columns. Revenue Attribution uses click IDs for platform-level ROAS.
-- **Ad blocker evasion**: Script at `/assets/v1.js`, beacon uses public_key not domain, endpoints obfuscated
+- **Ad blocker evasion**: Script at `/assets/v1.js`, beacon uses public_key not domain, endpoints obfuscated. `data-proxy` attribute enables reverse proxy through main domain for same-origin tracking. In proxy mode, cookies are set on parent domain (`.example.com`) for cross-subdomain readability.
 - **Cloudflare support**: Checks `CF-Connecting-IP` header before `x-forwarded-for`
 - **Sidebar layout**: All dashboard pages use `<.dashboard_layout>` from SidebarComponent
 - **Async dashboard**: Mount loads critical stats only; deferred stats load via `handle_info(:load_deferred)`

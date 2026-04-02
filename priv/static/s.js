@@ -9,7 +9,8 @@
 
   var gdpr = script.getAttribute("data-gdpr") || "off";
   var xdSites = (script.getAttribute("data-xd") || "").split(",").filter(Boolean);
-  var endpoint = script.src.replace(/\/assets\/v1\.js.*$/, "");
+  var proxyBase = script.getAttribute("data-proxy") || "";
+  var endpoint = proxyBase || script.src.replace(/\/assets\/v1\.js.*$/, "");
 
   // Check opt-out
   if (getCookie("_sab_optout")) return;
@@ -690,6 +691,14 @@
     var cookie = name + "=" + value + ";path=/;max-age=" + maxAge + ";SameSite=Lax";
     if (window.location.protocol === "https:") {
       cookie += ";Secure";
+    }
+    // When using proxy mode, set cookie on parent domain so it's readable
+    // from both www.example.com and b.example.com during migration
+    if (proxyBase) {
+      var parts = window.location.hostname.split(".");
+      if (parts.length >= 2) {
+        cookie += ";domain=." + parts.slice(-2).join(".");
+      }
     }
     document.cookie = cookie;
   }
