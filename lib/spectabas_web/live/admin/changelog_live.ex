@@ -63,6 +63,13 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Bumped Meta/Facebook Graph API from v21.0 to latest v25.0. Bing Ads v13 confirmed current."
          },
          %{
+           title: "Fix: fingerprint entropy + collision handling + docs",
+           description:
+             "Added AudioContext, WebGL parameter, and font detection signals to browser fingerprinting for higher uniqueness. " <>
+               "Visitor profile now caps cross-reference table at 10 matches — larger groups show 'common device' note. " <>
+               "New Browser Fingerprinting documentation section with signal table and limitations."
+         },
+         %{
            title: "Feature: Click ID diagnostics on ingest page + self-referral filtering",
            description:
              "Ingest diagnostics (/admin/ingest) now shows Click ID Attribution section: events today with click IDs, " <>

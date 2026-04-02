@@ -193,8 +193,11 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
                 <dt class="text-xs font-medium text-gray-500">Browser Fingerprint</dt>
                 <dd class="mt-0.5 text-xs text-indigo-600 font-mono">
                   {@profile["browser_fingerprint"]}
-                  <span :if={@fp_visitors != []} class="text-amber-600 ml-1">
+                  <span :if={@fp_visitors != [] && length(@fp_visitors) <= 10} class="text-amber-600 ml-1">
                     ({length(@fp_visitors)} other visitors share this fingerprint)
+                  </span>
+                  <span :if={length(@fp_visitors) > 10} class="text-gray-400 ml-1">
+                    (common device — {length(@fp_visitors)} matches)
                   </span>
                 </dd>
               </div>
@@ -521,8 +524,8 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
           </table>
         </div>
 
-        <%!-- Browser Fingerprint Cross-Reference --%>
-        <div :if={@fp_visitors != []} class="bg-white rounded-lg shadow mb-6">
+        <%!-- Browser Fingerprint Cross-Reference (only useful when < 10 matches) --%>
+        <div :if={@fp_visitors != [] && length(@fp_visitors) <= 10} class="bg-white rounded-lg shadow mb-6">
           <div class="px-5 py-4 border-b border-gray-100">
             <h3 class="text-sm font-semibold text-gray-700">
               Same Browser Fingerprint ({length(@fp_visitors)} other visitors)
@@ -564,6 +567,15 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <%!-- High collision fingerprint notice --%>
+        <div :if={@fp_visitors != [] && length(@fp_visitors) > 10} class="bg-white rounded-lg shadow mb-6 px-5 py-4">
+          <p class="text-sm text-gray-500">
+            <span class="font-medium text-gray-700">Browser Fingerprint:</span>
+            {length(@fp_visitors)} other visitors share this fingerprint.
+            This is a common device/browser combination — not useful for identifying alt accounts.
+          </p>
         </div>
 
         <%!-- Event Timeline --%>

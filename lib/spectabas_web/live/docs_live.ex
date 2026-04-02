@@ -524,6 +524,34 @@ defmodule SpectabasWeb.DocsLive do
             <script defer data-id="KEY" data-gdpr="off" src="https://b.example.com/assets/v1.js"></script>
             ```
 
+            ### Browser Fingerprinting
+
+            Spectabas generates a browser fingerprint for each visitor using deterministic signals — no random identifiers or tracking cookies involved. The fingerprint is used for:
+
+            - **GDPR-on mode:** The fingerprint IS the visitor identifier (no cookies set)
+            - **GDPR-off mode:** Used for cross-referencing on visitor profiles (cookies handle primary identification)
+
+            **Signals collected** (all client-side, no network requests):
+
+            | Signal | Purpose |
+            |--------|---------|
+            | Browser family + major version | Stable across minor updates |
+            | Screen dimensions + color depth | Hardware display characteristics |
+            | Device pixel ratio | Retina/HiDPI detection |
+            | Timezone + language | Regional settings |
+            | Hardware concurrency + device memory | CPU/RAM fingerprint |
+            | Touch points + platform | Device type identification |
+            | Canvas rendering | GPU-specific pixel output from text + shapes |
+            | WebGL renderer + parameters | GPU model, driver limits, extension count |
+            | AudioContext parameters | Audio processing characteristics |
+            | Font availability | Installed font detection via width measurement |
+
+            The signals are hashed with MurmurHash3 using two seeds to produce a 64-bit fingerprint (collision probability ~50% at 5 billion visitors).
+
+            **Limitations:** Visitors on identical hardware, OS, and browser (e.g., two iPhone 15s on iOS 18 Safari) will produce the same fingerprint. This is inherent to deterministic fingerprinting — it identifies device configurations, not individual people. The visitor profile page accounts for this by showing a "common device" note when more than 10 visitors share a fingerprint, rather than listing them as potential alt accounts.
+
+            > **Privacy:** The fingerprint never leaves the browser as raw signals. Only the hash is transmitted. In GDPR-on mode, IP addresses are also anonymized before storage.
+
             ### Cross-Domain Tracking
 
             To track visitors across multiple domains as one session:

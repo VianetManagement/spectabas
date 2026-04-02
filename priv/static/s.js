@@ -354,7 +354,7 @@
       signals.push("no-canvas");
     }
 
-    // WebGL renderer
+    // WebGL renderer + parameters
     try {
       var gl = document.createElement("canvas").getContext("webgl");
       if (gl) {
@@ -363,10 +363,59 @@
           signals.push(gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) || "");
           signals.push(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || "");
         }
+        // WebGL parameter fingerprint — varies across GPU drivers
+        signals.push(gl.getParameter(gl.MAX_TEXTURE_SIZE) || 0);
+        signals.push(gl.getParameter(gl.MAX_RENDERBUFFER_SIZE) || 0);
+        signals.push(gl.getParameter(gl.MAX_VIEWPORT_DIMS) ? gl.getParameter(gl.MAX_VIEWPORT_DIMS).join(",") : "");
+        signals.push(gl.getParameter(gl.ALIASED_LINE_WIDTH_RANGE) ? gl.getParameter(gl.ALIASED_LINE_WIDTH_RANGE).join(",") : "");
+        var exts = gl.getSupportedExtensions();
+        if (exts) signals.push(exts.length + ":" + exts.slice(0, 5).join(","));
         gl.getExtension("WEBGL_lose_context").loseContext();
       }
     } catch (e) {
       signals.push("no-webgl");
+    }
+
+    // AudioContext fingerprint — oscillator output varies per device/driver
+    try {
+      var actx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, 44100, 44100);
+      if (actx) {
+        var osc = actx.createOscillator();
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(10000, actx.currentTime);
+        var comp = actx.createDynamicsCompressor();
+        comp.threshold.setValueAtTime(-50, actx.currentTime);
+        comp.knee.setValueAtTime(40, actx.currentTime);
+        comp.ratio.setValueAtTime(12, actx.currentTime);
+        comp.attack.setValueAtTime(0, actx.currentTime);
+        comp.release.setValueAtTime(0.25, actx.currentTime);
+        osc.connect(comp);
+        comp.connect(actx.destination);
+        osc.start(0);
+        // Hash the compressor output fingerprint — don't need to render, just probe parameters
+        signals.push("ac:" + comp.threshold.value + "," + comp.knee.value + "," + comp.ratio.value);
+      }
+    } catch (e) {
+      signals.push("no-audio");
+    }
+
+    // Installed fonts probe — check for distinctive fonts via canvas width measurement
+    try {
+      var testStr = "mmmmmmmmmmlli";
+      var baseCanvas = document.createElement("canvas");
+      var baseCtx = baseCanvas.getContext("2d");
+      baseCtx.font = "72px monospace";
+      var baseWidth = baseCtx.measureText(testStr).width;
+      var fontHits = [];
+      var testFonts = ["Arial","Verdana","Georgia","Palatino","Garamond","Bookman","Trebuchet MS",
+        "Comic Sans MS","Impact","Lucida Console","Tahoma","Courier New","Helvetica Neue"];
+      for (var fi = 0; fi < testFonts.length; fi++) {
+        baseCtx.font = "72px '" + testFonts[fi] + "', monospace";
+        if (baseCtx.measureText(testStr).width !== baseWidth) fontHits.push(fi);
+      }
+      signals.push("f:" + fontHits.join(","));
+    } catch (e) {
+      signals.push("no-fonts");
     }
 
     // 64-bit hash (two 32-bit hashes with different seeds) — collision probability
