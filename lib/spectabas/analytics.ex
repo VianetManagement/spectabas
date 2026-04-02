@@ -1469,7 +1469,10 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
-      group_col = if opts[:group_by] == "campaign", do: "utm_campaign", else: "click_id_type"
+      {group_col, result_col} =
+        if opts[:group_by] == "campaign",
+          do: {"if(utm_campaign != '', utm_campaign, '(none)')", "campaign"},
+          else: {"click_id_type", "platform"}
 
       sql = """
       WITH first_click AS (
@@ -1512,7 +1515,7 @@ defmodule Spectabas.Analytics do
         GROUP BY fc.visitor_id, fc.group_key, days_to_convert
       )
       SELECT
-        group_key,
+        group_key AS #{result_col},
         count() AS converters,
         round(avg(days_to_convert), 1) AS avg_days,
         round(median(days_to_convert), 1) AS median_days,
@@ -1581,7 +1584,7 @@ defmodule Spectabas.Analytics do
           days_to_convert <= 30, 6,
           7
         ) AS bucket_order,
-        count() AS converters
+        count() AS visitors
       FROM conversions
       GROUP BY bucket, bucket_order
       ORDER BY bucket_order
@@ -1633,9 +1636,9 @@ defmodule Spectabas.Analytics do
           AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
       )
       SELECT
-        sp.path,
-        count() AS visitor_count,
-        countIf(p.visitor_id != '') AS converter_count,
+        sp.path AS journey,
+        count() AS visitors,
+        countIf(p.visitor_id != '') AS converters,
         round(countIf(p.visitor_id != '') / greatest(count(), 1) * 100, 1) AS conversion_rate
       FROM session_paths AS sp
       LEFT JOIN purchasers AS p ON sp.visitor_id = p.visitor_id
@@ -1671,7 +1674,7 @@ defmodule Spectabas.Analytics do
       SELECT
         landing_page,
         platform,
-        count() AS bounce_count
+        count() AS bounces
       FROM bounced_sessions
       GROUP BY landing_page, platform
       ORDER BY bounce_count DESC
@@ -1713,10 +1716,10 @@ defmodule Spectabas.Analytics do
         GROUP BY date
       )
       SELECT
-        dv.date,
+        dv.date AS day,
         dv.organic_visitors,
         dv.direct_visitors,
-        coalesce(ds.total_spend, 0) AS total_spend
+        coalesce(ds.total_spend, 0) AS ad_spend
       FROM daily_visitors AS dv
       LEFT JOIN daily_spend AS ds ON dv.date = ds.date
       ORDER BY dv.date
@@ -1760,15 +1763,15 @@ defmodule Spectabas.Analytics do
         GROUP BY date
       )
       SELECT
-        if(ds.total_spend >= ms.med, 'high_spend', 'low_spend') AS spend_group,
-        count() AS day_count,
+        if(ds.total_spend >= ms.med, 'high_spend', 'low_spend') AS period_type,
+        count() AS days,
         round(avg(ds.total_spend), 2) AS avg_daily_spend,
         round(avg(dv.organic_visitors), 1) AS avg_organic_visitors,
         round(avg(dv.direct_visitors), 1) AS avg_direct_visitors
       FROM daily_visitors AS dv
       INNER JOIN daily_spend AS ds ON dv.date = ds.date
       CROSS JOIN median_spend AS ms
-      GROUP BY spend_group
+      GROUP BY period_type
       ORDER BY spend_group
       """
 
@@ -1781,7 +1784,10 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
-      group_col = if opts[:group_by] == "campaign", do: "utm_campaign", else: "click_id_type"
+      {group_col, result_col} =
+        if opts[:group_by] == "campaign",
+          do: {"if(utm_campaign != '', utm_campaign, '(none)')", "campaign"},
+          else: {"click_id_type", "platform"}
 
       sql = """
       WITH ad_sessions AS (
@@ -1810,10 +1816,10 @@ defmodule Spectabas.Analytics do
         GROUP BY visitor_id, group_key
       )
       SELECT
-        s.group_key,
-        uniqExact(s.visitor_id) AS visitor_count,
+        s.group_key AS #{result_col},
+        uniqExact(s.visitor_id) AS visitors,
         round(avg(s.pages), 1) AS avg_pages,
-        round(avgIf(s.duration, s.duration > 0), 0) AS avg_duration,
+        round(avgIf(s.duration, s.duration > 0), 0) AS avg_duration_s,
         round(countIf(s.pages = 1) / greatest(count(), 1) * 100, 1) AS bounce_rate,
         round(countIf(vs.session_count > 1) / greatest(uniqExact(s.visitor_id), 1) * 100, 1) AS return_rate,
         round(countIf(s.intent NOT IN ('', 'browsing', 'bot')) / greatest(count(), 1) * 100, 1) AS high_intent_pct,
