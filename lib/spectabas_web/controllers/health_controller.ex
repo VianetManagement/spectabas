@@ -632,7 +632,29 @@ defmodule SpectabasWeb.HealthController do
         {:error, r} -> [%{"error" => inspect(r) |> String.slice(0, 200)}]
       end
 
-    json(conn, %{by_type: q1, today: q2, quality_test: q3})
+    site = Spectabas.Sites.get_site!(4)
+    user = Spectabas.Repo.get!(Spectabas.Accounts.User, 1)
+    range = %{from: DateTime.add(DateTime.utc_now(), -30, :day), to: DateTime.utc_now()}
+
+    q4 =
+      case Spectabas.Analytics.time_to_convert_by_source(site, user, range) do
+        {:ok, data} -> data
+        {:error, r} -> [%{"error" => inspect(r) |> String.slice(0, 300)}]
+      end
+
+    q5 =
+      case Spectabas.Analytics.ad_visitor_paths(site, user, range) do
+        {:ok, data} -> data
+        {:error, r} -> [%{"error" => inspect(r) |> String.slice(0, 300)}]
+      end
+
+    q6 =
+      case Spectabas.Analytics.visitor_quality_by_source(site, user, range) do
+        {:ok, data} -> data
+        {:error, r} -> [%{"error" => inspect(r) |> String.slice(0, 300)}]
+      end
+
+    json(conn, %{by_type: q1, today: q2, quality_test: q3, time_to_convert: q4, visitor_paths: q5, visitor_quality: q6})
   end
 
   def click_id_diag(conn, _params) do
