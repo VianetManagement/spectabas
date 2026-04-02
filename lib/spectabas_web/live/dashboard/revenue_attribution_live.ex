@@ -217,22 +217,32 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
 
         <%!-- Ad Spend Summary (only shown when ad data exists) --%>
         <div :if={@has_ad_data} class="bg-white rounded-lg shadow p-5 mb-6">
-          <h2 class="text-sm font-semibold text-gray-900 mb-3">Ad Spend Overview</h2>
+          <div class="flex items-start justify-between mb-3">
+            <h2 class="text-sm font-semibold text-gray-900">Ad Spend Overview</h2>
+            <span class="text-[10px] text-gray-400 max-w-xs text-right leading-tight">
+              Spend data from connected ad platforms. Revenue tracked via click IDs (gclid/msclkid/fbclid) on ad traffic.
+            </span>
+          </div>
           <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div>
               <dt class="text-xs text-gray-500">Total Spend</dt>
               <dd class="text-lg font-bold text-gray-900">
                 {@site.currency} {format_money(@total_spend)}
               </dd>
+              <dd class="text-[10px] text-gray-400">from connected platforms</dd>
             </div>
             <div>
               <dt class="text-xs text-gray-500">Ad Revenue</dt>
               <dd class="text-lg font-bold text-green-600">
                 {@site.currency} {format_money(@total_ad_revenue)}
               </dd>
-              <dd :if={@total_ad_revenue == 0} class="text-[10px] text-gray-400">
-                Awaiting click ID data
-              </dd>
+              <%= if @total_ad_revenue == 0 do %>
+                <dd class="text-[10px] text-amber-500">
+                  No click ID conversions yet. Revenue will appear here as visitors who arrive via ad clicks (gclid/msclkid/fbclid) make purchases.
+                </dd>
+              <% else %>
+                <dd class="text-[10px] text-gray-400">from visitors with ad click IDs</dd>
+              <% end %>
             </div>
             <div>
               <dt class="text-xs text-gray-500">ROAS</dt>
@@ -247,15 +257,30 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
               ]}>
                 {if @total_roas, do: "#{@total_roas}x", else: "--"}
               </dd>
+              <dd class="text-[10px] text-gray-400">
+                {if @total_roas, do: "ad revenue / ad spend", else: "needs ad revenue data"}
+              </dd>
             </div>
             <div>
               <dt class="text-xs text-gray-500">Ad Clicks</dt>
               <dd class="text-lg font-bold text-gray-900">{format_number(@total_ad_clicks)}</dd>
+              <dd class="text-[10px] text-gray-400">reported by platform</dd>
             </div>
             <div>
               <dt class="text-xs text-gray-500">Impressions</dt>
               <dd class="text-lg font-bold text-gray-900">{format_number(@total_ad_impressions)}</dd>
+              <dd class="text-[10px] text-gray-400">reported by platform</dd>
             </div>
+          </div>
+
+          <%!-- How it works hint (shown when no revenue yet) --%>
+          <div :if={@total_ad_revenue == 0} class="mt-4 pt-3 border-t border-gray-100">
+            <p class="text-xs text-gray-500 leading-relaxed">
+              <strong class="text-gray-700">How ROAS tracking works:</strong>
+              When a visitor clicks your ad, the platform appends a click ID to the URL (e.g. <code class="text-[10px] bg-gray-100 px-1 rounded">?gclid=abc123</code>).
+              Spectabas captures this and tags the visitor. If they later convert, that revenue is attributed to the ad platform.
+              Click ID data builds over time as new ad visitors arrive and convert.
+            </p>
           </div>
 
           <%!-- Per-platform breakdown --%>
