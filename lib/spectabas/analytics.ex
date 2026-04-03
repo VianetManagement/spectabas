@@ -1749,31 +1749,42 @@ defmodule Spectabas.Analytics do
           do: {"if(utm_campaign != '', utm_campaign, '(none)')", "campaign"},
           else: {"click_id_type", "platform"}
 
-      # Simple flat query — no CTEs, no subqueries, fast on ClickHouse
+      # Two-step: first compute per-visitor session counts, then aggregate per group
       sql = """
       SELECT
-        #{group_col} AS #{result_col},
-        uniqExact(visitor_id) AS visitors,
-        round(countIf(event_type = 'pageview') / greatest(uniqExact(session_id), 1), 1) AS avg_pages,
-        round(avgIf(duration_s, event_type = 'duration' AND duration_s > 0), 0) AS avg_duration_s,
-        round(uniqExactIf(session_id, is_bounce = 1 AND event_type = 'pageview') / greatest(uniqExact(session_id), 1) * 100, 1) AS bounce_rate,
-        round(uniqExactIf(visitor_id, 1 = 1) / greatest(uniqExact(visitor_id), 1) * 100, 1) AS return_rate,
-        round(countIf(visitor_intent NOT IN ('', 'browsing', 'bot') AND event_type = 'pageview') / greatest(countIf(event_type = 'pageview'), 1) * 100, 1) AS high_intent_pct,
+        #{result_col},
+        count() AS visitors,
+        round(sum(pageviews) / greatest(sum(sessions), 1), 1) AS avg_pages,
+        round(avg(avg_dur), 0) AS avg_duration_s,
+        round(sum(bounced_sessions) / greatest(sum(sessions), 1) * 100, 1) AS bounce_rate,
+        round(countIf(sessions > 1) / greatest(count(), 1) * 100, 1) AS return_rate,
+        round(sum(high_intent_pvs) / greatest(sum(pageviews), 1) * 100, 1) AS high_intent_pct,
         round(
-          least(countIf(event_type = 'pageview') / greatest(uniqExact(session_id), 1) / 5, 1) * 25
-          + least(coalesce(avgIf(duration_s, event_type = 'duration' AND duration_s > 0), 0) / 300, 1) * 25
-          + (1 - uniqExactIf(session_id, is_bounce = 1 AND event_type = 'pageview') / greatest(uniqExact(session_id), 1)) * 20
-          + 15
-          + countIf(visitor_intent NOT IN ('', 'browsing', 'bot') AND event_type = 'pageview') / greatest(countIf(event_type = 'pageview'), 1) * 15
+          least(sum(pageviews) / greatest(sum(sessions), 1) / 5, 1) * 25
+          + least(coalesce(avg(avg_dur), 0) / 300, 1) * 25
+          + (1 - sum(bounced_sessions) / greatest(sum(sessions), 1)) * 20
+          + countIf(sessions > 1) / greatest(count(), 1) * 15
+          + sum(high_intent_pvs) / greatest(sum(pageviews), 1) * 15
         , 1) AS quality_score
-      FROM events
-      WHERE site_id = #{ClickHouse.param(site.id)}
-        AND ip_is_bot = 0
-        AND click_id != ''
-        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-      GROUP BY #{group_col}
-      HAVING uniqExact(visitor_id) > 0
+      FROM (
+        SELECT
+          visitor_id,
+          #{group_col} AS #{result_col},
+          uniqExact(session_id) AS sessions,
+          countIf(event_type = 'pageview') AS pageviews,
+          avgIf(duration_s, event_type = 'duration' AND duration_s > 0) AS avg_dur,
+          uniqExactIf(session_id, is_bounce = 1 AND event_type = 'pageview') AS bounced_sessions,
+          countIf(visitor_intent NOT IN ('', 'browsing', 'bot') AND event_type = 'pageview') AS high_intent_pvs
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND ip_is_bot = 0
+          AND click_id != ''
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY visitor_id, #{group_col}
+      )
+      GROUP BY #{result_col}
+      HAVING count() > 0
       ORDER BY visitors DESC
       LIMIT 50
       """
