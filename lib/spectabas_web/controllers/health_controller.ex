@@ -453,6 +453,15 @@ defmodule SpectabasWeb.HealthController do
     json(conn, %{total: count, recent: recent})
   end
 
+  def optimize_ad_spend(conn, _params) do
+    db = Spectabas.ClickHouse.database()
+
+    case Spectabas.ClickHouse.execute("OPTIMIZE TABLE #{db}.ad_spend FINAL") do
+      :ok -> json(conn, %{status: "ok", message: "ad_spend table optimized"})
+      {:error, reason} -> json(conn, %{status: "error", message: inspect(reason)})
+    end
+  end
+
   defp safe_test(fun) do
     case fun.() do
       {:ok, data} -> %{status: "ok", rows: length(List.wrap(data))}
