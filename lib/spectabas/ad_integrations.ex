@@ -137,4 +137,44 @@ defmodule Spectabas.AdIntegrations do
       expires_at -> DateTime.compare(expires_at, DateTime.utc_now()) == :lt
     end
   end
+
+  @doc """
+  Check if enough time has elapsed since last sync based on the integration's
+  configured frequency. Returns true if sync should proceed.
+  Default frequencies: stripe/braintree = 15 min, ad platforms = 360 min (6h).
+  """
+  def should_sync?(integration) do
+    default_freq =
+      case integration.platform do
+        p when p in ["stripe", "braintree"] -> 15
+        _ -> 360
+      end
+
+    freq_minutes = (integration.extra || %{})["sync_frequency_minutes"] || default_freq
+
+    case integration.last_synced_at do
+      nil -> true
+      last -> DateTime.diff(DateTime.utc_now(), last, :minute) >= freq_minutes
+    end
+  end
+
+  @doc "Get the sync frequency in minutes for an integration."
+  def sync_frequency(integration) do
+    default =
+      case integration.platform do
+        p when p in ["stripe", "braintree"] -> 15
+        _ -> 360
+      end
+
+    (integration.extra || %{})["sync_frequency_minutes"] || default
+  end
+
+  @doc "Update the sync frequency for an integration."
+  def update_sync_frequency(integration, minutes) when is_integer(minutes) and minutes >= 5 do
+    extra = Map.put(integration.extra || %{}, "sync_frequency_minutes", minutes)
+
+    integration
+    |> AdIntegration.changeset(%{extra: extra})
+    |> Repo.update()
+  end
 end

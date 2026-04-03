@@ -69,6 +69,14 @@ defmodule Spectabas.AdIntegrations.Credentials do
     creds["api_key"] not in [nil, ""]
   end
 
+  def configured?(site, "braintree") do
+    creds = get_for_platform(site, "braintree")
+
+    creds["merchant_id"] not in [nil, ""] and
+      creds["public_key"] not in [nil, ""] and
+      creds["private_key"] not in [nil, ""]
+  end
+
   def configured?(_, _), do: false
 
   defp decrypt_all(%{ad_credentials_encrypted: nil}), do: %{}

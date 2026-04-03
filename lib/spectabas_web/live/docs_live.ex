@@ -2769,6 +2769,61 @@ defmodule SpectabasWeb.DocsLive do
             """
           },
           %{
+            id: "braintree-setup",
+            title: "Braintree Integration",
+            body: """
+            Import Braintree transactions, refunds, and subscriptions — the same features as the Stripe integration, for sites that use Braintree for payments.
+
+            ### Prerequisites
+
+            - Your site must use the [server-side Identify API](/docs/api#identify) to associate visitor sessions with customer emails
+            - You need access to the [Braintree Control Panel](https://www.braintreegateway.com/login) with API key permissions
+
+            ### Step 1: Get Your API Credentials
+
+            1. Log in to the **Braintree Control Panel**
+            2. Go to **Settings > API** (under the gear icon)
+            3. You'll see three values:
+
+            | Credential | Where to Find | Example |
+            |------------|---------------|---------|
+            | **Merchant ID** | Top of the API page | `abc123def456` |
+            | **Public Key** | Under "API Keys" | `9xk2n4r5th...` |
+            | **Private Key** | Click "View" next to the public key | `2f8d4a9b1c...` |
+
+            > **Sandbox vs Production:** Braintree has separate sandbox and production environments. Use production credentials for live data. Sandbox credentials will only return test transactions.
+
+            ### Step 2: Connect in Spectabas
+
+            1. Go to your site's **Settings** page
+            2. Scroll to **Integrations** > **Braintree**
+            3. Click **Configure**
+            4. Enter Merchant ID, Public Key, and Private Key
+            5. Click **Save Credentials**
+            6. The card shows "Connected" — click **Sync Now** to pull transactions immediately
+
+            ### Step 3: Verify
+
+            - Go to **Conversions > Ecommerce** — Braintree transactions should appear
+            - Check **Conversions > MRR & Subscriptions** — if you have Braintree subscriptions, MRR data will populate
+            - Visit a customer's **Visitor Profile** to see their Lifetime Value card
+
+            ### What Gets Synced
+
+            | Data | Description |
+            |------|-------------|
+            | **Transactions** | Settled/settling transactions → ecommerce events (revenue, email, timestamp) |
+            | **Refunds** | Credit transactions → updates refund_amount on original transaction |
+            | **Subscriptions** | Active/past_due/canceled → daily snapshots for MRR tracking |
+
+            ### Sync Frequency
+
+            Default: every 15 minutes. Configurable from the integration card (5 min to 24 hours).
+
+            > **Braintree API:** Uses XML-based search API with Basic auth. All credentials are encrypted at rest with AES-256-GCM. Read-only access — Spectabas never modifies your Braintree data.
+            """
+          },
+          %{
             id: "api-keys-setup",
             title: "API Keys",
             body: """

@@ -45,6 +45,24 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.4.0 — 2026-04-03 UTC",
+       [
+         %{
+           title: "Feature: Braintree payment integration",
+           description:
+             "Connect Braintree from Site Settings to import transactions, refunds, and subscriptions. " <>
+               "Same capabilities as Stripe: automatic revenue attribution, customer LTV, MRR tracking, " <>
+               "refund adjustments. Uses Braintree's XML search API with Basic auth (Merchant ID + Public/Private keys)."
+         },
+         %{
+           title: "Feature: Configurable sync frequency per integration",
+           description:
+             "Each connected integration (Stripe, Braintree, Google Ads, Bing, Meta) now has its own sync " <>
+               "frequency dropdown: 5 min, 15 min, 30 min, 1 hour, 6 hours, or 24 hours. " <>
+               "Default: 15 min for payment providers, 6 hours for ad platforms. " <>
+               "Stored per-integration in the extra config map."
+         }
+       ]},
       {"v5.3.0 — 2026-04-03 UTC",
        [
          %{

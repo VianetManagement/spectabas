@@ -114,10 +114,15 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   def handle_event("sync_ad_now", %{"id" => id}, socket) do
     integration = Spectabas.AdIntegrations.get!(id) |> Spectabas.Repo.preload(:site)
 
-    if integration.platform == "stripe" do
-      Task.start(fn -> Spectabas.Workers.StripeSync.sync_now(integration) end)
-    else
-      Oban.insert(Spectabas.Workers.AdSpendSyncOne.new(%{"integration_id" => integration.id}))
+    case integration.platform do
+      "stripe" ->
+        Task.start(fn -> Spectabas.Workers.StripeSync.sync_now(integration) end)
+
+      "braintree" ->
+        Task.start(fn -> Spectabas.Workers.BraintreeSync.sync_now(integration) end)
+
+      _ ->
+        Oban.insert(Spectabas.Workers.AdSpendSyncOne.new(%{"integration_id" => integration.id}))
     end
 
     {:noreply,
@@ -157,6 +162,13 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
           %{
             "api_key" => params["api_key"] || ""
           }
+
+        "braintree" ->
+          %{
+            "merchant_id" => params["merchant_id"] || "",
+            "public_key" => params["public_key"] || "",
+            "private_key" => params["private_key"] || ""
+          }
       end
 
     # Don't overwrite saved credentials with empty values (masked form submits empty)
@@ -175,23 +187,33 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
           platform: platform
         })
 
-        # For Stripe, also create/update the integration record directly (no OAuth flow)
+        # For Stripe/Braintree, also create/update the integration record directly (no OAuth flow)
         socket =
-          if platform == "stripe" and creds["api_key"] != "" do
-            api_key = creds["api_key"]
+          cond do
+            platform == "stripe" and creds["api_key"] != "" ->
+              {:ok, _} =
+                Spectabas.AdIntegrations.connect(site.id, "stripe", %{
+                  access_token: creds["api_key"],
+                  refresh_token: "",
+                  account_id: "",
+                  account_name: "Stripe"
+                })
 
-            {:ok, _integration} =
-              Spectabas.AdIntegrations.connect(site.id, "stripe", %{
-                access_token: api_key,
-                refresh_token: "",
-                account_id: "",
-                account_name: "Stripe"
-              })
+              assign(socket, :ad_integrations, Spectabas.AdIntegrations.list_for_site(site.id))
 
-            socket
-            |> assign(:ad_integrations, Spectabas.AdIntegrations.list_for_site(site.id))
-          else
-            socket
+            platform == "braintree" and creds["merchant_id"] != "" ->
+              {:ok, _} =
+                Spectabas.AdIntegrations.connect(site.id, "braintree", %{
+                  access_token: creds["merchant_id"],
+                  refresh_token: "",
+                  account_id: creds["merchant_id"],
+                  account_name: "Braintree"
+                })
+
+              assign(socket, :ad_integrations, Spectabas.AdIntegrations.list_for_site(site.id))
+
+            true ->
+              socket
           end
 
         {:noreply,
@@ -201,6 +223,25 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Failed to save credentials.")}
+    end
+  end
+
+  def handle_event("update_sync_frequency", %{"id" => id, "frequency" => freq}, socket) do
+    integration = Spectabas.AdIntegrations.get!(id)
+    minutes = String.to_integer(freq)
+
+    case Spectabas.AdIntegrations.update_sync_frequency(integration, minutes) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Sync frequency updated.")
+         |> assign(
+           :ad_integrations,
+           Spectabas.AdIntegrations.list_for_site(socket.assigns.site.id)
+         )}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to update sync frequency.")}
     end
   end
 
@@ -648,7 +689,8 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
               {"google_ads", "Google Ads", "bg-blue-100 text-blue-700"},
               {"bing_ads", "Microsoft Ads", "bg-amber-100 text-amber-700"},
               {"meta_ads", "Meta Ads", "bg-purple-100 text-purple-700"},
-              {"stripe", "Stripe", "bg-indigo-100 text-indigo-700"}
+              {"stripe", "Stripe", "bg-indigo-100 text-indigo-700"},
+              {"braintree", "Braintree", "bg-teal-100 text-teal-700"}
             ] do %>
               <% integration =
                 Enum.find(@ad_integrations, &(&1.platform == platform && &1.status == "active")) %>
@@ -680,14 +722,32 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                     </div>
                     <div :if={!integration.last_synced_at && !integration.last_error}>
                       <span class="text-amber-600 font-medium">
-                        Waiting for first sync (every 6h, or click Sync Now)
+                        Waiting for first sync — click Sync Now
                       </span>
                     </div>
                     <div :if={integration.last_error} class="text-red-600 font-medium">
                       Error: {String.slice(integration.last_error || "", 0, 80)}
                     </div>
+                    <div class="flex items-center gap-2 mt-1">
+                      <span class="text-gray-500">Sync every</span>
+                      <select
+                        phx-change="update_sync_frequency"
+                        phx-value-id={integration.id}
+                        name="frequency"
+                        class="text-sm rounded border-gray-300 py-1 pr-8"
+                      >
+                        <%= for {mins, lbl} <- [{5, "5 min"}, {15, "15 min"}, {30, "30 min"}, {60, "1 hour"}, {360, "6 hours"}, {1440, "24 hours"}] do %>
+                          <option
+                            value={mins}
+                            selected={Spectabas.AdIntegrations.sync_frequency(integration) == mins}
+                          >
+                            {lbl}
+                          </option>
+                        <% end %>
+                      </select>
+                    </div>
                   </div>
-                  <div class="flex items-center gap-3">
+                  <div class="flex items-center gap-3 mt-3">
                     <button
                       phx-click="sync_ad_now"
                       phx-value-id={integration.id}
@@ -785,7 +845,19 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                           >
                             Stripe Dashboard
                           </a>
-                          &gt; Developers &gt; API keys. Use the key starting with <code>sk_live_</code>.
+                          &gt; Developers &gt; API keys. Use the key starting with
+                          <code>sk_live_</code>
+                          or <code>rk_live_</code>.
+                        <% "braintree" -> %>
+                          Find credentials in the
+                          <a
+                            href="https://www.braintreegateway.com/login"
+                            target="_blank"
+                            class="text-indigo-600 underline"
+                          >
+                            Braintree Control Panel
+                          </a>
+                          &gt; Settings &gt; API. You need Merchant ID, Public Key, and Private Key.
                       <% end %>
                     </p>
                     <%= cond do %>
@@ -858,6 +930,49 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                             Found in Stripe Dashboard &gt; Developers &gt; API keys. Use the secret key (starts with sk_live_).
                           </p>
                         </div>
+                      <% platform == "braintree" -> %>
+                        <div>
+                          <label class="block text-sm font-medium text-gray-700">Merchant ID</label>
+                          <input
+                            type="text"
+                            name="merchant_id"
+                            value=""
+                            placeholder={
+                              if creds["merchant_id"],
+                                do: mask_credential(creds["merchant_id"]),
+                                else: "Merchant ID"
+                            }
+                            class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                          />
+                        </div>
+                        <div>
+                          <label class="block text-sm font-medium text-gray-700">Public Key</label>
+                          <input
+                            type="text"
+                            name="public_key"
+                            value=""
+                            placeholder={
+                              if creds["public_key"],
+                                do: mask_credential(creds["public_key"]),
+                                else: "Public Key"
+                            }
+                            class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                          />
+                        </div>
+                        <div>
+                          <label class="block text-sm font-medium text-gray-700">Private Key</label>
+                          <input
+                            type="password"
+                            name="private_key"
+                            value=""
+                            placeholder={
+                              if creds["private_key"],
+                                do: mask_credential(creds["private_key"]),
+                                else: "Private Key"
+                            }
+                            class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                          />
+                        </div>
                       <% true -> %>
                         <div>
                           <label class="block text-sm font-medium text-gray-700">App ID</label>
@@ -909,6 +1024,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   defp platform_label("bing_ads"), do: "Microsoft Ads"
   defp platform_label("meta_ads"), do: "Meta Ads"
   defp platform_label("stripe"), do: "Stripe"
+  defp platform_label("braintree"), do: "Braintree"
   defp platform_label(p), do: p
 
   # Mask saved credentials — show first 4 + last 4 chars with dots in between

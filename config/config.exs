@@ -71,8 +71,9 @@ config :spectabas, Oban,
        {"0 3 * * *", Spectabas.Workers.ApiLogCleanup},
        # Every 6 hours — sync ad spend data from connected platforms
        {"0 */6 * * *", Spectabas.Workers.AdSpendSync},
-       # Every 15 minutes — sync Stripe charges, refunds, and subscriptions
-       {"*/15 * * * *", Spectabas.Workers.StripeSync}
+       # Every 5 minutes — check payment integrations (per-integration frequency in extra map)
+       {"*/5 * * * *", Spectabas.Workers.StripeSync},
+       {"*/5 * * * *", Spectabas.Workers.BraintreeSync}
      ]}
   ]
 

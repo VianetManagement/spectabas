@@ -22,9 +22,11 @@ defmodule Spectabas.Workers.StripeSync do
     yesterday = Date.add(today, -1)
 
     Enum.each(integrations, fn integration ->
-      StripePlatform.sync_charges(integration.site, integration, today)
-      StripePlatform.sync_charges(integration.site, integration, yesterday)
-      StripePlatform.sync_subscriptions(integration.site, integration)
+      if AdIntegrations.should_sync?(integration) do
+        StripePlatform.sync_charges(integration.site, integration, today)
+        StripePlatform.sync_charges(integration.site, integration, yesterday)
+        StripePlatform.sync_subscriptions(integration.site, integration)
+      end
     end)
 
     :ok
