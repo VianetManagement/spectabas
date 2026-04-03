@@ -164,7 +164,19 @@ defmodule SpectabasWeb.Dashboard.BuyerPatternsLive do
                 </td>
               </tr>
               <tr :for={row <- @patterns} class="hover:bg-gray-50">
-                <td class="px-6 py-4 text-sm font-mono text-gray-900">{row["url_path"]}</td>
+                <td class="px-6 py-4 text-sm font-mono text-gray-900">
+                  <a
+                    href={"https://www.#{parent_domain(@site.domain)}#{row["url_path"]}"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="text-indigo-600 hover:text-indigo-800 hover:underline inline-flex items-center gap-1"
+                  >
+                    {row["url_path"]}
+                    <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </a>
+                </td>
                 <td class="px-6 py-4 text-sm text-green-600 text-right tabular-nums font-medium">
                   {format_number(to_num(row["buyer_visitors"]))}
                 </td>
@@ -207,4 +219,9 @@ defmodule SpectabasWeb.Dashboard.BuyerPatternsLive do
 
   defp parse_float(n) when is_number(n), do: n / 1
   defp parse_float(_), do: 0.0
+
+  defp parent_domain(domain) do
+    parts = String.split(domain, ".")
+    if length(parts) > 2, do: parts |> Enum.drop(1) |> Enum.join("."), else: domain
+  end
 end
