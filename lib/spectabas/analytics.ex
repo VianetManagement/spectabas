@@ -569,9 +569,7 @@ defmodule Spectabas.Analytics do
 
       channel_sql = channel_case_expression()
 
-      # Session-level subquery for accurate bounce rate and duration
-      # Channel is computed per-event first (argMin picks channel from earliest pageview),
-      # then aggregated at session level
+      # Three levels: event (compute channel) → session (bounce/duration) → group
       sql = """
       SELECT
         channel,
@@ -586,16 +584,25 @@ defmodule Spectabas.Analytics do
         SELECT
           session_id,
           any(visitor_id) AS visitor_id,
-          any(referrer_domain) AS ref_domain,
-          argMin(#{channel_sql}, timestamp) AS channel,
-          countIf(event_type = 'pageview') AS pv,
-          maxIf(duration_s, event_type = 'duration' AND duration_s > 0) AS dur
-        FROM events
-        WHERE site_id = #{ClickHouse.param(site.id)}
-          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-          AND ip_is_bot = 0
-          #{exclude_clause}
+          any(ref_domain) AS ref_domain,
+          any(channel) AS channel,
+          sum(is_pv) AS pv,
+          max(dur) AS dur
+        FROM (
+          SELECT
+            session_id,
+            visitor_id,
+            referrer_domain AS ref_domain,
+            (#{channel_sql}) AS channel,
+            if(event_type = 'pageview', 1, 0) AS is_pv,
+            if(event_type = 'duration' AND duration_s > 0, duration_s, 0) AS dur
+          FROM events
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+            AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+            AND ip_is_bot = 0
+            #{exclude_clause}
+        )
         GROUP BY session_id
         HAVING pv > 0
       )
