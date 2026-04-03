@@ -45,6 +45,17 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v4.9.0 — 2026-04-02 UTC",
+       [
+         %{
+           title: "Security: Audit v4 — 5 findings fixed",
+           description:
+             "IP extraction priority reversed (X-Forwarded-For before CF-Connecting-IP to prevent spoofing). " <>
+               "Hardcoded utility endpoint token replaced with UTILITY_TOKEN env var. " <>
+               "CollectPayload field length limits on fingerprint/click ID fields. " <>
+               "Segment LIKE wildcard injection escaped. Click ID format validation (5-256 chars, alphanumeric)."
+         }
+       ]},
       {"v4.8.0 — 2026-04-02 UTC",
        [
          %{

@@ -209,6 +209,13 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 4. **Silent event loss** — `Ingest.process` errors were caught as crashes via pattern match in try/rescue; now uses explicit case handling
 5. **Deferred stats sequential** — 9 dashboard queries ran sequentially (~1s); now parallel via Task.async (~200ms)
 
+### Audit v4 (v4.8.0) — 5 findings fixed
+1. **IP spoofing** — `CF-Connecting-IP` trusted before `X-Forwarded-For`; reversed priority so Render's LB header is trusted first
+2. **Hardcoded utility token** — `sab_import_test_92f7a3b1` in source code; replaced with `UTILITY_TOKEN` env var
+3. **Field length validation** — `_fp`, `_cid`, `_cidt` lacked length limits in CollectPayload; added max 256/256/32
+4. **LIKE wildcard injection** — segment `contains`/`not_contains` didn't escape `%`/`_`; now escaped before LIKE pattern
+5. **Click ID format validation** — gclid/msclkid/fbclid accepted without validation; now checked for length (5-256) and character set (alphanumeric + `-_=.`)
+
 ## UI/UX
 
 - **Sidebar navigation** — color-coded categories (Behavior, Acquisition, Audience, Conversions, Tools)
@@ -216,7 +223,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Mobile responsiveness** — scrollable tables, collapsible mobile nav bar
 - **Accessible top nav** — WCAG AA contrast compliance
 - **Documentation pages** — docs split into `/docs` (index), `/docs/getting-started`, `/docs/dashboard`, `/docs/conversions`, `/docs/api`, `/docs/admin` with cross-category search. Requires login (behind :require_authenticated_user). Public pages: `/privacy`, `/terms`, homepage.
-- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v4.8.0)
+- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v4.9.0)
 - **Legal** — Privacy Policy at `/privacy` and Terms of Service at `/terms` (public, no auth required). Entity: Spectabas, Kent County MI. Contact: howdy@spectabas.com. Arbitration clause (AAA, Kent County). 18+ age restriction.
 
 ## Important Patterns
@@ -233,7 +240,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **SPA pageview tracking**: Only pathname changes trigger new pageviews. Query-string-only pushState changes are ignored. This matches standard analytics behavior (Matomo, GA).
 - **Saved segments**: Ownership enforced — `get_segment!/3` scopes by user_id and site_id. Never load segments by ID alone.
 - **Tracker GDPR default**: `data-gdpr` defaults to `"off"` (cookie-based). Sites needing fingerprint-only mode must explicitly set `data-gdpr="on"`.
-- **Click ID capture**: Tracker extracts gclid/msclkid/fbclid from URL, persists in sessionStorage, sends as `_cid`/`_cidt` fields. Ingest stores in `click_id`/`click_id_type` ClickHouse columns. Revenue Attribution uses click IDs for platform-level ROAS.
+- **Click ID capture**: Tracker extracts gclid/msclkid/fbclid from URL, persists in sessionStorage, sends as `_cid`/`_cidt` fields. Ingest validates format (5-256 chars, alphanumeric + `-_=.` only) before storing in `click_id`/`click_id_type` ClickHouse columns. Invalid click IDs silently dropped. Revenue Attribution uses click IDs for platform-level ROAS.
 - **Ad blocker evasion**: Script at `/assets/v1.js`, beacon uses public_key not domain, endpoints obfuscated. `data-proxy` attribute enables reverse proxy through main domain for same-origin tracking. Cookie is always set on the page domain (not the script origin), so no cookie migration needed when switching to proxy mode.
 - **IP extraction**: Prefers `X-Forwarded-For` (set by Render's load balancer) over `CF-Connecting-IP` to prevent IP spoofing. CF-Connecting-IP used as fallback only when XFF is absent (e.g., Cloudflare-only proxied requests).
 - **Category landing pages**: `/sites/:id/c/:category` renders hub page with descriptions for each page in the category. Single reusable LiveView (`CategoryLive`) with all 38 page descriptions. Sidebar section labels link to these.

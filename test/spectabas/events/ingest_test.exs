@@ -57,6 +57,36 @@ defmodule Spectabas.Events.IngestTest do
     end
   end
 
+  describe "click ID validation" do
+    test "accepts valid gclid format" do
+      assert Ingest.valid_click_id?("EAIaIQobChMI_abc123-def456", "google_ads")
+    end
+
+    test "accepts valid msclkid format" do
+      assert Ingest.valid_click_id?("a1b2c3d4-e5f6-7890-abcd-ef1234567890", "bing_ads")
+    end
+
+    test "accepts valid fbclid format" do
+      assert Ingest.valid_click_id?("fb.1.1234567890.abcdef", "meta_ads")
+    end
+
+    test "rejects click ID with HTML injection" do
+      refute Ingest.valid_click_id?("<script>alert(1)</script>", "google_ads")
+    end
+
+    test "rejects click ID with SQL injection" do
+      refute Ingest.valid_click_id?("'; DROP TABLE events;--", "google_ads")
+    end
+
+    test "rejects oversized click ID" do
+      refute Ingest.valid_click_id?(String.duplicate("a", 257), "google_ads")
+    end
+
+    test "rejects too-short click ID" do
+      refute Ingest.valid_click_id?("ab", "google_ads")
+    end
+  end
+
   describe "self-referral filtering" do
     # parse_referrer_domain is private, so we test via the public module attribute behavior
     # These tests verify the logic indirectly through the domain parsing helpers

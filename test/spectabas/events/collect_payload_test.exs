@@ -103,5 +103,25 @@ defmodule Spectabas.Events.CollectPayloadTest do
       assert payload._cid == ""
       assert payload._cidt == ""
     end
+
+    test "rejects oversized fingerprint" do
+      params = %{"t" => "pageview", "u" => "https://example.com", "_fp" => String.duplicate("a", 257)}
+      assert {:error, _} = CollectPayload.validate(params)
+    end
+
+    test "rejects oversized click ID" do
+      params = %{"t" => "pageview", "u" => "https://example.com", "_cid" => String.duplicate("a", 257)}
+      assert {:error, _} = CollectPayload.validate(params)
+    end
+
+    test "rejects oversized click ID type" do
+      params = %{"t" => "pageview", "u" => "https://example.com", "_cidt" => String.duplicate("a", 33)}
+      assert {:error, _} = CollectPayload.validate(params)
+    end
+
+    test "accepts fingerprint at max length" do
+      params = %{"t" => "pageview", "u" => "https://example.com", "_fp" => String.duplicate("a", 256)}
+      assert {:ok, _} = CollectPayload.validate(params)
+    end
   end
 end

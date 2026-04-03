@@ -573,10 +573,13 @@ defmodule Spectabas.Events.Ingest do
   end
 
   # Validate click ID format: alphanumeric + base64/UUID chars, reasonable length
-  defp valid_click_id?(id, _platform) when byte_size(id) > 256, do: false
-  defp valid_click_id?(id, _platform) when byte_size(id) < 5, do: false
+  @doc false
+  def valid_click_id?(id, _platform) when byte_size(id) > 256, do: false
+  @doc false
+  def valid_click_id?(id, _platform) when byte_size(id) < 5, do: false
 
-  defp valid_click_id?(id, _platform) do
+  @doc false
+  def valid_click_id?(id, _platform) do
     # gclid: base64url chars; msclkid: hex + hyphens; fbclid: alphanumeric + punctuation
     # Allow alphanumeric, hyphens, underscores, dots, equals (covers all three formats)
     Regex.match?(~r/\A[a-zA-Z0-9\-_=.]+\z/, id)

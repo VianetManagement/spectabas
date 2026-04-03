@@ -67,6 +67,21 @@ defmodule Spectabas.Analytics.SegmentTest do
       sql = Segment.to_sql(filters)
       assert sql =~ "it\\'s"
     end
+
+    test "escapes LIKE wildcards in contains operator" do
+      filters = [%{"field" => "url_path", "op" => "contains", "value" => "100%_done"}]
+      sql = Segment.to_sql(filters)
+      # % and _ escaped with backslash, then ClickHouse.param escapes the backslash too
+      assert sql =~ "LIKE"
+      refute sql =~ "'%100%_done%'"
+    end
+
+    test "escapes LIKE wildcards in not_contains operator" do
+      filters = [%{"field" => "url_path", "op" => "not_contains", "value" => "50%"}]
+      sql = Segment.to_sql(filters)
+      assert sql =~ "NOT LIKE"
+      refute sql =~ "'%50%%'"
+    end
   end
 
   describe "available_fields/0" do
