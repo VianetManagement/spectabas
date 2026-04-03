@@ -1122,8 +1122,9 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   end
 
   # Validate a Stripe API key by making a lightweight API call
+  # Validate using Charges endpoint (only needs Charges:Read, which all valid keys have)
   defp validate_stripe_key(key) do
-    case Req.get("https://api.stripe.com/v1/balance",
+    case Req.get("https://api.stripe.com/v1/charges?limit=1",
            headers: [
              {"authorization", "Bearer #{key}"},
              {"stripe-version", "2024-12-18.acacia"}
@@ -1136,7 +1137,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
         {:error, "Authentication failed. Check that the key is correct and active."}
 
       {:ok, %{status: 403}} ->
-        {:error, "Key does not have sufficient permissions."}
+        {:error, "Key does not have Charges:Read permission."}
 
       {:ok, %{status: s}} ->
         {:error, "Stripe returned HTTP #{s}."}
