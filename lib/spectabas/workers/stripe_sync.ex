@@ -32,14 +32,19 @@ defmodule Spectabas.Workers.StripeSync do
     :ok
   end
 
-  @doc "Sync a single integration for today + yesterday. Called from Settings UI."
+  @doc "Sync a single integration. On first sync (never synced before), backfills 30 days."
   def sync_now(integration) do
     integration = Spectabas.Repo.preload(integration, :site)
     today = Date.utc_today()
-    yesterday = Date.add(today, -1)
 
-    StripePlatform.sync_charges(integration.site, integration, yesterday)
-    StripePlatform.sync_charges(integration.site, integration, today)
+    # If never synced, backfill last 30 days; otherwise just today + yesterday
+    days =
+      if is_nil(integration.last_synced_at), do: 30, else: 1
+
+    Enum.each(0..days, fn offset ->
+      StripePlatform.sync_charges(integration.site, integration, Date.add(today, -offset))
+    end)
+
     StripePlatform.sync_subscriptions(integration.site, integration)
   end
 end
