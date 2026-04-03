@@ -3527,9 +3527,9 @@ defmodule Spectabas.Analytics do
       SELECT *,
         ROW_NUMBER() OVER (
           PARTITION BY site_id, round(revenue, 2), toStartOfInterval(timestamp, INTERVAL 10 MINUTE)
-          ORDER BY if(import_source != '', 1, 2)
+          ORDER BY order_id
         ) AS _dedup_rn
-      FROM #{ecommerce_dedup()}
+      FROM ecommerce_events
     ) WHERE _dedup_rn = 1)
     """
   end

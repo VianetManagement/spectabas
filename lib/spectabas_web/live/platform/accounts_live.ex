@@ -79,10 +79,16 @@ defmodule SpectabasWeb.Platform.AccountsLive do
     {:noreply, assign(socket, :invite_email, email)}
   end
 
-  def handle_event("send_invite", _params, socket) do
+  def handle_event("send_invite", %{"email" => email} = params, socket) do
     admin = socket.assigns.current_scope.user
-    email = String.trim(socket.assigns.invite_email)
-    account_id = socket.assigns.invite_account_id
+    email = String.trim(email)
+
+    account_id =
+      case params["account_id"] do
+        nil -> socket.assigns.invite_account_id
+        id when is_binary(id) -> String.to_integer(id)
+        id -> id
+      end
 
     case Accounts.invite_user(admin, email, :superadmin, account_id) do
       {:ok, _} ->
@@ -220,24 +226,30 @@ defmodule SpectabasWeb.Platform.AccountsLive do
               <%= if @invite_account_id == stat.account.id do %>
                 <tr class="bg-purple-50">
                   <td colspan="7" class="px-4 py-3">
-                    <div class="flex items-center gap-3">
+                    <form
+                      phx-submit="send_invite"
+                      phx-value-account_id={stat.account.id}
+                      class="flex items-center gap-3"
+                    >
                       <span class="text-sm text-purple-700 font-medium">
                         Invite superadmin to {stat.account.name}:
                       </span>
                       <input
                         type="email"
-                        phx-keyup="update_invite_email"
-                        value={@invite_email}
+                        name="email"
                         class="border rounded px-3 py-1.5 text-sm w-64"
                         placeholder="email@example.com"
+                        required
+                        autofocus
                       />
                       <button
-                        phx-click="send_invite"
+                        type="submit"
                         class="px-3 py-1.5 bg-purple-600 text-white text-sm rounded hover:bg-purple-700"
                       >
                         Send Invitation
                       </button>
                       <button
+                        type="button"
                         phx-click="cancel_invite"
                         class="text-sm text-gray-500 hover:text-gray-700"
                       >
@@ -246,7 +258,7 @@ defmodule SpectabasWeb.Platform.AccountsLive do
                       <%= if @invite_error do %>
                         <span class="text-sm text-red-600">{@invite_error}</span>
                       <% end %>
-                    </div>
+                    </form>
                   </td>
                 </tr>
               <% end %>
