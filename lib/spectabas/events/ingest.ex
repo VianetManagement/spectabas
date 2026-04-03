@@ -545,7 +545,7 @@ defmodule Spectabas.Events.Ingest do
     cidt = payload._cidt || ""
 
     if cid != "" do
-      {cid, cidt}
+      if valid_click_id?(cid, cidt), do: {cid, cidt}, else: {"", ""}
     else
       # Fall back to extracting from URL query params
       url_params =
@@ -562,11 +562,24 @@ defmodule Spectabas.Events.Ingest do
 
       Enum.find_value(@click_id_params, {"", ""}, fn {param, platform} ->
         case url_params[param] do
-          val when is_binary(val) and val != "" -> {val, platform}
-          _ -> nil
+          val when is_binary(val) and val != "" ->
+            if valid_click_id?(val, platform), do: {val, platform}, else: nil
+
+          _ ->
+            nil
         end
       end)
     end
+  end
+
+  # Validate click ID format: alphanumeric + base64/UUID chars, reasonable length
+  defp valid_click_id?(id, _platform) when byte_size(id) > 256, do: false
+  defp valid_click_id?(id, _platform) when byte_size(id) < 5, do: false
+
+  defp valid_click_id?(id, _platform) do
+    # gclid: base64url chars; msclkid: hex + hyphens; fbclid: alphanumeric + punctuation
+    # Allow alphanumeric, hyphens, underscores, dots, equals (covers all three formats)
+    Regex.match?(~r/\A[a-zA-Z0-9\-_=.]+\z/, id)
   end
 
   defp extract_utms(url, payload) do
