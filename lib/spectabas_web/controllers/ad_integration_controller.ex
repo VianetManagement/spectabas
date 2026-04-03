@@ -75,15 +75,67 @@ defmodule SpectabasWeb.AdIntegrationController do
   end
 
   defp handle_platform_callback(conn, "bing_ads", site, code) do
-    case BingAds.exchange_code(site, code) do
-      {:ok, tokens} -> save_and_redirect(conn, "bing_ads", site.id, tokens)
+    creds = Spectabas.AdIntegrations.Credentials.get_for_platform(site, "bing_ads")
+
+    with {:ok, tokens} <- BingAds.exchange_code(site, code),
+         {:ok, accounts} <- BingAds.fetch_accounts(tokens.access_token, creds["developer_token"]) do
+      case accounts do
+        [single] ->
+          merged = Map.merge(tokens, %{
+            account_id: single.id,
+            account_name: single.name,
+            extra: %{"customer_id" => single.customer_id}
+          })
+          save_and_redirect(conn, "bing_ads", site.id, merged)
+
+        [] ->
+          conn
+          |> put_flash(:error, "No Microsoft Ads accounts found for this user.")
+          |> redirect(to: ~p"/dashboard/sites/#{site.id}/settings")
+
+        multiple ->
+          conn
+          |> put_session(:bing_ads_pending_tokens, %{
+            "access_token" => tokens.access_token,
+            "refresh_token" => tokens.refresh_token,
+            "expires_in" => tokens.expires_in,
+            "site_id" => site.id,
+            "accounts" => Enum.map(multiple, fn a ->
+              %{"id" => a.id, "name" => a.name, "customer_id" => a.customer_id, "number" => a.number}
+            end)
+          })
+          |> redirect(to: ~p"/auth/ad/bing_ads/pick_account?site_id=#{site.id}")
+      end
+    else
       {:error, reason} -> exchange_error(conn, "Microsoft Ads", site.id, reason)
     end
   end
 
   defp handle_platform_callback(conn, "meta_ads", site, code) do
-    case MetaAds.exchange_code(site, code) do
-      {:ok, tokens} -> save_and_redirect(conn, "meta_ads", site.id, tokens)
+    with {:ok, tokens} <- MetaAds.exchange_code(site, code),
+         {:ok, accounts} <- MetaAds.fetch_ad_accounts(tokens.access_token) do
+      case accounts do
+        [single] ->
+          merged = Map.merge(tokens, %{account_id: single.id, account_name: single.name})
+          save_and_redirect(conn, "meta_ads", site.id, merged)
+
+        [] ->
+          conn
+          |> put_flash(:error, "No Meta ad accounts found for this user.")
+          |> redirect(to: ~p"/dashboard/sites/#{site.id}/settings")
+
+        multiple ->
+          conn
+          |> put_session(:meta_ads_pending_tokens, %{
+            "access_token" => tokens.access_token,
+            "refresh_token" => tokens[:refresh_token] || tokens.access_token,
+            "expires_in" => tokens[:expires_in],
+            "site_id" => site.id,
+            "accounts" => Enum.map(multiple, fn a -> %{"id" => a.id, "name" => a.name, "currency" => a.currency} end)
+          })
+          |> redirect(to: ~p"/auth/ad/meta_ads/pick_account?site_id=#{site.id}")
+      end
+    else
       {:error, reason} -> exchange_error(conn, "Meta Ads", site.id, reason)
     end
   end
@@ -139,6 +191,94 @@ defmodule SpectabasWeb.AdIntegrationController do
     end
   end
 
+  # Meta Ads account picker page
+  def meta_pick_account(conn, %{"site_id" => site_id}) do
+    pending = get_session(conn, :meta_ads_pending_tokens)
+    site_id_int = String.to_integer(site_id)
+
+    if is_map(pending) && (pending["site_id"] || pending[:site_id]) == site_id_int do
+      accounts = pending["accounts"] || pending[:accounts] || []
+      render(conn, :meta_pick_account, site_id: site_id, accounts: accounts)
+    else
+      conn
+      |> put_flash(:error, "Session expired. Please reconnect Meta Ads.")
+      |> redirect(to: ~p"/dashboard/sites/#{site_id}/settings")
+    end
+  end
+
+  # User selected a Meta Ads account
+  def meta_select_account(conn, %{"site_id" => site_id, "account_id" => account_id}) do
+    pending = get_session(conn, :meta_ads_pending_tokens)
+    tokens = normalize_pending(pending)
+
+    if tokens do
+      accounts = tokens["accounts"] || []
+      selected = Enum.find(accounts, fn a -> (a["id"] || a[:id]) == account_id end)
+      name = (selected && (selected["name"] || selected[:name])) || account_id
+
+      merged = %{
+        access_token: tokens["access_token"],
+        refresh_token: tokens["refresh_token"],
+        expires_in: tokens["expires_in"],
+        account_id: account_id,
+        account_name: name
+      }
+
+      conn
+      |> delete_session(:meta_ads_pending_tokens)
+      |> save_and_redirect("meta_ads", String.to_integer(site_id), merged)
+    else
+      conn
+      |> put_flash(:error, "Session expired. Please reconnect Meta Ads.")
+      |> redirect(to: ~p"/dashboard/sites/#{site_id}/settings")
+    end
+  end
+
+  # Bing Ads account picker page
+  def bing_pick_account(conn, %{"site_id" => site_id}) do
+    pending = get_session(conn, :bing_ads_pending_tokens)
+    site_id_int = String.to_integer(site_id)
+
+    if is_map(pending) && (pending["site_id"] || pending[:site_id]) == site_id_int do
+      accounts = pending["accounts"] || pending[:accounts] || []
+      render(conn, :bing_pick_account, site_id: site_id, accounts: accounts)
+    else
+      conn
+      |> put_flash(:error, "Session expired. Please reconnect Microsoft Ads.")
+      |> redirect(to: ~p"/dashboard/sites/#{site_id}/settings")
+    end
+  end
+
+  # User selected a Bing Ads account
+  def bing_select_account(conn, %{"site_id" => site_id, "account_id" => account_id}) do
+    pending = get_session(conn, :bing_ads_pending_tokens)
+    tokens = normalize_pending(pending)
+
+    if tokens do
+      accounts = tokens["accounts"] || []
+      selected = Enum.find(accounts, fn a -> (a["id"] || a[:id]) == account_id end)
+      name = (selected && (selected["name"] || selected[:name])) || account_id
+      customer_id = selected && (selected["customer_id"] || selected[:customer_id])
+
+      merged = %{
+        access_token: tokens["access_token"],
+        refresh_token: tokens["refresh_token"],
+        expires_in: tokens["expires_in"],
+        account_id: account_id,
+        account_name: name,
+        extra: %{"customer_id" => customer_id}
+      }
+
+      conn
+      |> delete_session(:bing_ads_pending_tokens)
+      |> save_and_redirect("bing_ads", String.to_integer(site_id), merged)
+    else
+      conn
+      |> put_flash(:error, "Session expired. Please reconnect Microsoft Ads.")
+      |> redirect(to: ~p"/dashboard/sites/#{site_id}/settings")
+    end
+  end
+
   defp normalize_pending(%{} = map) do
     Map.new(map, fn
       {k, v} when is_atom(k) -> {Atom.to_string(k), v}
@@ -160,7 +300,8 @@ defmodule SpectabasWeb.AdIntegrationController do
            refresh_token: tokens[:refresh_token] || tokens[:access_token],
            expires_at: expires_at,
            account_id: tokens[:account_id] || "",
-           account_name: tokens[:account_name] || platform_label(platform)
+           account_name: tokens[:account_name] || platform_label(platform),
+           extra: tokens[:extra] || %{}
          }) do
       {:ok, _integration} ->
         Logger.info("[AdIntegration] Connected #{platform} for site #{site_id}")

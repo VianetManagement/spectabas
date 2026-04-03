@@ -216,7 +216,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Mobile responsiveness** — scrollable tables, collapsible mobile nav bar
 - **Accessible top nav** — WCAG AA contrast compliance
 - **Documentation pages** — docs split into `/docs` (index), `/docs/getting-started`, `/docs/dashboard`, `/docs/conversions`, `/docs/api`, `/docs/admin` with cross-category search. Requires login (behind :require_authenticated_user). Public pages: `/privacy`, `/terms`, homepage.
-- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v4.4.0)
+- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v4.5.0)
 - **Legal** — Privacy Policy at `/privacy` and Terms of Service at `/terms` (public, no auth required). Entity: Spectabas, Kent County MI. Contact: howdy@spectabas.com. Arbitration clause (AAA, Kent County). 18+ age restriction.
 
 ## Important Patterns
@@ -251,6 +251,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **High-throughput ingest**: Async flush, 500 batch size, ETS visitor cache, dedicated ClickHouse connection pool (100 connections), per-site rate limiting (1000 events/sec).
 - **occurred_at backdating**: All events support optional `occurred_at` field (Unix UTC seconds) to backdate events up to 7 days.
 - **Ecommerce email association**: Transaction API accepts optional `email` field. If `visitor_id` + `email` both provided, identifies the visitor. If only `email`, looks up by email. Orders appear on visitor profile pages.
-- **Ad integrations**: OAuth2 tokens stored encrypted via `Spectabas.AdIntegrations.Vault` (AES-256-GCM from SECRET_KEY_BASE). Platform adapters in `lib/spectabas/ad_integrations/platforms/`. Sync worker `AdSpendSync` runs every 6h via Oban `:ad_sync` queue. ClickHouse `ad_spend` table uses `ReplacingMergeTree(synced_at)` for dedup. ROAS = revenue / spend, matched by campaign_name = utm_campaign.
+- **Ad integrations**: OAuth2 tokens stored encrypted via `Spectabas.AdIntegrations.Vault` (AES-256-GCM from SECRET_KEY_BASE). Platform adapters in `lib/spectabas/ad_integrations/platforms/`. Sync worker `AdSpendSync` runs every 6h via Oban `:ad_sync` queue. ClickHouse `ad_spend` table uses `ReplacingMergeTree(synced_at)` for dedup — **all queries MUST use `FROM ad_spend FINAL`** to deduplicate rows from repeated syncs. ROAS = revenue / spend, matched by campaign_name = utm_campaign.
 - **Ad platform credentials**: Stored per-site as encrypted JSON blob in `sites.ad_credentials_encrypted`. No environment variables needed. Managed via `Spectabas.AdIntegrations.Credentials` module. Each site configures its own OAuth app credentials from the Settings page.
+- **ClickHouse argMinIf/argMaxIf empty string**: These functions return `''` (empty string, not NULL) when no rows match the condition. Always wrap with `nullIf(..., '')` before `ifNull` fallback, e.g. `ifNull(nullIf(argMinIf(expr, ts, cond), ''), 'Direct')`.
 - **RUM collection**: Tracker sends `_rum` (nav timing) and `_cwv` (Core Web Vitals) custom events. Uses `performance.getEntriesByType("navigation")` with `performance.timing` fallback. IMPORTANT: PerformanceNavigationTiming uses `nav.startTime` (always 0) for the navigation baseline — NOT `nav.navigationStart` which only exists on the deprecated `performance.timing`. Queries use `quantileIf` to exclude zeros. ClickHouse `quantileIf` returns `nan` when no rows match — `parse_rows` sanitizes `nan`→`null` before JSON parsing.

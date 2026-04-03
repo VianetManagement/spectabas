@@ -45,6 +45,33 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v4.5.0 — 2026-04-02 UTC",
+       [
+         %{
+           title: "Fix: Ad spend sync numbers incorrect (missing FINAL on ReplacingMergeTree queries)",
+           description:
+             "All 5 ad_spend queries now use FINAL keyword to deduplicate rows from repeated 6-hour syncs. " <>
+               "Without FINAL, ClickHouse summed duplicate rows causing inflated/stale spend totals."
+         },
+         %{
+           title: "Fix: Meta Ads and Bing Ads missing account ID during OAuth setup",
+           description:
+             "Meta and Bing callbacks now fetch ad accounts after token exchange and show an account picker " <>
+               "(matching existing Google Ads flow). Previously saved empty account_id, causing API errors."
+         },
+         %{
+           title: "Fix: Revenue Attribution channel cards showing blank labels",
+           description:
+             "Channel attribution query used argMinIf which returns empty string (not NULL) when no signal events exist. " <>
+               "Added nullIf wrapper so visitors with no signal are correctly labeled 'Direct'."
+         },
+         %{
+           title: "Fix: Empty account_id guard on all ad platform spend fetchers",
+           description:
+             "Meta and Bing fetch_daily_spend now return a clear error message when account_id is missing, " <>
+               "matching the existing Google Ads guard."
+         }
+       ]},
       {"v4.4.0 — 2026-04-02 UTC",
        [
          %{

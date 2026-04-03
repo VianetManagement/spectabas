@@ -1198,7 +1198,7 @@ defmodule Spectabas.Analytics do
           SELECT
             visitor_id,
             ifNull(
-              #{agg_fn_if}(#{source_expr}, timestamp, #{has_signal}),
+              nullIf(#{agg_fn_if}(#{source_expr}, timestamp, #{has_signal}), ''),
               'Direct'
             ) AS source,
             #{agg_fn_if}(click_id_type, timestamp, #{has_signal}) AS ad_platform
@@ -1251,7 +1251,7 @@ defmodule Spectabas.Analytics do
         sum(spend) AS total_spend,
         sum(clicks) AS total_clicks,
         sum(impressions) AS total_impressions
-      FROM ad_spend
+      FROM ad_spend FINAL
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND date >= #{ClickHouse.param(Date.to_iso8601(DateTime.to_date(date_range.from)))}
         AND date <= #{ClickHouse.param(Date.to_iso8601(DateTime.to_date(date_range.to)))}
@@ -1274,7 +1274,7 @@ defmodule Spectabas.Analytics do
         sum(clicks) AS total_clicks,
         sum(impressions) AS total_impressions,
         count(DISTINCT platform) AS platforms
-      FROM ad_spend
+      FROM ad_spend FINAL
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND date >= #{ClickHouse.param(Date.to_iso8601(DateTime.to_date(date_range.from)))}
         AND date <= #{ClickHouse.param(Date.to_iso8601(DateTime.to_date(date_range.to)))}
@@ -1355,7 +1355,7 @@ defmodule Spectabas.Analytics do
         sum(spend) AS total_spend,
         sum(clicks) AS total_clicks,
         sum(impressions) AS total_impressions
-      FROM ad_spend
+      FROM ad_spend FINAL
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND date >= #{ClickHouse.param(Date.to_iso8601(DateTime.to_date(date_range.from)))}
         AND date <= #{ClickHouse.param(Date.to_iso8601(DateTime.to_date(date_range.to)))}
@@ -1669,7 +1669,7 @@ defmodule Spectabas.Analytics do
         SELECT
           date,
           sum(spend) AS total_spend
-        FROM ad_spend
+        FROM ad_spend FINAL
         WHERE site_id = #{ClickHouse.param(site.id)}
           AND date >= #{ClickHouse.param(Date.to_iso8601(DateTime.to_date(date_range.from)))}
           AND date <= #{ClickHouse.param(Date.to_iso8601(DateTime.to_date(date_range.to)))}
@@ -1701,7 +1701,7 @@ defmodule Spectabas.Analytics do
         SELECT
           date,
           sum(spend) AS total_spend
-        FROM ad_spend
+        FROM ad_spend FINAL
         WHERE site_id = #{ClickHouse.param(site.id)}
           AND date >= #{ClickHouse.param(Date.to_iso8601(DateTime.to_date(date_range.from)))}
           AND date <= #{ClickHouse.param(Date.to_iso8601(DateTime.to_date(date_range.to)))}
@@ -1815,7 +1815,7 @@ defmodule Spectabas.Analytics do
         SELECT
           visitor_id,
           ifNull(
-            argMinIf(#{channel_expr}, timestamp, #{has_signal}),
+            nullIf(argMinIf(#{channel_expr}, timestamp, #{has_signal}), ''),
             'Direct'
           ) AS channel
         FROM events

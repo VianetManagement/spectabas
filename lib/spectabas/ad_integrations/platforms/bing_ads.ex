@@ -6,6 +6,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BingAds do
   @authorize_url "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
   @token_url "https://login.microsoftonline.com/common/oauth2/v2.0/token"
   @reporting_base "https://reporting.api.bingads.microsoft.com/Reporting/v13/GenerateReport"
+  @customer_mgmt_url "https://clientcenter.api.bingads.microsoft.com/Api/v13/CustomerManagementService"
   @scope "https://ads.microsoft.com/msads.manage offline_access"
   @max_poll_attempts 20
   @poll_interval_ms 5_000
@@ -71,7 +72,86 @@ defmodule Spectabas.AdIntegrations.Platforms.BingAds do
     end
   end
 
+  @doc "Fetch ad accounts via Customer Management API. Returns {:ok, [%{id, name, customer_id}]}."
+  def fetch_accounts(access_token, developer_token) do
+    headers = [
+      {"Authorization", "Bearer #{access_token}"},
+      {"DeveloperToken", developer_token},
+      {"Content-Type", "application/json"}
+    ]
+
+    # Step 1: Get current user to find their customer IDs
+    case Req.post("#{@customer_mgmt_url}/GetUser",
+           json: %{},
+           headers: headers
+         ) do
+      {:ok, %{status: 200, body: body}} ->
+        customer_ids = extract_customer_ids(body)
+        # Step 2: Get accounts for each customer
+        accounts =
+          Enum.flat_map(customer_ids, fn cid ->
+            case fetch_accounts_for_customer(cid, headers) do
+              {:ok, accts} -> accts
+              _ -> []
+            end
+          end)
+
+        {:ok, accounts}
+
+      {:ok, %{status: status, body: body}} ->
+        {:error, "Bing Ads GetUser #{status}: #{extract_error(body)}"}
+
+      {:error, reason} ->
+        {:error, inspect(reason)}
+    end
+  end
+
+  defp extract_customer_ids(%{"User" => %{"CustomerId" => cid}}) when is_integer(cid), do: [cid]
+  defp extract_customer_ids(%{"User" => %{"CustomerId" => cid}}) when is_binary(cid), do: [cid]
+  defp extract_customer_ids(%{"CustomerIds" => ids}) when is_list(ids), do: ids
+  defp extract_customer_ids(_), do: []
+
+  defp fetch_accounts_for_customer(customer_id, headers) do
+    headers_with_customer = headers ++ [{"CustomerId", to_string(customer_id)}]
+
+    case Req.post("#{@customer_mgmt_url}/SearchAccounts",
+           json: %{
+             "PageInfo" => %{"Index" => 0, "Size" => 100},
+             "Predicates" => []
+           },
+           headers: headers_with_customer
+         ) do
+      {:ok, %{status: 200, body: %{"Accounts" => accounts}}} when is_list(accounts) ->
+        {:ok,
+         Enum.map(accounts, fn a ->
+           %{
+             id: to_string(a["Id"]),
+             name: a["Name"] || to_string(a["Id"]),
+             number: a["Number"],
+             customer_id: to_string(customer_id)
+           }
+         end)}
+
+      {:ok, %{status: 200, body: _}} ->
+        {:ok, []}
+
+      {:ok, %{status: status, body: body}} ->
+        {:error, "Bing Ads SearchAccounts #{status}: #{extract_error(body)}"}
+
+      {:error, reason} ->
+        {:error, inspect(reason)}
+    end
+  end
+
   def fetch_daily_spend(site, integration, %Date{} = date) do
+    if integration.account_id in [nil, ""] do
+      {:error, "No Microsoft Ads account ID set. Please disconnect and reconnect Microsoft Ads."}
+    else
+      do_fetch_daily_spend(site, integration, date)
+    end
+  end
+
+  defp do_fetch_daily_spend(site, integration, date) do
     access_token = Spectabas.AdIntegrations.decrypt_access_token(integration)
     creds = Credentials.get_for_platform(site, "bing_ads")
     headers = auth_headers(access_token, creds, integration)

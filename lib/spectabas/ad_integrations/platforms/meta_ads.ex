@@ -105,6 +105,14 @@ defmodule Spectabas.AdIntegrations.Platforms.MetaAds do
   end
 
   def fetch_daily_spend(_site, integration, %Date{} = date) do
+    if integration.account_id in [nil, ""] do
+      {:error, "No Meta ad account ID set. Please disconnect and reconnect Meta Ads."}
+    else
+      do_fetch_daily_spend(integration, date)
+    end
+  end
+
+  defp do_fetch_daily_spend(integration, date) do
     access_token = Spectabas.AdIntegrations.decrypt_access_token(integration)
     account_id = integration.account_id
     date_str = Date.to_iso8601(date)
