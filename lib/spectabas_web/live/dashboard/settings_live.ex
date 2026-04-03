@@ -102,7 +102,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   end
 
   def handle_event("disconnect_ad", %{"id" => id}, socket) do
-    integration = Spectabas.AdIntegrations.get!(id)
+    integration = authorize_integration!(id, socket)
     Spectabas.AdIntegrations.disconnect(integration)
 
     {:noreply,
@@ -112,7 +112,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   end
 
   def handle_event("backfill_payment_data", %{"id" => id, "days" => days}, socket) do
-    integration = Spectabas.AdIntegrations.get!(id) |> Spectabas.Repo.preload(:site)
+    integration = authorize_integration!(id, socket) |> Spectabas.Repo.preload(:site)
     num_days = String.to_integer(days)
 
     Task.start(fn ->
@@ -148,7 +148,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   end
 
   def handle_event("sync_ad_now", %{"id" => id}, socket) do
-    integration = Spectabas.AdIntegrations.get!(id) |> Spectabas.Repo.preload(:site)
+    integration = authorize_integration!(id, socket) |> Spectabas.Repo.preload(:site)
 
     case integration.platform do
       "stripe" ->
@@ -308,7 +308,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   end
 
   def handle_event("clear_payment_data", %{"id" => id}, socket) do
-    integration = Spectabas.AdIntegrations.get!(id) |> Spectabas.Repo.preload(:site)
+    integration = authorize_integration!(id, socket) |> Spectabas.Repo.preload(:site)
     site_id = integration.site_id
     site_p = Spectabas.ClickHouse.param(site_id)
 
@@ -346,7 +346,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   end
 
   def handle_event("update_sync_frequency", %{"id" => id, "frequency" => freq}, socket) do
-    integration = Spectabas.AdIntegrations.get!(id)
+    integration = authorize_integration!(id, socket)
     minutes = String.to_integer(freq)
 
     case Spectabas.AdIntegrations.update_sync_frequency(integration, minutes) do
@@ -1207,6 +1207,17 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   defp platform_label(p), do: p
 
   # Mask saved credentials — show first 4 + last 4 chars with dots in between
+  # Verify integration belongs to the current site (prevents IDOR via crafted WebSocket events)
+  defp authorize_integration!(id, socket) do
+    integration = Spectabas.AdIntegrations.get!(id)
+
+    if integration.site_id != socket.assigns.site.id do
+      raise "Unauthorized: integration #{id} does not belong to site #{socket.assigns.site.id}"
+    end
+
+    integration
+  end
+
   defp mask_credential(nil), do: ""
   defp mask_credential(""), do: ""
 
