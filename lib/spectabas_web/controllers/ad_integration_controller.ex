@@ -112,31 +112,40 @@ defmodule SpectabasWeb.AdIntegrationController do
   end
 
   defp handle_platform_callback(conn, "meta_ads", site, code) do
-    with {:ok, tokens} <- MetaAds.exchange_code(site, code),
-         {:ok, accounts} <- MetaAds.fetch_ad_accounts(tokens.access_token) do
-      case accounts do
-        [single] ->
-          merged = Map.merge(tokens, %{account_id: single.id, account_name: single.name})
-          save_and_redirect(conn, "meta_ads", site.id, merged)
+    case MetaAds.exchange_code(site, code) do
+      {:ok, tokens} ->
+        case MetaAds.fetch_ad_accounts(tokens.access_token) do
+          {:ok, [single]} ->
+            merged = Map.merge(tokens, %{account_id: single.id, account_name: single.name})
+            save_and_redirect(conn, "meta_ads", site.id, merged)
 
-        [] ->
-          conn
-          |> put_flash(:error, "No Meta ad accounts found for this user.")
-          |> redirect(to: ~p"/dashboard/sites/#{site.id}/settings")
+          {:ok, []} ->
+            conn
+            |> put_flash(:error, "No Meta ad accounts found for this user. Make sure the Facebook account has access to at least one ad account.")
+            |> redirect(to: ~p"/dashboard/sites/#{site.id}/settings")
 
-        multiple ->
-          conn
-          |> put_session(:meta_ads_pending_tokens, %{
-            "access_token" => tokens.access_token,
-            "refresh_token" => tokens[:refresh_token] || tokens.access_token,
-            "expires_in" => tokens[:expires_in],
-            "site_id" => site.id,
-            "accounts" => Enum.map(multiple, fn a -> %{"id" => a.id, "name" => a.name, "currency" => a.currency} end)
-          })
-          |> redirect(to: ~p"/auth/ad/meta_ads/pick_account?site_id=#{site.id}")
-      end
-    else
-      {:error, reason} -> exchange_error(conn, "Meta Ads", site.id, reason)
+          {:ok, multiple} ->
+            conn
+            |> put_session(:meta_ads_pending_tokens, %{
+              "access_token" => tokens.access_token,
+              "refresh_token" => tokens[:refresh_token] || tokens.access_token,
+              "expires_in" => tokens[:expires_in],
+              "site_id" => site.id,
+              "accounts" => Enum.map(multiple, fn a -> %{"id" => a.id, "name" => a.name, "currency" => a.currency} end)
+            })
+            |> redirect(to: ~p"/auth/ad/meta_ads/pick_account?site_id=#{site.id}")
+
+          {:error, reason} ->
+            Logger.warning("[AdIntegration] Meta fetch_ad_accounts failed: #{inspect(reason)}")
+            detail = if is_map(reason), do: inspect(reason), else: to_string(reason)
+
+            conn
+            |> put_flash(:error, "Meta Ads connected but couldn't fetch ad accounts: #{String.slice(detail, 0, 150)}")
+            |> redirect(to: ~p"/dashboard/sites/#{site.id}/settings")
+        end
+
+      {:error, reason} ->
+        exchange_error(conn, "Meta Ads", site.id, reason)
     end
   end
 
