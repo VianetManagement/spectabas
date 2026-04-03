@@ -110,10 +110,19 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
         :ok
 
       {:ok, charges} ->
-        # Check for duplicates — skip charges already in ecommerce_events
-        existing = existing_order_ids(site.id, date)
+        # Dedup: skip charges already imported (by ch_ order_id) OR matching
+        # an existing transaction by amount + timestamp proximity (within 10 min)
+        existing_ids = existing_order_ids(site.id, date)
+        existing_txns = existing_transactions(site.id, date)
 
-        new_charges = Enum.reject(charges, fn c -> c.charge_id in existing end)
+        new_charges =
+          Enum.reject(charges, fn c ->
+            c.charge_id in existing_ids or
+              Enum.any?(existing_txns, fn txn ->
+                abs(txn.amount - c.amount) < 0.02 and
+                  abs(txn.timestamp_unix - DateTime.to_unix(c.created_at)) < 600
+              end)
+          end)
 
         if new_charges == [] do
           Logger.info("[StripSync] All #{length(charges)} charges already synced for #{date}")
@@ -463,6 +472,59 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
       _ -> []
     end
   end
+
+  # Fetch existing non-Stripe transactions for amount+timestamp dedup
+  defp existing_transactions(site_id, date) do
+    from_dt = DateTime.new!(date, ~T[00:00:00], "Etc/UTC")
+    to_dt = DateTime.new!(Date.add(date, 1), ~T[00:00:00], "Etc/UTC")
+
+    sql = """
+    SELECT
+      toFloat64(revenue) AS amount,
+      toUnixTimestamp(timestamp) AS ts
+    FROM ecommerce_events
+    WHERE site_id = #{ClickHouse.param(site_id)}
+      AND timestamp >= #{ClickHouse.param(Calendar.strftime(from_dt, "%Y-%m-%d %H:%M:%S"))}
+      AND timestamp < #{ClickHouse.param(Calendar.strftime(to_dt, "%Y-%m-%d %H:%M:%S"))}
+      AND order_id NOT LIKE 'ch_%'
+    """
+
+    case ClickHouse.query(sql) do
+      {:ok, rows} ->
+        Enum.map(rows, fn r ->
+          %{
+            amount: parse_float(r["amount"]),
+            timestamp_unix: parse_int(r["ts"])
+          }
+        end)
+
+      _ ->
+        []
+    end
+  end
+
+  defp parse_float(n) when is_float(n), do: n
+  defp parse_float(n) when is_integer(n), do: n / 1
+
+  defp parse_float(n) when is_binary(n) do
+    case Float.parse(n) do
+      {f, _} -> f
+      :error -> 0.0
+    end
+  end
+
+  defp parse_float(_), do: 0.0
+
+  defp parse_int(n) when is_integer(n), do: n
+
+  defp parse_int(n) when is_binary(n) do
+    case Integer.parse(n) do
+      {i, _} -> i
+      :error -> 0
+    end
+  end
+
+  defp parse_int(_), do: 0
 
   # Look up visitor by email in Postgres
   defp resolve_visitor(site_id, email) when is_binary(email) and email != "" do
