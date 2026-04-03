@@ -147,12 +147,12 @@ defmodule Spectabas.Workers.ProxySetupEmail do
     &nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #7dd3fc;">end</span><br>
     &nbsp;&nbsp;<span style="color: #7dd3fc;">end</span><br>
     <br>
+    &nbsp;&nbsp;<span style="color: #6b7280;"># Req 0.5+ returns headers as maps: %{"content-type" =&gt; ["text/javascript"]}</span><br>
     &nbsp;&nbsp;<span style="color: #7dd3fc;">defp</span> <span style="color: #93c5fd;">get_content_type</span>(headers) <span style="color: #7dd3fc;">do</span><br>
-    &nbsp;&nbsp;&nbsp;&nbsp;headers<br>
-    &nbsp;&nbsp;&nbsp;&nbsp;|&gt; Enum.find_value(<span style="color: #86efac;">"application/javascript"</span>, <span style="color: #7dd3fc;">fn</span><br>
-    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{<span style="color: #86efac;">"content-type"</span>, v} -&gt; v<br>
-    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;_ -&gt; <span style="color: #7dd3fc;">nil</span><br>
-    &nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #7dd3fc;">end</span>)<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #7dd3fc;">case</span> Map.get(headers, <span style="color: #86efac;">"content-type"</span>) <span style="color: #7dd3fc;">do</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[value | _] -&gt; value<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;_ -&gt; <span style="color: #86efac;">"application/javascript"</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #7dd3fc;">end</span><br>
     &nbsp;&nbsp;<span style="color: #7dd3fc;">end</span><br>
     <span style="color: #7dd3fc;">end</span>
         </div>
@@ -379,12 +379,12 @@ defmodule Spectabas.Workers.ProxySetupEmail do
         end
       end
 
+      # Req 0.5+ returns headers as maps: %{"content-type" => ["text/javascript"]}
       defp get_content_type(headers) do
-        headers
-        |> Enum.find_value("application/javascript", fn
-          {"content-type", v} -> v
-          _ -> nil
-        end)
+        case Map.get(headers, "content-type") do
+          [value | _] -> value
+          _ -> "application/javascript"
+        end
       end
     end
 
