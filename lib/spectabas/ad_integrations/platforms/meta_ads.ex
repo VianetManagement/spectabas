@@ -90,11 +90,19 @@ defmodule Spectabas.AdIntegrations.Platforms.MetaAds do
     case Req.get("#{@graph_url}/me/adaccounts",
            params: [fields: "account_id,name,currency", access_token: access_token]
          ) do
-      {:ok, %{status: 200, body: %{"data" => accounts}}} ->
-        {:ok,
-         Enum.map(accounts, fn a ->
-           %{id: a["account_id"], name: a["name"], currency: a["currency"]}
-         end)}
+      {:ok, %{status: 200, body: body}} ->
+        body = if is_binary(body), do: Jason.decode!(body), else: body
+
+        case body do
+          %{"data" => accounts} ->
+            {:ok,
+             Enum.map(accounts, fn a ->
+               %{id: a["account_id"], name: a["name"], currency: a["currency"]}
+             end)}
+
+          _ ->
+            {:error, body}
+        end
 
       {:ok, %{body: body}} ->
         {:error, body}
