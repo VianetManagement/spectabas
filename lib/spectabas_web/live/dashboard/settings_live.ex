@@ -1124,25 +1124,40 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   # Validate a Stripe API key by making a lightweight API call
   # Validate using Charges endpoint (only needs Charges:Read, which all valid keys have)
   defp validate_stripe_key(key) do
-    case Req.get("https://api.stripe.com/v1/charges?limit=1",
-           headers: [
-             {"authorization", "Bearer #{key}"},
-             {"stripe-version", "2024-12-18.acacia"}
-           ]
-         ) do
+    require Logger
+
+    # Log first/last 4 chars for debugging (never log the full key)
+    key_hint =
+      if byte_size(key) > 8,
+        do: String.slice(key, 0, 8) <> "..." <> String.slice(key, -4, 4),
+        else: "(short key)"
+
+    Logger.info("[StripeValidation] Validating key #{key_hint}, length=#{byte_size(key)}")
+
+    result =
+      Req.get("https://api.stripe.com/v1/charges?limit=1",
+        headers: [
+          {"authorization", "Bearer #{key}"},
+          {"stripe-version", "2024-12-18.acacia"}
+        ]
+      )
+
+    case result do
       {:ok, %{status: 200}} ->
+        Logger.info("[StripeValidation] Key valid")
         :ok
 
-      {:ok, %{status: 401}} ->
-        {:error, "Authentication failed. Check that the key is correct and active."}
+      {:ok, %{status: status, body: body}} ->
+        msg =
+          if is_map(body),
+            do: get_in(body, ["error", "message"]) || "HTTP #{status}",
+            else: "HTTP #{status}"
 
-      {:ok, %{status: 403}} ->
-        {:error, "Key does not have Charges:Read permission."}
-
-      {:ok, %{status: s}} ->
-        {:error, "Stripe returned HTTP #{s}."}
+        Logger.warning("[StripeValidation] Failed: status=#{status}, msg=#{msg}")
+        {:error, "Stripe says: #{msg}"}
 
       {:error, reason} ->
+        Logger.error("[StripeValidation] Request failed: #{inspect(reason)}")
         {:error, "Could not reach Stripe: #{inspect(reason)}"}
     end
   end
