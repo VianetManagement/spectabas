@@ -789,6 +789,71 @@ defmodule SpectabasWeb.HealthController do
     conn |> put_status(403) |> json(%{error: "forbidden"})
   end
 
+  def ecom_diag(conn, %{"token" => token, "site_id" => site_id}) do
+    unless valid_token?(token) do
+      conn |> put_status(403) |> json(%{error: "forbidden"})
+    else
+      site_p = Spectabas.ClickHouse.param(site_id)
+
+      # Today's raw events
+      raw =
+        case Spectabas.ClickHouse.query("""
+             SELECT order_id, revenue, import_source, visitor_id,
+               toTimezone(timestamp, 'America/New_York') AS ts_et
+             FROM ecommerce_events
+             WHERE site_id = #{site_p}
+               AND toDate(toTimezone(timestamp, 'America/New_York')) = today()
+             ORDER BY timestamp DESC
+             LIMIT 100
+             """) do
+          {:ok, rows} -> rows
+          {:error, e} -> [%{"error" => inspect(e)}]
+        end
+
+      # Today's totals by import_source
+      totals =
+        case Spectabas.ClickHouse.query("""
+             SELECT
+               import_source,
+               count() AS cnt,
+               sum(revenue) AS rev,
+               sum(refund_amount) AS refunds
+             FROM ecommerce_events
+             WHERE site_id = #{site_p}
+               AND toDate(toTimezone(timestamp, 'America/New_York')) = today()
+             GROUP BY import_source
+             """) do
+          {:ok, rows} -> rows
+          {:error, e} -> [%{"error" => inspect(e)}]
+        end
+
+      # Today's deduped total
+      deduped =
+        case Spectabas.ClickHouse.query("""
+             SELECT
+               count() AS cnt,
+               sum(revenue) AS rev,
+               sum(refund_amount) AS refunds
+             FROM #{Spectabas.Analytics.ecommerce_dedup()}
+             WHERE site_id = #{site_p}
+               AND toDate(toTimezone(timestamp, 'America/New_York')) = today()
+             """) do
+          {:ok, rows} -> rows
+          {:error, e} -> [%{"error" => inspect(e)}]
+        end
+
+      json(conn, %{
+        today_raw_events: raw,
+        today_by_source: totals,
+        today_deduped: deduped
+      })
+    end
+  end
+
+  def ecom_diag(conn, _params) do
+    conn |> put_status(403) |> json(%{error: "forbidden"})
+  end
+
   defp test_sites do
     Spectabas.Repo.all(Spectabas.Sites.Site)
     |> Enum.map(fn s -> %{id: s.id, domain: s.domain, public_key: s.public_key} end)
