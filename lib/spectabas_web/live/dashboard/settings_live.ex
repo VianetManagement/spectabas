@@ -759,6 +759,13 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                             setup guide
                           </a>
                           for details.
+                        <% "stripe" -> %>
+                          Find your secret key in the
+                          <a
+                            href="https://dashboard.stripe.com/apikeys"
+                            target="_blank"
+                            class="text-indigo-600 underline"
+                          >Stripe Dashboard</a> &gt; Developers &gt; API keys. Use the key starting with <code>sk_live_</code>.
                       <% end %>
                     </p>
                     <%= cond do %>
