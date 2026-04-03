@@ -738,6 +738,55 @@ defmodule SpectabasWeb.HealthController do
     conn |> put_status(403) |> json(%{error: "forbidden"})
   end
 
+  def fix_ch_schema(conn, %{"token" => token}) do
+    unless valid_token?(token) do
+      conn |> put_status(403) |> json(%{error: "forbidden"})
+    else
+      results =
+        [
+          {"refund_amount",
+           Spectabas.ClickHouse.execute(
+             "ALTER TABLE ecommerce_events ADD COLUMN IF NOT EXISTS refund_amount Decimal(12, 2) DEFAULT 0"
+           )},
+          {"import_source",
+           Spectabas.ClickHouse.execute(
+             "ALTER TABLE ecommerce_events ADD COLUMN IF NOT EXISTS import_source LowCardinality(String) DEFAULT ''"
+           )},
+          {"subscription_events",
+           Spectabas.ClickHouse.execute("""
+           CREATE TABLE IF NOT EXISTS subscription_events (
+             site_id UInt64,
+             subscription_id String,
+             customer_email String,
+             visitor_id String DEFAULT '',
+             plan_name String DEFAULT '',
+             plan_interval LowCardinality(String) DEFAULT 'month',
+             mrr_amount Decimal(12, 2) DEFAULT 0,
+             currency LowCardinality(String) DEFAULT 'USD',
+             status LowCardinality(String) DEFAULT 'active',
+             event_type LowCardinality(String) DEFAULT 'snapshot',
+             started_at DateTime DEFAULT now(),
+             canceled_at DateTime DEFAULT toDateTime(0),
+             current_period_end DateTime DEFAULT now(),
+             snapshot_date Date DEFAULT today(),
+             timestamp DateTime DEFAULT now()
+           ) ENGINE = ReplacingMergeTree(timestamp)
+           PARTITION BY toYYYYMM(snapshot_date)
+           ORDER BY (site_id, snapshot_date, subscription_id)
+           SETTINGS index_granularity = 8192
+           """)}
+        ]
+        |> Enum.map(fn {name, result} -> {name, inspect(result)} end)
+        |> Map.new()
+
+      json(conn, %{status: "done", results: results})
+    end
+  end
+
+  def fix_ch_schema(conn, _params) do
+    conn |> put_status(403) |> json(%{error: "forbidden"})
+  end
+
   defp test_sites do
     Spectabas.Repo.all(Spectabas.Sites.Site)
     |> Enum.map(fn s -> %{id: s.id, domain: s.domain, public_key: s.public_key} end)
