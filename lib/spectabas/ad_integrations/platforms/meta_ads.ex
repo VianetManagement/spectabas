@@ -35,30 +35,40 @@ defmodule Spectabas.AdIntegrations.Platforms.MetaAds do
              code: code
            ]
          ) do
-      %{status: 200, body: %{"access_token" => short_token}} ->
-        # Exchange for long-lived token (60 days)
-        case Req.get!("#{@graph_url}/oauth/access_token",
-               params: [
-                 grant_type: "fb_exchange_token",
-                 client_id: creds["app_id"],
-                 client_secret: creds["app_secret"],
-                 fb_exchange_token: short_token
-               ]
-             ) do
-          %{status: 200, body: body} ->
-            {:ok,
-             %{
-               access_token: body["access_token"],
-               refresh_token: body["access_token"],
-               expires_in: body["expires_in"] || 5_184_000
-             }}
+      %{status: 200, body: body} ->
+        body = ensure_parsed(body)
 
-          %{body: body} ->
+        case body do
+          %{"access_token" => short_token} ->
+            # Exchange for long-lived token (60 days)
+            case Req.get!("#{@graph_url}/oauth/access_token",
+                   params: [
+                     grant_type: "fb_exchange_token",
+                     client_id: creds["app_id"],
+                     client_secret: creds["app_secret"],
+                     fb_exchange_token: short_token
+                   ]
+                 ) do
+              %{status: 200, body: long_body} ->
+                long_body = ensure_parsed(long_body)
+
+                {:ok,
+                 %{
+                   access_token: long_body["access_token"],
+                   refresh_token: long_body["access_token"],
+                   expires_in: long_body["expires_in"] || 5_184_000
+                 }}
+
+              %{body: err_body} ->
+                {:error, ensure_parsed(err_body)}
+            end
+
+          _ ->
             {:error, body}
         end
 
       %{body: body} ->
-        {:error, body}
+        {:error, ensure_parsed(body)}
     end
   end
 
@@ -75,6 +85,8 @@ defmodule Spectabas.AdIntegrations.Platforms.MetaAds do
            ]
          ) do
       %{status: 200, body: body} ->
+        body = ensure_parsed(body)
+
         {:ok,
          %{
            access_token: body["access_token"],
@@ -82,7 +94,7 @@ defmodule Spectabas.AdIntegrations.Platforms.MetaAds do
          }}
 
       %{body: body} ->
-        {:error, body}
+        {:error, ensure_parsed(body)}
     end
   end
 
@@ -91,7 +103,7 @@ defmodule Spectabas.AdIntegrations.Platforms.MetaAds do
            params: [fields: "account_id,name,currency", access_token: access_token]
          ) do
       {:ok, %{status: 200, body: body}} ->
-        body = if is_binary(body), do: Jason.decode!(body), else: body
+        body = ensure_parsed(body)
 
         case body do
           %{"data" => accounts} ->
@@ -105,7 +117,7 @@ defmodule Spectabas.AdIntegrations.Platforms.MetaAds do
         end
 
       {:ok, %{body: body}} ->
-        {:error, body}
+        {:error, ensure_parsed(body)}
 
       {:error, reason} ->
         {:error, reason}
@@ -136,21 +148,30 @@ defmodule Spectabas.AdIntegrations.Platforms.MetaAds do
              access_token: access_token
            ]
          ) do
-      {:ok, %{status: 200, body: %{"data" => data}}} ->
-        rows =
-          Enum.map(data, fn row ->
-            %{
-              campaign_id: row["campaign_id"] || "",
-              campaign_name: row["campaign_name"] || "",
-              spend: parse_decimal(row["spend"]),
-              clicks: parse_int(row["clicks"]),
-              impressions: parse_int(row["impressions"])
-            }
-          end)
+      {:ok, %{status: 200, body: body}} ->
+        body = ensure_parsed(body)
 
-        {:ok, rows}
+        case body do
+          %{"data" => data} ->
+            rows =
+              Enum.map(data, fn row ->
+                %{
+                  campaign_id: row["campaign_id"] || "",
+                  campaign_name: row["campaign_name"] || "",
+                  spend: parse_decimal(row["spend"]),
+                  clicks: parse_int(row["clicks"]),
+                  impressions: parse_int(row["impressions"])
+                }
+              end)
+
+            {:ok, rows}
+
+          _ ->
+            {:error, "Meta Ads: unexpected response format"}
+        end
 
       {:ok, %{status: status, body: body}} ->
+        body = ensure_parsed(body)
         detail = extract_error(body)
         Logger.warning("[MetaAds] API #{status}: #{detail}")
         {:error, "Meta Ads #{status}: #{String.slice(detail, 0, 120)}"}
@@ -159,6 +180,16 @@ defmodule Spectabas.AdIntegrations.Platforms.MetaAds do
         {:error, inspect(reason)}
     end
   end
+
+  # Meta Graph API sometimes returns raw strings instead of parsed JSON
+  defp ensure_parsed(body) when is_binary(body) do
+    case Jason.decode(body) do
+      {:ok, parsed} -> parsed
+      _ -> body
+    end
+  end
+
+  defp ensure_parsed(body), do: body
 
   defp extract_error(%{"error" => %{"message" => msg}}), do: msg
   defp extract_error(body), do: inspect(body) |> String.slice(0, 200)
