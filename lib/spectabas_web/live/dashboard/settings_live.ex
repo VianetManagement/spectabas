@@ -28,7 +28,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
        |> assign(:snippet, Sites.snippet_code(site))
        |> assign(:render_domain_status, check_render_domain(site.domain))
        |> assign(:example_html, example_html(site))
-       |> assign(:ad_integrations, Spectabas.AdIntegrations.list_for_site(site.id))
+       |> assign(:ad_integrations, ensure_integrations(site))
        |> assign(:configuring_platform, nil)}
     end
   end
@@ -1228,6 +1228,48 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   defp platform_label(p), do: p
 
   # Mask saved credentials — show first 4 + last 4 chars with dots in between
+  # Auto-create integration records if credentials exist but integration is missing/revoked.
+  # This repairs the state when credentials are saved but the integration record was lost.
+  defp ensure_integrations(site) do
+    require Logger
+    integrations = Spectabas.AdIntegrations.list_for_site(site.id)
+
+    Enum.each(["stripe", "braintree"], fn platform ->
+      creds = Spectabas.AdIntegrations.Credentials.get_for_platform(site, platform)
+      has_active = Enum.any?(integrations, &(&1.platform == platform and &1.status == "active"))
+
+      key =
+        case platform do
+          "stripe" -> creds["api_key"]
+          "braintree" -> creds["merchant_id"]
+        end
+
+      if key not in [nil, ""] and not has_active do
+        # Delete any revoked records first
+        Enum.filter(integrations, &(&1.platform == platform and &1.status == "revoked"))
+        |> Enum.each(&Spectabas.Repo.delete/1)
+
+        token = if platform == "stripe", do: key, else: key
+
+        case Spectabas.AdIntegrations.connect(site.id, platform, %{
+               access_token: token,
+               refresh_token: "",
+               account_id: if(platform == "braintree", do: key, else: ""),
+               account_name: String.capitalize(platform)
+             }) do
+          {:ok, _} ->
+            Logger.info("[Settings] Auto-repaired #{platform} integration for site #{site.id}")
+
+          {:error, reason} ->
+            Logger.warning("[Settings] Failed to auto-repair #{platform}: #{inspect(reason)}")
+        end
+      end
+    end)
+
+    # Return fresh list
+    Spectabas.AdIntegrations.list_for_site(site.id)
+  end
+
   # Verify integration belongs to the current site (prevents IDOR via crafted WebSocket events)
   defp authorize_integration!(id, socket) do
     integration = Spectabas.AdIntegrations.get!(id)
