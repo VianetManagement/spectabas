@@ -506,7 +506,7 @@ defmodule Spectabas.Analytics.AnomalyDetector do
         AND event_type = 'pageview' AND ip_is_bot = 0
         AND timestamp >= now() - INTERVAL 28 DAY
         AND visitor_id IN (
-          SELECT DISTINCT visitor_id FROM ecommerce_events
+          SELECT DISTINCT visitor_id FROM #{Spectabas.Analytics.ecommerce_dedup()}
           WHERE site_id = #{ClickHouse.param(site.id)}
         )
       GROUP BY visitor_id
@@ -621,7 +621,7 @@ defmodule Spectabas.Analytics.AnomalyDetector do
   defp query_revenue(site, from, to) do
     sql = """
     SELECT sum(revenue) AS r
-    FROM ecommerce_events
+    FROM #{Spectabas.Analytics.ecommerce_dedup()}
     WHERE site_id = #{ClickHouse.param(site.id)}
       AND timestamp >= #{ClickHouse.param(fmt(from))}
       AND timestamp <= #{ClickHouse.param(fmt(to))}

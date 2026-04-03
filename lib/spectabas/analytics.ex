@@ -1272,7 +1272,7 @@ defmodule Spectabas.Analytics do
         ) AS e
         LEFT JOIN (
           SELECT visitor_id, order_id, revenue
-          FROM ecommerce_events
+          FROM #{ecommerce_dedup()}
           WHERE site_id = #{ClickHouse.param(site.id)}
             AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
             AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
@@ -1323,7 +1323,7 @@ defmodule Spectabas.Analytics do
             AND event_type = 'pageview' AND ip_is_bot = 0
             AND timestamp >= #{from_p} AND timestamp <= #{to_p}
             AND visitor_id IN (
-              SELECT DISTINCT visitor_id FROM ecommerce_events
+              SELECT DISTINCT visitor_id FROM #{ecommerce_dedup()}
               WHERE site_id = #{site_p}
                 AND timestamp >= #{from_p} AND timestamp <= #{to_p}
             )
@@ -1331,7 +1331,7 @@ defmodule Spectabas.Analytics do
         ) AS e
         INNER JOIN (
           SELECT visitor_id, order_id, revenue
-          FROM ecommerce_events
+          FROM #{ecommerce_dedup()}
           WHERE site_id = #{site_p}
             AND timestamp >= #{from_p} AND timestamp <= #{to_p}
         ) AS ec ON e.visitor_id = ec.visitor_id
@@ -1493,7 +1493,7 @@ defmodule Spectabas.Analytics do
       ) AS e
       LEFT JOIN (
         SELECT visitor_id, order_id, revenue
-        FROM ecommerce_events
+        FROM #{ecommerce_dedup()}
         WHERE site_id = #{ClickHouse.param(site.id)}
           AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
           AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
@@ -1569,7 +1569,7 @@ defmodule Spectabas.Analytics do
       ),
       purchases AS (
         SELECT DISTINCT visitor_id
-        FROM ecommerce_events
+        FROM #{ecommerce_dedup()}
         WHERE site_id = #{ClickHouse.param(site.id)}
           AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
           AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
@@ -1667,7 +1667,7 @@ defmodule Spectabas.Analytics do
         FROM events AS e
         INNER JOIN (
           SELECT visitor_id, min(timestamp) AS purchase_at
-          FROM ecommerce_events
+          FROM #{ecommerce_dedup()}
           WHERE site_id = #{ClickHouse.param(site.id)}
             AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
             AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
@@ -1710,7 +1710,7 @@ defmodule Spectabas.Analytics do
           FROM events AS e
           INNER JOIN (
             SELECT visitor_id, min(timestamp) AS purchase_at
-            FROM ecommerce_events
+            FROM #{ecommerce_dedup()}
             WHERE site_id = #{ClickHouse.param(site.id)}
               AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
               AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
@@ -1756,7 +1756,7 @@ defmodule Spectabas.Analytics do
             ' → '
           ) AS journey,
           max(visitor_id IN (
-            SELECT DISTINCT visitor_id FROM ecommerce_events
+            SELECT DISTINCT visitor_id FROM #{ecommerce_dedup()}
             WHERE site_id = #{ClickHouse.param(site.id)}
               AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
               AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
@@ -2014,7 +2014,7 @@ defmodule Spectabas.Analytics do
       ) AS e
       LEFT JOIN (
         SELECT visitor_id, order_id, revenue
-        FROM ecommerce_events
+        FROM #{ecommerce_dedup()}
         WHERE site_id = #{ClickHouse.param(site.id)}
           AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
           AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
@@ -2051,7 +2051,7 @@ defmodule Spectabas.Analytics do
       ) AS e
       INNER JOIN (
         SELECT visitor_id, revenue, timestamp
-        FROM ecommerce_events
+        FROM #{ecommerce_dedup()}
         WHERE site_id = #{ClickHouse.param(site.id)}
           AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
           AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
@@ -2093,10 +2093,10 @@ defmodule Spectabas.Analytics do
         uniq(e.visitor_id) AS customers,
         sum(e.revenue) AS revenue,
         round(sum(e.revenue) / greatest(uniq(e.visitor_id), 1), 2) AS revenue_per_customer
-      FROM ecommerce_events AS e
+      FROM #{ecommerce_dedup()} AS e
       INNER JOIN (
         SELECT visitor_id, min(toDate(timestamp)) AS first_purchase
-        FROM ecommerce_events
+        FROM #{ecommerce_dedup()}
         WHERE site_id = #{ClickHouse.param(site.id)}
         GROUP BY visitor_id
       ) AS fp ON e.visitor_id = fp.visitor_id
@@ -2132,7 +2132,7 @@ defmodule Spectabas.Analytics do
         FROM events
         LEFT JOIN (
           SELECT DISTINCT visitor_id
-          FROM ecommerce_events
+          FROM #{ecommerce_dedup()}
           WHERE site_id = #{ClickHouse.param(site.id)}
             AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
             AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
@@ -2173,7 +2173,7 @@ defmodule Spectabas.Analytics do
         FROM events
         LEFT JOIN (
           SELECT DISTINCT visitor_id
-          FROM ecommerce_events
+          FROM #{ecommerce_dedup()}
           WHERE site_id = #{ClickHouse.param(site.id)}
             AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
             AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
@@ -2218,7 +2218,7 @@ defmodule Spectabas.Analytics do
           AND ip_is_bot = 0
           AND visitor_id IN (
             SELECT DISTINCT visitor_id
-            FROM ecommerce_events
+            FROM #{ecommerce_dedup()}
             WHERE site_id = #{ClickHouse.param(site.id)}
           )
         GROUP BY visitor_id
@@ -2248,7 +2248,7 @@ defmodule Spectabas.Analytics do
         visitor_id,
         count() AS orders,
         sum(revenue) AS revenue
-      FROM ecommerce_events
+      FROM #{ecommerce_dedup()}
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND visitor_id IN (#{id_list})
       GROUP BY visitor_id
@@ -2479,7 +2479,7 @@ defmodule Spectabas.Analytics do
         round(avg(revenue), 2) AS avg_order_value,
         min(revenue) AS min_order,
         max(revenue) AS max_order
-      FROM ecommerce_events
+      FROM #{ecommerce_dedup()}
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
@@ -2507,7 +2507,7 @@ defmodule Spectabas.Analytics do
         sum(toUInt32OrZero(JSONExtractString(item, 'quantity'))) AS quantity,
         sum(toDecimal64OrZero(JSONExtractString(item, 'price'), 2) *
             toUInt32OrZero(JSONExtractString(item, 'quantity'))) AS revenue
-      FROM ecommerce_events
+      FROM #{ecommerce_dedup()}
       ARRAY JOIN JSONExtractArrayRaw(items) AS item
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
@@ -2542,7 +2542,7 @@ defmodule Spectabas.Analytics do
         currency,
         items,
         toTimezone(timestamp, #{tz}) AS timestamp
-      FROM ecommerce_events
+      FROM #{ecommerce_dedup()}
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
@@ -2568,7 +2568,7 @@ defmodule Spectabas.Analytics do
         toDate(toTimezone(timestamp, #{tz})) AS day,
         count() AS orders,
         sum(revenue) AS revenue
-      FROM ecommerce_events
+      FROM #{ecommerce_dedup()}
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
@@ -2616,7 +2616,7 @@ defmodule Spectabas.Analytics do
     sql = """
     SELECT order_id, revenue, subtotal, tax, shipping, discount, currency, items,
       toTimezone(timestamp, #{tz}) AS timestamp
-    FROM ecommerce_events
+    FROM #{ecommerce_dedup()}
     WHERE site_id = #{ClickHouse.param(site.id)}
       AND visitor_id = #{ClickHouse.param(visitor_id)}
     ORDER BY timestamp DESC
@@ -2636,7 +2636,7 @@ defmodule Spectabas.Analytics do
       countDistinct(order_id) AS total_orders,
       min(timestamp) AS first_purchase,
       max(timestamp) AS last_purchase
-    FROM ecommerce_events
+    FROM #{ecommerce_dedup()}
     WHERE site_id = #{ClickHouse.param(site.id)}
       AND visitor_id = #{ClickHouse.param(visitor_id)}
       AND visitor_id != ''
@@ -3514,6 +3514,25 @@ defmodule Spectabas.Analytics do
   end
 
   defp format_datetime(dt_string) when is_binary(dt_string), do: dt_string
+
+  @doc """
+  Deduplicated ecommerce subquery — prevents double-counting when the same
+  transaction is recorded by both the API and a payment provider (Stripe/Braintree).
+  Groups by amount + 10-minute time window, keeps the imported version (has charge ID)
+  over the API version when both exist.
+  """
+  def ecommerce_dedup do
+    """
+    (SELECT * FROM (
+      SELECT *,
+        ROW_NUMBER() OVER (
+          PARTITION BY site_id, round(revenue, 2), toStartOfInterval(timestamp, INTERVAL 10 MINUTE)
+          ORDER BY if(import_source != '', 1, 2)
+        ) AS _dedup_rn
+      FROM #{ecommerce_dedup()}
+    ) WHERE _dedup_rn = 1)
+    """
+  end
 
   # ClickHouse toTimezone() snippet for converting UTC timestamps to site timezone
   defp tz_sql(%Site{} = site), do: ClickHouse.param(site.timezone || "UTC")

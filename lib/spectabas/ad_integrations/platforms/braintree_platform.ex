@@ -120,19 +120,10 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
         :ok
 
       {:ok, transactions} ->
-        # Dedup: skip transactions already imported (by order_id) OR matching
-        # an existing transaction by amount + timestamp proximity (within 10 min)
+        # Skip transactions already imported (prevents re-importing same IDs on re-sync).
+        # Cross-source dedup handled at query time via ecommerce_dedup().
         existing_ids = existing_order_ids(site.id, date)
-        existing_txns = existing_transactions_for_dedup(site.id, date)
-
-        new_txns =
-          Enum.reject(transactions, fn t ->
-            t.id in existing_ids or
-              Enum.any?(existing_txns, fn txn ->
-                abs(txn.amount - t.amount) < 0.02 and
-                  abs(txn.timestamp_unix - parse_timestamp_unix(t.created_at)) < 600
-              end)
-          end)
+        new_txns = Enum.reject(transactions, fn t -> t.id in existing_ids end)
 
         if new_txns == [] do
           AdIntegrations.mark_synced(integration)
@@ -441,66 +432,6 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
       _ -> []
     end
   end
-
-  defp existing_transactions_for_dedup(site_id, date) do
-    from_dt = Date.to_iso8601(date) <> " 00:00:00"
-    to_dt = Date.to_iso8601(Date.add(date, 1)) <> " 00:00:00"
-
-    sql = """
-    SELECT toFloat64(revenue) AS amount, toUnixTimestamp(timestamp) AS ts
-    FROM ecommerce_events
-    WHERE site_id = #{ClickHouse.param(site_id)}
-      AND timestamp >= #{ClickHouse.param(from_dt)}
-      AND timestamp < #{ClickHouse.param(to_dt)}
-    """
-
-    case ClickHouse.query(sql) do
-      {:ok, rows} ->
-        Enum.map(rows, fn r ->
-          %{amount: parse_float(r["amount"]), timestamp_unix: parse_int_val(r["ts"])}
-        end)
-
-      _ ->
-        []
-    end
-  end
-
-  defp parse_float(n) when is_float(n), do: n
-
-  defp parse_float(n) when is_binary(n) do
-    case Float.parse(n) do
-      {f, _} -> f
-      :error -> 0.0
-    end
-  end
-
-  defp parse_float(_), do: 0.0
-
-  defp parse_int_val(n) when is_integer(n), do: n
-
-  defp parse_int_val(n) when is_binary(n) do
-    case Integer.parse(n) do
-      {i, _} -> i
-      :error -> 0
-    end
-  end
-
-  defp parse_int_val(_), do: 0
-
-  defp parse_timestamp_unix(dt_str) when is_binary(dt_str) do
-    case DateTime.from_iso8601(dt_str <> "Z") do
-      {:ok, dt, _} ->
-        DateTime.to_unix(dt)
-
-      _ ->
-        case NaiveDateTime.from_iso8601(String.replace(dt_str, " ", "T")) do
-          {:ok, ndt} -> ndt |> DateTime.from_naive!("Etc/UTC") |> DateTime.to_unix()
-          _ -> 0
-        end
-    end
-  end
-
-  defp parse_timestamp_unix(_), do: 0
 
   defp resolve_visitor(site_id, email) when is_binary(email) and email != "" do
     import Ecto.Query

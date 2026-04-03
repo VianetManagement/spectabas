@@ -210,10 +210,21 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
     # Don't overwrite saved credentials with empty values (masked form submits empty)
     existing = Spectabas.AdIntegrations.Credentials.get_for_platform(site, platform)
 
+    require Logger
+
+    Logger.info(
+      "[CredSave] platform=#{platform} existing_keys=#{inspect(Map.keys(existing))} " <>
+        "form_keys=#{inspect(for {k, v} <- creds, v != "", do: k)}"
+    )
+
     creds =
       Enum.reduce(creds, existing, fn {k, v}, acc ->
         if v == "", do: acc, else: Map.put(acc, k, v)
       end)
+
+    Logger.info(
+      "[CredSave] merged_keys=#{inspect(Map.keys(creds))} has_api_key=#{creds["api_key"] != nil and creds["api_key"] != ""}"
+    )
 
     # Validate Stripe/Braintree keys before saving
     validation =
@@ -253,13 +264,18 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                     Spectabas.Repo.delete(existing)
                   end
 
-                  {:ok, _} =
-                    Spectabas.AdIntegrations.connect(site.id, "stripe", %{
-                      access_token: creds["api_key"],
-                      refresh_token: "",
-                      account_id: "",
-                      account_name: "Stripe"
-                    })
+                  case Spectabas.AdIntegrations.connect(site.id, "stripe", %{
+                         access_token: creds["api_key"],
+                         refresh_token: "",
+                         account_id: "",
+                         account_name: "Stripe"
+                       }) do
+                    {:ok, _} ->
+                      :ok
+
+                    {:error, reason} ->
+                      Logger.error("[CredSave] Stripe connect failed: #{inspect(reason)}")
+                  end
 
                   assign(
                     socket,
@@ -278,13 +294,18 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                     Spectabas.Repo.delete(existing)
                   end
 
-                  {:ok, _} =
-                    Spectabas.AdIntegrations.connect(site.id, "braintree", %{
-                      access_token: creds["merchant_id"],
-                      refresh_token: "",
-                      account_id: creds["merchant_id"],
-                      account_name: "Braintree"
-                    })
+                  case Spectabas.AdIntegrations.connect(site.id, "braintree", %{
+                         access_token: creds["merchant_id"],
+                         refresh_token: "",
+                         account_id: creds["merchant_id"],
+                         account_name: "Braintree"
+                       }) do
+                    {:ok, _} ->
+                      :ok
+
+                    {:error, reason} ->
+                      Logger.error("[CredSave] Braintree connect failed: #{inspect(reason)}")
+                  end
 
                   assign(
                     socket,
