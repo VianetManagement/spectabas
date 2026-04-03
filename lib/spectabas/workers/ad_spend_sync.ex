@@ -11,14 +11,52 @@ defmodule Spectabas.Workers.AdSpendSync do
   @impl Oban.Worker
   def perform(_job) do
     integrations = AdIntegrations.list_active() |> Spectabas.Repo.preload(:site)
-    yesterday = Date.add(Date.utc_today(), -1)
+    today = Date.utc_today()
+    yesterday = Date.add(today, -1)
 
     Enum.each(integrations, fn integration ->
-      sync_integration(integration, yesterday)
+      # Always sync today (partial data updates throughout the day)
+      sync_integration(integration, today)
+      # Sync yesterday only if we haven't yet today (avoid duplicate inserts)
+      unless synced_date_today?(integration, yesterday) do
+        sync_integration(integration, yesterday)
+      end
     end)
 
     :ok
   end
+
+  # Check if this integration already synced a given date during the current UTC day
+  defp synced_date_today?(integration, date) do
+    case integration.last_synced_at do
+      nil -> false
+      ts -> Date.compare(DateTime.to_date(ts), Date.utc_today()) == :eq and
+            already_has_data?(integration, date)
+    end
+  end
+
+  defp already_has_data?(integration, date) do
+    sql = """
+    SELECT count() AS cnt FROM ad_spend FINAL
+    WHERE site_id = #{ClickHouse.param(integration.site_id)}
+      AND platform = #{ClickHouse.param(integration.platform)}
+      AND date = #{ClickHouse.param(Date.to_iso8601(date))}
+    """
+
+    case ClickHouse.query(sql) do
+      {:ok, [%{"cnt" => cnt}]} -> to_num(cnt) > 0
+      _ -> false
+    end
+  end
+
+  defp to_num(n) when is_integer(n), do: n
+  defp to_num(n) when is_binary(n) do
+    case Integer.parse(n) do
+      {i, _} -> i
+      :error -> 0
+    end
+  end
+  defp to_num(_), do: 0
 
   @doc "Sync a single integration for a given date. Called by AdSpendSyncOne."
   def sync_one(integration, date), do: sync_integration(integration, date)
