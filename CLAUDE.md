@@ -151,6 +151,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Funnel Revenue** — funnels show revenue from visitors at each step (ecommerce sites only)
 - **Abandoned Funnel Export** — CSV export of visitor IDs + emails who dropped off at each funnel step
 - **Ad Platform Integrations** — Google Ads, Bing Ads, Meta/Facebook Ads OAuth2 connections with daily spend sync. Encrypted token storage (AES-256-GCM). Settings UI per site with Sync Now button. Oban sync every 6h. Google Ads account picker for MCC/multi-account setups.
+- **Stripe Import** — Connect Stripe via API key (not OAuth) from Site Settings. Syncs completed charges into `ecommerce_events` every 6h via `StripeSync` Oban worker. Matches charges to identified visitors via email lookup in Postgres. Deduplicates by charge_id (Stripe IDs start with `ch_`). All Revenue Attribution, Cohorts, Buyer Patterns dashboards work automatically.
 - **ROAS on Revenue Attribution** — Ad Spend Overview card (total spend, ad-attributed revenue, ROAS, clicks, impressions, per-platform breakdown). Campaign tab shows inline Spend/ROAS/CPC columns. Standalone Ad Spend by Campaign table on other tabs. ROAS color-coded.
 - **Click ID Attribution** — Tracker captures gclid (Google), msclkid (Bing), fbclid (Meta) from landing URLs. Stored in ClickHouse `click_id`/`click_id_type` columns. Revenue from visitors with click IDs attributed to the platform for ROAS calculation.
 - **Ad Effectiveness Suite** — 5 pages under new sidebar section: Visitor Quality (engagement scoring 0-100), Time to Convert (days/sessions to purchase), Ad Visitor Paths (page sequences by outcome), Ad-to-Churn (campaign churn correlation), Organic Lift (ad spend vs organic traffic correlation)
@@ -253,7 +254,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Mobile responsiveness** — scrollable tables, collapsible mobile nav bar
 - **Accessible top nav** — WCAG AA contrast compliance
 - **Documentation pages** — docs split into `/docs` (index), `/docs/getting-started`, `/docs/dashboard`, `/docs/conversions`, `/docs/api`, `/docs/admin` with cross-category search. Requires login (behind :require_authenticated_user). Public pages: `/privacy`, `/terms`, homepage.
-- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.0.0)
+- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.2.0)
 - **Legal** — Privacy Policy at `/privacy` and Terms of Service at `/terms` (public, no auth required). Entity: Spectabas, Kent County MI. Contact: howdy@spectabas.com. Arbitration clause (AAA, Kent County). 18+ age restriction.
 
 ## Important Patterns

@@ -45,6 +45,17 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.2.0 — 2026-04-03 UTC",
+       [
+         %{
+           title: "Feature: Stripe charge import",
+           description:
+             "Connect Stripe from Site Settings to automatically import completed charges as ecommerce events. " <>
+               "Charges matched to identified visitors via email lookup. Syncs every 6h (today + yesterday). " <>
+               "Deduplicates by charge_id. All existing Revenue Attribution, Revenue Cohorts, Buyer Patterns, " <>
+               "and ROAS dashboards work automatically — zero additional instrumentation needed."
+         }
+       ]},
       {"v5.1.0 — 2026-04-03 UTC",
        [
          %{

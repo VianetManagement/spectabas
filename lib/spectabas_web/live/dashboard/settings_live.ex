@@ -114,7 +114,11 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   def handle_event("sync_ad_now", %{"id" => id}, socket) do
     integration = Spectabas.AdIntegrations.get!(id) |> Spectabas.Repo.preload(:site)
 
-    Oban.insert(Spectabas.Workers.AdSpendSyncOne.new(%{"integration_id" => integration.id}))
+    if integration.platform == "stripe" do
+      Task.start(fn -> Spectabas.Workers.StripeSync.sync_now(integration) end)
+    else
+      Oban.insert(Spectabas.Workers.AdSpendSyncOne.new(%{"integration_id" => integration.id}))
+    end
 
     {:noreply,
      socket
@@ -148,10 +152,34 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
             "app_id" => params["app_id"] || "",
             "app_secret" => params["app_secret"] || ""
           }
+
+        "stripe" ->
+          %{
+            "api_key" => params["api_key"] || ""
+          }
       end
 
     case Spectabas.AdIntegrations.Credentials.save(site, platform, creds) do
       {:ok, updated_site} ->
+        # For Stripe, also create/update the integration record directly (no OAuth flow)
+        socket =
+          if platform == "stripe" and creds["api_key"] != "" do
+            api_key = creds["api_key"]
+
+            {:ok, _integration} =
+              Spectabas.AdIntegrations.connect(site.id, "stripe", %{
+                access_token: api_key,
+                refresh_token: "",
+                account_id: "",
+                account_name: "Stripe"
+              })
+
+            socket
+            |> assign(:ad_integrations, Spectabas.AdIntegrations.list_for_site(site.id))
+          else
+            socket
+          end
+
         {:noreply,
          socket
          |> put_flash(:info, "#{platform_label(platform)} credentials saved.")
@@ -606,11 +634,12 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
             for step-by-step instructions.
           </p>
 
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <%= for {platform, label, icon_color} <- [
               {"google_ads", "Google Ads", "bg-blue-100 text-blue-700"},
               {"bing_ads", "Microsoft Ads", "bg-amber-100 text-amber-700"},
-              {"meta_ads", "Meta Ads", "bg-purple-100 text-purple-700"}
+              {"meta_ads", "Meta Ads", "bg-purple-100 text-purple-700"},
+              {"stripe", "Stripe", "bg-indigo-100 text-indigo-700"}
             ] do %>
               <% integration =
                 Enum.find(@ad_integrations, &(&1.platform == platform && &1.status == "active")) %>
@@ -732,58 +761,77 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                           for details.
                       <% end %>
                     </p>
-                    <%= if platform in ["google_ads", "bing_ads"] do %>
-                      <div>
-                        <label class="block text-xs font-medium text-gray-700">Client ID</label>
-                        <input
-                          type="text"
-                          name="client_id"
-                          value={creds["client_id"] || ""}
-                          class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
-                          placeholder="e.g. 123456789.apps.googleusercontent.com"
-                        />
-                      </div>
-                      <div>
-                        <label class="block text-xs font-medium text-gray-700">Client Secret</label>
-                        <input
-                          type="password"
-                          name="client_secret"
-                          value={creds["client_secret"] || ""}
-                          class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
-                          placeholder="OAuth client secret"
-                        />
-                      </div>
-                      <div>
-                        <label class="block text-xs font-medium text-gray-700">Developer Token</label>
-                        <input
-                          type="password"
-                          name="developer_token"
-                          value={creds["developer_token"] || ""}
-                          class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
-                          placeholder="API developer token"
-                        />
-                      </div>
-                    <% else %>
-                      <div>
-                        <label class="block text-xs font-medium text-gray-700">App ID</label>
-                        <input
-                          type="text"
-                          name="app_id"
-                          value={creds["app_id"] || ""}
-                          class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
-                          placeholder="e.g. 1234567890"
-                        />
-                      </div>
-                      <div>
-                        <label class="block text-xs font-medium text-gray-700">App Secret</label>
-                        <input
-                          type="password"
-                          name="app_secret"
-                          value={creds["app_secret"] || ""}
-                          class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
-                          placeholder="Meta app secret"
-                        />
-                      </div>
+                    <%= cond do %>
+                      <% platform in ["google_ads", "bing_ads"] -> %>
+                        <div>
+                          <label class="block text-xs font-medium text-gray-700">Client ID</label>
+                          <input
+                            type="text"
+                            name="client_id"
+                            value={creds["client_id"] || ""}
+                            class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                            placeholder="e.g. 123456789.apps.googleusercontent.com"
+                          />
+                        </div>
+                        <div>
+                          <label class="block text-xs font-medium text-gray-700">Client Secret</label>
+                          <input
+                            type="password"
+                            name="client_secret"
+                            value={creds["client_secret"] || ""}
+                            class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                            placeholder="OAuth client secret"
+                          />
+                        </div>
+                        <div>
+                          <label class="block text-xs font-medium text-gray-700">
+                            Developer Token
+                          </label>
+                          <input
+                            type="password"
+                            name="developer_token"
+                            value={creds["developer_token"] || ""}
+                            class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                            placeholder="API developer token"
+                          />
+                        </div>
+                      <% platform == "stripe" -> %>
+                        <div>
+                          <label class="block text-xs font-medium text-gray-700">
+                            Stripe Secret Key
+                          </label>
+                          <input
+                            type="password"
+                            name="api_key"
+                            value={creds["api_key"] || ""}
+                            class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                            placeholder="sk_live_..."
+                          />
+                          <p class="mt-1 text-xs text-gray-500">
+                            Found in Stripe Dashboard &gt; Developers &gt; API keys. Use the secret key (starts with sk_live_).
+                          </p>
+                        </div>
+                      <% true -> %>
+                        <div>
+                          <label class="block text-xs font-medium text-gray-700">App ID</label>
+                          <input
+                            type="text"
+                            name="app_id"
+                            value={creds["app_id"] || ""}
+                            class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                            placeholder="e.g. 1234567890"
+                          />
+                        </div>
+                        <div>
+                          <label class="block text-xs font-medium text-gray-700">App Secret</label>
+                          <input
+                            type="password"
+                            name="app_secret"
+                            value={creds["app_secret"] || ""}
+                            class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                            placeholder="Meta app secret"
+                          />
+                        </div>
                     <% end %>
                     <button
                       type="submit"
@@ -805,6 +853,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   defp platform_label("google_ads"), do: "Google Ads"
   defp platform_label("bing_ads"), do: "Microsoft Ads"
   defp platform_label("meta_ads"), do: "Meta Ads"
+  defp platform_label("stripe"), do: "Stripe"
   defp platform_label(p), do: p
 
   defp ad_authorize_url(platform, site) do

@@ -154,7 +154,7 @@ defmodule Spectabas.AdIntegrationsTest do
     end
 
     test "platforms/0 returns expected list" do
-      assert AdIntegration.platforms() == ~w(google_ads bing_ads meta_ads)
+      assert AdIntegration.platforms() == ~w(google_ads bing_ads meta_ads stripe)
     end
   end
 

@@ -70,7 +70,9 @@ config :spectabas, Oban,
        # Daily at 3am UTC — delete API access logs older than 30 days
        {"0 3 * * *", Spectabas.Workers.ApiLogCleanup},
        # Every 6 hours — sync ad spend data from connected platforms
-       {"0 */6 * * *", Spectabas.Workers.AdSpendSync}
+       {"0 */6 * * *", Spectabas.Workers.AdSpendSync},
+       # Every 6 hours — sync Stripe charges into ecommerce_events
+       {"30 */6 * * *", Spectabas.Workers.StripeSync}
      ]}
   ]
 
