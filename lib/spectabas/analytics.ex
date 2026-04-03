@@ -1755,13 +1755,13 @@ defmodule Spectabas.Analytics do
         #{result_col},
         count() AS visitors,
         round(sum(pageviews) / greatest(sum(sessions), 1), 1) AS avg_pages,
-        round(avg(avg_dur), 0) AS avg_duration_s,
+        round(avg(coalesce(avg_dur, 0)), 0) AS avg_duration_s,
         round(sum(bounced_sessions) / greatest(sum(sessions), 1) * 100, 1) AS bounce_rate,
         round(countIf(sessions > 1) / greatest(count(), 1) * 100, 1) AS return_rate,
         round(sum(high_intent_pvs) / greatest(sum(pageviews), 1) * 100, 1) AS high_intent_pct,
         round(
           least(sum(pageviews) / greatest(sum(sessions), 1) / 5, 1) * 25
-          + least(coalesce(avg(avg_dur), 0) / 300, 1) * 25
+          + least(avg(coalesce(avg_dur, 0)) / 300, 1) * 25
           + (1 - sum(bounced_sessions) / greatest(sum(sessions), 1)) * 20
           + countIf(sessions > 1) / greatest(count(), 1) * 15
           + sum(high_intent_pvs) / greatest(sum(pageviews), 1) * 15
