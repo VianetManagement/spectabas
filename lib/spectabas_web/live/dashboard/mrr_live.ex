@@ -44,10 +44,12 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
         _ -> %{}
       end
 
-    # Revenue by month (last 12 months)
+    # Revenue by month (last 12 months, in site timezone)
+    tz_p = ClickHouse.param(site.timezone || "UTC")
+
     monthly_sql = """
     SELECT
-      toStartOfMonth(timestamp) AS month,
+      toStartOfMonth(toTimezone(timestamp, #{tz_p})) AS month,
       sum(revenue) - sum(refund_amount) AS net_revenue,
       countDistinct(order_id) AS orders
     FROM #{Spectabas.Analytics.ecommerce_dedup()}

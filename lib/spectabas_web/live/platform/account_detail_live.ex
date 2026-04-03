@@ -83,10 +83,10 @@ defmodule SpectabasWeb.Platform.AccountDetailLive do
      |> assign(:invite_role, Map.get(params, "role", socket.assigns.invite_role))}
   end
 
-  def handle_event("send_invite", _params, socket) do
+  def handle_event("send_invite", params, socket) do
     admin = socket.assigns.current_scope.user
-    email = String.trim(socket.assigns.invite_email)
-    role = socket.assigns.invite_role
+    email = String.trim(params["email"] || "")
+    role = params["role"] || "superadmin"
     account_id = socket.assigns.account.id
 
     case Accounts.invite_user(admin, email, role, account_id) do
@@ -215,32 +215,28 @@ defmodule SpectabasWeb.Platform.AccountDetailLive do
 
         <%= if @show_invite do %>
           <div class="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
-            <div class="flex items-center gap-3">
+            <form phx-submit="send_invite" class="flex items-center gap-3">
               <input
                 type="email"
-                phx-keyup="update_invite"
-                phx-value-field="email"
-                value={@invite_email}
+                name="email"
                 class="border rounded px-3 py-1.5 text-sm w-64"
                 placeholder="email@example.com"
+                required
+                autofocus
               />
-              <select
-                phx-change="update_invite"
-                name="role"
-                class="border rounded px-3 py-1.5 text-sm"
-              >
-                <option value="superadmin" selected={@invite_role == "superadmin"}>Superadmin</option>
-                <option value="admin" selected={@invite_role == "admin"}>Admin</option>
-                <option value="analyst" selected={@invite_role == "analyst"}>Analyst</option>
-                <option value="viewer" selected={@invite_role == "viewer"}>Viewer</option>
+              <select name="role" class="border rounded px-3 py-1.5 text-sm">
+                <option value="superadmin">Superadmin</option>
+                <option value="admin">Admin</option>
+                <option value="analyst">Analyst</option>
+                <option value="viewer">Viewer</option>
               </select>
               <button
-                phx-click="send_invite"
+                type="submit"
                 class="px-3 py-1.5 bg-purple-600 text-white text-sm rounded hover:bg-purple-700"
               >
                 Send
               </button>
-            </div>
+            </form>
             <%= if @invite_error do %>
               <p class="text-sm text-red-600 mt-2">{@invite_error}</p>
             <% end %>
