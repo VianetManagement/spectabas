@@ -2166,7 +2166,7 @@ defmodule SpectabasWeb.DocsLive do
             id: "ad-integrations",
             title: "Ad Platform Integrations",
             body: """
-            Connect your advertising accounts to track Return on Ad Spend (ROAS) directly in Spectabas. Supported platforms: **Google Ads**, **Microsoft/Bing Ads**, and **Meta/Facebook Ads**.
+            Connect your advertising accounts and payment providers to track Return on Ad Spend (ROAS) and revenue directly in Spectabas. Supported platforms: **Google Ads**, **Microsoft/Bing Ads**, **Meta/Facebook Ads**, and **Stripe** (charge import).
 
             ### How It Works
 
@@ -2321,6 +2321,55 @@ defmodule SpectabasWeb.DocsLive do
 
             > **All credentials are encrypted** at rest using AES-256-GCM and stored per-site in the database. No environment variables or server access needed. Each site can use its own OAuth apps or share credentials across sites.
 
+            ---
+
+            ### Stripe (1 credential: Secret API Key)
+
+            Stripe integration imports completed charges directly into your ecommerce data. Unlike the ad platforms above, Stripe uses a simple API key instead of OAuth — no app registration or redirect URLs needed.
+
+            **What it does:** Every 6 hours, Spectabas fetches completed Stripe charges and writes them to your ecommerce events. Each charge is matched to an identified visitor via their email address. This means Revenue Attribution, Revenue Cohorts, Buyer Patterns, and all ecommerce dashboards populate automatically.
+
+            **Prerequisite:** Your site must use the [server-side Identify API](/docs/api#identify) to associate visitor sessions with customer emails. Stripe charges are matched to visitors by email — if a visitor hasn't been identified, their charges still sync but won't be linked to their browsing behavior.
+
+            **Step 1: Create a Restricted API Key in Stripe**
+
+            A restricted key is more secure than your account's default secret key because it only grants the specific permissions Spectabas needs.
+
+            - Go to the [Stripe Dashboard](https://dashboard.stripe.com/apikeys) > **Developers** > **API keys**
+            - Click **+ Create restricted key**
+            - Name it "Spectabas Analytics" (or any name you'll recognize)
+            - Set the following permissions:
+              - **Charges** → **Read** (required — this is how Spectabas fetches payment data)
+              - **Customers** → **Read** (required — used to look up customer email when not on the charge)
+              - All other permissions → **None**
+            - Click **Create key**
+            - Copy the key (starts with `rk_live_`) — you won't be able to see it again
+
+            > **Why a restricted key?** The default secret key (`sk_live_`) has full access to your entire Stripe account including refunds, transfers, and customer management. A restricted key with only Charges:Read and Customers:Read limits Spectabas to read-only access to payment data. This is the recommended approach.
+
+            > **Test mode:** You can use a test mode key (`rk_test_` or `sk_test_`) to verify the integration works before switching to live. Test mode charges won't appear in your analytics.
+
+            **Step 2: Enter in Spectabas**
+
+            - Go to your site's **Settings** page
+            - Scroll to **Ad Platform Integrations** > **Stripe**
+            - Click **Configure**
+            - Paste your Stripe secret key or restricted key
+            - Click **Save Credentials**
+            - The card will show "Connected" — click **Sync Now** to pull charges immediately, or wait for the next automatic sync (every 6 hours)
+
+            **Step 3: Verify**
+
+            - After syncing, go to **Conversions > Revenue Attribution** — you should see revenue data from Stripe charges
+            - Check the **Ecommerce** page for order counts and revenue totals
+            - Stripe charges appear with order IDs starting with `ch_` (Stripe charge IDs)
+
+            > **Deduplication:** Spectabas uses the Stripe charge ID as the order ID. If a charge is already in your ecommerce events (e.g., from a previous sync), it won't be inserted again. This means you can safely click "Sync Now" multiple times.
+
+            > **Existing ecommerce data:** If you already send transaction events via the JavaScript tracker or the server-side Transaction API, Stripe charges are additive. Each Stripe charge gets its own unique `ch_*` order ID, so there's no conflict with your existing `ORD-*` style order IDs. However, if you're tracking the same purchases through both Stripe import AND your own transaction API, you'll double-count revenue. Choose one method per payment flow.
+
+            > **Refunds and disputes:** The current integration syncs successful charges only. Refunds, disputes, and partial refunds are not yet tracked. If a charge is refunded after syncing, the revenue remains in your analytics data.
+
             ### Connecting an Account
 
             - Go to your site's **Settings** page
@@ -2332,7 +2381,7 @@ defmodule SpectabasWeb.DocsLive do
 
             ### What Gets Synced
 
-            For each connected account, Spectabas pulls daily data:
+            **Ad platforms** (Google, Bing, Meta) — daily campaign data:
 
             | Field | Description |
             |-------|-------------|
@@ -2342,7 +2391,17 @@ defmodule SpectabasWeb.DocsLive do
             | Clicks | Total ad clicks |
             | Impressions | Total ad impressions |
 
-            Data is synced every 6 hours via an Oban background job. On first connection, the last 30 days are backfilled.
+            **Stripe** — completed charges:
+
+            | Field | Description |
+            |-------|-------------|
+            | Charge ID | Stripe charge ID (e.g., `ch_1234...`) used as order ID |
+            | Revenue | Charge amount (converted from cents) |
+            | Currency | Charge currency (USD, EUR, etc.) |
+            | Email | Customer email — matched to identified visitors |
+            | Timestamp | When the charge was created |
+
+            All integrations sync every 6 hours via Oban background jobs.
 
             ### ROAS on Revenue Attribution
 
@@ -2396,6 +2455,9 @@ defmodule SpectabasWeb.DocsLive do
             - **No ROAS showing on Revenue Attribution** — Campaign names don't match between your UTM parameters and the ad platform. Check that `utm_campaign` values in your ad URLs exactly match the campaign names in Google/Bing/Meta.
             - **Data seems outdated** — Syncs happen every 6 hours. The most recent data is from yesterday (ad platforms don't report same-day spend in real time).
             - **Disconnecting doesn't delete spend data** — Historical ad spend data in ClickHouse is retained after disconnecting. Only the OAuth tokens are deleted.
+            - **Stripe charges not showing** — Verify visitors are identified via the Identify API with the same email used in Stripe. Charges from unidentified visitors sync but show as empty visitor_id.
+            - **Stripe "Invalid API key" error** — Check that you pasted the full key including the `sk_live_` or `rk_live_` prefix. Test mode keys (`sk_test_`, `rk_test_`) only return test data.
+            - **Duplicate revenue from Stripe** — If you also send the same transactions via the Transaction API, revenue will be double-counted. Use one method per payment flow.
             """
           }
         ]

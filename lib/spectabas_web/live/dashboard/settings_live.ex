@@ -765,7 +765,10 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                             href="https://dashboard.stripe.com/apikeys"
                             target="_blank"
                             class="text-indigo-600 underline"
-                          >Stripe Dashboard</a> &gt; Developers &gt; API keys. Use the key starting with <code>sk_live_</code>.
+                          >
+                            Stripe Dashboard
+                          </a>
+                          &gt; Developers &gt; API keys. Use the key starting with <code>sk_live_</code>.
                       <% end %>
                     </p>
                     <%= cond do %>
