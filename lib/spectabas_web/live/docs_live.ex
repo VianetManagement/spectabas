@@ -2550,13 +2550,21 @@ defmodule SpectabasWeb.DocsLive do
             - Click **+ Create restricted key**
             - Name it "Spectabas Analytics" (or any name you'll recognize)
             - Set the following permissions:
-              - **Charges** → **Read** (required — this is how Spectabas fetches payment data)
-              - **Customers** → **Read** (required — used to look up customer email when not on the charge)
-              - All other permissions → **None**
+
+            | Resource | Permission | Why |
+            |----------|------------|-----|
+            | **Charges** | **Read** | Fetches completed payments for revenue tracking |
+            | **Customers** | **Read** | Looks up customer email to match charges to visitors |
+            | **Refunds** | **Read** | Tracks refunds to adjust net revenue and LTV |
+            | **Subscriptions** | **Read** | Enables MRR tracking, plan breakdown, and churn detection |
+            | **Prices** | **Read** | Reads plan names and pricing for subscription details |
+            | **Products** | **Read** | Reads product names for subscription plan labels |
+            | All others | **None** | |
+
             - Click **Create key**
             - Copy the key (starts with `rk_live_`) — you won't be able to see it again
 
-            > **Why a restricted key?** The default secret key (`sk_live_`) has full access to your entire Stripe account including refunds, transfers, and customer management. A restricted key with only Charges:Read and Customers:Read limits Spectabas to read-only access to payment data. This is the recommended approach.
+            > **Why a restricted key?** The default secret key (`sk_live_`) has full access to your entire Stripe account including refunds, transfers, and customer management. A restricted key with read-only access to the resources above limits Spectabas to reading payment and subscription data — it cannot modify anything in your Stripe account.
 
             > **Test mode:** You can use a test mode key (`rk_test_` or `sk_test_`) to verify the integration works before switching to live. Test mode charges won't appear in your analytics.
 
@@ -2668,6 +2676,8 @@ defmodule SpectabasWeb.DocsLive do
             - **Disconnecting doesn't delete spend data** — Historical ad spend data in ClickHouse is retained after disconnecting. Only the OAuth tokens are deleted.
             - **Stripe charges not showing** — Verify visitors are identified via the Identify API with the same email used in Stripe. Charges from unidentified visitors sync but show as empty visitor_id.
             - **Stripe "Invalid API key" error** — Check that you pasted the full key including the `sk_live_` or `rk_live_` prefix. Test mode keys (`sk_test_`, `rk_test_`) only return test data.
+            - **Stripe "permission denied" errors** — The restricted key needs Read access to: Charges, Customers, Refunds, Subscriptions, Prices, and Products. Regenerate the key with all six permissions.
+            - **MRR page shows no data** — Subscription snapshots are taken during each sync. Click Sync Now on the Settings page, then check MRR & Subscriptions.
             - **Duplicate revenue from Stripe** — If you also send the same transactions via the Transaction API, revenue will be double-counted. Use one method per payment flow.
             """
           }
@@ -2729,18 +2739,33 @@ defmodule SpectabasWeb.DocsLive do
 
             ### How the Sync Works
 
-            - Spectabas fetches all **succeeded charges** from the Stripe API for the sync period
-            - For each charge, it looks up the customer's **email** and finds the matching identified visitor in your site's visitor database
-            - The charge is written to your ecommerce events with: charge ID as order ID, amount as revenue, charge currency, and the original charge timestamp
-            - **Deduplication:** Charge IDs are unique — re-syncing never creates duplicate records
-            - **Sync schedule:** Every 6 hours (today + yesterday), or manually via the Sync Now button
+            Each sync (every 6 hours, or manually via Sync Now) does three things:
+
+            **1. Charges** — Fetches all succeeded charges for the sync period. Each charge is matched to an identified visitor via email. Written to ecommerce events with charge ID as order ID. Deduplicates by charge_id.
+
+            **2. Refunds** — Fetches refunds and updates the `refund_amount` on the corresponding charge. Net revenue (revenue minus refunds) is used in LTV calculations and Revenue Attribution. Partial refunds are supported.
+
+            **3. Subscriptions** — Takes a daily snapshot of all active, past_due, trialing, and canceled subscriptions. Calculates MRR per subscription (yearly plans divided by 12). Powers the **MRR & Subscriptions** dashboard page.
+
+            **Sync schedule:** Every 6 hours (today + yesterday for charges/refunds, current state for subscriptions). Click Sync Now for immediate results.
+
+            ### What You Get
+
+            | Feature | Where | What It Shows |
+            |---------|-------|---------------|
+            | **Revenue Attribution** | Conversions > Revenue Attribution | Revenue from Stripe charges attributed to traffic sources |
+            | **Customer LTV** | Visitor Profile page | Lifetime value card with net revenue, order count, refund total |
+            | **MRR & Subscriptions** | Conversions > MRR & Subscriptions | Current MRR, active subs, plan breakdown, churn, MRR trend |
+            | **Refund Tracking** | LTV card + Revenue Attribution | Net revenue = gross revenue minus refunds |
+            | **Ecommerce** | Conversions > Ecommerce | Order counts, revenue totals, top products |
 
             ### Important Notes
 
             - **Double-counting:** If you already send the same transactions via the [Transaction API](/docs/api#ecommerce), Stripe import will create duplicate revenue. Use one method per payment flow — either Stripe import OR the Transaction API, not both.
-            - **Refunds:** Only successful charges are synced. Refunds, disputes, and partial refunds are not currently tracked. Refunded charges remain in your analytics.
+            - **Refunds:** Refunds update the original charge's `refund_amount`. Net revenue (gross - refunds) is used in LTV and attribution. Disputes are treated as refunds.
+            - **MRR calculation:** Monthly plans use their amount directly. Yearly plans are divided by 12 for the monthly equivalent. Only active, trialing, and past_due subscriptions count toward MRR.
             - **Multiple Stripe accounts:** Each site can connect one Stripe account. If you process payments through multiple Stripe accounts, connect the primary one.
-            - **Currency:** Charge amounts are converted from Stripe's cents format (e.g., 9999 → $99.99) and stored in the charge's currency.
+            - **Currency:** Charge amounts are converted from Stripe's cents format (e.g., 9999 → $99.99). Currency symbols are displayed automatically ($, €, £, etc.).
             """
           },
           %{

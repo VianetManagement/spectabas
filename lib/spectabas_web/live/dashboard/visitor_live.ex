@@ -87,15 +87,24 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
         end)
         |> Enum.sort_by(& &1.started, :desc)
 
-      # Load ecommerce orders for this visitor (if ecommerce enabled)
-      orders =
+      # Load ecommerce orders and LTV for this visitor
+      {orders, ltv} =
         if site.ecommerce_enabled do
-          case Analytics.visitor_orders(site, visitor_id) do
-            {:ok, rows} -> rows
-            _ -> []
-          end
+          ord =
+            case Analytics.visitor_orders(site, visitor_id) do
+              {:ok, rows} -> rows
+              _ -> []
+            end
+
+          l =
+            case Analytics.visitor_ltv(site, visitor_id) do
+              {:ok, [row | _]} -> row
+              _ -> nil
+            end
+
+          {ord, l}
         else
-          []
+          {[], nil}
         end
 
       {:ok,
@@ -112,6 +121,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
        |> assign(:fp_visitors, fp_visitors)
        |> assign(:show_ip_panel, false)
        |> assign(:orders, orders)
+       |> assign(:ltv, ltv)
        |> assign(:visitor_ips, load_visitor_ips(site, visitor_id))}
     end
   end
@@ -137,7 +147,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
         </div>
 
         <%!-- Top stats row --%>
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        <div class={"grid grid-cols-2 gap-4 mb-6 " <> if(@ltv, do: "md:grid-cols-6", else: "md:grid-cols-5")}>
           <div class="bg-white rounded-lg shadow p-4">
             <dt class="text-xs font-medium text-gray-500">Pageviews</dt>
             <dd class="mt-1 text-2xl font-bold text-gray-900">{@profile["total_pageviews"] || 0}</dd>
@@ -160,6 +170,20 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
               {format_duration(to_num(@profile["total_duration"]))}
             </dd>
           </div>
+          <%= if @ltv do %>
+            <div class="bg-white rounded-lg shadow p-4 border-l-4 border-green-400">
+              <dt class="text-xs font-medium text-gray-500">Lifetime Value</dt>
+              <dd class="mt-1 text-2xl font-bold text-green-700">
+                {Spectabas.Currency.format(to_float(@ltv["net_revenue"]), @site.currency)}
+              </dd>
+              <dd class="text-xs text-gray-500 mt-0.5">
+                {to_num(@ltv["total_orders"])} orders
+                <%= if to_float(@ltv["total_refunds"]) > 0 do %>
+                  &middot; {Spectabas.Currency.format(to_float(@ltv["total_refunds"]), @site.currency)} refunded
+                <% end %>
+              </dd>
+            </div>
+          <% end %>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">

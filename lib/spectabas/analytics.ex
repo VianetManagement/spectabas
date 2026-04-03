@@ -2626,6 +2626,25 @@ defmodule Spectabas.Analytics do
     ClickHouse.query(sql)
   end
 
+  @doc "Calculate lifetime value for a visitor from ecommerce events."
+  def visitor_ltv(%Site{} = site, visitor_id) do
+    sql = """
+    SELECT
+      sum(revenue) - sum(refund_amount) AS net_revenue,
+      sum(revenue) AS gross_revenue,
+      sum(refund_amount) AS total_refunds,
+      countDistinct(order_id) AS total_orders,
+      min(timestamp) AS first_purchase,
+      max(timestamp) AS last_purchase
+    FROM ecommerce_events
+    WHERE site_id = #{ClickHouse.param(site.id)}
+      AND visitor_id = #{ClickHouse.param(visitor_id)}
+      AND visitor_id != ''
+    """
+
+    ClickHouse.query(sql)
+  end
+
   @doc """
   All events for a specific visitor_id, ordered by timestamp.
   """

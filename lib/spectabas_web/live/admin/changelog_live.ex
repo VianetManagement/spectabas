@@ -45,6 +45,36 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.3.0 — 2026-04-03 UTC",
+       [
+         %{
+           title: "Feature: MRR & Subscription tracking from Stripe",
+           description:
+             "New dashboard page under Conversions showing current MRR, active subscriptions, " <>
+               "plan breakdown, average MRR per subscriber, past due count, recent cancellations (30d), " <>
+               "and MRR trend chart (30d). Powered by daily Stripe subscription snapshots."
+         },
+         %{
+           title: "Feature: Customer LTV on visitor profiles",
+           description:
+             "Visitor profile pages now show a Lifetime Value card with net revenue (gross minus refunds), " <>
+               "total order count, refund total, and first/last purchase dates. " <>
+               "Appears automatically for visitors with ecommerce events."
+         },
+         %{
+           title: "Feature: Stripe refund tracking",
+           description:
+             "Stripe sync now fetches refunds and updates the refund_amount on the matching charge. " <>
+               "Net revenue (gross - refunds) used in LTV calculations and Revenue Attribution. " <>
+               "Partial refunds supported."
+         },
+         %{
+           title: "UX: Currency symbols on all revenue values",
+           description:
+             "Revenue displays now use proper currency symbols ($, \u20AC, \u00A3, etc.) instead of " <>
+               "currency codes. Format: $100.00 instead of 100.00 USD."
+         }
+       ]},
       {"v5.2.0 — 2026-04-03 UTC",
        [
          %{

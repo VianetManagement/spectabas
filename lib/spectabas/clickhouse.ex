@@ -119,12 +119,35 @@ defmodule Spectabas.ClickHouse do
         tax Decimal(12, 2) DEFAULT 0,
         shipping Decimal(12, 2) DEFAULT 0,
         discount Decimal(12, 2) DEFAULT 0,
+        refund_amount Decimal(12, 2) DEFAULT 0,
         currency LowCardinality(String) DEFAULT 'USD',
         items String DEFAULT '[]',
         timestamp DateTime DEFAULT now()
       ) ENGINE = MergeTree()
       PARTITION BY toYYYYMM(timestamp)
       ORDER BY (site_id, timestamp, order_id)
+      SETTINGS index_granularity = 8192
+      """,
+      """
+      CREATE TABLE IF NOT EXISTS #{db}.subscription_events (
+        site_id UInt64,
+        subscription_id String,
+        customer_email String,
+        visitor_id String DEFAULT '',
+        plan_name String DEFAULT '',
+        plan_interval LowCardinality(String) DEFAULT 'month',
+        mrr_amount Decimal(12, 2) DEFAULT 0,
+        currency LowCardinality(String) DEFAULT 'USD',
+        status LowCardinality(String) DEFAULT 'active',
+        event_type LowCardinality(String) DEFAULT 'snapshot',
+        started_at DateTime DEFAULT now(),
+        canceled_at DateTime DEFAULT toDateTime(0),
+        current_period_end DateTime DEFAULT now(),
+        snapshot_date Date DEFAULT today(),
+        timestamp DateTime DEFAULT now()
+      ) ENGINE = ReplacingMergeTree(timestamp)
+      PARTITION BY toYYYYMM(snapshot_date)
+      ORDER BY (site_id, snapshot_date, subscription_id)
       SETTINGS index_granularity = 8192
       """,
       """
@@ -465,7 +488,7 @@ defmodule Spectabas.ClickHouse do
     "'#{e}'"
   end
 
-  @allowed_tables ~w(events daily_stats source_stats country_stats device_stats network_stats ecommerce_events imported_daily_stats imported_pages imported_sources imported_countries imported_devices ad_spend)
+  @allowed_tables ~w(events daily_stats source_stats country_stats device_stats network_stats ecommerce_events subscription_events imported_daily_stats imported_pages imported_sources imported_countries imported_devices ad_spend)
   defp sanitize_table(t) when t in @allowed_tables, do: t
   defp sanitize_table(t), do: raise(ArgumentError, "Unknown ClickHouse table: #{t}")
 

@@ -251,6 +251,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
               active={@active == "ecommerce"}
             />
             <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/mrr"}
+              label="MRR & Subscriptions"
+              active={@active == "mrr"}
+            />
+            <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/revenue-attribution"}
               label="Revenue Attribution"
               active={@active == "revenue-attribution"}
@@ -484,6 +489,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
       {~p"/dashboard/sites/#{site_id}/goals", "Goals"},
       {~p"/dashboard/sites/#{site_id}/funnels", "Funnels"},
       {~p"/dashboard/sites/#{site_id}/ecommerce", "Ecommerce"},
+      {~p"/dashboard/sites/#{site_id}/mrr", "MRR & Subscriptions"},
       {~p"/dashboard/sites/#{site_id}/revenue-attribution", "Revenue Attribution"},
       {~p"/dashboard/sites/#{site_id}/revenue-cohorts", "Revenue Cohorts"},
       {~p"/dashboard/sites/#{site_id}/buyer-patterns", "Buyer Patterns"},
@@ -550,6 +556,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
     "goals" => "Conversions",
     "funnels" => "Conversions",
     "ecommerce" => "Conversions",
+    "mrr" => "Conversions",
     "revenue-attribution" => "Conversions",
     "revenue-cohorts" => "Conversions",
     "buyer-patterns" => "Conversions",

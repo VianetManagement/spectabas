@@ -134,6 +134,7 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
                 "tax" => 0,
                 "shipping" => 0,
                 "discount" => 0,
+                "refund_amount" => 0,
                 "currency" => charge.currency,
                 "items" => "[]",
                 "timestamp" => Calendar.strftime(charge.created_at, "%Y-%m-%d %H:%M:%S")
@@ -147,6 +148,10 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
               )
 
               AdIntegrations.mark_synced(integration)
+
+              # Also sync refunds for this date
+              sync_refunds(site, integration, date)
+
               :ok
 
             {:error, reason} ->
@@ -162,6 +167,279 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
       {:error, reason} ->
         Logger.warning("[StripSync] Fetch failed: #{inspect(reason) |> String.slice(0, 200)}")
         AdIntegrations.mark_error(integration, reason)
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Fetch refunds from Stripe for a given date.
+  Returns {:ok, [refund_map]} or {:error, reason}.
+  """
+  def fetch_refunds(integration, date) do
+    api_key = AdIntegrations.decrypt_access_token(integration)
+
+    day_start = DateTime.new!(date, ~T[00:00:00], "Etc/UTC")
+    day_end = DateTime.new!(Date.add(date, 1), ~T[00:00:00], "Etc/UTC")
+
+    fetch_refunds_page(api_key, day_start, day_end, nil, [])
+  end
+
+  defp fetch_refunds_page(api_key, day_start, day_end, starting_after, acc) do
+    params = %{
+      "created[gte]" => DateTime.to_unix(day_start),
+      "created[lt]" => DateTime.to_unix(day_end),
+      "limit" => "100",
+      "expand[]" => "data.charge"
+    }
+
+    params =
+      if starting_after,
+        do: Map.put(params, "starting_after", starting_after),
+        else: params
+
+    qs = URI.encode_query(params)
+
+    case Req.get("#{@stripe_api}/refunds?#{qs}",
+           headers: [
+             {"authorization", "Bearer #{api_key}"},
+             {"stripe-version", "2024-12-18.acacia"}
+           ]
+         ) do
+      {:ok, %{status: 200, body: %{"data" => refunds, "has_more" => has_more}}} ->
+        parsed =
+          Enum.map(refunds, fn refund ->
+            charge_id =
+              case refund["charge"] do
+                %{"id" => id} -> id
+                id when is_binary(id) -> id
+                _ -> ""
+              end
+
+            %{
+              refund_id: refund["id"],
+              charge_id: charge_id,
+              amount: (refund["amount"] || 0) / 100.0,
+              currency: String.upcase(refund["currency"] || "usd"),
+              created_at: DateTime.from_unix!(refund["created"])
+            }
+          end)
+
+        new_acc = acc ++ parsed
+
+        if has_more and length(refunds) > 0 do
+          last_id = List.last(refunds)["id"]
+          fetch_refunds_page(api_key, day_start, day_end, last_id, new_acc)
+        else
+          {:ok, new_acc}
+        end
+
+      {:ok, %{status: 401}} ->
+        {:error, "Invalid Stripe API key"}
+
+      {:ok, %{status: status, body: body}} ->
+        msg =
+          if is_map(body),
+            do: get_in(body, ["error", "message"]) || "HTTP #{status}",
+            else: "HTTP #{status}"
+
+        {:error, msg}
+
+      {:error, reason} ->
+        {:error, "Stripe API error: #{inspect(reason)}"}
+    end
+  end
+
+  @doc """
+  Sync Stripe refunds for a date by updating refund_amount on matching ecommerce_events.
+  """
+  def sync_refunds(site, integration, date) do
+    case fetch_refunds(integration, date) do
+      {:ok, []} ->
+        Logger.info("[StripSync] No refunds for #{date}")
+        :ok
+
+      {:ok, refunds} ->
+        Enum.each(refunds, fn refund ->
+          sql = """
+          ALTER TABLE ecommerce_events UPDATE refund_amount = #{ClickHouse.param(refund.amount)}
+          WHERE site_id = #{ClickHouse.param(site.id)} AND order_id = #{ClickHouse.param(refund.charge_id)}
+          """
+
+          case ClickHouse.execute(sql) do
+            :ok ->
+              :ok
+
+            {:error, reason} ->
+              Logger.warning(
+                "[StripSync] Refund update failed for #{refund.refund_id}: #{inspect(reason) |> String.slice(0, 200)}"
+              )
+          end
+        end)
+
+        Logger.info("[StripSync] Processed #{length(refunds)} refunds for #{date}")
+        :ok
+
+      {:error, reason} ->
+        Logger.warning(
+          "[StripSync] Refund fetch failed: #{inspect(reason) |> String.slice(0, 200)}"
+        )
+
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Fetch all subscriptions from Stripe (active, past_due, canceled).
+  Returns {:ok, [subscription_map]} or {:error, reason}.
+  """
+  def fetch_subscriptions(integration) do
+    api_key = AdIntegrations.decrypt_access_token(integration)
+    fetch_subscriptions_page(api_key, nil, [])
+  end
+
+  defp fetch_subscriptions_page(api_key, starting_after, acc) do
+    params = %{
+      "status" => "all",
+      "limit" => "100",
+      "expand[]" => "data.customer"
+    }
+
+    params =
+      if starting_after,
+        do: Map.put(params, "starting_after", starting_after),
+        else: params
+
+    qs = URI.encode_query(params)
+
+    case Req.get("#{@stripe_api}/subscriptions?#{qs}",
+           headers: [
+             {"authorization", "Bearer #{api_key}"},
+             {"stripe-version", "2024-12-18.acacia"}
+           ]
+         ) do
+      {:ok, %{status: 200, body: %{"data" => subs, "has_more" => has_more}}} ->
+        parsed =
+          Enum.map(subs, fn sub ->
+            customer_email =
+              case sub["customer"] do
+                %{"email" => email} when is_binary(email) -> email
+                _ -> ""
+              end
+
+            item = get_in(sub, ["items", "data", Access.at(0)]) || %{}
+            price = item["price"] || %{}
+
+            plan_name = price["nickname"] || price["product"] || ""
+            interval = get_in(price, ["recurring", "interval"]) || "month"
+            unit_amount = (price["unit_amount"] || 0) / 100.0
+            currency = String.upcase(price["currency"] || "usd")
+
+            mrr =
+              case interval do
+                "year" -> Float.round(unit_amount / 12.0, 2)
+                _ -> unit_amount
+              end
+
+            canceled_at_dt =
+              if sub["canceled_at"],
+                do: DateTime.from_unix!(sub["canceled_at"]),
+                else: DateTime.from_unix!(0)
+
+            %{
+              id: sub["id"],
+              customer_email: customer_email,
+              plan_name: plan_name,
+              plan_interval: interval,
+              amount: unit_amount,
+              mrr: mrr,
+              currency: currency,
+              status: sub["status"] || "unknown",
+              current_period_end: DateTime.from_unix!(sub["current_period_end"] || 0),
+              created: DateTime.from_unix!(sub["created"] || 0),
+              canceled_at: canceled_at_dt
+            }
+          end)
+
+        new_acc = acc ++ parsed
+
+        if has_more and length(subs) > 0 do
+          last_id = List.last(subs)["id"]
+          fetch_subscriptions_page(api_key, last_id, new_acc)
+        else
+          {:ok, new_acc}
+        end
+
+      {:ok, %{status: 401}} ->
+        {:error, "Invalid Stripe API key"}
+
+      {:ok, %{status: status, body: body}} ->
+        msg =
+          if is_map(body),
+            do: get_in(body, ["error", "message"]) || "HTTP #{status}",
+            else: "HTTP #{status}"
+
+        {:error, msg}
+
+      {:error, reason} ->
+        {:error, "Stripe API error: #{inspect(reason)}"}
+    end
+  end
+
+  @doc """
+  Sync subscription snapshots to ClickHouse subscription_events table.
+  """
+  def sync_subscriptions(site, integration) do
+    case fetch_subscriptions(integration) do
+      {:ok, []} ->
+        Logger.info("[StripSync] No subscriptions found")
+        :ok
+
+      {:ok, subscriptions} ->
+        now = DateTime.utc_now()
+        today = Date.utc_today()
+
+        rows =
+          Enum.map(subscriptions, fn sub ->
+            visitor_id = resolve_visitor(site.id, sub.customer_email)
+
+            %{
+              "site_id" => site.id,
+              "subscription_id" => sub.id,
+              "customer_email" => sub.customer_email,
+              "visitor_id" => visitor_id,
+              "plan_name" => sub.plan_name,
+              "plan_interval" => sub.plan_interval,
+              "mrr_amount" => sub.mrr,
+              "currency" => sub.currency,
+              "status" => sub.status,
+              "event_type" => "snapshot",
+              "started_at" => Calendar.strftime(sub.created, "%Y-%m-%d %H:%M:%S"),
+              "canceled_at" => Calendar.strftime(sub.canceled_at, "%Y-%m-%d %H:%M:%S"),
+              "current_period_end" =>
+                Calendar.strftime(sub.current_period_end, "%Y-%m-%d %H:%M:%S"),
+              "snapshot_date" => Date.to_string(today),
+              "timestamp" => Calendar.strftime(now, "%Y-%m-%d %H:%M:%S")
+            }
+          end)
+
+        case ClickHouse.insert("subscription_events", rows) do
+          :ok ->
+            Logger.info("[StripSync] Synced #{length(rows)} subscription snapshots")
+            :ok
+
+          {:error, reason} ->
+            Logger.error(
+              "[StripSync] Subscription insert failed: #{inspect(reason) |> String.slice(0, 200)}"
+            )
+
+            {:error, reason}
+        end
+
+      {:error, reason} ->
+        Logger.warning(
+          "[StripSync] Subscription fetch failed: #{inspect(reason) |> String.slice(0, 200)}"
+        )
+
         {:error, reason}
     end
   end

@@ -24,6 +24,7 @@ defmodule Spectabas.Workers.StripeSync do
     Enum.each(integrations, fn integration ->
       StripePlatform.sync_charges(integration.site, integration, today)
       StripePlatform.sync_charges(integration.site, integration, yesterday)
+      StripePlatform.sync_subscriptions(integration.site, integration)
     end)
 
     :ok
@@ -37,5 +38,6 @@ defmodule Spectabas.Workers.StripeSync do
 
     StripePlatform.sync_charges(integration.site, integration, yesterday)
     StripePlatform.sync_charges(integration.site, integration, today)
+    StripePlatform.sync_subscriptions(integration.site, integration)
   end
 end
