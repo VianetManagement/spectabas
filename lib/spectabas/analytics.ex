@@ -570,13 +570,15 @@ defmodule Spectabas.Analytics do
       channel_sql = channel_case_expression()
 
       # Session-level subquery for accurate bounce rate and duration
+      # Channel is computed per-event first (argMin picks channel from earliest pageview),
+      # then aggregated at session level
       sql = """
       SELECT
         channel,
         sum(pv) AS pageviews,
         uniq(visitor_id) AS visitors,
         count() AS sessions,
-        uniq(referrer_domain) AS sources,
+        uniq(ref_domain) AS sources,
         round(countIf(pv = 1) / greatest(count(), 1) * 100, 1) AS bounce_rate,
         round(avg(coalesce(dur, 0)), 0) AS avg_duration,
         round(sum(pv) / greatest(count(), 1), 1) AS pages_per_session
@@ -584,8 +586,8 @@ defmodule Spectabas.Analytics do
         SELECT
           session_id,
           any(visitor_id) AS visitor_id,
-          any(referrer_domain) AS referrer_domain,
-          (#{channel_sql}) AS channel,
+          any(referrer_domain) AS ref_domain,
+          argMin(#{channel_sql}, timestamp) AS channel,
           countIf(event_type = 'pageview') AS pv,
           maxIf(duration_s, event_type = 'duration' AND duration_s > 0) AS dur
         FROM events
