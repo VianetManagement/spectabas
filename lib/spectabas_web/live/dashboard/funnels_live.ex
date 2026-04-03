@@ -272,7 +272,7 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
                       class="text-xs font-medium text-green-600"
                       title="Revenue from visitors who reached this step"
                     >
-                      {@site.currency} {step["revenue"]}
+                      {Spectabas.Currency.format(step["revenue"], @site.currency)}
                     </span>
                     <span class="text-sm font-medium text-gray-900">
                       {format_number(to_num(Map.get(step, "visitors", 0)))}

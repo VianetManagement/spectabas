@@ -670,7 +670,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           <div :if={@ecommerce} class="bg-white rounded-lg shadow p-3 sm:p-4">
             <dt class="text-xs sm:text-sm font-medium text-gray-500 truncate">Revenue</dt>
             <dd class="mt-1 text-xl sm:text-2xl font-bold text-green-600">
-              {@site.currency} {format_money(@ecommerce["total_revenue"])}
+              {Spectabas.Currency.format(@ecommerce["total_revenue"], @site.currency)}
             </dd>
           </div>
           <div :if={@ecommerce} class="bg-white rounded-lg shadow p-3 sm:p-4">
@@ -682,7 +682,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           <div :if={@ecommerce} class="bg-white rounded-lg shadow p-3 sm:p-4">
             <dt class="text-xs sm:text-sm font-medium text-gray-500 truncate">Avg Order</dt>
             <dd class="mt-1 text-xl sm:text-2xl font-bold text-gray-900">
-              {@site.currency} {format_money(@ecommerce["avg_order_value"])}
+              {Spectabas.Currency.format(@ecommerce["avg_order_value"], @site.currency)}
             </dd>
             <dd class="mt-1">
               <.link
@@ -1023,17 +1023,6 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     country = loc["ip_country"] || ""
     [city, region, country] |> Enum.reject(&(&1 == "")) |> Enum.join(", ")
   end
-
-  defp format_money(n) when is_number(n), do: :erlang.float_to_binary(n / 1, decimals: 2)
-
-  defp format_money(n) when is_binary(n) do
-    case Float.parse(n) do
-      {f, _} -> :erlang.float_to_binary(f, decimals: 2)
-      :error -> "0.00"
-    end
-  end
-
-  defp format_money(_), do: "0.00"
 
   defp region_display(row) do
     region = row["ip_region_name"] || ""

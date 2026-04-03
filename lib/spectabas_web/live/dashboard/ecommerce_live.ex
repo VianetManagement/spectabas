@@ -152,7 +152,7 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
           <div class="bg-white rounded-lg shadow p-6">
             <dt class="text-sm font-medium text-gray-500">Total Revenue</dt>
             <dd class="mt-1 text-3xl font-bold text-gray-900">
-              {@site.currency} {format_money(@ecommerce["total_revenue"])}
+              {Spectabas.Currency.format(@ecommerce["total_revenue"], @site.currency)}
             </dd>
           </div>
           <div class="bg-white rounded-lg shadow p-6">
@@ -164,7 +164,7 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
           <div class="bg-white rounded-lg shadow p-6">
             <dt class="text-sm font-medium text-gray-500">Avg Order Value</dt>
             <dd class="mt-1 text-3xl font-bold text-gray-900">
-              {@site.currency} {format_money(@ecommerce["avg_order_value"])}
+              {Spectabas.Currency.format(@ecommerce["avg_order_value"], @site.currency)}
             </dd>
           </div>
         </div>
@@ -217,7 +217,7 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
                   {format_number(to_num(product["quantity"]))}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {@site.currency} {format_money(product["revenue"])}
+                  {Spectabas.Currency.format(product["revenue"], @site.currency)}
                 </td>
               </tr>
             </tbody>
@@ -278,7 +278,7 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
                   </.link>
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums font-medium">
-                  {@site.currency} {format_money(order["revenue"])}
+                  {Spectabas.Currency.format(order["revenue"], @site.currency)}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-500 text-right tabular-nums">
                   {format_money(order["tax"])}

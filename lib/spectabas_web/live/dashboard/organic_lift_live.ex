@@ -150,7 +150,7 @@ defmodule SpectabasWeb.Dashboard.OrganicLiftLive do
                 <div class="flex justify-between">
                   <span class="text-gray-500">Avg Daily Spend</span>
                   <span class="font-bold text-gray-900">
-                    {@site.currency} {format_money(@high_spend["avg_daily_spend"])}
+                    {Spectabas.Currency.format(@high_spend["avg_daily_spend"], @site.currency)}
                   </span>
                 </div>
                 <div class="flex justify-between">
@@ -177,7 +177,7 @@ defmodule SpectabasWeb.Dashboard.OrganicLiftLive do
                 <div class="flex justify-between">
                   <span class="text-gray-500">Avg Daily Spend</span>
                   <span class="font-bold text-gray-900">
-                    {@site.currency} {format_money(@low_spend["avg_daily_spend"])}
+                    {Spectabas.Currency.format(@low_spend["avg_daily_spend"], @site.currency)}
                   </span>
                 </div>
                 <div class="flex justify-between">
@@ -226,7 +226,7 @@ defmodule SpectabasWeb.Dashboard.OrganicLiftLive do
                   <td class="px-4 py-2 text-sm text-gray-500">{d["day"]}</td>
                   <td class="px-4 py-2 text-sm text-gray-900 text-right tabular-nums">
                     {if parse_float(d["ad_spend"]) > 0,
-                      do: "#{@site.currency} #{format_money(d["ad_spend"])}",
+                      do: Spectabas.Currency.format(d["ad_spend"], @site.currency),
                       else: "--"}
                   </td>
                   <td class="px-4 py-2 text-sm text-green-600 text-right tabular-nums font-medium">
@@ -272,14 +272,4 @@ defmodule SpectabasWeb.Dashboard.OrganicLiftLive do
 
   defp parse_float(n) when is_number(n), do: n / 1
   defp parse_float(_), do: 0.0
-
-  defp format_money(n) when is_binary(n) do
-    case Float.parse(n) do
-      {f, _} -> :erlang.float_to_binary(f, decimals: 2)
-      :error -> "0.00"
-    end
-  end
-
-  defp format_money(n) when is_number(n), do: :erlang.float_to_binary(n / 1, decimals: 2)
-  defp format_money(_), do: "0.00"
 end

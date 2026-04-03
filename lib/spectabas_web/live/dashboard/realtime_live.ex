@@ -229,7 +229,7 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
                   <span
                     :if={v["ecom_orders"] && v["ecom_orders"] > 0}
                     class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700"
-                    title={"#{v["ecom_orders"]} order(s) — #{@site.currency} #{format_revenue(v["ecom_revenue"])}"}
+                    title={"#{v["ecom_orders"]} order(s) — #{Spectabas.Currency.format(v["ecom_revenue"], @site.currency)}"}
                   >
                     Customer
                   </span>
@@ -353,16 +353,6 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
   defp event_type_class("custom"), do: "bg-purple-100 text-purple-800"
   defp event_type_class("duration"), do: "bg-gray-100 text-gray-600"
   defp event_type_class(_), do: "bg-gray-100 text-gray-800"
-
-  defp format_revenue(n) when is_binary(n) do
-    case Float.parse(n) do
-      {f, _} -> :erlang.float_to_binary(f, decimals: 2)
-      :error -> "0.00"
-    end
-  end
-
-  defp format_revenue(n) when is_number(n), do: :erlang.float_to_binary(n / 1, decimals: 2)
-  defp format_revenue(_), do: "0.00"
 
   defp ad_pill("google_ads"), do: "bg-blue-100 text-blue-700"
   defp ad_pill("bing_ads"), do: "bg-amber-100 text-amber-700"

@@ -41,16 +41,40 @@ defmodule Spectabas.Currency do
     Map.get(@symbols, String.upcase(currency || "USD"), String.upcase(currency || "USD"))
   end
 
-  defp format_number(n) when is_float(n), do: :erlang.float_to_binary(n, decimals: 2)
-  defp format_number(n) when is_integer(n), do: :erlang.float_to_binary(n / 1, decimals: 2)
+  defp format_number(n) when is_float(n), do: add_commas(:erlang.float_to_binary(n, decimals: 2))
+
+  defp format_number(n) when is_integer(n),
+    do: add_commas(:erlang.float_to_binary(n / 1, decimals: 2))
 
   defp format_number(n) when is_binary(n) do
     case Float.parse(n) do
-      {f, _} -> :erlang.float_to_binary(f, decimals: 2)
+      {f, _} -> add_commas(:erlang.float_to_binary(f, decimals: 2))
       :error -> n
     end
   end
 
-  defp format_number(%Decimal{} = d), do: Decimal.to_string(d, :normal)
+  defp format_number(%Decimal{} = d), do: add_commas(Decimal.to_string(d, :normal))
   defp format_number(n), do: to_string(n)
+
+  # Add thousand separators: "1234567.89" → "1,234,567.89"
+  defp add_commas(s) when is_binary(s) do
+    case String.split(s, ".") do
+      [int_part, dec_part] ->
+        comma_int(int_part) <> "." <> dec_part
+
+      [int_part] ->
+        comma_int(int_part)
+    end
+  end
+
+  defp comma_int("-" <> rest), do: "-" <> comma_int(rest)
+
+  defp comma_int(s) do
+    s
+    |> String.graphemes()
+    |> Enum.reverse()
+    |> Enum.chunk_every(3)
+    |> Enum.join(",")
+    |> String.reverse()
+  end
 end

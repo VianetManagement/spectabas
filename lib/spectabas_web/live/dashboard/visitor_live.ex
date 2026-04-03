@@ -537,7 +537,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
               <tr :for={order <- @orders} class="hover:bg-gray-50">
                 <td class="px-4 py-2 font-mono text-xs text-gray-900">{order["order_id"]}</td>
                 <td class="px-4 py-2 text-right tabular-nums font-medium text-green-600">
-                  {@site.currency} {format_order_amount(order["revenue"])}
+                  {Spectabas.Currency.format(format_order_amount(order["revenue"]), @site.currency)}
                 </td>
                 <td class="px-4 py-2 text-right tabular-nums text-gray-500">
                   {format_order_amount(order["tax"])}

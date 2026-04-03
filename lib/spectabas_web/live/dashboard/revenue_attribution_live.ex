@@ -301,14 +301,14 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
             <div>
               <dt class="text-xs text-gray-500">Total Spend</dt>
               <dd class="text-lg font-bold text-gray-900">
-                {@site.currency} {format_money(@total_spend)}
+                {Spectabas.Currency.format(@total_spend, @site.currency)}
               </dd>
               <dd class="text-[10px] text-gray-400">from connected platforms</dd>
             </div>
             <div>
               <dt class="text-xs text-gray-500">Ad Revenue</dt>
               <dd class="text-lg font-bold text-green-600">
-                {@site.currency} {format_money(@total_ad_revenue)}
+                {Spectabas.Currency.format(@total_ad_revenue, @site.currency)}
               </dd>
               <%= if @total_ad_revenue == 0 do %>
                 <dd class="text-[10px] text-amber-500">
@@ -368,7 +368,7 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
                   {platform_label(p["platform"])}
                 </span>
                 <span class="text-gray-500">
-                  {@site.currency} {format_money(p["total_spend"])} spend
+                  {Spectabas.Currency.format(p["total_spend"], @site.currency)} spend
                 </span>
                 <span class="text-gray-400">{format_number(to_num(p["total_clicks"]))} clicks</span>
               </div>
@@ -383,7 +383,7 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
               {ch["channel"]}
             </dt>
             <dd class="mt-0.5 text-lg font-bold text-gray-900">
-              {@site.currency} {format_money(ch["total_revenue"])}
+              {Spectabas.Currency.format(ch["total_revenue"], @site.currency)}
             </dd>
             <dd class="text-xs text-gray-500">
               {to_num(ch["orders"])} orders &middot; {ch["conversion_rate"]}%
@@ -393,7 +393,7 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
 
         <div :if={@total_revenue > 0} class="bg-indigo-50 rounded-lg p-3 mb-6 flex gap-6 text-sm">
           <span class="font-medium text-indigo-900">
-            Total: {@site.currency} {format_money(@total_revenue)}
+            Total: {Spectabas.Currency.format(@total_revenue, @site.currency)}
           </span>
           <span class="text-indigo-700">{format_number(@total_orders)} orders</span>
           <span class="text-indigo-700">{format_number(@total_visitors)} visitors</span>
@@ -484,10 +484,10 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
                   {format_number(to_num(row["orders"]))}
                 </td>
                 <td class="px-6 py-4 text-sm font-medium text-green-600 text-right tabular-nums">
-                  {@site.currency} {format_money(row["total_revenue"])}
+                  {Spectabas.Currency.format(row["total_revenue"], @site.currency)}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
-                  {@site.currency} {format_money(row["avg_order_value"])}
+                  {Spectabas.Currency.format(row["avg_order_value"], @site.currency)}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
                   {row["conversion_rate"]}%
@@ -495,7 +495,7 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
                 <%= if @group_by == "campaign" and @has_ad_data do %>
                   <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
                     <%= if row["ad_spend"] && row["ad_spend"] > 0 do %>
-                      {@site.currency} {format_money(row["ad_spend"])}
+                      {Spectabas.Currency.format(row["ad_spend"], @site.currency)}
                     <% else %>
                       <span class="text-gray-300">--</span>
                     <% end %>
@@ -509,7 +509,7 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
                   </td>
                   <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
                     <%= if row["cpc"] do %>
-                      {@site.currency} {format_money(row["cpc"])}
+                      {Spectabas.Currency.format(row["cpc"], @site.currency)}
                     <% else %>
                       <span class="text-gray-300">--</span>
                     <% end %>
@@ -582,7 +582,7 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
                     </span>
                   </td>
                   <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                    {@site.currency} {format_money(c["total_spend"])}
+                    {Spectabas.Currency.format(c["total_spend"], @site.currency)}
                   </td>
                   <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
                     {format_number(to_num(c["total_clicks"]))}
@@ -594,7 +594,7 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
                     <% clicks = to_num(c["total_clicks"]) %>
                     <% spend = parse_float(c["total_spend"]) %>
                     {if clicks > 0,
-                      do: "#{@site.currency} #{format_money(spend / clicks)}",
+                      do: Spectabas.Currency.format(spend / clicks, @site.currency),
                       else: "--"}
                   </td>
                   <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
@@ -619,16 +619,6 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
     </.dashboard_layout>
     """
   end
-
-  defp format_money(n) when is_binary(n) do
-    case Float.parse(n) do
-      {f, _} -> :erlang.float_to_binary(f, decimals: 2)
-      :error -> "0.00"
-    end
-  end
-
-  defp format_money(n) when is_number(n), do: :erlang.float_to_binary(n / 1, decimals: 2)
-  defp format_money(_), do: "0.00"
 
   defp parse_float(n) when is_binary(n) do
     case Float.parse(n) do

@@ -135,7 +135,7 @@ defmodule SpectabasWeb.Dashboard.RevenueCohortLive do
                   {cohort.cohort_week}
                 </td>
                 <td class="px-4 py-3 text-sm font-medium text-green-600 text-right tabular-nums">
-                  {@site.currency} {cohort.total_revenue}
+                  {Spectabas.Currency.format(cohort.total_revenue, @site.currency)}
                 </td>
                 <td :for={w <- 0..@max_week} class="px-3 py-3 text-center text-xs tabular-nums">
                   <% week_data = Enum.find(cohort.weeks, &(&1.week == w)) %>
