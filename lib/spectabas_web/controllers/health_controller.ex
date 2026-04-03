@@ -575,22 +575,31 @@ defmodule SpectabasWeb.HealthController do
     end
   end
 
-  @import_token "sab_import_test_92f7a3b1"
+  defp valid_token?(token), do: token != "" and token == System.get_env("UTILITY_TOKEN", "")
 
-  def import_matomo_test(conn, %{"token" => token, "action" => "status"})
-      when token == @import_token do
+  def import_matomo_test(conn, %{"token" => token} = params) do
+    if valid_token?(token) do
+      do_import_matomo_test(conn, params)
+    else
+      conn |> put_status(403) |> json(%{error: "forbidden"})
+    end
+  end
+
+  def import_matomo_test(conn, _params) do
+    conn |> put_status(403) |> json(%{error: "forbidden"})
+  end
+
+  defp do_import_matomo_test(conn, %{"action" => "status"}) do
     count = Spectabas.Imports.Matomo.imported_day_count(4)
     json(conn, %{imported_days: count})
   end
 
-  def import_matomo_test(conn, %{"token" => token, "action" => "rollback"})
-      when token == @import_token do
+  defp do_import_matomo_test(conn, %{"action" => "rollback"}) do
     result = Spectabas.Imports.Matomo.rollback(4)
     json(conn, %{result: inspect(result)})
   end
 
-  def import_matomo_test(conn, %{"token" => token, "action" => "set_dates"})
-      when token == @import_token do
+  defp do_import_matomo_test(conn, %{"action" => "set_dates"}) do
     site = Spectabas.Sites.get_site!(4)
 
     {:ok, _} =
@@ -604,8 +613,7 @@ defmodule SpectabasWeb.HealthController do
     json(conn, %{ok: true, native_start_date: "2026-03-30", import_end_date: "2026-03-29"})
   end
 
-  def import_matomo_test(conn, %{"token" => token, "action" => "import"})
-      when token == @import_token do
+  defp do_import_matomo_test(conn, %{"action" => "import"}) do
     Task.start(fn ->
       Spectabas.Imports.Matomo.import_range(
         4,
@@ -623,18 +631,17 @@ defmodule SpectabasWeb.HealthController do
     })
   end
 
-  def import_matomo_test(conn, %{"token" => token}) when token == @import_token do
+  defp do_import_matomo_test(conn, _params) do
     json(conn, %{
-      actions: ["import", "status", "rollback"],
+      actions: ["import", "status", "rollback", "set_dates"],
       usage: "?token=...&action=import|status|rollback"
     })
   end
 
-  def import_matomo_test(conn, _params) do
-    conn |> put_status(403) |> json(%{error: "forbidden"})
-  end
-
-  def click_id_diag(conn, %{"token" => token}) when token == @import_token do
+  def click_id_diag(conn, %{"token" => token}) do
+    unless valid_token?(token) do
+      conn |> put_status(403) |> json(%{error: "forbidden"})
+    else
     q1 =
       case Spectabas.ClickHouse.query(
              "SELECT click_id_type, count() AS c, uniq(visitor_id) AS v FROM events WHERE click_id != '' AND site_id = 4 AND timestamp >= now() - INTERVAL 7 DAY GROUP BY click_id_type"
@@ -692,13 +699,17 @@ defmodule SpectabasWeb.HealthController do
       end
 
     json(conn, %{by_type: q1, today: q2, quality_test: q3, time_to_convert: q4, visitor_paths: q5, visitor_quality: q6})
+    end
   end
 
   def click_id_diag(conn, _params) do
     conn |> put_status(403) |> json(%{error: "forbidden"})
   end
 
-  def send_setup_emails(conn, %{"token" => token}) when token == @import_token do
+  def send_setup_emails(conn, %{"token" => token}) do
+    unless valid_token?(token) do
+      conn |> put_status(403) |> json(%{error: "forbidden"})
+    else
     results = %{
       proxy:
         case Spectabas.Workers.ProxySetupEmail.perform(%Oban.Job{args: %{}}) do
@@ -713,6 +724,7 @@ defmodule SpectabasWeb.HealthController do
     }
 
     json(conn, %{status: "done", results: results})
+    end
   end
 
   def send_setup_emails(conn, _params) do

@@ -45,6 +45,9 @@ defmodule Spectabas.Events.CollectPayload do
     |> validate_number(:d, greater_than_or_equal_to: 0, less_than_or_equal_to: 86_400_000)
     |> validate_number(:sw, greater_than_or_equal_to: 0, less_than_or_equal_to: 10_000)
     |> validate_number(:sh, greater_than_or_equal_to: 0, less_than_or_equal_to: 10_000)
+    |> validate_length(:_fp, max: 256)
+    |> validate_length(:_cid, max: 256)
+    |> validate_length(:_cidt, max: 32)
     |> validate_props()
     |> apply_action(:validate)
   end

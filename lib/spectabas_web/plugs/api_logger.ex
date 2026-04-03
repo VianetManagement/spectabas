@@ -54,11 +54,11 @@ defmodule SpectabasWeb.Plugs.ApiLogger do
 
   defp get_client_ip(conn) do
     cond do
-      (cf = Plug.Conn.get_req_header(conn, "cf-connecting-ip")) != [] ->
-        cf |> List.first() |> String.trim()
-
       (xff = Plug.Conn.get_req_header(conn, "x-forwarded-for")) != [] ->
         xff |> List.first() |> String.split(",") |> List.first() |> String.trim()
+
+      (cf = Plug.Conn.get_req_header(conn, "cf-connecting-ip")) != [] ->
+        cf |> List.first() |> String.trim()
 
       true ->
         conn.remote_ip |> :inet.ntoa() |> to_string()

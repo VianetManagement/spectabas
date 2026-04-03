@@ -21,11 +21,11 @@ defmodule SpectabasWeb.Plugs.CollectRateLimit do
 
   defp client_ip(conn) do
     cond do
-      (cf = get_req_header(conn, "cf-connecting-ip")) != [] ->
-        cf |> List.first() |> String.trim()
-
       (xff = get_req_header(conn, "x-forwarded-for")) != [] ->
         xff |> List.first() |> String.split(",") |> List.first() |> String.trim()
+
+      (cf = get_req_header(conn, "cf-connecting-ip")) != [] ->
+        cf |> List.first() |> String.trim()
 
       true ->
         conn.remote_ip |> :inet.ntoa() |> to_string()

@@ -235,7 +235,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Tracker GDPR default**: `data-gdpr` defaults to `"off"` (cookie-based). Sites needing fingerprint-only mode must explicitly set `data-gdpr="on"`.
 - **Click ID capture**: Tracker extracts gclid/msclkid/fbclid from URL, persists in sessionStorage, sends as `_cid`/`_cidt` fields. Ingest stores in `click_id`/`click_id_type` ClickHouse columns. Revenue Attribution uses click IDs for platform-level ROAS.
 - **Ad blocker evasion**: Script at `/assets/v1.js`, beacon uses public_key not domain, endpoints obfuscated. `data-proxy` attribute enables reverse proxy through main domain for same-origin tracking. Cookie is always set on the page domain (not the script origin), so no cookie migration needed when switching to proxy mode.
-- **Cloudflare support**: Checks `CF-Connecting-IP` header before `x-forwarded-for`
+- **IP extraction**: Prefers `X-Forwarded-For` (set by Render's load balancer) over `CF-Connecting-IP` to prevent IP spoofing. CF-Connecting-IP used as fallback only when XFF is absent (e.g., Cloudflare-only proxied requests).
 - **Category landing pages**: `/sites/:id/c/:category` renders hub page with descriptions for each page in the category. Single reusable LiveView (`CategoryLive`) with all 38 page descriptions. Sidebar section labels link to these.
 - **Sidebar layout**: All dashboard pages use `<.dashboard_layout>` from SidebarComponent
 - **Async dashboard**: Mount loads critical stats only; deferred stats load via `handle_info(:load_deferred)`

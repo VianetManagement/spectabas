@@ -76,12 +76,21 @@ defmodule Spectabas.Analytics.Segment do
   end
 
   defp filter_to_sql(%{"field" => field, "op" => "contains", "value" => value}) do
-    "AND #{field} LIKE #{ClickHouse.param("%#{value}%")}"
+    escaped = escape_like_wildcards(value)
+    "AND #{field} LIKE #{ClickHouse.param("%#{escaped}%")}"
   end
 
   defp filter_to_sql(%{"field" => field, "op" => "not_contains", "value" => value}) do
-    "AND #{field} NOT LIKE #{ClickHouse.param("%#{value}%")}"
+    escaped = escape_like_wildcards(value)
+    "AND #{field} NOT LIKE #{ClickHouse.param("%#{escaped}%")}"
   end
 
   defp filter_to_sql(_), do: ""
+
+  defp escape_like_wildcards(value) do
+    value
+    |> String.replace("\\", "\\\\")
+    |> String.replace("%", "\\%")
+    |> String.replace("_", "\\_")
+  end
 end

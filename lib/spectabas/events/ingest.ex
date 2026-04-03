@@ -108,13 +108,14 @@ defmodule Spectabas.Events.Ingest do
   """
   def extract_client_ip(conn) do
     cond do
-      # Cloudflare proxy: CF-Connecting-IP is the true client IP
-      (cf = Plug.Conn.get_req_header(conn, "cf-connecting-ip")) != [] ->
-        cf |> List.first() |> String.trim()
-
-      # Standard proxy: x-forwarded-for (first IP in chain)
+      # Render always sets X-Forwarded-For — trust it first to prevent
+      # CF-Connecting-IP spoofing when not behind Cloudflare
       (xff = Plug.Conn.get_req_header(conn, "x-forwarded-for")) != [] ->
         xff |> List.first() |> String.split(",") |> List.first() |> String.trim()
+
+      # Fallback: CF-Connecting-IP (only meaningful when proxied through Cloudflare)
+      (cf = Plug.Conn.get_req_header(conn, "cf-connecting-ip")) != [] ->
+        cf |> List.first() |> String.trim()
 
       true ->
         conn.remote_ip |> :inet.ntoa() |> to_string()

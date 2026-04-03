@@ -22,11 +22,24 @@ defmodule Spectabas.Events.IngestTest do
       assert Ingest.extract_client_ip(conn) == "5.6.7.8"
     end
 
-    test "prefers CF-Connecting-IP over x-forwarded-for" do
+    test "prefers x-forwarded-for over CF-Connecting-IP to prevent spoofing" do
       conn = %Plug.Conn{
         req_headers: [
           {"cf-connecting-ip", "1.2.3.4"},
           {"x-forwarded-for", "5.6.7.8"}
+        ],
+        remote_ip: {127, 0, 0, 1}
+      }
+
+      # XFF is set by Render's load balancer (trusted); CF-Connecting-IP
+      # can be spoofed when not behind Cloudflare
+      assert Ingest.extract_client_ip(conn) == "5.6.7.8"
+    end
+
+    test "falls back to CF-Connecting-IP when x-forwarded-for absent" do
+      conn = %Plug.Conn{
+        req_headers: [
+          {"cf-connecting-ip", "1.2.3.4"}
         ],
         remote_ip: {127, 0, 0, 1}
       }
