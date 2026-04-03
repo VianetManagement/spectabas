@@ -18,7 +18,8 @@ defmodule SpectabasWeb.DashboardPagesTest do
         domain: "b.test.com",
         public_key: "test_key_#{System.unique_integer([:positive])}",
         active: true,
-        gdpr_mode: "off"
+        gdpr_mode: "off",
+        account_id: test_account().id
       })
 
     conn = log_in_user(build_conn(), user)
@@ -224,8 +225,18 @@ defmodule SpectabasWeb.DashboardPagesTest do
       assert html =~ "Audit"
     end
 
-    test "admin spam filter", %{conn: conn} do
-      {:ok, _view, html} = live(conn, ~p"/admin/spam-filter")
+    test "platform spam filter", %{user: user} do
+      # Spam filter moved to /platform — requires platform_admin role
+      {:ok, user} =
+        user
+        |> Spectabas.Accounts.User.profile_changeset(%{role: :platform_admin})
+        |> Spectabas.Repo.update()
+
+      conn =
+        build_conn()
+        |> log_in_user(user)
+
+      {:ok, _view, html} = live(conn, "/platform/spam-filter")
       assert html =~ "Spam Filter"
       assert html =~ "Active Blocklist"
       assert html =~ "Add Domain"

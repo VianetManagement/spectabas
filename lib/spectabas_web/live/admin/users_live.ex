@@ -3,7 +3,7 @@ defmodule SpectabasWeb.Admin.UsersLive do
 
   alias Spectabas.{Accounts, Sites}
 
-  @roles ~w(superadmin admin analyst viewer)
+  @all_roles ~w(superadmin admin analyst viewer)
 
   @timezones [
     "America/New_York",
@@ -24,16 +24,18 @@ defmodule SpectabasWeb.Admin.UsersLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    users = Accounts.list_users()
-    pending = Accounts.list_pending_invitations()
-    all_sites = Spectabas.Repo.all(Sites.Site)
+    user = socket.assigns.current_scope.user
+    users = Accounts.list_users(user)
+    pending = Accounts.list_pending_invitations(user)
+
+    all_sites = Accounts.accessible_sites(user)
 
     {:ok,
      socket
      |> assign(:page_title, "Manage Users")
      |> assign(:users, users)
      |> assign(:pending_invitations, pending)
-     |> assign(:roles, @roles)
+     |> assign(:roles, @all_roles)
      |> assign(:timezones, @timezones)
      |> assign(:all_sites, all_sites)
      |> assign(:show_invite, false)
@@ -67,7 +69,10 @@ defmodule SpectabasWeb.Admin.UsersLive do
     email = String.trim(socket.assigns.invite_email)
     role = socket.assigns.invite_role
 
-    case Accounts.invite_user(admin, email, role) do
+    # Invite into the admin's account (platform_admin uses their Vianet account for /admin invites)
+    account_id = admin.account_id
+
+    case Accounts.invite_user(admin, email, role, account_id) do
       {:ok, _invitation} ->
         {:noreply,
          socket
@@ -76,7 +81,7 @@ defmodule SpectabasWeb.Admin.UsersLive do
          |> assign(:invite_email, "")
          |> assign(:invite_role, "analyst")
          |> assign(:invite_error, nil)
-         |> assign(:pending_invitations, Accounts.list_pending_invitations())}
+         |> assign(:pending_invitations, Accounts.list_pending_invitations(admin))}
 
       {:error, reason} ->
         {:noreply, assign(socket, :invite_error, inspect(reason))}
@@ -92,7 +97,7 @@ defmodule SpectabasWeb.Admin.UsersLive do
         {:noreply,
          socket
          |> put_flash(:info, "Invitation resent to #{invitation.email}.")
-         |> assign(:pending_invitations, Accounts.list_pending_invitations())}
+         |> assign(:pending_invitations, Accounts.list_pending_invitations(admin))}
 
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Failed to resend: #{inspect(reason)}")}
@@ -107,7 +112,10 @@ defmodule SpectabasWeb.Admin.UsersLive do
         {:noreply,
          socket
          |> put_flash(:info, "Invitation for #{invitation.email} revoked.")
-         |> assign(:pending_invitations, Accounts.list_pending_invitations())}
+         |> assign(
+           :pending_invitations,
+           Accounts.list_pending_invitations(socket.assigns.current_scope.user)
+         )}
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Failed to revoke invitation.")}
@@ -176,7 +184,7 @@ defmodule SpectabasWeb.Admin.UsersLive do
         {:noreply,
          socket
          |> put_flash(:info, "User updated.")
-         |> assign(:users, Accounts.list_users())
+         |> assign(:users, Accounts.list_users(socket.assigns.current_scope.user))
          |> assign(:editing_user, nil)}
 
       {:error, _} ->
@@ -205,7 +213,7 @@ defmodule SpectabasWeb.Admin.UsersLive do
         {:noreply,
          socket
          |> put_flash(:info, "User deleted.")
-         |> assign(:users, Accounts.list_users())
+         |> assign(:users, Accounts.list_users(socket.assigns.current_scope.user))
          |> assign(:editing_user, nil)}
 
       {:error, reason} ->

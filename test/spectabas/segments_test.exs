@@ -2,6 +2,7 @@ defmodule Spectabas.SegmentsTest do
   use Spectabas.DataCase, async: true
 
   alias Spectabas.Segments
+  import Spectabas.AccountsFixtures
 
   setup do
     user =
@@ -24,7 +25,8 @@ defmodule Spectabas.SegmentsTest do
         domain: "b.test-seg.com",
         public_key: "seg_key_#{System.unique_integer([:positive])}",
         active: true,
-        gdpr_mode: "off"
+        gdpr_mode: "off",
+        account_id: test_account().id
       })
 
     %{user: user, other_user: other_user, site: site}

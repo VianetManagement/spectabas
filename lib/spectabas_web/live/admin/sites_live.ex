@@ -5,12 +5,19 @@ defmodule SpectabasWeb.Admin.SitesLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    sites = Sites.list_sites()
+    user = socket.assigns.current_scope.user
+    sites = Spectabas.Accounts.accessible_sites(user)
+
+    account =
+      if user.account_id,
+        do: Spectabas.Accounts.get_account!(user.account_id),
+        else: nil
 
     {:ok,
      socket
      |> assign(:page_title, "Manage Sites")
      |> assign(:sites, sites)
+     |> assign(:account, account)
      |> assign(:show_form, false)
      |> assign(:form, to_form(site_changeset()))}
   end
@@ -30,29 +37,38 @@ defmodule SpectabasWeb.Admin.SitesLive do
   end
 
   def handle_event("create_site", %{"site" => params}, socket) do
-    case Sites.create_site(params) do
-      {:ok, site} ->
-        render_msg =
-          case Sites.register_render_domain(site.domain) do
-            :ok -> " Custom domain #{site.domain} registered on Render."
-            {:ok, :already_exists} -> " Domain #{site.domain} already registered on Render."
-            {:error, reason} -> " Warning: failed to register domain on Render: #{reason}"
-          end
+    user = socket.assigns.current_scope.user
 
-        sites = Sites.list_sites()
+    if not Spectabas.Accounts.can_create_site?(user) do
+      {:noreply, put_flash(socket, :error, "Site limit reached for this account.")}
+    else
+      # Inject account_id into params
+      params = Map.put(params, "account_id", user.account_id)
 
-        {:noreply,
-         socket
-         |> put_flash(
-           :info,
-           "Site created.#{render_msg} Add a CNAME for #{site.domain} → www.spectabas.com"
-         )
-         |> assign(:sites, sites)
-         |> assign(:show_form, false)
-         |> assign(:form, to_form(site_changeset()))}
+      case Sites.create_site(params) do
+        {:ok, site} ->
+          render_msg =
+            case Sites.register_render_domain(site.domain) do
+              :ok -> " Custom domain #{site.domain} registered on Render."
+              {:ok, :already_exists} -> " Domain #{site.domain} already registered on Render."
+              {:error, reason} -> " Warning: failed to register domain on Render: #{reason}"
+            end
 
-      {:error, changeset} ->
-        {:noreply, assign(socket, :form, to_form(changeset))}
+          sites = Spectabas.Accounts.accessible_sites(user)
+
+          {:noreply,
+           socket
+           |> put_flash(
+             :info,
+             "Site created.#{render_msg} Add a CNAME for #{site.domain} → www.spectabas.com"
+           )
+           |> assign(:sites, sites)
+           |> assign(:show_form, false)
+           |> assign(:form, to_form(site_changeset()))}
+
+        {:error, changeset} ->
+          {:noreply, assign(socket, :form, to_form(changeset))}
+      end
     end
   end
 

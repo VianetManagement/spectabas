@@ -17,7 +17,8 @@ defmodule SpectabasWeb.API.StatsControllerTest do
       Sites.create_site(%{
         name: "API Test Site",
         domain: "b.api-test.com",
-        gdpr_mode: "off"
+        gdpr_mode: "off",
+        account_id: Spectabas.AccountsFixtures.test_account().id
       })
 
     {:ok, plaintext, _api_key} = APIKeys.generate(user, "api test key")

@@ -19,7 +19,8 @@ defmodule SpectabasWeb.API.EcommerceTest do
         domain: "b.shop-test.com",
         gdpr_mode: "off",
         ecommerce_enabled: true,
-        currency: "USD"
+        currency: "USD",
+        account_id: Spectabas.AccountsFixtures.test_account().id
       })
 
     {:ok, plaintext, _api_key} = APIKeys.generate(user, "ecommerce test key")

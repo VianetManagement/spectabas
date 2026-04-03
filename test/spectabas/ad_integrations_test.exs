@@ -16,7 +16,8 @@ defmodule Spectabas.AdIntegrationsTest do
         name: "Ad Test Site",
         domain: "b.ad-test.com",
         public_key: "pk_adtest_#{System.unique_integer([:positive])}",
-        gdpr_mode: "off"
+        gdpr_mode: "off",
+        account_id: Spectabas.AccountsFixtures.test_account().id
       })
 
     %{user: user, site: site}
@@ -244,7 +245,8 @@ defmodule Spectabas.AdIntegrationsTest do
           name: "Other",
           domain: "b.other-ad.com",
           public_key: "pk_other_#{System.unique_integer([:positive])}",
-          gdpr_mode: "off"
+          gdpr_mode: "off",
+          account_id: Spectabas.AccountsFixtures.test_account().id
         })
 
       {:ok, _} =
@@ -279,7 +281,8 @@ defmodule Spectabas.AdIntegrationsTest do
           name: "Empty",
           domain: "b.empty-ad.com",
           public_key: "pk_empty_#{System.unique_integer([:positive])}",
-          gdpr_mode: "off"
+          gdpr_mode: "off",
+          account_id: Spectabas.AccountsFixtures.test_account().id
         })
 
       assert AdIntegrations.list_for_site(other.id) == []

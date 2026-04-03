@@ -5,14 +5,16 @@ defmodule Spectabas.Accounts.InvitationTest do
 
   alias Spectabas.Accounts
 
-  describe "invite_user/3" do
+  describe "invite_user/4" do
     test "creates a pending invitation" do
       admin = user_fixture()
 
       {:ok, admin} =
         admin |> Accounts.User.profile_changeset(%{role: :superadmin}) |> Repo.update()
 
-      assert {:ok, invitation} = Accounts.invite_user(admin, "new@example.com", "analyst")
+      assert {:ok, invitation} =
+               Accounts.invite_user(admin, "new@example.com", "analyst", test_account().id)
+
       assert invitation.email == "new@example.com"
       assert invitation.role == :analyst
       assert invitation.token != nil
@@ -26,7 +28,8 @@ defmodule Spectabas.Accounts.InvitationTest do
       {:ok, admin} =
         admin |> Accounts.User.profile_changeset(%{role: :superadmin}) |> Repo.update()
 
-      assert {:error, _changeset} = Accounts.invite_user(admin, "not-an-email", "analyst")
+      assert {:error, _changeset} =
+               Accounts.invite_user(admin, "not-an-email", "analyst", test_account().id)
     end
   end
 
@@ -37,7 +40,8 @@ defmodule Spectabas.Accounts.InvitationTest do
       {:ok, admin} =
         admin |> Accounts.User.profile_changeset(%{role: :superadmin}) |> Repo.update()
 
-      {:ok, invitation} = Accounts.invite_user(admin, "find@example.com", "viewer")
+      {:ok, invitation} =
+        Accounts.invite_user(admin, "find@example.com", "viewer", test_account().id)
 
       assert {:ok, found} = Accounts.get_valid_invitation(invitation.token)
       assert found.email == "find@example.com"
@@ -55,7 +59,8 @@ defmodule Spectabas.Accounts.InvitationTest do
       {:ok, admin} =
         admin |> Accounts.User.profile_changeset(%{role: :superadmin}) |> Repo.update()
 
-      {:ok, invitation} = Accounts.invite_user(admin, "accept@example.com", "analyst")
+      {:ok, invitation} =
+        Accounts.invite_user(admin, "accept@example.com", "analyst", test_account().id)
 
       assert {:ok, user} =
                Accounts.accept_invitation(invitation.token, %{
@@ -76,7 +81,8 @@ defmodule Spectabas.Accounts.InvitationTest do
       {:ok, admin} =
         admin |> Accounts.User.profile_changeset(%{role: :superadmin}) |> Repo.update()
 
-      {:ok, invitation} = Accounts.invite_user(admin, "intended@example.com", "viewer")
+      {:ok, invitation} =
+        Accounts.invite_user(admin, "intended@example.com", "viewer", test_account().id)
 
       assert {:error, :email_mismatch} =
                Accounts.accept_invitation(invitation.token, %{
@@ -91,7 +97,8 @@ defmodule Spectabas.Accounts.InvitationTest do
       {:ok, admin} =
         admin |> Accounts.User.profile_changeset(%{role: :superadmin}) |> Repo.update()
 
-      {:ok, invitation} = Accounts.invite_user(admin, "once@example.com", "viewer")
+      {:ok, invitation} =
+        Accounts.invite_user(admin, "once@example.com", "viewer", test_account().id)
 
       assert {:ok, _user} =
                Accounts.accept_invitation(invitation.token, %{
@@ -108,15 +115,18 @@ defmodule Spectabas.Accounts.InvitationTest do
     end
   end
 
-  describe "list_pending_invitations/0" do
+  describe "list_pending_invitations/1" do
     test "returns only unaccepted invitations" do
       admin = user_fixture()
 
       {:ok, admin} =
         admin |> Accounts.User.profile_changeset(%{role: :superadmin}) |> Repo.update()
 
-      {:ok, _inv1} = Accounts.invite_user(admin, "pending1@example.com", "analyst")
-      {:ok, inv2} = Accounts.invite_user(admin, "pending2@example.com", "viewer")
+      {:ok, _inv1} =
+        Accounts.invite_user(admin, "pending1@example.com", "analyst", test_account().id)
+
+      {:ok, inv2} =
+        Accounts.invite_user(admin, "pending2@example.com", "viewer", test_account().id)
 
       # Accept one
       Accounts.accept_invitation(inv2.token, %{
@@ -124,7 +134,7 @@ defmodule Spectabas.Accounts.InvitationTest do
         password: "a_good_password123"
       })
 
-      pending = Accounts.list_pending_invitations()
+      pending = Accounts.list_pending_invitations(admin)
       emails = Enum.map(pending, & &1.email)
       assert "pending1@example.com" in emails
       refute "pending2@example.com" in emails

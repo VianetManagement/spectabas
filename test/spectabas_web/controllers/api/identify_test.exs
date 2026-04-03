@@ -20,7 +20,8 @@ defmodule SpectabasWeb.API.IdentifyTest do
       Sites.create_site(%{
         name: "Test Site",
         domain: "b.test.com",
-        gdpr_mode: "off"
+        gdpr_mode: "off",
+        account_id: Spectabas.AccountsFixtures.test_account().id
       })
 
     # Create an API key
@@ -159,7 +160,8 @@ defmodule SpectabasWeb.API.IdentifyTest do
         Sites.create_site(%{
           name: "Other Site",
           domain: "b.other.com",
-          gdpr_mode: "off"
+          gdpr_mode: "off",
+          account_id: Spectabas.AccountsFixtures.test_account().id
         })
 
       conn =

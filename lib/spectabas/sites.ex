@@ -34,6 +34,7 @@ defmodule Spectabas.Sites do
 
   @doc """
   Create a new site. Generates a public key and warms the domain cache.
+  Accepts attrs map which must include account_id.
   """
   def create_site(attrs) do
     public_key = Site.generate_public_key()

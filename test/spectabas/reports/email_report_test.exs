@@ -42,7 +42,8 @@ defmodule Spectabas.Reports.EmailReportTest do
           name: "Test",
           domain: "b.test.com",
           public_key: "test_#{System.unique_integer([:positive])}",
-          active: true
+          active: true,
+          account_id: test_account().id
         })
 
       assert {:ok, sub} =
@@ -63,7 +64,8 @@ defmodule Spectabas.Reports.EmailReportTest do
           name: "Test",
           domain: "b.test2.com",
           public_key: "test2_#{System.unique_integer([:positive])}",
-          active: true
+          active: true,
+          account_id: test_account().id
         })
 
       {:ok, _} =
@@ -90,7 +92,8 @@ defmodule Spectabas.Reports.EmailReportTest do
           name: "Test",
           domain: "b.test3.com",
           public_key: "test3_#{System.unique_integer([:positive])}",
-          active: true
+          active: true,
+          account_id: test_account().id
         })
 
       assert Reports.get_email_subscription(user, site) == nil
@@ -108,7 +111,8 @@ defmodule Spectabas.Reports.EmailReportTest do
           name: "Test",
           domain: "b.test4.com",
           public_key: "test4_#{System.unique_integer([:positive])}",
-          active: true
+          active: true,
+          account_id: test_account().id
         })
 
       {:ok, sub} =

@@ -6,24 +6,43 @@ defmodule Spectabas.Accounts do
   import Ecto.Query, warn: false
   alias Spectabas.Repo
 
-  alias Spectabas.Accounts.{User, UserToken, UserNotifier, UserSitePermission, Invitation}
+  alias Spectabas.Accounts.{
+    Account,
+    User,
+    UserToken,
+    UserNotifier,
+    UserSitePermission,
+    Invitation
+  }
+
   alias Spectabas.{Audit, Sites}
+  alias Spectabas.Sites.Site
 
   ## Authorization
 
   @doc """
   Checks if a user can access a given site.
-  Superadmins and admins can access all sites.
+  Platform admin can access all sites across all accounts.
+  Superadmins and admins can access sites within their own account.
   Other roles need an explicit UserSitePermission record.
   """
-  def can_access_site?(%User{role: role}, _site) when role in [:superadmin, :admin], do: true
+  def can_access_site?(%User{role: :platform_admin}, _site), do: true
 
-  def can_access_site?(%User{id: user_id}, %{id: site_id}) do
-    Repo.exists?(
-      from(p in UserSitePermission,
-        where: p.user_id == ^user_id and p.site_id == ^site_id
+  def can_access_site?(%User{role: role, account_id: acct_id}, %{account_id: site_acct_id})
+      when role in [:superadmin, :admin] do
+    acct_id != nil and acct_id == site_acct_id
+  end
+
+  def can_access_site?(%User{id: user_id, account_id: acct_id}, %{
+        id: site_id,
+        account_id: site_acct_id
+      }) do
+    acct_id == site_acct_id and
+      Repo.exists?(
+        from(p in UserSitePermission,
+          where: p.user_id == ^user_id and p.site_id == ^site_id
+        )
       )
-    )
   end
 
   def can_access_site?(_, _), do: false
@@ -335,6 +354,7 @@ defmodule Spectabas.Accounts do
   @doc """
   Check if a user has a specific role on a site.
   """
+  def has_site_role?(%User{role: :platform_admin}, _site, _role), do: true
   def has_site_role?(%User{role: :superadmin}, _site, _role), do: true
 
   def has_site_role?(%User{id: user_id}, %{id: site_id}, role) do
@@ -347,15 +367,21 @@ defmodule Spectabas.Accounts do
 
   @doc """
   Return all sites accessible to a user.
-  Superadmins and admins get all sites; others get their permitted sites.
+  Platform admin sees all sites. Superadmins/admins see their account's sites.
+  Others get their explicitly permitted sites.
   """
-  def accessible_sites(%User{role: role}) when role in [:superadmin, :admin] do
+  def accessible_sites(%User{role: :platform_admin}) do
     Sites.list_sites()
+  end
+
+  def accessible_sites(%User{role: role, account_id: acct_id})
+      when role in [:superadmin, :admin] and not is_nil(acct_id) do
+    Repo.all(from(s in Site, where: s.account_id == ^acct_id, order_by: [asc: s.name]))
   end
 
   def accessible_sites(%User{id: user_id}) do
     Repo.all(
-      from(s in Spectabas.Sites.Site,
+      from(s in Site,
         join: p in UserSitePermission,
         on: p.site_id == s.id,
         where: p.user_id == ^user_id,
@@ -365,11 +391,18 @@ defmodule Spectabas.Accounts do
   end
 
   @doc """
-  List all users.
+  List users scoped to the caller's permissions.
+  Platform admin sees all users. Others see only their account's users.
   """
-  def list_users do
+  def list_users(%User{role: :platform_admin}) do
     Repo.all(from(u in User, order_by: [asc: u.email]))
   end
+
+  def list_users(%User{account_id: acct_id}) when not is_nil(acct_id) do
+    Repo.all(from(u in User, where: u.account_id == ^acct_id, order_by: [asc: u.email]))
+  end
+
+  def list_users(_), do: []
 
   @doc """
   Update a user's role. Only admins/superadmins should call this.
@@ -492,11 +525,16 @@ defmodule Spectabas.Accounts do
   end
 
   @doc """
-  Create an invitation for a new user.
+  Create an invitation for a new user within an account.
   """
-  def invite_user(%User{} = admin, email, role) do
+  def invite_user(%User{} = admin, email, role, account_id) do
     %Invitation{}
-    |> Invitation.create_changeset(%{email: email, role: role, invited_by_id: admin.id})
+    |> Invitation.create_changeset(%{
+      email: email,
+      role: role,
+      invited_by_id: admin.id,
+      account_id: account_id
+    })
     |> Repo.insert()
     |> case do
       {:ok, invitation} ->
@@ -520,17 +558,27 @@ defmodule Spectabas.Accounts do
   end
 
   @doc """
-  List all pending (not yet accepted) invitations.
+  List pending (not yet accepted) invitations, scoped to the caller's account.
   """
-  def list_pending_invitations do
-    import Ecto.Query
-
-    from(i in Invitation,
-      where: is_nil(i.accepted_at),
-      order_by: [desc: i.inserted_at]
+  def list_pending_invitations(%User{role: :platform_admin}) do
+    Repo.all(
+      from(i in Invitation,
+        where: is_nil(i.accepted_at),
+        order_by: [desc: i.inserted_at]
+      )
     )
-    |> Repo.all()
   end
+
+  def list_pending_invitations(%User{account_id: acct_id}) when not is_nil(acct_id) do
+    Repo.all(
+      from(i in Invitation,
+        where: is_nil(i.accepted_at) and i.account_id == ^acct_id,
+        order_by: [desc: i.inserted_at]
+      )
+    )
+  end
+
+  def list_pending_invitations(_), do: []
 
   @doc """
   Look up a valid invitation by its plaintext token.
@@ -587,10 +635,10 @@ defmodule Spectabas.Accounts do
         |> Ecto.Changeset.change(accepted_at: now)
         |> Repo.update!()
 
-        # Set the user's role to match the invitation
+        # Set the user's role and account to match the invitation
         {:ok, user} =
           user
-          |> User.profile_changeset(%{role: invitation.role})
+          |> User.profile_changeset(%{role: invitation.role, account_id: invitation.account_id})
           |> Repo.update()
 
         Audit.log("invitation.accepted", %{
@@ -609,14 +657,12 @@ defmodule Spectabas.Accounts do
   """
   def resend_invitation(%User{} = admin, %Invitation{} = invitation) do
     # Delete all prior pending invitations for this email
-    import Ecto.Query
-
     from(i in Invitation,
       where: i.email == ^invitation.email and is_nil(i.accepted_at)
     )
     |> Repo.delete_all()
 
-    invite_user(admin, invitation.email, invitation.role)
+    invite_user(admin, invitation.email, invitation.role, invitation.account_id)
   end
 
   @doc """
@@ -625,4 +671,64 @@ defmodule Spectabas.Accounts do
   def delete_invitation(%Invitation{} = invitation) do
     Repo.delete(invitation)
   end
+
+  # ─── Account Management ─────────────────────────────────────────────
+
+  @doc "Create a new account. Only platform_admin should call this."
+  def create_account(%User{role: :platform_admin} = admin, attrs) do
+    %Account{}
+    |> Account.changeset(attrs)
+    |> Repo.insert()
+    |> case do
+      {:ok, account} ->
+        Audit.log("account.created", %{
+          admin_id: admin.id,
+          account_id: account.id,
+          name: account.name
+        })
+
+        {:ok, account}
+
+      error ->
+        error
+    end
+  end
+
+  @doc "List all accounts."
+  def list_accounts do
+    Repo.all(from(a in Account, order_by: [asc: a.name]))
+  end
+
+  @doc "Get an account by ID. Raises if not found."
+  def get_account!(id), do: Repo.get!(Account, id)
+
+  @doc "Get an account by ID. Returns nil if not found."
+  def get_account(id), do: Repo.get(Account, id)
+
+  @doc "Update an account's attributes."
+  def update_account(%Account{} = account, attrs) do
+    account
+    |> Account.changeset(attrs)
+    |> Repo.update()
+  end
+
+  @doc "Count sites in an account."
+  def account_site_count(account_id) do
+    Repo.aggregate(from(s in Site, where: s.account_id == ^account_id), :count)
+  end
+
+  @doc "Check if an account can create another site (under its site_limit)."
+  def can_create_site?(%User{role: :platform_admin}), do: true
+
+  def can_create_site?(%User{account_id: nil}), do: false
+
+  def can_create_site?(%User{account_id: acct_id}) do
+    account = Repo.get!(Account, acct_id)
+    current = Repo.aggregate(from(s in Site, where: s.account_id == ^acct_id), :count)
+    current < account.site_limit
+  end
+
+  @doc "Get the account for a user, handling platform_admin (nil account_id)."
+  def get_user_account(%User{account_id: nil}), do: nil
+  def get_user_account(%User{account_id: acct_id}), do: Repo.get(Account, acct_id)
 end

@@ -45,6 +45,25 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.0.0 — 2026-04-03 UTC",
+       [
+         %{
+           title: "Feature: Multi-tenant account system",
+           description:
+             "Accounts entity for grouping sites and users. Platform admin role for global management. " <>
+               "Superadmins are now account-level owners who manage their own sites and team. " <>
+               "Complete isolation between customer accounts. Configurable per-account site limits (default 10). " <>
+               "New /platform routes for global administration (accounts, ingest, spam filter, API logs). " <>
+               "Existing /admin routes scoped to account context. Migration backfills all existing data into Vianet account."
+         },
+         %{
+           title: "New role: platform_admin",
+           description:
+             "Platform admin sees all accounts, sites, and users across the entire platform. " <>
+               "Can create new accounts, invite superadmins, and configure site limits. " <>
+               "Superadmins can now invite other superadmins to co-manage their account."
+         }
+       ]},
       {"v4.10.0 — 2026-04-03 UTC",
        [
          %{

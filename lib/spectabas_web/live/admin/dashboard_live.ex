@@ -6,8 +6,23 @@ defmodule SpectabasWeb.Admin.DashboardLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    total_sites = Repo.aggregate(Sites.Site, :count, :id)
-    total_users = Repo.aggregate(Accounts.User, :count, :id)
+    user = socket.assigns.current_scope.user
+
+    {total_sites, total_users} =
+      if user.role == :platform_admin do
+        {Repo.aggregate(Sites.Site, :count, :id), Repo.aggregate(Accounts.User, :count, :id)}
+      else
+        {Repo.aggregate(
+           from(s in Sites.Site, where: s.account_id == ^user.account_id),
+           :count,
+           :id
+         ),
+         Repo.aggregate(
+           from(u in Accounts.User, where: u.account_id == ^user.account_id),
+           :count,
+           :id
+         )}
+      end
 
     events_today =
       case Analytics.total_events_today() do
@@ -88,38 +103,40 @@ defmodule SpectabasWeb.Admin.DashboardLive do
           <h3 class="font-semibold text-gray-900 mb-1">Changelog</h3>
           <p class="text-sm text-gray-500">Recent changes and new features</p>
         </.link>
-        <.link
-          navigate={~p"/admin/competitive"}
-          class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
-        >
-          <h3 class="font-semibold text-gray-900 mb-1">Competitive Analysis</h3>
-          <p class="text-sm text-gray-500">Feature gaps, positioning, and roadmap</p>
-        </.link>
-        <.link
-          navigate={~p"/admin/spam-filter"}
-          class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
-        >
-          <h3 class="font-semibold text-gray-900 mb-1">Spam Filter</h3>
-          <p class="text-sm text-gray-500">Manage referrer spam blocklist and auto-detection</p>
-        </.link>
-        <.link
-          navigate={~p"/admin/ingest"}
-          class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
-        >
-          <h3 class="font-semibold text-gray-900 mb-1">Ingest Diagnostics</h3>
-          <p class="text-sm text-gray-500">
-            Live buffer, cache, flush tasks, BEAM memory, ClickHouse throughput
-          </p>
-        </.link>
-        <.link
-          navigate={~p"/admin/api-logs"}
-          class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
-        >
-          <h3 class="font-semibold text-gray-900 mb-1">API Access Logs</h3>
-          <p class="text-sm text-gray-500">
-            API call history, usage by endpoint and key, status codes
-          </p>
-        </.link>
+        <%= if @current_scope.user.role == :platform_admin do %>
+          <.link
+            navigate="/platform/competitive"
+            class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+          >
+            <h3 class="font-semibold text-gray-900 mb-1">Competitive Analysis</h3>
+            <p class="text-sm text-gray-500">Feature gaps, positioning, and roadmap</p>
+          </.link>
+          <.link
+            navigate="/platform/spam-filter"
+            class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+          >
+            <h3 class="font-semibold text-gray-900 mb-1">Spam Filter</h3>
+            <p class="text-sm text-gray-500">Manage referrer spam blocklist and auto-detection</p>
+          </.link>
+          <.link
+            navigate="/platform/ingest"
+            class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+          >
+            <h3 class="font-semibold text-gray-900 mb-1">Ingest Diagnostics</h3>
+            <p class="text-sm text-gray-500">
+              Live buffer, cache, flush tasks, BEAM memory, ClickHouse throughput
+            </p>
+          </.link>
+          <.link
+            navigate="/platform/api-logs"
+            class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+          >
+            <h3 class="font-semibold text-gray-900 mb-1">API Access Logs</h3>
+            <p class="text-sm text-gray-500">
+              API call history, usage by endpoint and key, status codes
+            </p>
+          </.link>
+        <% end %>
         <a
           href="/health/diag"
           class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"

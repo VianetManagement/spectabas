@@ -8,8 +8,11 @@ defmodule Spectabas.Accounts.Invitation do
     field :token_hash, :string
 
     field :role, Ecto.Enum,
-      values: [:superadmin, :admin, :analyst, :viewer],
+      values: [:platform_admin, :superadmin, :admin, :analyst, :viewer],
       default: :analyst
+
+    field :account_id, :id
+    belongs_to :account, Spectabas.Accounts.Account, define_field: false
 
     field :invited_by_id, :id
     field :expires_at, :utc_datetime
@@ -31,8 +34,8 @@ defmodule Spectabas.Accounts.Invitation do
       DateTime.utc_now() |> DateTime.add(ttl_hours * 3600, :second) |> DateTime.truncate(:second)
 
     invitation
-    |> cast(attrs, [:email, :role, :invited_by_id])
-    |> validate_required([:email, :role])
+    |> cast(attrs, [:email, :role, :invited_by_id, :account_id])
+    |> validate_required([:email, :role, :account_id])
     |> validate_format(:email, ~r/^[^@,;\s]+@[^@,;\s]+$/, message: "must be a valid email")
     |> validate_length(:email, max: 160)
     |> put_change(:token_hash, token_hash)

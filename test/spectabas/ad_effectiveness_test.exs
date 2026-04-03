@@ -14,7 +14,8 @@ defmodule Spectabas.AdEffectivenessTest do
         public_key: "pk_adeff_#{System.unique_integer([:positive])}",
         gdpr_mode: "off",
         ecommerce_enabled: true,
-        timezone: "UTC"
+        timezone: "UTC",
+        account_id: Spectabas.AccountsFixtures.test_account().id
       })
 
     # These queries all hit ClickHouse which isn't available in test.

@@ -15,10 +15,20 @@ defmodule SpectabasWeb.API.ApiSecurityTest do
     user = Spectabas.Accounts.get_user!(user.id)
 
     {:ok, site} =
-      Sites.create_site(%{name: "Security Test", domain: "b.sec-test.com", gdpr_mode: "off"})
+      Sites.create_site(%{
+        name: "Security Test",
+        domain: "b.sec-test.com",
+        gdpr_mode: "off",
+        account_id: Spectabas.AccountsFixtures.test_account().id
+      })
 
     {:ok, site2} =
-      Sites.create_site(%{name: "Other Site", domain: "b.other-sec.com", gdpr_mode: "off"})
+      Sites.create_site(%{
+        name: "Other Site",
+        domain: "b.other-sec.com",
+        gdpr_mode: "off",
+        account_id: Spectabas.AccountsFixtures.test_account().id
+      })
 
     %{conn: conn, user: user, site: site, site2: site2}
   end

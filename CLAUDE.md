@@ -157,6 +157,36 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Revenue Attribution Enhancements** — sortable columns, paid vs organic row split with colored platform pills (Google/Bing/Meta) across all UTM tabs
 - **Reverse Proxy (data-proxy)** — tracker supports `data-proxy` attribute for same-origin tracking through main domain, bypasses ad blockers
 
+## Multi-Tenancy
+
+### Account Model
+- **Accounts** — tenant boundary grouping sites and users. Fields: name, slug (unique), site_limit (default 10), active.
+- **Sites** and **Users** belong to an account via `account_id` FK.
+- **Invitations** carry `account_id` — accepted users inherit the account.
+- ClickHouse events keyed by `site_id` — account isolation is implicit (no CH changes needed).
+
+### Role Hierarchy
+| Role | Scope | account_id | Access |
+|------|-------|------------|--------|
+| platform_admin | Global | NULL | All accounts, sites, users. Creates accounts, invites superadmins. |
+| superadmin | Account | set | Own account's sites/users. Can invite any role including superadmin. |
+| admin | Account | set | Own account's sites. Cannot manage users. |
+| analyst | Account+Site | set | Only explicitly-permitted sites within account. |
+| viewer | Account+Site | set | Read-only on permitted sites within account. |
+
+### Route Tiers
+- `/platform/*` — platform_admin only (accounts management, ingest diagnostics, spam filter, API logs, competitive)
+- `/admin/*` — superadmin + platform_admin (account-scoped user/site management, audit, changelog)
+- `/dashboard/*` — all authenticated users (analytics, scoped by `can_access_site?`)
+
+### Key Functions
+- `can_access_site?/2` — platform_admin→all; superadmin/admin→same account only; analyst/viewer→explicit permission + same account
+- `accessible_sites/1` — scoped by account for superadmin/admin; all for platform_admin
+- `list_users/1` — scoped to caller's account
+- `invite_user/4` — requires account_id parameter
+- `can_create_site?/1` — checks account site_limit
+- `create_account/2` — platform_admin only
+
 ## Authentication
 
 ### Multi-factor Authentication
@@ -164,7 +194,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **WebAuthn/Passkeys** — FIDO2 hardware keys and platform authenticators via `wax_` library
 - Users can register multiple WebAuthn credentials from account settings
 - **Admin force 2FA** — admins can require 2FA for specific users from the admin panel
-- **Granular site access** — Analyst/Viewer roles require explicit per-site permissions (toggled from /admin/users). Superadmin/Admin have all-site access.
+- **Granular site access** — Analyst/Viewer roles require explicit per-site permissions (toggled from /admin/users). Superadmin/Admin have account-scoped site access.
 
 ### wax_ Configuration
 - Requires `origin` setting in `config/config.exs` (production) and `config/test.exs` (test)
@@ -223,7 +253,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Mobile responsiveness** — scrollable tables, collapsible mobile nav bar
 - **Accessible top nav** — WCAG AA contrast compliance
 - **Documentation pages** — docs split into `/docs` (index), `/docs/getting-started`, `/docs/dashboard`, `/docs/conversions`, `/docs/api`, `/docs/admin` with cross-category search. Requires login (behind :require_authenticated_user). Public pages: `/privacy`, `/terms`, homepage.
-- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v4.10.0)
+- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.0.0)
 - **Legal** — Privacy Policy at `/privacy` and Terms of Service at `/terms` (public, no auth required). Entity: Spectabas, Kent County MI. Contact: howdy@spectabas.com. Arbitration clause (AAA, Kent County). 18+ age restriction.
 
 ## Important Patterns

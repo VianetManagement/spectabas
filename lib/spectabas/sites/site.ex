@@ -3,6 +3,7 @@ defmodule Spectabas.Sites.Site do
   import Ecto.Changeset
 
   schema "sites" do
+    belongs_to :account, Spectabas.Accounts.Account
     field :name, :string
     field :domain, :string
     field :public_key, :string
@@ -33,6 +34,7 @@ defmodule Spectabas.Sites.Site do
   def changeset(site, attrs) do
     site
     |> cast(attrs, [
+      :account_id,
       :name,
       :domain,
       :timezone,

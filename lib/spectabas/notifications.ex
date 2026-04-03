@@ -5,6 +5,7 @@ defmodule Spectabas.Notifications do
   """
 
   require Logger
+  import Ecto.Query, warn: false
 
   alias Spectabas.Accounts
   alias Spectabas.Accounts.UserNotifier
@@ -59,10 +60,13 @@ defmodule Spectabas.Notifications do
       |> Enum.filter(fn p -> p.role in [:admin, :analyst] end)
       |> Enum.map(fn p -> p.user.email end)
 
-    # Also include superadmins
+    # Also include superadmins from the site's account
     superadmin_emails =
-      Accounts.list_users()
-      |> Enum.filter(fn u -> u.role == :superadmin end)
+      Spectabas.Repo.all(
+        Ecto.Query.from(u in Spectabas.Accounts.User,
+          where: u.account_id == ^site.account_id and u.role == :superadmin
+        )
+      )
       |> Enum.map(fn u -> u.email end)
 
     Enum.uniq(admin_emails ++ superadmin_emails)

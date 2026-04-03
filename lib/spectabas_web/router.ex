@@ -31,6 +31,10 @@ defmodule SpectabasWeb.Router do
     plug SpectabasWeb.Plugs.RequireAdmin
   end
 
+  pipeline :require_platform_admin do
+    plug SpectabasWeb.Plugs.RequirePlatformAdmin
+  end
+
   # Health check — public (just returns ok/error)
   scope "/", SpectabasWeb do
     get "/health", HealthController, :show
@@ -197,7 +201,23 @@ defmodule SpectabasWeb.Router do
     end
   end
 
-  # Admin routes
+  # Platform admin routes (global platform management)
+  scope "/platform", SpectabasWeb do
+    pipe_through [:browser, :require_authenticated_user, :require_platform_admin]
+
+    live_session :platform_admin,
+      on_mount: [{SpectabasWeb.UserAuth, :require_authenticated}] do
+      live "/", Platform.DashboardLive, :index
+      live "/accounts", Platform.AccountsLive, :index
+      live "/accounts/:id", Platform.AccountDetailLive, :show
+      live "/ingest", Admin.IngestDiagnosticsLive, :index
+      live "/spam-filter", Admin.SpamFilterLive, :index
+      live "/api-logs", Admin.ApiLogsLive, :index
+      live "/competitive", Admin.CompetitiveLive, :index
+    end
+  end
+
+  # Account admin routes (superadmin + platform_admin)
   scope "/admin", SpectabasWeb do
     pipe_through [:browser, :require_authenticated_user, :require_admin]
 
@@ -208,10 +228,6 @@ defmodule SpectabasWeb.Router do
       live "/sites", Admin.SitesLive, :index
       live "/audit", Admin.AuditLive, :index
       live "/changelog", Admin.ChangelogLive, :index
-      live "/competitive", Admin.CompetitiveLive, :index
-      live "/spam-filter", Admin.SpamFilterLive, :index
-      live "/ingest", Admin.IngestDiagnosticsLive, :index
-      live "/api-logs", Admin.ApiLogsLive, :index
     end
   end
 

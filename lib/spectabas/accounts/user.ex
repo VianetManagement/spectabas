@@ -11,8 +11,11 @@ defmodule Spectabas.Accounts.User do
 
     # Spectabas additions
     field :role, Ecto.Enum,
-      values: [:superadmin, :admin, :analyst, :viewer],
+      values: [:platform_admin, :superadmin, :admin, :analyst, :viewer],
       default: :analyst
+
+    field :account_id, :id
+    belongs_to :account, Spectabas.Accounts.Account, define_field: false
 
     field :display_name, :string
     field :totp_secret, :string, redact: true
@@ -128,13 +131,14 @@ defmodule Spectabas.Accounts.User do
     user
     |> cast(attrs, [
       :role,
+      :account_id,
       :display_name,
       :last_sign_in_at,
       :last_sign_in_ip,
       :force_2fa,
       :timezone
     ])
-    |> validate_inclusion(:role, [:superadmin, :admin, :analyst, :viewer])
+    |> validate_inclusion(:role, [:platform_admin, :superadmin, :admin, :analyst, :viewer])
     |> validate_length(:display_name, max: 255)
     |> validate_length(:timezone, max: 50)
   end

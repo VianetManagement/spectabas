@@ -18,7 +18,8 @@ defmodule SpectabasWeb.Dashboard.PerformanceLiveTest do
         domain: "b.perftest.com",
         public_key: "perf_key_#{System.unique_integer([:positive])}",
         active: true,
-        gdpr_mode: "off"
+        gdpr_mode: "off",
+        account_id: test_account().id
       })
 
     conn = log_in_user(build_conn(), user)

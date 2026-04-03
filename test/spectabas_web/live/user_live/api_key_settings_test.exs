@@ -20,7 +20,8 @@ defmodule SpectabasWeb.UserLive.ApiKeySettingsTest do
         domain: "b.apikey-test.com",
         public_key: "apikey_test_#{System.unique_integer([:positive])}",
         active: true,
-        gdpr_mode: "off"
+        gdpr_mode: "off",
+        account_id: Spectabas.AccountsFixtures.test_account().id
       })
 
     conn = log_in_user(conn, user)

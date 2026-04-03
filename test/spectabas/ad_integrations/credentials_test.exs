@@ -2,6 +2,7 @@ defmodule Spectabas.AdIntegrations.CredentialsTest do
   use SpectabasWeb.ConnCase
 
   alias Spectabas.AdIntegrations.Credentials
+  import Spectabas.AccountsFixtures
 
   setup do
     site =
@@ -10,7 +11,8 @@ defmodule Spectabas.AdIntegrations.CredentialsTest do
         domain: "b.credstest.com",
         public_key: "creds_#{System.unique_integer([:positive])}",
         active: true,
-        gdpr_mode: "off"
+        gdpr_mode: "off",
+        account_id: test_account().id
       })
 
     %{site: site}

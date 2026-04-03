@@ -1,7 +1,7 @@
-defmodule SpectabasWeb.Plugs.RequireAdmin do
+defmodule SpectabasWeb.Plugs.RequirePlatformAdmin do
   @moduledoc """
-  Requires the current user to be a platform_admin or superadmin.
-  Guards /admin routes (account-level administration).
+  Requires the current user to be a platform_admin.
+  Guards /platform routes (global platform administration).
   """
   import Plug.Conn
   import Phoenix.Controller
@@ -11,7 +11,7 @@ defmodule SpectabasWeb.Plugs.RequireAdmin do
   def call(conn, _opts) do
     user = get_current_user(conn)
 
-    if user && user.role in [:platform_admin, :superadmin] do
+    if user && user.role == :platform_admin do
       conn
     else
       Spectabas.Audit.log(:unauthorized_admin_access, %{

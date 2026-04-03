@@ -7,10 +7,26 @@ defmodule Spectabas.AccountsFixtures do
   import Ecto.Query
 
   alias Spectabas.Accounts
-  alias Spectabas.Accounts.Scope
+  alias Spectabas.Accounts.{Account, Scope}
 
   def unique_user_email, do: "user#{System.unique_integer()}@example.com"
   def valid_user_password, do: "hello world!"
+
+  @doc "Get or create a shared test account for tests."
+  def test_account do
+    case Spectabas.Repo.get_by(Account, slug: "test-account") do
+      %Account{} = acct ->
+        acct
+
+      nil ->
+        Spectabas.Repo.insert!(%Account{
+          name: "Test Account",
+          slug: "test-account",
+          site_limit: 100,
+          active: true
+        })
+    end
+  end
 
   def valid_user_attributes(attrs \\ %{}) do
     Enum.into(attrs, %{
@@ -23,6 +39,14 @@ defmodule Spectabas.AccountsFixtures do
       attrs
       |> valid_user_attributes()
       |> Accounts.register_user()
+
+    # Associate with test account
+    account = test_account()
+
+    {:ok, user} =
+      user
+      |> Accounts.User.profile_changeset(%{account_id: account.id})
+      |> Spectabas.Repo.update()
 
     user
   end
@@ -55,6 +79,24 @@ defmodule Spectabas.AccountsFixtures do
       Accounts.update_user_password(user, %{password: valid_user_password()})
 
     user
+  end
+
+  @doc "Create a site with the test account's account_id."
+  def create_test_site(attrs) do
+    account = test_account()
+    attrs = Map.put_new(attrs, "account_id", account.id) |> Map.put_new(:account_id, account.id)
+    Spectabas.Sites.create_site(attrs)
+  end
+
+  @doc "Insert a site struct directly with test account_id."
+  def insert_test_site!(attrs) do
+    account = test_account()
+
+    %Spectabas.Sites.Site{}
+    |> Map.merge(attrs)
+    |> Map.put(:account_id, account.id)
+    |> Map.put_new(:public_key, Spectabas.Sites.Site.generate_public_key())
+    |> Spectabas.Repo.insert!()
   end
 
   def extract_user_token(fun) do
