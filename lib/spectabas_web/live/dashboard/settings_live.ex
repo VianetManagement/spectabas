@@ -226,6 +226,52 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
     end
   end
 
+  def handle_event("clear_payment_data", %{"id" => id}, socket) do
+    integration = Spectabas.AdIntegrations.get!(id) |> Spectabas.Repo.preload(:site)
+    site_id = integration.site_id
+    site_p = Spectabas.ClickHouse.param(site_id)
+
+    # Delete imported ecommerce events (Stripe charges start with ch_, Braintree uses transaction IDs)
+    ecom_result =
+      case integration.platform do
+        "stripe" ->
+          Spectabas.ClickHouse.execute(
+            "ALTER TABLE ecommerce_events DELETE WHERE site_id = #{site_p} AND order_id LIKE 'ch_%'"
+          )
+
+        "braintree" ->
+          # Braintree transaction IDs don't have a consistent prefix, so delete all
+          # ecommerce events with empty session_id (imported, not tracked via JS)
+          Spectabas.ClickHouse.execute(
+            "ALTER TABLE ecommerce_events DELETE WHERE site_id = #{site_p} AND session_id = ''"
+          )
+      end
+
+    # Delete subscription snapshots for this site
+    sub_result =
+      Spectabas.ClickHouse.execute(
+        "ALTER TABLE subscription_events DELETE WHERE site_id = #{site_p}"
+      )
+
+    # Reset last_synced_at so next sync starts fresh
+    Spectabas.AdIntegrations.mark_synced(integration)
+
+    Spectabas.Audit.log("payment_data.cleared", %{
+      user_id: socket.assigns.current_scope.user.id,
+      site_id: site_id,
+      platform: integration.platform,
+      ecom_result: inspect(ecom_result),
+      sub_result: inspect(sub_result)
+    })
+
+    {:noreply,
+     socket
+     |> put_flash(
+       :info,
+       "#{platform_label(integration.platform)} data cleared. ClickHouse DELETE is async — data will disappear within a few minutes."
+     )}
+  end
+
   def handle_event("update_sync_frequency", %{"id" => id, "frequency" => freq}, socket) do
     integration = Spectabas.AdIntegrations.get!(id)
     minutes = String.to_integer(freq)
@@ -755,6 +801,16 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                     >
                       Sync Now
                     </button>
+                    <%= if platform in ["stripe", "braintree"] do %>
+                      <button
+                        phx-click="clear_payment_data"
+                        phx-value-id={integration.id}
+                        data-confirm={"Clear ALL imported #{label} data for this site? This deletes ecommerce events and subscription snapshots imported from #{label}. This cannot be undone."}
+                        class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200"
+                      >
+                        Clear Data
+                      </button>
+                    <% end %>
                     <button
                       phx-click="disconnect_ad"
                       phx-value-id={integration.id}
