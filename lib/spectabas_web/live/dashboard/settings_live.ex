@@ -554,7 +554,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
           <form phx-submit="save_intent_config" class="space-y-4">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label class="block text-xs font-medium text-gray-700 mb-1">
+                <label class="block text-sm font-medium text-gray-700 mb-1">
                   Buying paths <span class="text-gray-400 font-normal">(conversion pages)</span>
                 </label>
                 <textarea
@@ -565,7 +565,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                 >{paths_to_text((@site.intent_config || %{})["buying_paths"])}</textarea>
               </div>
               <div>
-                <label class="block text-xs font-medium text-gray-700 mb-1">
+                <label class="block text-sm font-medium text-gray-700 mb-1">
                   Engaging paths <span class="text-gray-400 font-normal">(core app features)</span>
                 </label>
                 <textarea
@@ -576,7 +576,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                 >{paths_to_text((@site.intent_config || %{})["engaging_paths"])}</textarea>
               </div>
               <div>
-                <label class="block text-xs font-medium text-gray-700 mb-1">
+                <label class="block text-sm font-medium text-gray-700 mb-1">
                   Support paths <span class="text-gray-400 font-normal">(help/contact pages)</span>
                 </label>
                 <textarea
@@ -587,7 +587,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                 >{paths_to_text((@site.intent_config || %{})["support_paths"])}</textarea>
               </div>
               <div>
-                <label class="block text-xs font-medium text-gray-700 mb-1">
+                <label class="block text-sm font-medium text-gray-700 mb-1">
                   Researching threshold <span class="text-gray-400 font-normal">(min pageviews)</span>
                 </label>
                 <input
@@ -616,25 +616,20 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
 
         <%!-- Ad Integrations --%>
         <div class="bg-white rounded-lg shadow p-6 mt-6">
-          <div class="flex items-center justify-between mb-2">
-            <h2 class="text-lg font-semibold text-gray-900">Ad Platform Integrations</h2>
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-semibold text-gray-900">Integrations</h2>
             <.link
               navigate="/docs/admin#ad-integrations"
-              class="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+              class="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
             >
               Setup guide &rarr;
             </.link>
           </div>
-          <p class="text-sm text-gray-500 mb-4">
-            Connect your ad accounts to track ROAS on the Revenue Attribution page.
-            See the
-            <.link navigate="/docs/admin#ad-integrations" class="text-indigo-600 underline">
-              full documentation
-            </.link>
-            for step-by-step instructions.
+          <p class="text-sm text-gray-600 mb-5">
+            Connect ad accounts for ROAS tracking, or Stripe for automatic revenue import.
           </p>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
             <%= for {platform, label, icon_color} <- [
               {"google_ads", "Google Ads", "bg-blue-100 text-blue-700"},
               {"bing_ads", "Microsoft Ads", "bg-amber-100 text-amber-700"},
@@ -643,36 +638,38 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
             ] do %>
               <% integration =
                 Enum.find(@ad_integrations, &(&1.platform == platform && &1.status == "active")) %>
-              <div class="border border-gray-200 rounded-lg p-4">
-                <div class="flex items-center gap-2 mb-3">
-                  <span class={"inline-flex items-center px-2 py-0.5 rounded text-xs font-medium #{icon_color}"}>
-                    {label}
-                  </span>
-                  <span
-                    :if={integration}
-                    class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700"
-                  >
-                    Connected
-                  </span>
+              <div class="border border-gray-200 rounded-lg p-5">
+                <div class="flex items-center justify-between mb-3">
+                  <div class="flex items-center gap-2">
+                    <span class={"inline-flex items-center px-2.5 py-1 rounded-md text-sm font-semibold #{icon_color}"}>
+                      {label}
+                    </span>
+                    <%= if integration do %>
+                      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                        Connected
+                      </span>
+                    <% end %>
+                  </div>
                 </div>
 
                 <%= if integration do %>
-                  <div class="text-xs text-gray-500 space-y-1 mb-3">
-                    <div :if={integration.account_name}>
-                      Account: <span class="text-gray-700">{integration.account_name}</span>
+                  <div class="text-sm text-gray-600 space-y-1.5 mb-4">
+                    <div :if={integration.account_name && integration.account_name != ""}>
+                      <span class="text-gray-500">Account:</span>
+                      <span class="font-medium text-gray-800">{integration.account_name}</span>
                     </div>
                     <div :if={integration.last_synced_at}>
-                      Last sync: {Calendar.strftime(integration.last_synced_at, "%Y-%m-%d %H:%M")} UTC
-                    </div>
-                    <div :if={!integration.last_synced_at && !integration.last_error}>
-                      <span class="text-amber-600">
-                        Waiting for first sync (runs every 6h, or click Sync Now)
+                      <span class="text-gray-500">Last sync:</span>
+                      <span class="font-medium">
+                        {Calendar.strftime(integration.last_synced_at, "%Y-%m-%d %H:%M")} UTC
                       </span>
                     </div>
-                    <div
-                      :if={integration.last_error}
-                      class="text-red-600"
-                    >
+                    <div :if={!integration.last_synced_at && !integration.last_error}>
+                      <span class="text-amber-600 font-medium">
+                        Waiting for first sync (every 6h, or click Sync Now)
+                      </span>
+                    </div>
+                    <div :if={integration.last_error} class="text-red-600 font-medium">
                       Error: {String.slice(integration.last_error || "", 0, 80)}
                     </div>
                   </div>
@@ -680,46 +677,52 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                     <button
                       phx-click="sync_ad_now"
                       phx-value-id={integration.id}
-                      class="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                      class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200"
                     >
                       Sync Now
                     </button>
                     <button
                       phx-click="disconnect_ad"
                       phx-value-id={integration.id}
-                      data-confirm={"Disconnect #{label}? Ad spend data will stop syncing."}
-                      class="text-xs text-red-600 hover:text-red-800 font-medium"
+                      data-confirm={"Disconnect #{label}? Data sync will stop."}
+                      class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 border border-red-200"
                     >
                       Disconnect
                     </button>
                   </div>
                 <% else %>
-                  <%= if ad_platform_configured?(@site, platform) do %>
-                    <a
-                      href={ad_authorize_url(platform, @site)}
-                      class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+                  <div class="flex items-center gap-3 flex-wrap">
+                    <%= if ad_platform_configured?(@site, platform) and platform != "stripe" do %>
+                      <a
+                        href={ad_authorize_url(platform, @site)}
+                        class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm"
+                      >
+                        Connect {label}
+                      </a>
+                    <% end %>
+                    <button
+                      phx-click="toggle_ad_config"
+                      phx-value-platform={platform}
+                      class={"inline-flex items-center px-4 py-2 text-sm font-medium rounded-md border shadow-sm " <>
+                        if(@configuring_platform == platform,
+                          do: "text-gray-700 bg-gray-100 border-gray-300 hover:bg-gray-200",
+                          else: "text-indigo-700 bg-white border-indigo-200 hover:bg-indigo-50"
+                        )}
                     >
-                      Connect {label}
-                    </a>
-                  <% end %>
-                  <button
-                    phx-click="toggle_ad_config"
-                    phx-value-platform={platform}
-                    class="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
-                  >
-                    {if @configuring_platform == platform, do: "Hide", else: "Configure"}
-                  </button>
+                      {if @configuring_platform == platform, do: "Hide", else: "Configure"}
+                    </button>
+                  </div>
                 <% end %>
 
                 <%!-- Credential Configuration Form --%>
                 <%= if @configuring_platform == platform do %>
                   <form
                     phx-submit="save_ad_credentials"
-                    class="mt-4 space-y-3 border-t border-gray-100 pt-3"
+                    class="mt-4 space-y-4 border-t border-gray-200 pt-4"
                   >
                     <input type="hidden" name="platform" value={platform} />
                     <% creds = Spectabas.AdIntegrations.Credentials.get_for_platform(@site, platform) %>
-                    <p class="text-xs text-gray-500">
+                    <p class="text-sm text-gray-600">
                       <%= case platform do %>
                         <% "google_ads" -> %>
                           Get credentials from
@@ -774,7 +777,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                     <%= cond do %>
                       <% platform in ["google_ads", "bing_ads"] -> %>
                         <div>
-                          <label class="block text-xs font-medium text-gray-700">Client ID</label>
+                          <label class="block text-sm font-medium text-gray-700">Client ID</label>
                           <input
                             type="text"
                             name="client_id"
@@ -784,7 +787,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                           />
                         </div>
                         <div>
-                          <label class="block text-xs font-medium text-gray-700">Client Secret</label>
+                          <label class="block text-sm font-medium text-gray-700">Client Secret</label>
                           <input
                             type="password"
                             name="client_secret"
@@ -794,7 +797,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                           />
                         </div>
                         <div>
-                          <label class="block text-xs font-medium text-gray-700">
+                          <label class="block text-sm font-medium text-gray-700">
                             Developer Token
                           </label>
                           <input
@@ -807,7 +810,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                         </div>
                       <% platform == "stripe" -> %>
                         <div>
-                          <label class="block text-xs font-medium text-gray-700">
+                          <label class="block text-sm font-medium text-gray-700">
                             Stripe Secret Key
                           </label>
                           <input
@@ -823,7 +826,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                         </div>
                       <% true -> %>
                         <div>
-                          <label class="block text-xs font-medium text-gray-700">App ID</label>
+                          <label class="block text-sm font-medium text-gray-700">App ID</label>
                           <input
                             type="text"
                             name="app_id"
@@ -833,7 +836,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                           />
                         </div>
                         <div>
-                          <label class="block text-xs font-medium text-gray-700">App Secret</label>
+                          <label class="block text-sm font-medium text-gray-700">App Secret</label>
                           <input
                             type="password"
                             name="app_secret"
