@@ -702,8 +702,8 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
   defp click_platform_label(other), do: other || "Unknown"
 
   defp click_platform_class("google_ads"), do: "bg-blue-100 text-blue-800"
-  defp click_platform_class("bing_ads"), do: "bg-cyan-100 text-cyan-800"
-  defp click_platform_class("meta_ads"), do: "bg-indigo-100 text-indigo-800"
+  defp click_platform_class("bing_ads"), do: "bg-amber-100 text-amber-800"
+  defp click_platform_class("meta_ads"), do: "bg-purple-100 text-purple-800"
   defp click_platform_class(_), do: "bg-gray-100 text-gray-800"
 
   defp load_visitor_ips(site, visitor_id) do

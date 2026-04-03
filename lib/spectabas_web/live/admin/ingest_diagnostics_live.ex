@@ -401,8 +401,8 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
   defp click_id_label(other), do: other
 
   defp click_id_color("google_ads"), do: "bg-blue-500"
-  defp click_id_color("bing_ads"), do: "bg-cyan-500"
-  defp click_id_color("meta_ads"), do: "bg-indigo-500"
+  defp click_id_color("bing_ads"), do: "bg-amber-500"
+  defp click_id_color("meta_ads"), do: "bg-purple-500"
   defp click_id_color(_), do: "bg-gray-400"
 
   defp metric_card(assigns) do

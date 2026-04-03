@@ -517,8 +517,8 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <%= for {platform, label, icon_color} <- [
               {"google_ads", "Google Ads", "bg-blue-100 text-blue-700"},
-              {"bing_ads", "Microsoft Ads", "bg-teal-100 text-teal-700"},
-              {"meta_ads", "Meta Ads", "bg-indigo-100 text-indigo-700"}
+              {"bing_ads", "Microsoft Ads", "bg-amber-100 text-amber-700"},
+              {"meta_ads", "Meta Ads", "bg-purple-100 text-purple-700"}
             ] do %>
               <% integration =
                 Enum.find(@ad_integrations, &(&1.platform == platform && &1.status == "active")) %>

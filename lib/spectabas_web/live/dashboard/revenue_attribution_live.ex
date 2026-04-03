@@ -615,8 +615,8 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
   end
 
   defp ad_pill_class("google_ads"), do: "bg-blue-100 text-blue-700"
-  defp ad_pill_class("bing_ads"), do: "bg-cyan-100 text-cyan-700"
-  defp ad_pill_class("meta_ads"), do: "bg-indigo-100 text-indigo-700"
+  defp ad_pill_class("bing_ads"), do: "bg-amber-100 text-amber-700"
+  defp ad_pill_class("meta_ads"), do: "bg-purple-100 text-purple-700"
   defp ad_pill_class(_), do: "bg-gray-100 text-gray-600"
 
   defp ad_pill_label("google_ads"), do: "Google Ads"
@@ -630,7 +630,7 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
   defp platform_label(p), do: p
 
   defp platform_color("google_ads"), do: "bg-blue-500"
-  defp platform_color("bing_ads"), do: "bg-cyan-500"
-  defp platform_color("meta_ads"), do: "bg-indigo-500"
+  defp platform_color("bing_ads"), do: "bg-amber-500"
+  defp platform_color("meta_ads"), do: "bg-purple-500"
   defp platform_color(_), do: "bg-gray-400"
 end

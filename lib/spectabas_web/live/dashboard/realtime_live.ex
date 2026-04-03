@@ -365,8 +365,8 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
   defp format_revenue(_), do: "0.00"
 
   defp ad_pill("google_ads"), do: "bg-blue-100 text-blue-700"
-  defp ad_pill("bing_ads"), do: "bg-cyan-100 text-cyan-700"
-  defp ad_pill("meta_ads"), do: "bg-indigo-100 text-indigo-700"
+  defp ad_pill("bing_ads"), do: "bg-amber-100 text-amber-700"
+  defp ad_pill("meta_ads"), do: "bg-purple-100 text-purple-700"
   defp ad_pill(_), do: "bg-gray-100 text-gray-600"
 
   defp ad_label("google_ads"), do: "Google"
