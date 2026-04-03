@@ -226,7 +226,12 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
                 <td class="px-6 py-4 text-sm text-gray-500 font-mono">
                   {goal.page_path || goal.event_name || "-"}
                 </td>
-                <% stats = Map.get(@completions, goal.id, %{completions: 0, unique_completers: 0, conversion_rate: 0.0}) %>
+                <% stats =
+                  Map.get(@completions, goal.id, %{
+                    completions: 0,
+                    unique_completers: 0,
+                    conversion_rate: 0.0
+                  }) %>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right font-semibold tabular-nums">
                   {stats.completions}
                 </td>

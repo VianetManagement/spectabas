@@ -84,8 +84,13 @@ defmodule SpectabasWeb.Dashboard.TimeToConvertLive do
                 :for={{id, label} <- [{"platform", "By Platform"}, {"campaign", "By Campaign"}]}
                 phx-click="change_group"
                 phx-value-group={id}
-                class={["px-2.5 py-1 text-xs font-medium rounded-md",
-                  if(@group_by == id, do: "bg-white shadow text-gray-900", else: "text-gray-600 hover:text-gray-900")]}
+                class={[
+                  "px-2.5 py-1 text-xs font-medium rounded-md",
+                  if(@group_by == id,
+                    do: "bg-white shadow text-gray-900",
+                    else: "text-gray-600 hover:text-gray-900"
+                  )
+                ]}
               >
                 {label}
               </button>
@@ -95,8 +100,13 @@ defmodule SpectabasWeb.Dashboard.TimeToConvertLive do
                 :for={r <- [{"7d", "7d"}, {"30d", "30d"}, {"90d", "90d"}]}
                 phx-click="change_range"
                 phx-value-range={elem(r, 0)}
-                class={["px-2.5 py-1 text-xs font-medium rounded-md",
-                  if(@date_range == elem(r, 0), do: "bg-white shadow text-gray-900", else: "text-gray-600 hover:text-gray-900")]}
+                class={[
+                  "px-2.5 py-1 text-xs font-medium rounded-md",
+                  if(@date_range == elem(r, 0),
+                    do: "bg-white shadow text-gray-900",
+                    else: "text-gray-600 hover:text-gray-900"
+                  )
+                ]}
               >
                 {elem(r, 1)}
               </button>
@@ -105,7 +115,9 @@ defmodule SpectabasWeb.Dashboard.TimeToConvertLive do
         </div>
 
         <div :if={!@has_data} class="bg-white rounded-lg shadow p-12 text-center">
-          <p class="text-gray-500">No ad-driven conversions yet. Data will appear as visitors who arrive via ad clicks make purchases.</p>
+          <p class="text-gray-500">
+            No ad-driven conversions yet. Data will appear as visitors who arrive via ad clicks make purchases.
+          </p>
         </div>
 
         <div :if={@has_data}>
@@ -127,7 +139,9 @@ defmodule SpectabasWeb.Dashboard.TimeToConvertLive do
                 </div>
               </div>
             </div>
-            <p class="text-xs text-gray-400 mt-3">{format_number(@total_converters)} total conversions from ad clicks</p>
+            <p class="text-xs text-gray-400 mt-3">
+              {format_number(@total_converters)} total conversions from ad clicks
+            </p>
           </div>
 
           <%!-- Per-source table --%>
@@ -135,24 +149,48 @@ defmodule SpectabasWeb.Dashboard.TimeToConvertLive do
             <table class="min-w-full divide-y divide-gray-200">
               <thead class="bg-gray-50">
                 <tr>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{if @group_by == "platform", do: "Platform", else: "Campaign"}</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Converters</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Avg Days</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Median Days</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Avg Sessions</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Median Sessions</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    {if @group_by == "platform", do: "Platform", else: "Campaign"}
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Converters
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Avg Days
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Median Days
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Avg Sessions
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Median Sessions
+                  </th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-100">
                 <tr :for={row <- @rows} class="hover:bg-gray-50">
                   <td class="px-4 py-3 text-sm font-medium text-gray-900">
-                    {if @group_by == "platform", do: platform_label(row["platform"]), else: row["campaign"] || "(none)"}
+                    {if @group_by == "platform",
+                      do: platform_label(row["platform"]),
+                      else: row["campaign"] || "(none)"}
                   </td>
-                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{format_number(to_num(row["converters"]))}</td>
-                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums font-bold">{row["avg_days"]}</td>
-                  <td class="px-4 py-3 text-sm text-gray-600 text-right tabular-nums">{row["median_days"]}</td>
-                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{row["avg_sessions"]}</td>
-                  <td class="px-4 py-3 text-sm text-gray-600 text-right tabular-nums">{row["median_sessions"]}</td>
+                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
+                    {format_number(to_num(row["converters"]))}
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums font-bold">
+                    {row["avg_days"]}
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-600 text-right tabular-nums">
+                    {row["median_days"]}
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
+                    {row["avg_sessions"]}
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-600 text-right tabular-nums">
+                    {row["median_sessions"]}
+                  </td>
                 </tr>
               </tbody>
             </table>

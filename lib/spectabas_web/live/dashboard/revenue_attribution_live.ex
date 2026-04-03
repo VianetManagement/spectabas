@@ -51,7 +51,8 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
   end
 
   def handle_event("sort", %{"col" => col}, socket) do
-    {sort_by, sort_dir} = socket.assigns |> Map.take([:sort_by, :sort_dir]) |> Map.values() |> List.to_tuple()
+    {sort_by, sort_dir} =
+      socket.assigns |> Map.take([:sort_by, :sort_dir]) |> Map.values() |> List.to_tuple()
 
     new_dir =
       if col == sort_by do
@@ -127,7 +128,13 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
           |> Map.put("ad_clicks", to_num(spend_row["total_clicks"]))
           |> Map.put("ad_impressions", to_num(spend_row["total_impressions"]))
           |> Map.put("roas", roas)
-          |> Map.put("cpc", if(to_num(spend_row["total_clicks"]) > 0, do: Float.round(spend / to_num(spend_row["total_clicks"]), 2), else: nil))
+          |> Map.put(
+            "cpc",
+            if(to_num(spend_row["total_clicks"]) > 0,
+              do: Float.round(spend / to_num(spend_row["total_clicks"]), 2),
+              else: nil
+            )
+          )
         end)
       else
         rows
@@ -162,8 +169,14 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
         |> Map.put("roas", roas)
       end)
 
-    total_ad_revenue = Enum.reduce(ad_revenue, 0, fn r, acc -> acc + parse_float(r["total_revenue"]) end)
-    total_roas = if total_spend > 0 and total_ad_revenue > 0, do: Float.round(total_ad_revenue / total_spend, 2), else: nil
+    total_ad_revenue =
+      Enum.reduce(ad_revenue, 0, fn r, acc -> acc + parse_float(r["total_revenue"]) end)
+
+    total_roas =
+      if total_spend > 0 and total_ad_revenue > 0,
+        do: Float.round(total_ad_revenue / total_spend, 2),
+        else: nil
+
     has_ad_data = total_spend > 0
 
     socket
@@ -190,20 +203,30 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
     sort_dir = socket.assigns[:sort_dir] || "desc"
 
     sorted =
-      Enum.sort_by(rows, fn row ->
-        val = row[sort_by]
+      Enum.sort_by(
+        rows,
+        fn row ->
+          val = row[sort_by]
 
-        cond do
-          is_nil(val) -> 0
-          is_number(val) -> val
-          is_binary(val) ->
-            case Float.parse(val) do
-              {f, _} -> f
-              :error -> 0
-            end
-          true -> 0
-        end
-      end, if(sort_dir == "asc", do: :asc, else: :desc))
+          cond do
+            is_nil(val) ->
+              0
+
+            is_number(val) ->
+              val
+
+            is_binary(val) ->
+              case Float.parse(val) do
+                {f, _} -> f
+                :error -> 0
+              end
+
+            true ->
+              0
+          end
+        end,
+        if(sort_dir == "asc", do: :asc, else: :desc)
+      )
 
     assign(socket, :rows, sorted)
   end
@@ -226,7 +249,13 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
             <%!-- First/Last Touch Toggle --%>
             <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">
               <button
-                :for={{id, label} <- [{"first", "First Touch"}, {"last", "Last Touch"}, {"any", "Any Touch"}]}
+                :for={
+                  {id, label} <- [
+                    {"first", "First Touch"},
+                    {"last", "Last Touch"},
+                    {"any", "Any Touch"}
+                  ]
+                }
                 phx-click="change_touch"
                 phx-value-touch={id}
                 class={[
@@ -332,8 +361,15 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
           <div :if={@ad_platforms != []} class="mt-4 pt-3 border-t border-gray-100">
             <div class="flex flex-wrap gap-4">
               <div :for={p <- @ad_platforms} class="flex items-center gap-2 text-sm">
-                <span class={["inline-flex items-center px-2 py-0.5 rounded text-xs font-medium", ad_pill_class(p["platform"])]}>{platform_label(p["platform"])}</span>
-                <span class="text-gray-500">{@site.currency} {format_money(p["total_spend"])} spend</span>
+                <span class={[
+                  "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
+                  ad_pill_class(p["platform"])
+                ]}>
+                  {platform_label(p["platform"])}
+                </span>
+                <span class="text-gray-500">
+                  {@site.currency} {format_money(p["total_spend"])} spend
+                </span>
                 <span class="text-gray-400">{format_number(to_num(p["total_clicks"]))} clicks</span>
               </div>
             </div>
@@ -389,12 +425,23 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
           <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
               <tr>
-                <.sort_th col="source" label={String.capitalize(@group_by)} align="left" sort_by={@sort_by} sort_dir={@sort_dir} />
+                <.sort_th
+                  col="source"
+                  label={String.capitalize(@group_by)}
+                  align="left"
+                  sort_by={@sort_by}
+                  sort_dir={@sort_dir}
+                />
                 <.sort_th col="visitors" label="Visitors" sort_by={@sort_by} sort_dir={@sort_dir} />
                 <.sort_th col="orders" label="Orders" sort_by={@sort_by} sort_dir={@sort_dir} />
                 <.sort_th col="total_revenue" label="Revenue" sort_by={@sort_by} sort_dir={@sort_dir} />
                 <.sort_th col="avg_order_value" label="AOV" sort_by={@sort_by} sort_dir={@sort_dir} />
-                <.sort_th col="conversion_rate" label="Conv Rate" sort_by={@sort_by} sort_dir={@sort_dir} />
+                <.sort_th
+                  col="conversion_rate"
+                  label="Conv Rate"
+                  sort_by={@sort_by}
+                  sort_dir={@sort_dir}
+                />
                 <%= if @group_by == "campaign" and @has_ad_data do %>
                   <.sort_th col="ad_spend" label="Ad Spend" sort_by={@sort_by} sort_dir={@sort_dir} />
                   <.sort_th col="roas" label="ROAS" sort_by={@sort_by} sort_dir={@sort_dir} />
@@ -408,7 +455,10 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr :if={@rows == []}>
-                <td colspan={if(@group_by == "campaign" and @has_ad_data, do: "9", else: "7")} class="px-6 py-8 text-center text-gray-500">
+                <td
+                  colspan={if(@group_by == "campaign" and @has_ad_data, do: "9", else: "7")}
+                  class="px-6 py-8 text-center text-gray-500"
+                >
                   No revenue data for this period.
                 </td>
               </tr>
@@ -418,7 +468,10 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
                     {row["source"] || "Direct"}
                     <span
                       :if={row["ad_platform"] && row["ad_platform"] != ""}
-                      class={["inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold shrink-0", ad_pill_class(row["ad_platform"])]}
+                      class={[
+                        "inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold shrink-0",
+                        ad_pill_class(row["ad_platform"])
+                      ]}
                     >
                       {ad_pill_label(row["ad_platform"])}
                     </span>
@@ -489,13 +542,27 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
             <table class="min-w-full divide-y divide-gray-200">
               <thead class="bg-gray-50">
                 <tr>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Campaign</th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Platform</th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Spend</th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Clicks</th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Impressions</th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">CPC</th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">CTR</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Campaign
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Platform
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Spend
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Clicks
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Impressions
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    CPC
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    CTR
+                  </th>
                 </tr>
               </thead>
               <tbody class="bg-white divide-y divide-gray-200">
@@ -526,7 +593,9 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
                   <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
                     <% clicks = to_num(c["total_clicks"]) %>
                     <% spend = parse_float(c["total_spend"]) %>
-                    {if clicks > 0, do: "#{@site.currency} #{format_money(spend / clicks)}", else: "--"}
+                    {if clicks > 0,
+                      do: "#{@site.currency} #{format_money(spend / clicks)}",
+                      else: "--"}
                   </td>
                   <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
                     <% clicks = to_num(c["total_clicks"]) %>
@@ -589,7 +658,8 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
     do: "revenue is credited to the most recent traffic source before purchasing."
 
   defp touch_description("any"),
-    do: "revenue is credited to every source the customer touched. Totals may exceed actual revenue since one conversion can appear under multiple sources."
+    do:
+      "revenue is credited to every source the customer touched. Totals may exceed actual revenue since one conversion can appear under multiple sources."
 
   defp roas_color(roas) when roas >= 3, do: "font-bold text-green-600"
   defp roas_color(roas) when roas >= 1, do: "font-medium text-yellow-600"
@@ -598,7 +668,7 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
   defp sort_th(assigns) do
     assigns = assigns |> Map.put_new(:align, "right")
     active = assigns.col == assigns.sort_by
-    arrow = if active, do: (if assigns.sort_dir == "asc", do: " \u2191", else: " \u2193"), else: ""
+    arrow = if active, do: if(assigns.sort_dir == "asc", do: " \u2191", else: " \u2193"), else: ""
 
     assigns = assign(assigns, :active, active)
     assigns = assign(assigns, :arrow, arrow)

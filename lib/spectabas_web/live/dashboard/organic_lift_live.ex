@@ -99,8 +99,13 @@ defmodule SpectabasWeb.Dashboard.OrganicLiftLive do
               :for={r <- [{"30d", "30d"}, {"90d", "90d"}]}
               phx-click="change_range"
               phx-value-range={elem(r, 0)}
-              class={["px-2.5 py-1 text-xs font-medium rounded-md",
-                if(@date_range == elem(r, 0), do: "bg-white shadow text-gray-900", else: "text-gray-600 hover:text-gray-900")]}
+              class={[
+                "px-2.5 py-1 text-xs font-medium rounded-md",
+                if(@date_range == elem(r, 0),
+                  do: "bg-white shadow text-gray-900",
+                  else: "text-gray-600 hover:text-gray-900"
+                )
+              ]}
             >
               {elem(r, 1)}
             </button>
@@ -108,16 +113,24 @@ defmodule SpectabasWeb.Dashboard.OrganicLiftLive do
         </div>
 
         <div :if={!@has_data} class="bg-white rounded-lg shadow p-12 text-center">
-          <p class="text-gray-500">Needs ad spend data to compare with organic traffic. Connect an ad platform and wait for spend data to sync.</p>
+          <p class="text-gray-500">
+            Needs ad spend data to compare with organic traffic. Connect an ad platform and wait for spend data to sync.
+          </p>
         </div>
 
         <div :if={@has_data}>
           <%!-- Lift insight --%>
-          <div :if={@organic_lift} class={[
-            "rounded-lg shadow p-5 mb-6",
-            if(@organic_lift > 0, do: "bg-green-50", else: "bg-yellow-50")
-          ]}>
-            <p class={["text-lg font-bold", if(@organic_lift > 0, do: "text-green-800", else: "text-yellow-800")]}>
+          <div
+            :if={@organic_lift}
+            class={[
+              "rounded-lg shadow p-5 mb-6",
+              if(@organic_lift > 0, do: "bg-green-50", else: "bg-yellow-50")
+            ]}
+          >
+            <p class={[
+              "text-lg font-bold",
+              if(@organic_lift > 0, do: "text-green-800", else: "text-yellow-800")
+            ]}>
               Organic traffic is {@organic_lift}% {if @organic_lift > 0, do: "higher", else: "lower"} on high-spend days
             </p>
             <p class="text-sm text-gray-600 mt-1">
@@ -136,15 +149,21 @@ defmodule SpectabasWeb.Dashboard.OrganicLiftLive do
                 </div>
                 <div class="flex justify-between">
                   <span class="text-gray-500">Avg Daily Spend</span>
-                  <span class="font-bold text-gray-900">{@site.currency} {format_money(@high_spend["avg_daily_spend"])}</span>
+                  <span class="font-bold text-gray-900">
+                    {@site.currency} {format_money(@high_spend["avg_daily_spend"])}
+                  </span>
                 </div>
                 <div class="flex justify-between">
                   <span class="text-gray-500">Avg Organic Visitors</span>
-                  <span class="font-bold text-green-600">{@high_spend["avg_organic_visitors"] || 0}</span>
+                  <span class="font-bold text-green-600">
+                    {@high_spend["avg_organic_visitors"] || 0}
+                  </span>
                 </div>
                 <div class="flex justify-between">
                   <span class="text-gray-500">Avg Direct Visitors</span>
-                  <span class="font-bold text-indigo-600">{@high_spend["avg_direct_visitors"] || 0}</span>
+                  <span class="font-bold text-indigo-600">
+                    {@high_spend["avg_direct_visitors"] || 0}
+                  </span>
                 </div>
               </div>
             </div>
@@ -157,15 +176,21 @@ defmodule SpectabasWeb.Dashboard.OrganicLiftLive do
                 </div>
                 <div class="flex justify-between">
                   <span class="text-gray-500">Avg Daily Spend</span>
-                  <span class="font-bold text-gray-900">{@site.currency} {format_money(@low_spend["avg_daily_spend"])}</span>
+                  <span class="font-bold text-gray-900">
+                    {@site.currency} {format_money(@low_spend["avg_daily_spend"])}
+                  </span>
                 </div>
                 <div class="flex justify-between">
                   <span class="text-gray-500">Avg Organic Visitors</span>
-                  <span class="font-bold text-green-600">{@low_spend["avg_organic_visitors"] || 0}</span>
+                  <span class="font-bold text-green-600">
+                    {@low_spend["avg_organic_visitors"] || 0}
+                  </span>
                 </div>
                 <div class="flex justify-between">
                   <span class="text-gray-500">Avg Direct Visitors</span>
-                  <span class="font-bold text-indigo-600">{@low_spend["avg_direct_visitors"] || 0}</span>
+                  <span class="font-bold text-indigo-600">
+                    {@low_spend["avg_direct_visitors"] || 0}
+                  </span>
                 </div>
               </div>
             </div>
@@ -179,18 +204,30 @@ defmodule SpectabasWeb.Dashboard.OrganicLiftLive do
             <table class="min-w-full divide-y divide-gray-200">
               <thead class="bg-gray-50">
                 <tr>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ad Spend</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Organic Visitors</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Direct Visitors</th>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Spend Level</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Date
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Ad Spend
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Organic Visitors
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Direct Visitors
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Spend Level
+                  </th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-100">
                 <tr :for={d <- @timeseries} class="hover:bg-gray-50">
                   <td class="px-4 py-2 text-sm text-gray-500">{d["day"]}</td>
                   <td class="px-4 py-2 text-sm text-gray-900 text-right tabular-nums">
-                    {if parse_float(d["ad_spend"]) > 0, do: "#{@site.currency} #{format_money(d["ad_spend"])}", else: "--"}
+                    {if parse_float(d["ad_spend"]) > 0,
+                      do: "#{@site.currency} #{format_money(d["ad_spend"])}",
+                      else: "--"}
                   </td>
                   <td class="px-4 py-2 text-sm text-green-600 text-right tabular-nums font-medium">
                     {format_number(to_num(d["organic_visitors"]))}
@@ -199,12 +236,16 @@ defmodule SpectabasWeb.Dashboard.OrganicLiftLive do
                     {format_number(to_num(d["direct_visitors"]))}
                   </td>
                   <td class="px-4 py-2">
-                    <span :if={parse_float(d["ad_spend"]) > 0} class={[
-                      "px-2 py-0.5 rounded text-[10px] font-medium",
-                      if(parse_float(d["ad_spend"]) >= @max_spend * 0.5,
-                        do: "bg-violet-100 text-violet-700",
-                        else: "bg-gray-100 text-gray-500")
-                    ]}>
+                    <span
+                      :if={parse_float(d["ad_spend"]) > 0}
+                      class={[
+                        "px-2 py-0.5 rounded text-[10px] font-medium",
+                        if(parse_float(d["ad_spend"]) >= @max_spend * 0.5,
+                          do: "bg-violet-100 text-violet-700",
+                          else: "bg-gray-100 text-gray-500"
+                        )
+                      ]}
+                    >
                       {if parse_float(d["ad_spend"]) >= @max_spend * 0.5, do: "High", else: "Low"}
                     </span>
                   </td>

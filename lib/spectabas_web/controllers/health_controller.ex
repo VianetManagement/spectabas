@@ -642,63 +642,70 @@ defmodule SpectabasWeb.HealthController do
     unless valid_token?(token) do
       conn |> put_status(403) |> json(%{error: "forbidden"})
     else
-    q1 =
-      case Spectabas.ClickHouse.query(
-             "SELECT click_id_type, count() AS c, uniq(visitor_id) AS v FROM events WHERE click_id != '' AND site_id = 4 AND timestamp >= now() - INTERVAL 7 DAY GROUP BY click_id_type"
-           ) do
-        {:ok, data} -> data
-        {:error, r} -> [%{"error" => inspect(r) |> String.slice(0, 200)}]
-      end
+      q1 =
+        case Spectabas.ClickHouse.query(
+               "SELECT click_id_type, count() AS c, uniq(visitor_id) AS v FROM events WHERE click_id != '' AND site_id = 4 AND timestamp >= now() - INTERVAL 7 DAY GROUP BY click_id_type"
+             ) do
+          {:ok, data} -> data
+          {:error, r} -> [%{"error" => inspect(r) |> String.slice(0, 200)}]
+        end
 
-    q2 =
-      case Spectabas.ClickHouse.query(
-             "SELECT count() AS c FROM events WHERE site_id = 4 AND toDate(timestamp) = today()"
-           ) do
-        {:ok, data} -> data
-        {:error, r} -> [%{"error" => inspect(r) |> String.slice(0, 200)}]
-      end
+      q2 =
+        case Spectabas.ClickHouse.query(
+               "SELECT count() AS c FROM events WHERE site_id = 4 AND toDate(timestamp) = today()"
+             ) do
+          {:ok, data} -> data
+          {:error, r} -> [%{"error" => inspect(r) |> String.slice(0, 200)}]
+        end
 
-    q3 =
-      case Spectabas.ClickHouse.query("""
-           WITH ad_sessions AS (
-             SELECT session_id, any(visitor_id) AS visitor_id, any(click_id_type) AS group_key,
-               countIf(event_type = 'pageview') AS pages, maxIf(duration_s, event_type = 'duration') AS duration,
-               any(visitor_intent) AS intent
-             FROM events WHERE site_id = 4 AND ip_is_bot = 0 AND click_id != ''
-               AND timestamp >= now() - INTERVAL 30 DAY
-             GROUP BY session_id HAVING countIf(event_type = 'pageview') > 0
-           )
-           SELECT group_key, count() AS sessions, uniqExact(visitor_id) AS visitors,
-             round(avg(pages), 1) AS avg_pages
-           FROM ad_sessions GROUP BY group_key
-           """) do
-        {:ok, data} -> data
-        {:error, r} -> [%{"error" => inspect(r) |> String.slice(0, 200)}]
-      end
+      q3 =
+        case Spectabas.ClickHouse.query("""
+             WITH ad_sessions AS (
+               SELECT session_id, any(visitor_id) AS visitor_id, any(click_id_type) AS group_key,
+                 countIf(event_type = 'pageview') AS pages, maxIf(duration_s, event_type = 'duration') AS duration,
+                 any(visitor_intent) AS intent
+               FROM events WHERE site_id = 4 AND ip_is_bot = 0 AND click_id != ''
+                 AND timestamp >= now() - INTERVAL 30 DAY
+               GROUP BY session_id HAVING countIf(event_type = 'pageview') > 0
+             )
+             SELECT group_key, count() AS sessions, uniqExact(visitor_id) AS visitors,
+               round(avg(pages), 1) AS avg_pages
+             FROM ad_sessions GROUP BY group_key
+             """) do
+          {:ok, data} -> data
+          {:error, r} -> [%{"error" => inspect(r) |> String.slice(0, 200)}]
+        end
 
-    site = Spectabas.Sites.get_site!(4)
-    user = Spectabas.Repo.get!(Spectabas.Accounts.User, 1)
-    range = %{from: DateTime.add(DateTime.utc_now(), -30, :day), to: DateTime.utc_now()}
+      site = Spectabas.Sites.get_site!(4)
+      user = Spectabas.Repo.get!(Spectabas.Accounts.User, 1)
+      range = %{from: DateTime.add(DateTime.utc_now(), -30, :day), to: DateTime.utc_now()}
 
-    q4 =
-      case Spectabas.Analytics.time_to_convert_by_source(site, user, range) do
-        {:ok, data} -> data
-        {:error, r} -> [%{"error" => inspect(r) |> String.slice(0, 300)}]
-      end
+      q4 =
+        case Spectabas.Analytics.time_to_convert_by_source(site, user, range) do
+          {:ok, data} -> data
+          {:error, r} -> [%{"error" => inspect(r) |> String.slice(0, 300)}]
+        end
 
-    q5 =
-      case Spectabas.Analytics.ad_visitor_paths(site, user, range) do
-        {:ok, data} -> data
-        {:error, r} -> [%{"error" => inspect(r) |> String.slice(0, 300)}]
-      end
+      q5 =
+        case Spectabas.Analytics.ad_visitor_paths(site, user, range) do
+          {:ok, data} -> data
+          {:error, r} -> [%{"error" => inspect(r) |> String.slice(0, 300)}]
+        end
 
-    q6 =
-      case Spectabas.Analytics.visitor_quality_by_source(site, user, range) do
-        {:ok, data} -> data
-        {:error, r} -> [%{"error" => inspect(r) |> String.slice(0, 300)}]
-      end
+      q6 =
+        case Spectabas.Analytics.visitor_quality_by_source(site, user, range) do
+          {:ok, data} -> data
+          {:error, r} -> [%{"error" => inspect(r) |> String.slice(0, 300)}]
+        end
 
-    json(conn, %{by_type: q1, today: q2, quality_test: q3, time_to_convert: q4, visitor_paths: q5, visitor_quality: q6})
+      json(conn, %{
+        by_type: q1,
+        today: q2,
+        quality_test: q3,
+        time_to_convert: q4,
+        visitor_paths: q5,
+        visitor_quality: q6
+      })
     end
   end
 
@@ -710,20 +717,20 @@ defmodule SpectabasWeb.HealthController do
     unless valid_token?(token) do
       conn |> put_status(403) |> json(%{error: "forbidden"})
     else
-    results = %{
-      proxy:
-        case Spectabas.Workers.ProxySetupEmail.perform(%Oban.Job{args: %{}}) do
-          :ok -> "sent"
-          {:error, reason} -> "error: #{inspect(reason)}"
-        end,
-      ad_setup:
-        case Spectabas.Workers.AdSetupEmail.perform(%Oban.Job{args: %{}}) do
-          :ok -> "sent"
-          {:error, reason} -> "error: #{inspect(reason)}"
-        end
-    }
+      results = %{
+        proxy:
+          case Spectabas.Workers.ProxySetupEmail.perform(%Oban.Job{args: %{}}) do
+            :ok -> "sent"
+            {:error, reason} -> "error: #{inspect(reason)}"
+          end,
+        ad_setup:
+          case Spectabas.Workers.AdSetupEmail.perform(%Oban.Job{args: %{}}) do
+            :ok -> "sent"
+            {:error, reason} -> "error: #{inspect(reason)}"
+          end
+      }
 
-    json(conn, %{status: "done", results: results})
+      json(conn, %{status: "done", results: results})
     end
   end
 

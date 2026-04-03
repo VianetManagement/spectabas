@@ -92,7 +92,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
 
         <%!-- Navigation --%>
         <nav class="flex-1 p-3 space-y-0.5 overflow-y-auto">
-          <.nav_section label="Overview" color="text-indigo-500" to={~p"/dashboard/sites/#{@site.id}/c/overview"}>
+          <.nav_section
+            label="Overview"
+            color="text-indigo-500"
+            to={~p"/dashboard/sites/#{@site.id}/c/overview"}
+          >
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}"}
               label="Dashboard"
@@ -115,7 +119,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
             />
           </.nav_section>
 
-          <.nav_section label="Behavior" color="text-blue-500" to={~p"/dashboard/sites/#{@site.id}/c/behavior"}>
+          <.nav_section
+            label="Behavior"
+            color="text-blue-500"
+            to={~p"/dashboard/sites/#{@site.id}/c/behavior"}
+          >
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/pages"}
               label="Pages"
@@ -158,7 +166,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
             />
           </.nav_section>
 
-          <.nav_section label="Acquisition" color="text-emerald-500" to={~p"/dashboard/sites/#{@site.id}/c/acquisition"}>
+          <.nav_section
+            label="Acquisition"
+            color="text-emerald-500"
+            to={~p"/dashboard/sites/#{@site.id}/c/acquisition"}
+          >
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/acquisition"}
               label="Acquisition"
@@ -171,7 +183,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
             />
           </.nav_section>
 
-          <.nav_section label="Audience" color="text-amber-500" to={~p"/dashboard/sites/#{@site.id}/c/audience"}>
+          <.nav_section
+            label="Audience"
+            color="text-amber-500"
+            to={~p"/dashboard/sites/#{@site.id}/c/audience"}
+          >
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/geo"}
               label="Geography"
@@ -214,7 +230,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
             />
           </.nav_section>
 
-          <.nav_section label="Conversions" color="text-rose-500" to={~p"/dashboard/sites/#{@site.id}/c/conversions"}>
+          <.nav_section
+            label="Conversions"
+            color="text-rose-500"
+            to={~p"/dashboard/sites/#{@site.id}/c/conversions"}
+          >
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/goals"}
               label="Goals"
@@ -247,7 +267,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
             />
           </.nav_section>
 
-          <.nav_section label="Ad Effectiveness" color="text-violet-500" to={~p"/dashboard/sites/#{@site.id}/c/ad-effectiveness"}>
+          <.nav_section
+            label="Ad Effectiveness"
+            color="text-violet-500"
+            to={~p"/dashboard/sites/#{@site.id}/c/ad-effectiveness"}
+          >
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/visitor-quality"}
               label="Visitor Quality"
@@ -304,10 +328,20 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
       <div class="flex-1 flex flex-col min-w-0">
         <%!-- Page header with breadcrumb + title + description --%>
         <div :if={@page_title} class="hidden lg:block bg-white border-b border-gray-200 px-6 py-4">
-          <nav :if={breadcrumb_category(@active)} class="flex items-center gap-1.5 text-xs text-gray-400 mb-1">
-            <.link navigate={~p"/dashboard/sites/#{@site.id}"} class="hover:text-indigo-600">{@site.name}</.link>
+          <nav
+            :if={breadcrumb_category(@active)}
+            class="flex items-center gap-1.5 text-xs text-gray-400 mb-1"
+          >
+            <.link navigate={~p"/dashboard/sites/#{@site.id}"} class="hover:text-indigo-600">
+              {@site.name}
+            </.link>
             <span>/</span>
-            <.link navigate={category_path(@site.id, @active)} class={"hover:underline #{breadcrumb_color(@active)}"}>{breadcrumb_category(@active)}</.link>
+            <.link
+              navigate={category_path(@site.id, @active)}
+              class={"hover:underline #{breadcrumb_color(@active)}"}
+            >
+              {breadcrumb_category(@active)}
+            </.link>
             <span>/</span>
             <span class="text-gray-600">{@page_title}</span>
           </nav>
@@ -465,7 +499,10 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
     ~H"""
     <div class="pt-4 first:pt-0">
       <%= if @to do %>
-        <.link navigate={@to} class={["px-2 text-[10px] font-bold uppercase tracking-wider mb-1 hover:underline", @color]}>
+        <.link
+          navigate={@to}
+          class={["px-2 text-[10px] font-bold uppercase tracking-wider mb-1 hover:underline", @color]}
+        >
           {@label}
         </.link>
       <% else %>
@@ -481,33 +518,59 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
   # Breadcrumb: maps active key → category name
   @breadcrumb_map %{
     # Overview
-    "overview" => nil, "insights" => "Overview", "journeys" => "Overview", "realtime" => "Overview",
+    "overview" => nil,
+    "insights" => "Overview",
+    "journeys" => "Overview",
+    "realtime" => "Overview",
     # Behavior
-    "pages" => "Behavior", "entry-exit" => "Behavior", "transitions" => "Behavior",
-    "search" => "Behavior", "outbound-links" => "Behavior", "downloads" => "Behavior",
-    "events" => "Behavior", "performance" => "Behavior",
+    "pages" => "Behavior",
+    "entry-exit" => "Behavior",
+    "transitions" => "Behavior",
+    "search" => "Behavior",
+    "outbound-links" => "Behavior",
+    "downloads" => "Behavior",
+    "events" => "Behavior",
+    "performance" => "Behavior",
     # Acquisition
-    "acquisition" => "Acquisition", "channels" => "Acquisition",
-    "sources" => "Acquisition", "attribution" => "Acquisition",
+    "acquisition" => "Acquisition",
+    "channels" => "Acquisition",
+    "sources" => "Acquisition",
+    "attribution" => "Acquisition",
     "campaigns" => "Acquisition",
     # Audience
-    "geo" => "Audience", "map" => "Audience", "devices" => "Audience",
-    "network" => "Audience", "bot-traffic" => "Audience", "visitor-log" => "Audience",
-    "cohort" => "Audience", "churn-risk" => "Audience",
+    "geo" => "Audience",
+    "map" => "Audience",
+    "devices" => "Audience",
+    "network" => "Audience",
+    "bot-traffic" => "Audience",
+    "visitor-log" => "Audience",
+    "cohort" => "Audience",
+    "churn-risk" => "Audience",
     # Conversions
-    "goals" => "Conversions", "funnels" => "Conversions", "ecommerce" => "Conversions",
-    "revenue-attribution" => "Conversions", "revenue-cohorts" => "Conversions",
+    "goals" => "Conversions",
+    "funnels" => "Conversions",
+    "ecommerce" => "Conversions",
+    "revenue-attribution" => "Conversions",
+    "revenue-cohorts" => "Conversions",
     "buyer-patterns" => "Conversions",
     # Ad Effectiveness
-    "visitor-quality" => "Ad Effectiveness", "time-to-convert" => "Ad Effectiveness",
-    "ad-visitor-paths" => "Ad Effectiveness", "ad-churn" => "Ad Effectiveness",
+    "visitor-quality" => "Ad Effectiveness",
+    "time-to-convert" => "Ad Effectiveness",
+    "ad-visitor-paths" => "Ad Effectiveness",
+    "ad-churn" => "Ad Effectiveness",
     "organic-lift" => "Ad Effectiveness",
     # Tools
-    "reports" => "Tools", "email-reports" => "Tools", "exports" => "Tools", "settings" => "Tools",
+    "reports" => "Tools",
+    "email-reports" => "Tools",
+    "exports" => "Tools",
+    "settings" => "Tools",
     # Category landing pages
-    "overview-landing" => nil, "behavior-landing" => "Behavior",
-    "acquisition-landing" => "Acquisition", "audience-landing" => "Audience",
-    "conversions-landing" => "Conversions", "ad-effectiveness-landing" => "Ad Effectiveness",
+    "overview-landing" => nil,
+    "behavior-landing" => "Behavior",
+    "acquisition-landing" => "Acquisition",
+    "audience-landing" => "Audience",
+    "conversions-landing" => "Conversions",
+    "ad-effectiveness-landing" => "Ad Effectiveness",
     "tools-landing" => "Tools"
   }
 

@@ -51,7 +51,7 @@ Spectabas is a multi-tenant, privacy-first web analytics SaaS platform built wit
 ### ClickHouse Data Types from JSON
 **Important**: ClickHouse returns all values as strings in JSON format. Always use `to_num/1` or `to_float/1` helpers before arithmetic. This has caused multiple bugs.
 
-**Important**: Ad effectiveness queries must use flat GROUP BY, not CTEs with JOINs — CTEs time out on ClickHouse with large event tables. A bloom_filter skip index on `click_id` speeds up `click_id != ''` filters.
+**Important**: Ad effectiveness queries must use flat GROUP BY, not CTEs with JOINs — CTEs time out on ClickHouse with large event tables. A bloom_filter skip index on `click_id` speeds up `click_id != ''` filters. Revenue attribution first/last touch uses two parallel flat queries (visitor counts + revenue scoped to purchasing visitors) to avoid the timeout — "any" touch is small enough for a single query.
 
 ## Development
 
@@ -223,7 +223,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Mobile responsiveness** — scrollable tables, collapsible mobile nav bar
 - **Accessible top nav** — WCAG AA contrast compliance
 - **Documentation pages** — docs split into `/docs` (index), `/docs/getting-started`, `/docs/dashboard`, `/docs/conversions`, `/docs/api`, `/docs/admin` with cross-category search. Requires login (behind :require_authenticated_user). Public pages: `/privacy`, `/terms`, homepage.
-- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v4.9.0)
+- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v4.10.0)
 - **Legal** — Privacy Policy at `/privacy` and Terms of Service at `/terms` (public, no auth required). Entity: Spectabas, Kent County MI. Contact: howdy@spectabas.com. Arbitration clause (AAA, Kent County). 18+ age restriction.
 
 ## Important Patterns
@@ -241,8 +241,8 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Saved segments**: Ownership enforced — `get_segment!/3` scopes by user_id and site_id. Never load segments by ID alone.
 - **Tracker GDPR default**: `data-gdpr` defaults to `"off"` (cookie-based). Sites needing fingerprint-only mode must explicitly set `data-gdpr="on"`.
 - **Click ID capture**: Tracker extracts gclid/msclkid/fbclid from URL, persists in sessionStorage, sends as `_cid`/`_cidt` fields. Ingest validates format (5-256 chars, alphanumeric + `-_=.` only) before storing in `click_id`/`click_id_type` ClickHouse columns. Invalid click IDs silently dropped. Revenue Attribution uses click IDs for platform-level ROAS.
-- **Ad blocker evasion**: Script at `/assets/v1.js`, beacon uses public_key not domain, endpoints obfuscated. `data-proxy` attribute enables reverse proxy through main domain for same-origin tracking. Cookie is always set on the page domain (not the script origin), so no cookie migration needed when switching to proxy mode.
-- **IP extraction**: Prefers `X-Forwarded-For` (set by Render's load balancer) over `CF-Connecting-IP` to prevent IP spoofing. CF-Connecting-IP used as fallback only when XFF is absent (e.g., Cloudflare-only proxied requests).
+- **Ad blocker evasion**: Script at `/assets/v1.js`, beacon uses public_key not domain, endpoints obfuscated. `data-proxy` attribute enables reverse proxy through main domain for same-origin tracking. Cookie is always set on the page domain (not the script origin), so no cookie migration needed when switching to proxy mode. Proxy plug MUST go in endpoint.ex before Plug.Parsers (not router.ex). Cloudflare Bot Fight Mode must be disabled or have WAF skip rule for `/t/*` — sendBeacon cannot solve JS challenges.
+- **IP extraction**: Priority: `X-Spectabas-Real-IP` (trusted proxy header) > `X-Forwarded-For` (Render LB) > `CF-Connecting-IP` (Cloudflare fallback) > `conn.remote_ip`. The custom header is set by our reverse proxy plug and survives Render's XFF overwrite on the second hop. Both `ingest.ex` and `collect_rate_limit.ex` use the same priority.
 - **Category landing pages**: `/sites/:id/c/:category` renders hub page with descriptions for each page in the category. Single reusable LiveView (`CategoryLive`) with all 38 page descriptions. Sidebar section labels link to these.
 - **Sidebar layout**: All dashboard pages use `<.dashboard_layout>` from SidebarComponent
 - **Async dashboard**: Mount loads critical stats only; deferred stats load via `handle_info(:load_deferred)`

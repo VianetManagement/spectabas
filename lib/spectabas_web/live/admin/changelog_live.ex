@@ -45,6 +45,32 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v4.10.0 — 2026-04-03 UTC",
+       [
+         %{
+           title: "Fix: First/last touch attribution returning zero",
+           description:
+             "Revenue Attribution first-touch and last-touch models returned empty results because the " <>
+               "subquery JOIN timed out on large event tables. Restructured into two parallel flat queries " <>
+               "(visitor counts + revenue scoped to purchasing visitors) merged in Elixir. " <>
+               "Any-touch model was unaffected and remains unchanged."
+         },
+         %{
+           title: "Fix: Reverse proxy IP forwarding",
+           description:
+             "Added X-Spectabas-Real-IP trusted header for proxied requests. Render's load balancer " <>
+               "overwrites X-Forwarded-For on the second hop, causing all proxied visitors to share " <>
+               "the proxy server's IP. The custom header bypasses this, preserving real client IPs for " <>
+               "geo enrichment and visitor dedup."
+         },
+         %{
+           title: "Update: Proxy setup guide — endpoint.ex + Cloudflare WAF",
+           description:
+             "Proxy plug must go in endpoint.ex (before Plug.Parsers), not router.ex — prevents " <>
+               "CSRF 403 errors and body consumption. Added Cloudflare WAF exception step — Bot Fight Mode " <>
+               "serves JS challenges that sendBeacon cannot solve, blocking all tracking beacons."
+         }
+       ]},
       {"v4.9.0 — 2026-04-02 UTC",
        [
          %{
@@ -117,7 +143,8 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
          },
          %{
            title: "UI: Clickable page URLs on Buyer Patterns",
-           description: "Page paths now link to the actual page on the tracked site with an external link icon."
+           description:
+             "Page paths now link to the actual page on the tracked site with an external link icon."
          },
          %{
            title: "UI: Revenue Cohorts explainer text",
@@ -127,7 +154,8 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
       {"v4.5.0 — 2026-04-02 UTC",
        [
          %{
-           title: "Fix: Ad spend sync numbers incorrect (missing FINAL on ReplacingMergeTree queries)",
+           title:
+             "Fix: Ad spend sync numbers incorrect (missing FINAL on ReplacingMergeTree queries)",
            description:
              "All 5 ad_spend queries now use FINAL keyword to deduplicate rows from repeated 6-hour syncs. " <>
                "Without FINAL, ClickHouse summed duplicate rows causing inflated/stale spend totals."

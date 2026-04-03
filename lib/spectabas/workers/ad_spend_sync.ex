@@ -29,9 +29,12 @@ defmodule Spectabas.Workers.AdSpendSync do
   # Check if this integration already synced a given date during the current UTC day
   defp synced_date_today?(integration, date) do
     case integration.last_synced_at do
-      nil -> false
-      ts -> Date.compare(DateTime.to_date(ts), Date.utc_today()) == :eq and
-            already_has_data?(integration, date)
+      nil ->
+        false
+
+      ts ->
+        Date.compare(DateTime.to_date(ts), Date.utc_today()) == :eq and
+          already_has_data?(integration, date)
     end
   end
 
@@ -50,12 +53,14 @@ defmodule Spectabas.Workers.AdSpendSync do
   end
 
   defp to_num(n) when is_integer(n), do: n
+
   defp to_num(n) when is_binary(n) do
     case Integer.parse(n) do
       {i, _} -> i
       :error -> 0
     end
   end
+
   defp to_num(_), do: 0
 
   @doc "Sync a single integration for a given date. Called by AdSpendSyncOne."

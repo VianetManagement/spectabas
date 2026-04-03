@@ -119,7 +119,11 @@ defmodule Spectabas.Events.EventSchemaTest do
     end
 
     test "maps all three ad platform click ID types" do
-      for {cid, type} <- [{"gclid_val", "google_ads"}, {"msclkid_val", "bing_ads"}, {"fbclid_val", "meta_ads"}] do
+      for {cid, type} <- [
+            {"gclid_val", "google_ads"},
+            {"msclkid_val", "bing_ads"},
+            {"fbclid_val", "meta_ads"}
+          ] do
         event = %{site_id: 1, click_id: cid, click_id_type: type}
         row = EventSchema.to_row(event)
 

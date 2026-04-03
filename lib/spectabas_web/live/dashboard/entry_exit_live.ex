@@ -137,7 +137,10 @@ defmodule SpectabasWeb.Dashboard.EntryExitLive do
                 <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   {if @tab == "entry", do: "Entries", else: "Exits"}
                 </th>
-                <th :if={@tab == "entry"} class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th
+                  :if={@tab == "entry"}
+                  class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
+                >
                   Bounce Rate
                 </th>
                 <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -147,7 +150,10 @@ defmodule SpectabasWeb.Dashboard.EntryExitLive do
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr :if={@data == []}>
-                <td colspan={if @tab == "entry", do: "5", else: "4"} class="px-6 py-8 text-center text-gray-500">
+                <td
+                  colspan={if @tab == "entry", do: "5", else: "4"}
+                  class="px-6 py-8 text-center text-gray-500"
+                >
                   No data for this period.
                 </td>
               </tr>
@@ -161,7 +167,10 @@ defmodule SpectabasWeb.Dashboard.EntryExitLive do
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
                   {format_number(to_num(row[count_key(@tab)]))}
                 </td>
-                <td :if={@tab == "entry"} class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                <td
+                  :if={@tab == "entry"}
+                  class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums"
+                >
                   {row["bounce_rate"]}%
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">

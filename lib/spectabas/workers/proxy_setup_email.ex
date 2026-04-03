@@ -134,6 +134,7 @@ defmodule Spectabas.Workers.ProxySetupEmail do
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;body: body,<br>
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;headers: [<br>
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{<span style="color: #86efac;">"content-type"</span>, <span style="color: #86efac;">"application/json"</span>},<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{<span style="color: #86efac;">"x-spectabas-real-ip"</span>, client_ip},<br>
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{<span style="color: #86efac;">"cf-connecting-ip"</span>, client_ip},<br>
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{<span style="color: #86efac;">"x-forwarded-for"</span>, client_ip},<br>
     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{<span style="color: #86efac;">"user-agent"</span>, get_req_header(conn, <span style="color: #86efac;">"user-agent"</span>) |&gt; List.first() |&gt; Kernel.||(<span style="color: #86efac;">""</span>)}<br>
@@ -158,23 +159,29 @@ defmodule Spectabas.Workers.ProxySetupEmail do
 
         <hr style="border: 0; border-top: 2px solid #e5e7eb; margin: 24px 0;">
 
-        <h2 style="font-size: 18px; margin-bottom: 8px;">Step 2: Add the Plug to Your Router</h2>
+        <h2 style="font-size: 18px; margin-bottom: 8px;">Step 2: Add the Plug to Your Endpoint</h2>
 
-        <p style="font-size: 14px;">In your <code>lib/roommates_web/router.ex</code>, add the plug <strong>before</strong> your main pipeline, near the top of the router:</p>
+        <p style="font-size: 14px;">In your <code>lib/roommates_web/endpoint.ex</code>, add the plug <strong>BEFORE</strong> <code>Plug.Parsers</code>:</p>
 
         <div style="background: #1e293b; color: #e2e8f0; padding: 16px; border-radius: 6px; font-family: monospace; font-size: 13px; overflow-x: auto; margin: 12px 0; line-height: 1.5;">
-    <span style="color: #7dd3fc;">defmodule</span> RoommatesWeb.Router <span style="color: #7dd3fc;">do</span><br>
-    &nbsp;&nbsp;<span style="color: #7dd3fc;">use</span> RoommatesWeb, :router<br>
+    <span style="color: #7dd3fc;">defmodule</span> RoommatesWeb.Endpoint <span style="color: #7dd3fc;">do</span><br>
+    &nbsp;&nbsp;<span style="color: #7dd3fc;">use</span> Phoenix.Endpoint, otp_app: :roommates<br>
     <br>
-    &nbsp;&nbsp;<span style="color: #6b7280;"># Analytics proxy — must be before parsers/pipelines</span><br>
-    &nbsp;&nbsp;<span style="color: #7dd3fc;">plug</span> RoommatesWeb.Plugs.AnalyticsProxy<br>
+    &nbsp;&nbsp;<span style="color: #6b7280;"># ... session, static, etc ...</span><br>
     <br>
-    &nbsp;&nbsp;<span style="color: #6b7280;"># ... rest of your router ...</span><br>
+    &nbsp;&nbsp;<span style="color: #86efac; font-weight: bold;"># Analytics proxy — MUST be before Plug.Parsers</span><br>
+    &nbsp;&nbsp;<span style="color: #86efac; font-weight: bold;">plug RoommatesWeb.Plugs.AnalyticsProxy</span><br>
+    <br>
+    &nbsp;&nbsp;plug Plug.Parsers,<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;parsers: [:urlencoded, :multipart, :json],<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;<span style="color: #6b7280;"># ...</span><br>
+    <br>
+    &nbsp;&nbsp;<span style="color: #6b7280;"># ... rest of endpoint ...</span><br>
     <span style="color: #7dd3fc;">end</span>
         </div>
 
-        <div style="background: #fefce8; border-left: 4px solid #eab308; padding: 12px 16px; margin: 16px 0; font-size: 13px;">
-          <strong>Important:</strong> The plug must be added BEFORE <code>plug :match</code> and <code>plug :dispatch</code> in the router, and before any body-reading plugs like <code>Plug.Parsers</code>. This is because the proxy needs to read the raw POST body for beacon forwarding. If <code>Plug.Parsers</code> runs first, it consumes the body.
+        <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 12px 16px; margin: 16px 0; font-size: 13px;">
+          <strong>Critical:</strong> The plug MUST go in <code>endpoint.ex</code>, not <code>router.ex</code>. It must be placed BEFORE <code>Plug.Parsers</code> because the proxy needs to read the raw POST body. If <code>Plug.Parsers</code> runs first, it consumes the body and the proxy forwards empty payloads. Placing it in the router causes 403 errors from CSRF protection.
         </div>
 
         <hr style="border: 0; border-top: 2px solid #e5e7eb; margin: 24px 0;">
@@ -216,7 +223,24 @@ defmodule Spectabas.Workers.ProxySetupEmail do
 
         <hr style="border: 0; border-top: 2px solid #e5e7eb; margin: 24px 0;">
 
-        <h2 style="font-size: 18px; margin-bottom: 8px;">Step 5: Deploy and Verify</h2>
+        <h2 style="font-size: 18px; margin-bottom: 8px;">Step 5: Cloudflare WAF Exception</h2>
+
+        <p style="font-size: 14px;">If your site uses Cloudflare, its Bot Fight Mode or Managed Challenge will block beacon POST requests to <code>/t/c/e</code> with a 403 before they reach your app. You must add a WAF skip rule:</p>
+
+        <ol style="font-size: 14px; padding-left: 20px;">
+          <li>Go to <strong>Security &gt; WAF &gt; Custom Rules</strong> in Cloudflare dashboard</li>
+          <li>Create a new rule with expression: <code>(http.request.uri.path starts with "/t/")</code></li>
+          <li>Action: <strong>Skip</strong> — check <strong>All remaining custom rules</strong> and <strong>All WAF Managed Rules</strong></li>
+          <li>If you have <strong>Bot Fight Mode</strong> enabled (Security &gt; Bots), either disable it or upgrade to Super Bot Fight Mode which allows path-based exceptions</li>
+        </ol>
+
+        <div style="background: #fefce8; border-left: 4px solid #eab308; padding: 12px 16px; margin: 16px 0; font-size: 13px;">
+          <strong>Why:</strong> Cloudflare's bot protection serves a JavaScript challenge page for POST requests. Browser <code>sendBeacon</code> and <code>fetch(keepalive)</code> cannot solve JS challenges — they are fire-and-forget. Without this exception, every tracking beacon gets eaten by Cloudflare.
+        </div>
+
+        <hr style="border: 0; border-top: 2px solid #e5e7eb; margin: 24px 0;">
+
+        <h2 style="font-size: 18px; margin-bottom: 8px;">Step 6: Deploy and Verify</h2>
 
         <ol style="font-size: 14px; padding-left: 20px;">
           <li>Deploy the roommates.com changes to Render</li>
@@ -240,7 +264,7 @@ defmodule Spectabas.Workers.ProxySetupEmail do
           <tbody>
             <tr style="border-bottom: 1px solid #f3f4f6;">
               <td style="padding: 8px; font-weight: 600;">Client IP</td>
-              <td style="padding: 8px;">Proxy forwards <code>X-Forwarded-For</code> header → Spectabas reads real IP for geo enrichment</td>
+              <td style="padding: 8px;">Proxy forwards <code>X-Spectabas-Real-IP</code> header with the real client IP. Spectabas checks this header first, bypassing Render's X-Forwarded-For overwrite. Geo enrichment uses the correct IP.</td>
             </tr>
             <tr style="border-bottom: 1px solid #f3f4f6;">
               <td style="padding: 8px; font-weight: 600;">User Agent</td>
@@ -266,7 +290,8 @@ defmodule Spectabas.Workers.ProxySetupEmail do
         <h2 style="font-size: 18px; margin-bottom: 8px;">Cloudflare + Render Notes</h2>
 
         <ul style="font-size: 14px; padding-left: 20px;">
-          <li><strong>Cloudflare IP forwarding:</strong> Since www.roommates.com is behind Cloudflare, the real client IP arrives in the <code>CF-Connecting-IP</code> header. The proxy plug reads this and forwards it to Spectabas as both <code>CF-Connecting-IP</code> and <code>X-Forwarded-For</code>. Spectabas checks <code>CF-Connecting-IP</code> first, so geo enrichment uses the correct IP.</li>
+          <li><strong>Cloudflare IP forwarding:</strong> Since www.roommates.com is behind Cloudflare, the real client IP arrives in the <code>CF-Connecting-IP</code> header. The proxy plug reads this and forwards it to Spectabas via the trusted <code>X-Spectabas-Real-IP</code> header. Spectabas checks this custom header first, bypassing Render's X-Forwarded-For overwrite on the second hop.</li>
+          <li><strong>Cloudflare Bot Fight Mode:</strong> Must be disabled or have a WAF skip rule for <code>/t/*</code> paths (see Step 5). Bot Fight Mode serves JS challenges that <code>sendBeacon</code> cannot solve.</li>
           <li><strong>Cloudflare caching:</strong> Cloudflare may cache <code>/t/v1.js</code> since it returns <code>Cache-Control: public, max-age=3600</code>. This is actually good — reduces proxy overhead. If you update the tracker, purge the Cloudflare cache or change the path.</li>
           <li><strong>Cloudflare DNS:</strong> The proxy goes directly to <code>www.spectabas.com</code> (Render's domain), bypassing Cloudflare entirely for the server-to-server hop. No DNS changes needed.</li>
           <li><strong>Render latency:</strong> The proxy adds ~10-50ms per request (internal HTTP call between Render services in the same Ohio region). This is fine for async beacons.</li>
@@ -341,6 +366,7 @@ defmodule Spectabas.Workers.ProxySetupEmail do
                body: body,
                headers: [
                  {"content-type", "application/json"},
+                 {"x-spectabas-real-ip", client_ip},
                  {"cf-connecting-ip", client_ip},
                  {"x-forwarded-for", client_ip},
                  {"user-agent", get_req_header(conn, "user-agent") |> List.first() || ""}
@@ -362,7 +388,7 @@ defmodule Spectabas.Workers.ProxySetupEmail do
       end
     end
 
-    STEP 2: In router.ex, add BEFORE pipelines:
+    STEP 2: In endpoint.ex, add BEFORE Plug.Parsers (NOT in router.ex):
       plug RoommatesWeb.Plugs.AnalyticsProxy
 
     STEP 3: Update tracking snippet:
@@ -372,9 +398,16 @@ defmodule Spectabas.Workers.ProxySetupEmail do
     STEP 4: Ensure Req is in mix.exs deps:
       {:req, "~> 0.5"}
 
-    STEP 5: Deploy, then verify:
+    STEP 5: Cloudflare WAF Exception (if using Cloudflare):
+      - Security > WAF > Custom Rules > Create Rule
+      - Expression: (http.request.uri.path starts with "/t/")
+      - Action: Skip — All remaining custom rules + All WAF Managed Rules
+      - Also disable Bot Fight Mode (Security > Bots) or add path exception
+
+    STEP 6: Deploy, then verify:
       - Visit www.roommates.com/t/v1.js — should see tracker JS
       - Check Network tab — beacons go to www.roommates.com/t/c/e
+      - curl -X POST https://www.roommates.com/t/c/e?s=KEY -H "Content-Type: application/json" -d '{}' — should return 204
       - Test with uBlock Origin strict mode
     """
   end

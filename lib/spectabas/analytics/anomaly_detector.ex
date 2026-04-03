@@ -337,32 +337,61 @@ defmodule Spectabas.Analytics.AnomalyDetector do
 
       cond do
         pct <= -30 ->
-          [%{
-            severity: :high, severity_rank: 1, category: "revenue", metric: "revenue",
-            current: current_rev, previous: previous_rev, change_pct: pct,
-            message: "Revenue dropped #{abs(pct)}% this week ($#{Float.round(current_rev, 2)} vs $#{Float.round(previous_rev, 2)})",
-            action: "Check if conversion paths are broken, pricing changed, or ad traffic quality declined"
-          } | anomalies]
+          [
+            %{
+              severity: :high,
+              severity_rank: 1,
+              category: "revenue",
+              metric: "revenue",
+              current: current_rev,
+              previous: previous_rev,
+              change_pct: pct,
+              message:
+                "Revenue dropped #{abs(pct)}% this week ($#{Float.round(current_rev, 2)} vs $#{Float.round(previous_rev, 2)})",
+              action:
+                "Check if conversion paths are broken, pricing changed, or ad traffic quality declined"
+            }
+            | anomalies
+          ]
 
         pct >= 50 ->
-          [%{
-            severity: :info, severity_rank: 3, category: "revenue", metric: "revenue",
-            current: current_rev, previous: previous_rev, change_pct: pct,
-            message: "Revenue up #{pct}% this week ($#{Float.round(current_rev, 2)} vs $#{Float.round(previous_rev, 2)})",
-            action: "Investigate what's driving the growth — new campaign, seasonal trend, or product change"
-          } | anomalies]
+          [
+            %{
+              severity: :info,
+              severity_rank: 3,
+              category: "revenue",
+              metric: "revenue",
+              current: current_rev,
+              previous: previous_rev,
+              change_pct: pct,
+              message:
+                "Revenue up #{pct}% this week ($#{Float.round(current_rev, 2)} vs $#{Float.round(previous_rev, 2)})",
+              action:
+                "Investigate what's driving the growth — new campaign, seasonal trend, or product change"
+            }
+            | anomalies
+          ]
 
         true ->
           anomalies
       end
     else
       if current_rev > 0 do
-        [%{
-          severity: :info, severity_rank: 3, category: "revenue", metric: "revenue",
-          current: current_rev, previous: 0, change_pct: nil,
-          message: "First revenue: $#{Float.round(current_rev, 2)} this week",
-          action: "Your first ecommerce revenue is coming in — check Revenue Attribution to see which sources are converting"
-        } | anomalies]
+        [
+          %{
+            severity: :info,
+            severity_rank: 3,
+            category: "revenue",
+            metric: "revenue",
+            current: current_rev,
+            previous: 0,
+            change_pct: nil,
+            message: "First revenue: $#{Float.round(current_rev, 2)} this week",
+            action:
+              "Your first ecommerce revenue is coming in — check Revenue Attribution to see which sources are converting"
+          }
+          | anomalies
+        ]
       else
         anomalies
       end
@@ -378,19 +407,32 @@ defmodule Spectabas.Analytics.AnomalyDetector do
     curr_map = Map.new(current_ads, fn r -> {r["click_id_type"], to_int(r["visitors"])} end)
     prev_map = Map.new(previous_ads, fn r -> {r["click_id_type"], to_int(r["visitors"])} end)
 
-    platform_labels = %{"google_ads" => "Google Ads", "bing_ads" => "Bing Ads", "meta_ads" => "Meta Ads"}
+    platform_labels = %{
+      "google_ads" => "Google Ads",
+      "bing_ads" => "Bing Ads",
+      "meta_ads" => "Meta Ads"
+    }
 
     # New platforms detected
     anomalies =
       Enum.reduce(curr_map, anomalies, fn {platform, count}, acc ->
         if count > 0 and not Map.has_key?(prev_map, platform) do
           label = platform_labels[platform] || platform
-          [%{
-            severity: :info, severity_rank: 3, category: "ad traffic", metric: "click_id",
-            current: count, previous: 0, change_pct: nil,
-            message: "New ad traffic: #{count} visitors from #{label} this week (via click ID)",
-            action: "Check Visitor Quality and Time to Convert to evaluate this traffic source"
-          } | acc]
+
+          [
+            %{
+              severity: :info,
+              severity_rank: 3,
+              category: "ad traffic",
+              metric: "click_id",
+              current: count,
+              previous: 0,
+              change_pct: nil,
+              message: "New ad traffic: #{count} visitors from #{label} this week (via click ID)",
+              action: "Check Visitor Quality and Time to Convert to evaluate this traffic source"
+            }
+            | acc
+          ]
         else
           acc
         end
@@ -406,20 +448,40 @@ defmodule Spectabas.Analytics.AnomalyDetector do
 
         cond do
           pct <= -50 ->
-            [%{
-              severity: :medium, severity_rank: 2, category: "ad traffic", metric: "click_id",
-              current: curr_count, previous: prev_count, change_pct: pct,
-              message: "#{label} traffic dropped #{abs(pct)}% (#{curr_count} vs #{prev_count} visitors)",
-              action: "Check if campaigns were paused, budgets reduced, or ad accounts have errors"
-            } | acc]
+            [
+              %{
+                severity: :medium,
+                severity_rank: 2,
+                category: "ad traffic",
+                metric: "click_id",
+                current: curr_count,
+                previous: prev_count,
+                change_pct: pct,
+                message:
+                  "#{label} traffic dropped #{abs(pct)}% (#{curr_count} vs #{prev_count} visitors)",
+                action:
+                  "Check if campaigns were paused, budgets reduced, or ad accounts have errors"
+              }
+              | acc
+            ]
 
           pct >= 100 ->
-            [%{
-              severity: :info, severity_rank: 3, category: "ad traffic", metric: "click_id",
-              current: curr_count, previous: prev_count, change_pct: pct,
-              message: "#{label} traffic surged #{pct}% (#{curr_count} vs #{prev_count} visitors)",
-              action: "Monitor Visitor Quality to ensure the increased traffic maintains engagement"
-            } | acc]
+            [
+              %{
+                severity: :info,
+                severity_rank: 3,
+                category: "ad traffic",
+                metric: "click_id",
+                current: curr_count,
+                previous: prev_count,
+                change_pct: pct,
+                message:
+                  "#{label} traffic surged #{pct}% (#{curr_count} vs #{prev_count} visitors)",
+                action:
+                  "Monitor Visitor Quality to ensure the increased traffic maintains engagement"
+              }
+              | acc
+            ]
 
           true ->
             acc
@@ -457,12 +519,21 @@ defmodule Spectabas.Analytics.AnomalyDetector do
         count = to_int(c)
 
         if count >= 3 do
-          [%{
-            severity: :medium, severity_rank: 2, category: "retention", metric: "churn_risk",
-            current: count, previous: nil, change_pct: nil,
-            message: "#{count} customers flagged as churn risk (50%+ session decline)",
-            action: "Visit Churn Risk page to see affected customers and trigger re-engagement outreach"
-          } | anomalies]
+          [
+            %{
+              severity: :medium,
+              severity_rank: 2,
+              category: "retention",
+              metric: "churn_risk",
+              current: count,
+              previous: nil,
+              change_pct: nil,
+              message: "#{count} customers flagged as churn risk (50%+ session decline)",
+              action:
+                "Visit Churn Risk page to see affected customers and trigger re-engagement outreach"
+            }
+            | anomalies
+          ]
         else
           anomalies
         end

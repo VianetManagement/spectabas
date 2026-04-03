@@ -1239,68 +1239,165 @@ defmodule Spectabas.Analytics do
       # UTM param, or click ID). Internal navigations (self-referrals cleaned to
       # empty, no UTMs) evaluate to "Direct" and would incorrectly override real
       # sources in first/last touch attribution.
-      has_signal = "(#{ref} != '' OR utm_source != '' OR utm_medium != '' OR utm_campaign != '' OR click_id != '')"
+      has_signal =
+        "(#{ref} != '' OR utm_source != '' OR utm_medium != '' OR utm_campaign != '' OR click_id != '')"
 
-      visitor_source_subquery =
-        if touch == "any" do
-          """
-          SELECT visitor_id, source, ad_platform
-          FROM (
-            SELECT visitor_id, #{source_expr} AS source, click_id_type AS ad_platform
-            FROM events
-            WHERE site_id = #{ClickHouse.param(site.id)}
-              AND event_type = 'pageview' AND ip_is_bot = 0
-              AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-              AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-              AND #{has_signal}
-          )
-          GROUP BY visitor_id, source, ad_platform
-          """
-        else
-          agg_fn_if = if touch == "last", do: "argMaxIf", else: "argMinIf"
-
-          """
-          SELECT
-            visitor_id,
-            ifNull(
-              nullIf(#{agg_fn_if}(#{source_expr}, timestamp, #{has_signal}), ''),
-              'Direct'
-            ) AS source,
-            #{agg_fn_if}(click_id_type, timestamp, #{has_signal}) AS ad_platform
+      if touch == "any" do
+        # "Any touch" works fine — has_signal filter keeps the subquery small
+        visitor_source_subquery = """
+        SELECT visitor_id, source, ad_platform
+        FROM (
+          SELECT visitor_id, #{source_expr} AS source, click_id_type AS ad_platform
           FROM events
           WHERE site_id = #{ClickHouse.param(site.id)}
             AND event_type = 'pageview' AND ip_is_bot = 0
             AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
             AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+            AND #{has_signal}
+        )
+        GROUP BY visitor_id, source, ad_platform
+        """
+
+        sql = """
+        SELECT
+          source,
+          ad_platform,
+          uniq(e.visitor_id) AS visitors,
+          countDistinct(ec.order_id) AS orders,
+          sum(ec.revenue) AS total_revenue,
+          round(avg(ec.revenue), 2) AS avg_order_value,
+          round(countDistinct(ec.order_id) / greatest(uniq(e.visitor_id), 1) * 100, 2) AS conversion_rate
+        FROM (
+          #{visitor_source_subquery}
+        ) AS e
+        LEFT JOIN (
+          SELECT visitor_id, order_id, revenue
+          FROM ecommerce_events
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+            AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        ) AS ec ON e.visitor_id = ec.visitor_id
+        GROUP BY source, ad_platform
+        ORDER BY total_revenue DESC
+        LIMIT 50
+        """
+
+        ClickHouse.query(sql)
+      else
+        # First/last touch: two parallel flat queries to avoid timeout.
+        # The single-query approach scans ALL events (millions) before JOIN,
+        # which times out on large tables. Instead:
+        #   Q1: flat visitor counts by attributed source (no cross-table JOIN)
+        #   Q2: revenue scoped to purchasing visitors only (small JOIN)
+        agg_fn_if = if touch == "last", do: "argMaxIf", else: "argMinIf"
+        site_p = ClickHouse.param(site.id)
+        from_p = ClickHouse.param(format_datetime(date_range.from))
+        to_p = ClickHouse.param(format_datetime(date_range.to))
+
+        visitors_sql = """
+        SELECT source, ad_platform, count() AS visitors
+        FROM (
+          SELECT visitor_id,
+            ifNull(nullIf(#{agg_fn_if}(#{source_expr}, timestamp, #{has_signal}), ''), 'Direct') AS source,
+            #{agg_fn_if}(click_id_type, timestamp, #{has_signal}) AS ad_platform
+          FROM events
+          WHERE site_id = #{site_p}
+            AND event_type = 'pageview' AND ip_is_bot = 0
+            AND timestamp >= #{from_p} AND timestamp <= #{to_p}
           GROUP BY visitor_id
-          """
-        end
+        )
+        GROUP BY source, ad_platform
+        """
 
-      sql = """
-      SELECT
-        source,
-        ad_platform,
-        uniq(e.visitor_id) AS visitors,
-        countDistinct(ec.order_id) AS orders,
-        sum(ec.revenue) AS total_revenue,
-        round(avg(ec.revenue), 2) AS avg_order_value,
-        round(countDistinct(ec.order_id) / greatest(uniq(e.visitor_id), 1) * 100, 2) AS conversion_rate
-      FROM (
-        #{visitor_source_subquery}
-      ) AS e
-      LEFT JOIN (
-        SELECT visitor_id, order_id, revenue
-        FROM ecommerce_events
-        WHERE site_id = #{ClickHouse.param(site.id)}
-          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-      ) AS ec ON e.visitor_id = ec.visitor_id
-      GROUP BY source, ad_platform
-      ORDER BY total_revenue DESC
-      LIMIT 50
-      """
+        revenue_sql = """
+        SELECT source, ad_platform,
+          countDistinct(ec.order_id) AS orders,
+          sum(ec.revenue) AS total_revenue,
+          round(avg(ec.revenue), 2) AS avg_order_value
+        FROM (
+          SELECT visitor_id,
+            ifNull(nullIf(#{agg_fn_if}(#{source_expr}, timestamp, #{has_signal}), ''), 'Direct') AS source,
+            #{agg_fn_if}(click_id_type, timestamp, #{has_signal}) AS ad_platform
+          FROM events
+          WHERE site_id = #{site_p}
+            AND event_type = 'pageview' AND ip_is_bot = 0
+            AND timestamp >= #{from_p} AND timestamp <= #{to_p}
+            AND visitor_id IN (
+              SELECT DISTINCT visitor_id FROM ecommerce_events
+              WHERE site_id = #{site_p}
+                AND timestamp >= #{from_p} AND timestamp <= #{to_p}
+            )
+          GROUP BY visitor_id
+        ) AS e
+        INNER JOIN (
+          SELECT visitor_id, order_id, revenue
+          FROM ecommerce_events
+          WHERE site_id = #{site_p}
+            AND timestamp >= #{from_p} AND timestamp <= #{to_p}
+        ) AS ec ON e.visitor_id = ec.visitor_id
+        GROUP BY source, ad_platform
+        """
 
-      ClickHouse.query(sql)
+        visitors_task = Task.async(fn -> ClickHouse.query(visitors_sql) end)
+        revenue_task = Task.async(fn -> ClickHouse.query(revenue_sql) end)
+
+        visitors_result = Task.await(visitors_task, 30_000)
+        revenue_result = Task.await(revenue_task, 30_000)
+
+        visitors_map =
+          case visitors_result do
+            {:ok, rows} ->
+              Map.new(rows, fn r ->
+                {{r["source"], r["ad_platform"]}, to_int(r["visitors"])}
+              end)
+
+            _ ->
+              %{}
+          end
+
+        revenue_map =
+          case revenue_result do
+            {:ok, rows} ->
+              Map.new(rows, fn r ->
+                {{r["source"], r["ad_platform"]}, r}
+              end)
+
+            _ ->
+              %{}
+          end
+
+        all_keys =
+          MapSet.union(
+            MapSet.new(Map.keys(visitors_map)),
+            MapSet.new(Map.keys(revenue_map))
+          )
+
+        rows =
+          Enum.map(all_keys, fn {source, ad_platform} = key ->
+            visitors = Map.get(visitors_map, key, 0)
+            rev = Map.get(revenue_map, key, %{})
+            orders = to_int(Map.get(rev, "orders", "0"))
+
+            %{
+              "source" => source,
+              "ad_platform" => ad_platform,
+              "visitors" => to_string(visitors),
+              "orders" => Map.get(rev, "orders", "0"),
+              "total_revenue" => Map.get(rev, "total_revenue", "0"),
+              "avg_order_value" => Map.get(rev, "avg_order_value", "0"),
+              "conversion_rate" =>
+                if(visitors > 0,
+                  do: to_string(Float.round(orders / visitors * 100, 2)),
+                  else: "0"
+                )
+            }
+          end)
+
+        {:ok,
+         rows
+         |> Enum.sort_by(fn r -> -to_float(r["total_revenue"]) end)
+         |> Enum.take(50)}
+      end
     end
   end
 
@@ -1880,7 +1977,8 @@ defmodule Spectabas.Analytics do
 
       # Only attribute from events with a real signal — exclude internal navigations
       # that evaluate to "Direct" after self-referral cleaning
-      has_signal = "(#{ref} != '' OR utm_source != '' OR utm_medium != '' OR utm_campaign != '' OR click_id != '')"
+      has_signal =
+        "(#{ref} != '' OR utm_source != '' OR utm_medium != '' OR utm_campaign != '' OR click_id != '')"
 
       channel_expr = """
       multiIf(
@@ -2280,13 +2378,13 @@ defmodule Spectabas.Analytics do
         # Get total unique visitors for conversion rate calculation
         total_visitors =
           case ClickHouse.query("""
-            SELECT uniq(visitor_id) AS total
-            FROM events
-            WHERE site_id = #{ClickHouse.param(site.id)}
-              AND event_type = 'pageview' AND ip_is_bot = 0
-              AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-              AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-          """) do
+                 SELECT uniq(visitor_id) AS total
+                 FROM events
+                 WHERE site_id = #{ClickHouse.param(site.id)}
+                   AND event_type = 'pageview' AND ip_is_bot = 0
+                   AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+                   AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+               """) do
             {:ok, [%{"total" => t}]} -> to_int(t)
             _ -> 0
           end
@@ -2315,17 +2413,25 @@ defmodule Spectabas.Analytics do
           case ClickHouse.query(unions) do
             {:ok, rows} ->
               Map.new(rows, fn r ->
-                {r["goal_id"], %{completions: to_int(r["completions"]), unique_completers: to_int(r["unique_completers"])}}
+                {r["goal_id"],
+                 %{
+                   completions: to_int(r["completions"]),
+                   unique_completers: to_int(r["unique_completers"])
+                 }}
               end)
-            _ -> %{}
+
+            _ ->
+              %{}
           end
 
         results =
           Enum.map(goals, fn goal ->
             stats = Map.get(counts, to_string(goal.id), %{completions: 0, unique_completers: 0})
-            conv_rate = if total_visitors > 0,
-              do: Float.round(stats.unique_completers / total_visitors * 100, 2),
-              else: 0.0
+
+            conv_rate =
+              if total_visitors > 0,
+                do: Float.round(stats.unique_completers / total_visitors * 100, 2),
+                else: 0.0
 
             %{
               goal_id: goal.id,

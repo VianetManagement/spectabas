@@ -25,37 +25,86 @@ defmodule Spectabas.AttributionLogicTest do
     end
 
     test "external referrer has signal" do
-      event = %{referrer_domain: "google.com", utm_source: "", utm_medium: "", utm_campaign: "", click_id: ""}
+      event = %{
+        referrer_domain: "google.com",
+        utm_source: "",
+        utm_medium: "",
+        utm_campaign: "",
+        click_id: ""
+      }
+
       assert has_signal?(event)
     end
 
     test "utm_source has signal" do
-      event = %{referrer_domain: "", utm_source: "google", utm_medium: "", utm_campaign: "", click_id: ""}
+      event = %{
+        referrer_domain: "",
+        utm_source: "google",
+        utm_medium: "",
+        utm_campaign: "",
+        click_id: ""
+      }
+
       assert has_signal?(event)
     end
 
     test "click_id has signal" do
-      event = %{referrer_domain: "", utm_source: "", utm_medium: "", utm_campaign: "", click_id: "gclid_abc"}
+      event = %{
+        referrer_domain: "",
+        utm_source: "",
+        utm_medium: "",
+        utm_campaign: "",
+        click_id: "gclid_abc"
+      }
+
       assert has_signal?(event)
     end
 
     test "self-referral without UTM has NO signal" do
-      event = %{referrer_domain: "www.roommates.com", utm_source: "", utm_medium: "", utm_campaign: "", click_id: ""}
+      event = %{
+        referrer_domain: "www.roommates.com",
+        utm_source: "",
+        utm_medium: "",
+        utm_campaign: "",
+        click_id: ""
+      }
+
       refute has_signal?(event)
     end
 
     test "empty referrer without UTM has NO signal (internal navigation)" do
-      event = %{referrer_domain: "", utm_source: "", utm_medium: "", utm_campaign: "", click_id: ""}
+      event = %{
+        referrer_domain: "",
+        utm_source: "",
+        utm_medium: "",
+        utm_campaign: "",
+        click_id: ""
+      }
+
       refute has_signal?(event)
     end
 
     test "self-referral WITH UTM still has signal (UTM overrides)" do
-      event = %{referrer_domain: "www.roommates.com", utm_source: "newsletter", utm_medium: "", utm_campaign: "", click_id: ""}
+      event = %{
+        referrer_domain: "www.roommates.com",
+        utm_source: "newsletter",
+        utm_medium: "",
+        utm_campaign: "",
+        click_id: ""
+      }
+
       assert has_signal?(event)
     end
 
     test "self-referral WITH click_id still has signal" do
-      event = %{referrer_domain: "www.roommates.com", utm_source: "", utm_medium: "", utm_campaign: "", click_id: "gclid_123"}
+      event = %{
+        referrer_domain: "www.roommates.com",
+        utm_source: "",
+        utm_medium: "",
+        utm_campaign: "",
+        click_id: "gclid_123"
+      }
+
       assert has_signal?(event)
     end
   end
@@ -83,7 +132,8 @@ defmodule Spectabas.AttributionLogicTest do
     end
 
     defp has_signal?(event) do
-      (event.referrer_domain != "" and event.referrer_domain not in ["www.roommates.com", "roommates.com"]) or
+      (event.referrer_domain != "" and
+         event.referrer_domain not in ["www.roommates.com", "roommates.com"]) or
         event.utm_source != "" or
         event.utm_medium != "" or
         event.utm_campaign != "" or
@@ -92,10 +142,13 @@ defmodule Spectabas.AttributionLogicTest do
 
     defp source_for(event) do
       cond do
-        event.referrer_domain != "" and event.referrer_domain not in ["www.roommates.com", "roommates.com"] ->
+        event.referrer_domain != "" and
+            event.referrer_domain not in ["www.roommates.com", "roommates.com"] ->
           event.referrer_domain
+
         event.utm_source != "" ->
           event.utm_source
+
         true ->
           "Direct"
       end
@@ -103,9 +156,30 @@ defmodule Spectabas.AttributionLogicTest do
 
     test "first-touch credits external source, ignores self-referrals" do
       events = [
-        %{referrer_domain: "google.com", utm_source: "", utm_medium: "", utm_campaign: "", click_id: "", timestamp: 1},
-        %{referrer_domain: "www.roommates.com", utm_source: "", utm_medium: "", utm_campaign: "", click_id: "", timestamp: 2},
-        %{referrer_domain: "www.roommates.com", utm_source: "", utm_medium: "", utm_campaign: "", click_id: "", timestamp: 3}
+        %{
+          referrer_domain: "google.com",
+          utm_source: "",
+          utm_medium: "",
+          utm_campaign: "",
+          click_id: "",
+          timestamp: 1
+        },
+        %{
+          referrer_domain: "www.roommates.com",
+          utm_source: "",
+          utm_medium: "",
+          utm_campaign: "",
+          click_id: "",
+          timestamp: 2
+        },
+        %{
+          referrer_domain: "www.roommates.com",
+          utm_source: "",
+          utm_medium: "",
+          utm_campaign: "",
+          click_id: "",
+          timestamp: 3
+        }
       ]
 
       assert first_touch(events) == "google.com"
@@ -113,9 +187,30 @@ defmodule Spectabas.AttributionLogicTest do
 
     test "last-touch credits external source, ignores trailing self-referrals" do
       events = [
-        %{referrer_domain: "google.com", utm_source: "", utm_medium: "", utm_campaign: "", click_id: "", timestamp: 1},
-        %{referrer_domain: "www.roommates.com", utm_source: "", utm_medium: "", utm_campaign: "", click_id: "", timestamp: 2},
-        %{referrer_domain: "www.roommates.com", utm_source: "", utm_medium: "", utm_campaign: "", click_id: "", timestamp: 3}
+        %{
+          referrer_domain: "google.com",
+          utm_source: "",
+          utm_medium: "",
+          utm_campaign: "",
+          click_id: "",
+          timestamp: 1
+        },
+        %{
+          referrer_domain: "www.roommates.com",
+          utm_source: "",
+          utm_medium: "",
+          utm_campaign: "",
+          click_id: "",
+          timestamp: 2
+        },
+        %{
+          referrer_domain: "www.roommates.com",
+          utm_source: "",
+          utm_medium: "",
+          utm_campaign: "",
+          click_id: "",
+          timestamp: 3
+        }
       ]
 
       # Without the fix, this would be "Direct" (from self-referral at T3)
@@ -125,9 +220,30 @@ defmodule Spectabas.AttributionLogicTest do
 
     test "last-touch credits most recent external source" do
       events = [
-        %{referrer_domain: "google.com", utm_source: "", utm_medium: "", utm_campaign: "", click_id: "", timestamp: 1},
-        %{referrer_domain: "www.roommates.com", utm_source: "", utm_medium: "", utm_campaign: "", click_id: "", timestamp: 2},
-        %{referrer_domain: "facebook.com", utm_source: "", utm_medium: "", utm_campaign: "", click_id: "", timestamp: 4}
+        %{
+          referrer_domain: "google.com",
+          utm_source: "",
+          utm_medium: "",
+          utm_campaign: "",
+          click_id: "",
+          timestamp: 1
+        },
+        %{
+          referrer_domain: "www.roommates.com",
+          utm_source: "",
+          utm_medium: "",
+          utm_campaign: "",
+          click_id: "",
+          timestamp: 2
+        },
+        %{
+          referrer_domain: "facebook.com",
+          utm_source: "",
+          utm_medium: "",
+          utm_campaign: "",
+          click_id: "",
+          timestamp: 4
+        }
       ]
 
       assert last_touch(events) == "facebook.com"
@@ -135,19 +251,49 @@ defmodule Spectabas.AttributionLogicTest do
 
     test "click ID counts as signal for attribution" do
       events = [
-        %{referrer_domain: "", utm_source: "", utm_medium: "", utm_campaign: "", click_id: "gclid_abc", timestamp: 1},
-        %{referrer_domain: "www.roommates.com", utm_source: "", utm_medium: "", utm_campaign: "", click_id: "", timestamp: 2}
+        %{
+          referrer_domain: "",
+          utm_source: "",
+          utm_medium: "",
+          utm_campaign: "",
+          click_id: "gclid_abc",
+          timestamp: 1
+        },
+        %{
+          referrer_domain: "www.roommates.com",
+          utm_source: "",
+          utm_medium: "",
+          utm_campaign: "",
+          click_id: "",
+          timestamp: 2
+        }
       ]
 
       # The click ID event at T1 is the only one with signal
-      assert first_touch(events) == "Direct"  # no referrer/utm, but has click_id
-      assert last_touch(events) == "Direct"   # same — source_for doesn't use click_id for source label
+      # no referrer/utm, but has click_id
+      assert first_touch(events) == "Direct"
+      # same — source_for doesn't use click_id for source label
+      assert last_touch(events) == "Direct"
     end
 
     test "pure direct visitor (no external referrer ever) returns Direct" do
       events = [
-        %{referrer_domain: "", utm_source: "", utm_medium: "", utm_campaign: "", click_id: "", timestamp: 1},
-        %{referrer_domain: "www.roommates.com", utm_source: "", utm_medium: "", utm_campaign: "", click_id: "", timestamp: 2}
+        %{
+          referrer_domain: "",
+          utm_source: "",
+          utm_medium: "",
+          utm_campaign: "",
+          click_id: "",
+          timestamp: 1
+        },
+        %{
+          referrer_domain: "www.roommates.com",
+          utm_source: "",
+          utm_medium: "",
+          utm_campaign: "",
+          click_id: "",
+          timestamp: 2
+        }
       ]
 
       assert first_touch(events) == "Direct"
@@ -156,8 +302,22 @@ defmodule Spectabas.AttributionLogicTest do
 
     test "UTM source from self-referral domain is still attributed" do
       events = [
-        %{referrer_domain: "www.roommates.com", utm_source: "newsletter", utm_medium: "email", utm_campaign: "", click_id: "", timestamp: 1},
-        %{referrer_domain: "www.roommates.com", utm_source: "", utm_medium: "", utm_campaign: "", click_id: "", timestamp: 2}
+        %{
+          referrer_domain: "www.roommates.com",
+          utm_source: "newsletter",
+          utm_medium: "email",
+          utm_campaign: "",
+          click_id: "",
+          timestamp: 1
+        },
+        %{
+          referrer_domain: "www.roommates.com",
+          utm_source: "",
+          utm_medium: "",
+          utm_campaign: "",
+          click_id: "",
+          timestamp: 2
+        }
       ]
 
       assert first_touch(events) == "newsletter"

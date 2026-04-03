@@ -100,7 +100,10 @@ defmodule Spectabas.Events.IngestTest do
 
     test "parent_domain returns domain itself when only 2 parts" do
       parts = String.split("example.com", ".")
-      result = if length(parts) > 2, do: parts |> Enum.drop(1) |> Enum.join("."), else: "example.com"
+
+      result =
+        if length(parts) > 2, do: parts |> Enum.drop(1) |> Enum.join("."), else: "example.com"
+
       assert result == "example.com"
     end
   end

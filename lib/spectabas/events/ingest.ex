@@ -104,12 +104,24 @@ defmodule Spectabas.Events.Ingest do
   end
 
   @doc """
-  Extract client IP from x-forwarded-for header or conn.remote_ip.
+  Extract client IP from request headers or conn.remote_ip.
+
+  Priority:
+  1. X-Spectabas-Real-IP — set by our reverse proxy plug, Render LB won't touch it
+  2. X-Forwarded-For — set by Render's LB (first IP in chain for proxy hops)
+  3. CF-Connecting-IP — Cloudflare fallback when XFF absent
+  4. conn.remote_ip — direct connection fallback
   """
   def extract_client_ip(conn) do
     cond do
-      # Render always sets X-Forwarded-For — trust it first to prevent
-      # CF-Connecting-IP spoofing when not behind Cloudflare
+      # Trusted proxy header — set only by our reverse proxy plug on customer sites.
+      # Render's LB does not modify custom headers, so this is the real client IP.
+      (sab = Plug.Conn.get_req_header(conn, "x-spectabas-real-ip")) != [] ->
+        sab |> List.first() |> String.trim()
+
+      # Render always sets X-Forwarded-For — trust it to prevent
+      # CF-Connecting-IP spoofing when not behind Cloudflare.
+      # For proxy chains, XFF = "real_client, proxy_server" — first IP is real client.
       (xff = Plug.Conn.get_req_header(conn, "x-forwarded-for")) != [] ->
         xff |> List.first() |> String.split(",") |> List.first() |> String.trim()
 

@@ -78,7 +78,9 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
 
         detail =
           if socket.assigns.selected_channel do
-            safe_query(fn -> Analytics.channel_detail(site, user, period, socket.assigns.selected_channel) end)
+            safe_query(fn ->
+              Analytics.channel_detail(site, user, period, socket.assigns.selected_channel)
+            end)
           else
             []
           end
@@ -132,8 +134,13 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
                 :for={{id, label} <- [{"channels", "Channels"}, {"sources", "Sources"}]}
                 phx-click="switch_view"
                 phx-value-view={id}
-                class={["px-2.5 py-1 text-xs font-medium rounded-md",
-                  if(@view == id, do: "bg-white shadow text-gray-900", else: "text-gray-600 hover:text-gray-900")]}
+                class={[
+                  "px-2.5 py-1 text-xs font-medium rounded-md",
+                  if(@view == id,
+                    do: "bg-white shadow text-gray-900",
+                    else: "text-gray-600 hover:text-gray-900"
+                  )
+                ]}
               >
                 {label}
               </button>
@@ -144,8 +151,13 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
                 :for={r <- [{"24h", "24h"}, {"7d", "7d"}, {"30d", "30d"}]}
                 phx-click="change_range"
                 phx-value-range={elem(r, 0)}
-                class={["px-2.5 py-1 text-xs font-medium rounded-md",
-                  if(@date_range == elem(r, 0), do: "bg-white shadow text-gray-900", else: "text-gray-600 hover:text-gray-900")]}
+                class={[
+                  "px-2.5 py-1 text-xs font-medium rounded-md",
+                  if(@date_range == elem(r, 0),
+                    do: "bg-white shadow text-gray-900",
+                    else: "text-gray-600 hover:text-gray-900"
+                  )
+                ]}
               >
                 {elem(r, 1)}
               </button>
@@ -164,7 +176,10 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
               &larr; All Channels
             </button>
             <h2 class="text-lg font-semibold text-gray-900 mb-4">
-              <span class={["inline-block px-2.5 py-0.5 rounded-full text-xs font-medium mr-2", ChannelClassifier.channel_color(@selected_channel)]}>
+              <span class={[
+                "inline-block px-2.5 py-0.5 rounded-full text-xs font-medium mr-2",
+                ChannelClassifier.channel_color(@selected_channel)
+              ]}>
                 {@selected_channel}
               </span>
               Sources
@@ -173,21 +188,37 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
               <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
                   <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th>
-                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Pageviews</th>
-                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Visitors</th>
-                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sessions</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Source
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Pageviews
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Visitors
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Sessions
+                    </th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                   <tr :if={@channel_detail == []}>
-                    <td colspan="4" class="px-6 py-8 text-center text-gray-500">No sources for this channel.</td>
+                    <td colspan="4" class="px-6 py-8 text-center text-gray-500">
+                      No sources for this channel.
+                    </td>
                   </tr>
                   <tr :for={src <- @channel_detail} class="hover:bg-gray-50">
                     <td class="px-6 py-4 text-sm text-indigo-600 font-medium">{src["source"]}</td>
-                    <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">{format_number(to_num(src["pageviews"]))}</td>
-                    <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">{format_number(to_num(src["visitors"]))}</td>
-                    <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">{format_number(to_num(src["sessions"]))}</td>
+                    <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                      {format_number(to_num(src["pageviews"]))}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                      {format_number(to_num(src["visitors"]))}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                      {format_number(to_num(src["sessions"]))}
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -199,18 +230,34 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
             <table class="min-w-full divide-y divide-gray-200">
               <thead class="bg-gray-50">
                 <tr>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Channel</th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Visitors</th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sessions</th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Pageviews</th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Bounce Rate</th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Avg Duration</th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Pages/Session</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Channel
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Visitors
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Sessions
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Pageviews
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Bounce Rate
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Avg Duration
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Pages/Session
+                  </th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-100">
                 <tr :if={@channels == []}>
-                  <td colspan="7" class="px-6 py-8 text-center text-gray-500">No data for this period.</td>
+                  <td colspan="7" class="px-6 py-8 text-center text-gray-500">
+                    No data for this period.
+                  </td>
                 </tr>
                 <tr
                   :for={ch <- @channels}
@@ -219,16 +266,31 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
                   phx-value-channel={ch["channel"]}
                 >
                   <td class="px-6 py-4 text-sm">
-                    <span class={["inline-block px-2.5 py-0.5 rounded-full text-xs font-medium", ChannelClassifier.channel_color(ch["channel"])]}>
+                    <span class={[
+                      "inline-block px-2.5 py-0.5 rounded-full text-xs font-medium",
+                      ChannelClassifier.channel_color(ch["channel"])
+                    ]}>
                       {ch["channel"]}
                     </span>
                   </td>
-                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">{format_number(to_num(ch["visitors"]))}</td>
-                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">{format_number(to_num(ch["sessions"]))}</td>
-                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">{format_number(to_num(ch["pageviews"]))}</td>
-                  <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">{ch["bounce_rate"]}%</td>
-                  <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">{format_duration(to_num(ch["avg_duration"]))}</td>
-                  <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">{ch["pages_per_session"]}</td>
+                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                    {format_number(to_num(ch["visitors"]))}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                    {format_number(to_num(ch["sessions"]))}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                    {format_number(to_num(ch["pageviews"]))}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                    {ch["bounce_rate"]}%
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                    {format_duration(to_num(ch["avg_duration"]))}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                    {ch["pages_per_session"]}
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -246,8 +308,13 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
               :for={{id, label} <- @utm_tabs}
               phx-click="change_tab"
               phx-value-tab={id}
-              class={["px-4 py-2 text-sm font-medium rounded-md",
-                if(@tab == id, do: "bg-indigo-600 text-white", else: "bg-gray-100 text-gray-700 hover:bg-gray-200")]}
+              class={[
+                "px-4 py-2 text-sm font-medium rounded-md",
+                if(@tab == id,
+                  do: "bg-indigo-600 text-white",
+                  else: "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                )
+              ]}
             >
               {label}
             </button>
@@ -257,14 +324,22 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
             <table class="min-w-full divide-y divide-gray-200">
               <thead class="bg-gray-50">
                 <tr>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Pageviews</th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sessions</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Source
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Pageviews
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Sessions
+                  </th>
                 </tr>
               </thead>
               <tbody class="bg-white divide-y divide-gray-200">
                 <tr :if={@sources == []}>
-                  <td colspan="3" class="px-6 py-8 text-center text-gray-500">No data for this period.</td>
+                  <td colspan="3" class="px-6 py-8 text-center text-gray-500">
+                    No data for this period.
+                  </td>
                 </tr>
                 <tr :for={source <- @sources} class="hover:bg-gray-50">
                   <td class="px-6 py-4 text-sm">
@@ -296,6 +371,7 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
 
   defp source_link(site_id, source, "referrers") do
     domain = Map.get(source, "referrer_domain", "")
+
     ~p"/dashboard/sites/#{site_id}/visitor-log?filter_field=referrer_domain&filter_value=#{domain}"
   end
 

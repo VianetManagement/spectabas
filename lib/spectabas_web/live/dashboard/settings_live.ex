@@ -118,7 +118,10 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
 
     {:noreply,
      socket
-     |> put_flash(:info, "#{platform_label(integration.platform)} sync queued. Refresh in a minute to see results.")}
+     |> put_flash(
+       :info,
+       "#{platform_label(integration.platform)} sync queued. Refresh in a minute to see results."
+     )}
   end
 
   def handle_event("save_ad_credentials", %{"platform" => platform} = params, socket) do
@@ -524,8 +527,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label class="block text-xs font-medium text-gray-700 mb-1">
-                  Buying paths
-                  <span class="text-gray-400 font-normal">(conversion pages)</span>
+                  Buying paths <span class="text-gray-400 font-normal">(conversion pages)</span>
                 </label>
                 <textarea
                   name="buying_paths"
@@ -536,8 +538,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
               </div>
               <div>
                 <label class="block text-xs font-medium text-gray-700 mb-1">
-                  Engaging paths
-                  <span class="text-gray-400 font-normal">(core app features)</span>
+                  Engaging paths <span class="text-gray-400 font-normal">(core app features)</span>
                 </label>
                 <textarea
                   name="engaging_paths"
@@ -548,8 +549,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
               </div>
               <div>
                 <label class="block text-xs font-medium text-gray-700 mb-1">
-                  Support paths
-                  <span class="text-gray-400 font-normal">(help/contact pages)</span>
+                  Support paths <span class="text-gray-400 font-normal">(help/contact pages)</span>
                 </label>
                 <textarea
                   name="support_paths"
@@ -560,8 +560,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
               </div>
               <div>
                 <label class="block text-xs font-medium text-gray-700 mb-1">
-                  Researching threshold
-                  <span class="text-gray-400 font-normal">(min pageviews)</span>
+                  Researching threshold <span class="text-gray-400 font-normal">(min pageviews)</span>
                 </label>
                 <input
                   type="number"
@@ -571,7 +570,9 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                   max="10"
                   class="block w-24 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                 />
-                <p class="text-[10px] text-gray-400 mt-1">Sessions with this many+ pageviews classified as "researching"</p>
+                <p class="text-[10px] text-gray-400 mt-1">
+                  Sessions with this many+ pageviews classified as "researching"
+                </p>
               </div>
             </div>
             <div class="flex justify-end">
@@ -635,7 +636,9 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                       Last sync: {Calendar.strftime(integration.last_synced_at, "%Y-%m-%d %H:%M")} UTC
                     </div>
                     <div :if={!integration.last_synced_at && !integration.last_error}>
-                      <span class="text-amber-600">Waiting for first sync (runs every 6h, or click Sync Now)</span>
+                      <span class="text-amber-600">
+                        Waiting for first sync (runs every 6h, or click Sync Now)
+                      </span>
                     </div>
                     <div
                       :if={integration.last_error}
@@ -854,6 +857,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   defp paths_to_text(_), do: ""
 
   defp text_to_paths(nil), do: []
+
   defp text_to_paths(text) do
     text
     |> String.split(~r/[\n,]+/)
@@ -862,12 +866,14 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   end
 
   defp parse_threshold(nil), do: 2
+
   defp parse_threshold(val) when is_binary(val) do
     case Integer.parse(val) do
       {n, _} when n >= 2 -> n
       _ -> 2
     end
   end
+
   defp parse_threshold(val) when is_integer(val) and val >= 2, do: val
   defp parse_threshold(_), do: 2
 end

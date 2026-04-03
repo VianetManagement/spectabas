@@ -301,7 +301,9 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
                 <span class="text-gray-700 font-medium">{click_id_label(row["click_id_type"])}</span>
               </div>
               <div class="flex gap-4 tabular-nums">
-                <span class="text-gray-900 font-bold">{format_number(to_num(row["events"]))} events</span>
+                <span class="text-gray-900 font-bold">
+                  {format_number(to_num(row["events"]))} events
+                </span>
                 <span class="text-gray-500">{format_number(to_num(row["visitors"]))} visitors</span>
               </div>
             </div>

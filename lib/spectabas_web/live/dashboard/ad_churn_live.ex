@@ -82,8 +82,13 @@ defmodule SpectabasWeb.Dashboard.AdChurnLive do
                 :for={{id, label} <- [{"platform", "By Platform"}, {"campaign", "By Campaign"}]}
                 phx-click="change_group"
                 phx-value-group={id}
-                class={["px-2.5 py-1 text-xs font-medium rounded-md",
-                  if(@group_by == id, do: "bg-white shadow text-gray-900", else: "text-gray-600 hover:text-gray-900")]}
+                class={[
+                  "px-2.5 py-1 text-xs font-medium rounded-md",
+                  if(@group_by == id,
+                    do: "bg-white shadow text-gray-900",
+                    else: "text-gray-600 hover:text-gray-900"
+                  )
+                ]}
               >
                 {label}
               </button>
@@ -93,8 +98,13 @@ defmodule SpectabasWeb.Dashboard.AdChurnLive do
                 :for={r <- [{"30d", "30d"}, {"90d", "90d"}]}
                 phx-click="change_range"
                 phx-value-range={elem(r, 0)}
-                class={["px-2.5 py-1 text-xs font-medium rounded-md",
-                  if(@date_range == elem(r, 0), do: "bg-white shadow text-gray-900", else: "text-gray-600 hover:text-gray-900")]}
+                class={[
+                  "px-2.5 py-1 text-xs font-medium rounded-md",
+                  if(@date_range == elem(r, 0),
+                    do: "bg-white shadow text-gray-900",
+                    else: "text-gray-600 hover:text-gray-900"
+                  )
+                ]}
               >
                 {elem(r, 1)}
               </button>
@@ -103,7 +113,9 @@ defmodule SpectabasWeb.Dashboard.AdChurnLive do
         </div>
 
         <div :if={!@has_data} class="bg-white rounded-lg shadow p-12 text-center">
-          <p class="text-gray-500">Not enough data yet. Churn analysis requires ad visitors with repeat sessions over at least 28 days.</p>
+          <p class="text-gray-500">
+            Not enough data yet. Churn analysis requires ad visitors with repeat sessions over at least 28 days.
+          </p>
         </div>
 
         <div :if={@has_data}>
@@ -115,16 +127,22 @@ defmodule SpectabasWeb.Dashboard.AdChurnLive do
                 {@ad_summary["churn_rate"] || "0"}%
               </dd>
               <dd class="text-xs text-gray-400 mt-1">
-                {format_number(to_num(@ad_summary["churned"]))} of {format_number(to_num(@ad_summary["total_visitors"]))} visitors
+                {format_number(to_num(@ad_summary["churned"]))} of {format_number(
+                  to_num(@ad_summary["total_visitors"])
+                )} visitors
               </dd>
             </div>
             <div class="bg-white rounded-lg shadow p-5">
-              <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">Organic Traffic Churn</h3>
+              <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">
+                Organic Traffic Churn
+              </h3>
               <dd class={"text-3xl font-bold #{churn_color(parse_float(@organic_summary["churn_rate"]))}"}>
                 {@organic_summary["churn_rate"] || "0"}%
               </dd>
               <dd class="text-xs text-gray-400 mt-1">
-                {format_number(to_num(@organic_summary["churned"]))} of {format_number(to_num(@organic_summary["total_visitors"]))} visitors
+                {format_number(to_num(@organic_summary["churned"]))} of {format_number(
+                  to_num(@organic_summary["total_visitors"])
+                )} visitors
               </dd>
             </div>
           </div>
@@ -134,23 +152,45 @@ defmodule SpectabasWeb.Dashboard.AdChurnLive do
             <table class="min-w-full divide-y divide-gray-200">
               <thead class="bg-gray-50">
                 <tr>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{if @group_by == "platform", do: "Platform", else: "Campaign"}</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Visitors</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Churned</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Retained</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Purchased</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Churn Rate</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    {if @group_by == "platform", do: "Platform", else: "Campaign"}
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Visitors
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Churned
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Retained
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Purchased
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Churn Rate
+                  </th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-100">
                 <tr :for={row <- @rows} class="hover:bg-gray-50">
                   <td class="px-4 py-3 text-sm font-medium text-gray-900">
-                    {if @group_by == "platform", do: platform_label(row["platform"]), else: row["campaign"] || row["platform"] || "(none)"}
+                    {if @group_by == "platform",
+                      do: platform_label(row["platform"]),
+                      else: row["campaign"] || row["platform"] || "(none)"}
                   </td>
-                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{format_number(to_num(row["total_visitors"]))}</td>
-                  <td class="px-4 py-3 text-sm text-red-600 text-right tabular-nums">{format_number(to_num(row["churned"]))}</td>
-                  <td class="px-4 py-3 text-sm text-green-600 text-right tabular-nums">{format_number(to_num(row["retained"]))}</td>
-                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{format_number(to_num(row["purchased"]))}</td>
+                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
+                    {format_number(to_num(row["total_visitors"]))}
+                  </td>
+                  <td class="px-4 py-3 text-sm text-red-600 text-right tabular-nums">
+                    {format_number(to_num(row["churned"]))}
+                  </td>
+                  <td class="px-4 py-3 text-sm text-green-600 text-right tabular-nums">
+                    {format_number(to_num(row["retained"]))}
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
+                    {format_number(to_num(row["purchased"]))}
+                  </td>
                   <td class="px-4 py-3 text-right">
                     <span class={"text-sm font-bold tabular-nums #{churn_color(parse_float(row["churn_rate"]))}"}>
                       {row["churn_rate"]}%

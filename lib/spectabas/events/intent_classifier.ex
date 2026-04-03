@@ -44,8 +44,10 @@ defmodule Spectabas.Events.IntentClassifier do
       buying_paths: get_paths(config, "buying_paths", @default_buying_paths),
       engaging_paths: get_paths(config, "engaging_paths", @default_engaging_paths),
       support_paths: get_paths(config, "support_paths", @default_support_paths),
-      comparison_referrers: get_paths(config, "comparison_referrers", @default_comparison_referrers),
-      researching_threshold: get_int(config, "researching_threshold", @default_researching_threshold)
+      comparison_referrers:
+        get_paths(config, "comparison_referrers", @default_comparison_referrers),
+      researching_threshold:
+        get_int(config, "researching_threshold", @default_researching_threshold)
     }
   end
 

@@ -21,6 +21,10 @@ defmodule SpectabasWeb.Plugs.CollectRateLimit do
 
   defp client_ip(conn) do
     cond do
+      # Trusted proxy header from our reverse proxy plug
+      (sab = get_req_header(conn, "x-spectabas-real-ip")) != [] ->
+        sab |> List.first() |> String.trim()
+
       (xff = get_req_header(conn, "x-forwarded-for")) != [] ->
         xff |> List.first() |> String.split(",") |> List.first() |> String.trim()
 

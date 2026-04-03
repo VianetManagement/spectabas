@@ -85,8 +85,13 @@ defmodule SpectabasWeb.Dashboard.AdVisitorPathsLive do
                 :for={{id, label} <- [{"all", "All Paths"}, {"bounces", "Bounce Pages"}]}
                 phx-click="change_view"
                 phx-value-view={id}
-                class={["px-2.5 py-1 text-xs font-medium rounded-md",
-                  if(@view == id, do: "bg-white shadow text-gray-900", else: "text-gray-600 hover:text-gray-900")]}
+                class={[
+                  "px-2.5 py-1 text-xs font-medium rounded-md",
+                  if(@view == id,
+                    do: "bg-white shadow text-gray-900",
+                    else: "text-gray-600 hover:text-gray-900"
+                  )
+                ]}
               >
                 {label}
               </button>
@@ -96,8 +101,13 @@ defmodule SpectabasWeb.Dashboard.AdVisitorPathsLive do
                 :for={r <- [{"7d", "7d"}, {"30d", "30d"}, {"90d", "90d"}]}
                 phx-click="change_range"
                 phx-value-range={elem(r, 0)}
-                class={["px-2.5 py-1 text-xs font-medium rounded-md",
-                  if(@date_range == elem(r, 0), do: "bg-white shadow text-gray-900", else: "text-gray-600 hover:text-gray-900")]}
+                class={[
+                  "px-2.5 py-1 text-xs font-medium rounded-md",
+                  if(@date_range == elem(r, 0),
+                    do: "bg-white shadow text-gray-900",
+                    else: "text-gray-600 hover:text-gray-900"
+                  )
+                ]}
               >
                 {elem(r, 1)}
               </button>
@@ -106,7 +116,9 @@ defmodule SpectabasWeb.Dashboard.AdVisitorPathsLive do
         </div>
 
         <div :if={!@has_data} class="bg-white rounded-lg shadow p-12 text-center">
-          <p class="text-gray-500">No ad visitor path data yet. Paths will appear as visitors arrive from ad clicks.</p>
+          <p class="text-gray-500">
+            No ad visitor path data yet. Paths will appear as visitors arrive from ad clicks.
+          </p>
         </div>
 
         <div :if={@has_data}>
@@ -117,7 +129,9 @@ defmodule SpectabasWeb.Dashboard.AdVisitorPathsLive do
             </div>
             <div class="bg-white rounded-lg shadow p-4">
               <dt class="text-xs font-medium text-gray-500">Converted</dt>
-              <dd class="mt-1 text-2xl font-bold text-green-600">{format_number(@total_converters)}</dd>
+              <dd class="mt-1 text-2xl font-bold text-green-600">
+                {format_number(@total_converters)}
+              </dd>
               <dd :if={@total_sessions > 0} class="text-xs text-gray-400">
                 {Float.round(@total_converters / @total_sessions * 100, 1)}%
               </dd>
@@ -133,10 +147,18 @@ defmodule SpectabasWeb.Dashboard.AdVisitorPathsLive do
             <table class="min-w-full divide-y divide-gray-200">
               <thead class="bg-gray-50">
                 <tr>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Page Path</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Visitors</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Converted</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Conv Rate</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Page Path
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Visitors
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Converted
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Conv Rate
+                  </th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-100">
@@ -144,10 +166,18 @@ defmodule SpectabasWeb.Dashboard.AdVisitorPathsLive do
                   <td class="px-4 py-3 text-sm text-gray-900 font-mono">
                     <span class="text-xs">{path["journey"]}</span>
                   </td>
-                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{format_number(to_num(path["visitors"]))}</td>
-                  <td class="px-4 py-3 text-sm text-green-600 text-right tabular-nums">{format_number(to_num(path["converters"]))}</td>
+                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
+                    {format_number(to_num(path["visitors"]))}
+                  </td>
+                  <td class="px-4 py-3 text-sm text-green-600 text-right tabular-nums">
+                    {format_number(to_num(path["converters"]))}
+                  </td>
                   <td class="px-4 py-3 text-sm text-right tabular-nums">
-                    <span class={if parse_float(path["conversion_rate"]) > 5, do: "text-green-600 font-bold", else: "text-gray-600"}>
+                    <span class={
+                      if parse_float(path["conversion_rate"]) > 5,
+                        do: "text-green-600 font-bold",
+                        else: "text-gray-600"
+                    }>
                       {path["conversion_rate"]}%
                     </span>
                   </td>
@@ -161,16 +191,24 @@ defmodule SpectabasWeb.Dashboard.AdVisitorPathsLive do
             <table class="min-w-full divide-y divide-gray-200">
               <thead class="bg-gray-50">
                 <tr>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Landing Page</th>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Platform</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Bounces</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Landing Page
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Platform
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Bounces
+                  </th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-100">
                 <tr :for={b <- @bounces} class="hover:bg-gray-50">
                   <td class="px-4 py-3 text-sm font-mono text-gray-900">{b["landing_page"]}</td>
                   <td class="px-4 py-3 text-sm text-gray-600">{platform_label(b["platform"])}</td>
-                  <td class="px-4 py-3 text-sm text-red-600 text-right tabular-nums font-bold">{format_number(to_num(b["bounces"]))}</td>
+                  <td class="px-4 py-3 text-sm text-red-600 text-right tabular-nums font-bold">
+                    {format_number(to_num(b["bounces"]))}
+                  </td>
                 </tr>
               </tbody>
             </table>

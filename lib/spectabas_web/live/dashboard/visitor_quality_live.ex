@@ -90,8 +90,13 @@ defmodule SpectabasWeb.Dashboard.VisitorQualityLive do
                 :for={{id, label} <- [{"platform", "By Platform"}, {"campaign", "By Campaign"}]}
                 phx-click="change_group"
                 phx-value-group={id}
-                class={["px-2.5 py-1 text-xs font-medium rounded-md",
-                  if(@group_by == id, do: "bg-white shadow text-gray-900", else: "text-gray-600 hover:text-gray-900")]}
+                class={[
+                  "px-2.5 py-1 text-xs font-medium rounded-md",
+                  if(@group_by == id,
+                    do: "bg-white shadow text-gray-900",
+                    else: "text-gray-600 hover:text-gray-900"
+                  )
+                ]}
               >
                 {label}
               </button>
@@ -101,8 +106,13 @@ defmodule SpectabasWeb.Dashboard.VisitorQualityLive do
                 :for={r <- [{"7d", "7d"}, {"30d", "30d"}, {"90d", "90d"}]}
                 phx-click="change_range"
                 phx-value-range={elem(r, 0)}
-                class={["px-2.5 py-1 text-xs font-medium rounded-md",
-                  if(@date_range == elem(r, 0), do: "bg-white shadow text-gray-900", else: "text-gray-600 hover:text-gray-900")]}
+                class={[
+                  "px-2.5 py-1 text-xs font-medium rounded-md",
+                  if(@date_range == elem(r, 0),
+                    do: "bg-white shadow text-gray-900",
+                    else: "text-gray-600 hover:text-gray-900"
+                  )
+                ]}
               >
                 {elem(r, 1)}
               </button>
@@ -111,7 +121,9 @@ defmodule SpectabasWeb.Dashboard.VisitorQualityLive do
         </div>
 
         <div :if={!@has_data} class="bg-white rounded-lg shadow p-12 text-center">
-          <p class="text-gray-500">No ad visitor data yet. Quality scores will appear as visitors arrive from ad clicks (gclid/msclkid/fbclid).</p>
+          <p class="text-gray-500">
+            No ad visitor data yet. Quality scores will appear as visitors arrive from ad clicks (gclid/msclkid/fbclid).
+          </p>
         </div>
 
         <div :if={@has_data}>
@@ -141,35 +153,71 @@ defmodule SpectabasWeb.Dashboard.VisitorQualityLive do
             <table class="min-w-full divide-y divide-gray-200">
               <thead class="bg-gray-50">
                 <tr>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{if @group_by == "platform", do: "Platform", else: "Campaign"}</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Score</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Visitors</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Pages/Session</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Avg Duration</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Bounce Rate</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Return Rate</th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">High Intent</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    {if @group_by == "platform", do: "Platform", else: "Campaign"}
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Score
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Visitors
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Pages/Session
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Avg Duration
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Bounce Rate
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Return Rate
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    High Intent
+                  </th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-100">
                 <tr :for={row <- @rows} class="hover:bg-gray-50">
                   <td class="px-4 py-3 text-sm font-medium text-gray-900">
-                    {if @group_by == "platform", do: platform_label(row["platform"]), else: row["campaign"] || "(none)"}
+                    {if @group_by == "platform",
+                      do: platform_label(row["platform"]),
+                      else: row["campaign"] || "(none)"}
                   </td>
                   <td class="px-4 py-3 text-right">
                     <div class="flex items-center justify-end gap-2">
                       <div class="w-16 bg-gray-200 rounded-full h-2">
-                        <div class={"h-2 rounded-full #{score_bar_color(parse_float(row["quality_score"]))}"} style={"width: #{min(parse_float(row["quality_score"]), 100)}%"}></div>
+                        <div
+                          class={"h-2 rounded-full #{score_bar_color(parse_float(row["quality_score"]))}"}
+                          style={"width: #{min(parse_float(row["quality_score"]), 100)}%"}
+                        >
+                        </div>
                       </div>
-                      <span class={"text-sm font-bold tabular-nums w-8 text-right #{score_color(parse_float(row["quality_score"]))}"}>{row["quality_score"]}</span>
+                      <span class={"text-sm font-bold tabular-nums w-8 text-right #{score_color(parse_float(row["quality_score"]))}"}>
+                        {row["quality_score"]}
+                      </span>
                     </div>
                   </td>
-                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{format_number(to_num(row["visitors"]))}</td>
-                  <td class="px-4 py-3 text-sm text-gray-600 text-right tabular-nums">{row["avg_pages"]}</td>
-                  <td class="px-4 py-3 text-sm text-gray-600 text-right tabular-nums">{format_duration(parse_float(row["avg_duration_s"]))}</td>
-                  <td class="px-4 py-3 text-sm text-gray-600 text-right tabular-nums">{row["bounce_rate"]}%</td>
-                  <td class="px-4 py-3 text-sm text-gray-600 text-right tabular-nums">{row["return_rate"]}%</td>
-                  <td class="px-4 py-3 text-sm text-gray-600 text-right tabular-nums">{row["high_intent_pct"]}%</td>
+                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
+                    {format_number(to_num(row["visitors"]))}
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-600 text-right tabular-nums">
+                    {row["avg_pages"]}
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-600 text-right tabular-nums">
+                    {format_duration(parse_float(row["avg_duration_s"]))}
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-600 text-right tabular-nums">
+                    {row["bounce_rate"]}%
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-600 text-right tabular-nums">
+                    {row["return_rate"]}%
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-600 text-right tabular-nums">
+                    {row["high_intent_pct"]}%
+                  </td>
                 </tr>
               </tbody>
             </table>

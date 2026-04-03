@@ -1776,7 +1776,7 @@ defmodule SpectabasWeb.DocsLive do
 
             Spam domains are excluded from the Sources page, All Channels page, and attribution calculations. They are still visible in the Network and Bot Traffic pages for analysis purposes.
             """
-          },
+          }
         ]
       },
       %{

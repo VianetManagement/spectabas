@@ -81,11 +81,13 @@ defmodule SpectabasWeb.AdIntegrationController do
          {:ok, accounts} <- BingAds.fetch_accounts(tokens.access_token, creds["developer_token"]) do
       case accounts do
         [single] ->
-          merged = Map.merge(tokens, %{
-            account_id: single.id,
-            account_name: single.name,
-            extra: %{"customer_id" => single.customer_id}
-          })
+          merged =
+            Map.merge(tokens, %{
+              account_id: single.id,
+              account_name: single.name,
+              extra: %{"customer_id" => single.customer_id}
+            })
+
           save_and_redirect(conn, "bing_ads", site.id, merged)
 
         [] ->
@@ -100,9 +102,15 @@ defmodule SpectabasWeb.AdIntegrationController do
             "refresh_token" => tokens.refresh_token,
             "expires_in" => tokens.expires_in,
             "site_id" => site.id,
-            "accounts" => Enum.map(multiple, fn a ->
-              %{"id" => a.id, "name" => a.name, "customer_id" => a.customer_id, "number" => a.number}
-            end)
+            "accounts" =>
+              Enum.map(multiple, fn a ->
+                %{
+                  "id" => a.id,
+                  "name" => a.name,
+                  "customer_id" => a.customer_id,
+                  "number" => a.number
+                }
+              end)
           })
           |> redirect(to: ~p"/auth/ad/bing_ads/pick_account?site_id=#{site.id}")
       end
@@ -121,7 +129,10 @@ defmodule SpectabasWeb.AdIntegrationController do
 
           {:ok, []} ->
             conn
-            |> put_flash(:error, "No Meta ad accounts found for this user. Make sure the Facebook account has access to at least one ad account.")
+            |> put_flash(
+              :error,
+              "No Meta ad accounts found for this user. Make sure the Facebook account has access to at least one ad account."
+            )
             |> redirect(to: ~p"/dashboard/sites/#{site.id}/settings")
 
           {:ok, multiple} ->
@@ -131,7 +142,10 @@ defmodule SpectabasWeb.AdIntegrationController do
               "refresh_token" => tokens[:refresh_token] || tokens.access_token,
               "expires_in" => tokens[:expires_in],
               "site_id" => site.id,
-              "accounts" => Enum.map(multiple, fn a -> %{"id" => a.id, "name" => a.name, "currency" => a.currency} end)
+              "accounts" =>
+                Enum.map(multiple, fn a ->
+                  %{"id" => a.id, "name" => a.name, "currency" => a.currency}
+                end)
             })
             |> redirect(to: ~p"/auth/ad/meta_ads/pick_account?site_id=#{site.id}")
 
@@ -140,7 +154,10 @@ defmodule SpectabasWeb.AdIntegrationController do
             detail = if is_map(reason), do: inspect(reason), else: to_string(reason)
 
             conn
-            |> put_flash(:error, "Meta Ads connected but couldn't fetch ad accounts: #{String.slice(detail, 0, 150)}")
+            |> put_flash(
+              :error,
+              "Meta Ads connected but couldn't fetch ad accounts: #{String.slice(detail, 0, 150)}"
+            )
             |> redirect(to: ~p"/dashboard/sites/#{site.id}/settings")
         end
 
