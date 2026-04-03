@@ -159,8 +159,22 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
           }
       end
 
+    # Don't overwrite saved credentials with empty values (masked form submits empty)
+    existing = Spectabas.AdIntegrations.Credentials.get_for_platform(site, platform)
+
+    creds =
+      Enum.reduce(creds, existing, fn {k, v}, acc ->
+        if v == "", do: acc, else: Map.put(acc, k, v)
+      end)
+
     case Spectabas.AdIntegrations.Credentials.save(site, platform, creds) do
       {:ok, updated_site} ->
+        Spectabas.Audit.log("ad_credentials.saved", %{
+          user_id: socket.assigns.current_scope.user.id,
+          site_id: site.id,
+          platform: platform
+        })
+
         # For Stripe, also create/update the integration record directly (no OAuth flow)
         socket =
           if platform == "stripe" and creds["api_key"] != "" do
@@ -781,7 +795,12 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                           <input
                             type="text"
                             name="client_id"
-                            value={creds["client_id"] || ""}
+                            value=""
+                            placeholder={
+                              if creds["client_id"],
+                                do: mask_credential(creds["client_id"]),
+                                else: "Client ID"
+                            }
                             class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
                             placeholder="e.g. 123456789.apps.googleusercontent.com"
                           />
@@ -791,7 +810,12 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                           <input
                             type="password"
                             name="client_secret"
-                            value={creds["client_secret"] || ""}
+                            value=""
+                            placeholder={
+                              if creds["client_secret"],
+                                do: mask_credential(creds["client_secret"]),
+                                else: "Client Secret"
+                            }
                             class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
                             placeholder="OAuth client secret"
                           />
@@ -803,7 +827,12 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                           <input
                             type="password"
                             name="developer_token"
-                            value={creds["developer_token"] || ""}
+                            value=""
+                            placeholder={
+                              if creds["developer_token"],
+                                do: mask_credential(creds["developer_token"]),
+                                else: "Developer Token"
+                            }
                             class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
                             placeholder="API developer token"
                           />
@@ -816,7 +845,12 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                           <input
                             type="password"
                             name="api_key"
-                            value={creds["api_key"] || ""}
+                            value=""
+                            placeholder={
+                              if creds["api_key"],
+                                do: mask_credential(creds["api_key"]),
+                                else: "sk_live_..."
+                            }
                             class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
                             placeholder="sk_live_..."
                           />
@@ -830,7 +864,10 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                           <input
                             type="text"
                             name="app_id"
-                            value={creds["app_id"] || ""}
+                            value=""
+                            placeholder={
+                              if creds["app_id"], do: mask_credential(creds["app_id"]), else: "App ID"
+                            }
                             class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
                             placeholder="e.g. 1234567890"
                           />
@@ -840,7 +877,12 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                           <input
                             type="password"
                             name="app_secret"
-                            value={creds["app_secret"] || ""}
+                            value=""
+                            placeholder={
+                              if creds["app_secret"],
+                                do: mask_credential(creds["app_secret"]),
+                                else: "App Secret"
+                            }
                             class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
                             placeholder="Meta app secret"
                           />
@@ -868,6 +910,16 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   defp platform_label("meta_ads"), do: "Meta Ads"
   defp platform_label("stripe"), do: "Stripe"
   defp platform_label(p), do: p
+
+  # Mask saved credentials — show first 4 + last 4 chars with dots in between
+  defp mask_credential(nil), do: ""
+  defp mask_credential(""), do: ""
+
+  defp mask_credential(val) when byte_size(val) > 8 do
+    String.slice(val, 0, 4) <> "••••••••" <> String.slice(val, -4, 4)
+  end
+
+  defp mask_credential(_), do: "••••••••"
 
   defp ad_authorize_url(platform, site) do
     state = Phoenix.Token.sign(SpectabasWeb.Endpoint, "ad_oauth", site.id)

@@ -17,6 +17,8 @@ defmodule Spectabas.AdIntegrations do
 
   def get!(id), do: Repo.get!(AdIntegration, id)
 
+  alias Spectabas.Audit
+
   def connect(site_id, platform, tokens) do
     attrs = %{
       site_id: site_id,
@@ -31,35 +33,65 @@ defmodule Spectabas.AdIntegrations do
       status: "active"
     }
 
-    %AdIntegration{}
-    |> AdIntegration.changeset(attrs)
-    |> Repo.insert(
-      on_conflict:
-        {:replace,
-         [
-           :access_token_encrypted,
-           :refresh_token_encrypted,
-           :token_expires_at,
-           :status,
-           :extra,
-           :updated_at
-         ]},
-      conflict_target: [:site_id, :platform, :account_id]
-    )
+    result =
+      %AdIntegration{}
+      |> AdIntegration.changeset(attrs)
+      |> Repo.insert(
+        on_conflict:
+          {:replace,
+           [
+             :access_token_encrypted,
+             :refresh_token_encrypted,
+             :token_expires_at,
+             :status,
+             :extra,
+             :updated_at
+           ]},
+        conflict_target: [:site_id, :platform, :account_id]
+      )
+
+    case result do
+      {:ok, integration} ->
+        Audit.log("ad_integration.connected", %{
+          site_id: site_id,
+          platform: platform,
+          account_id: tokens[:account_id] || ""
+        })
+
+        {:ok, integration}
+
+      error ->
+        error
+    end
   end
 
   def disconnect(integration) do
     # Use a dummy encrypted value (single null byte) — validate_required needs non-empty binary
     tombstone = Vault.encrypt("revoked")
 
-    integration
-    |> AdIntegration.changeset(%{
-      status: "revoked",
-      access_token_encrypted: tombstone,
-      refresh_token_encrypted: tombstone,
-      last_error: nil
-    })
-    |> Repo.update()
+    result =
+      integration
+      |> AdIntegration.changeset(%{
+        status: "revoked",
+        access_token_encrypted: tombstone,
+        refresh_token_encrypted: tombstone,
+        last_error: nil
+      })
+      |> Repo.update()
+
+    case result do
+      {:ok, updated} ->
+        Audit.log("ad_integration.disconnected", %{
+          site_id: integration.site_id,
+          platform: integration.platform,
+          account_id: integration.account_id || ""
+        })
+
+        {:ok, updated}
+
+      error ->
+        error
+    end
   end
 
   def update_tokens(integration, access_token, refresh_token, expires_at) do

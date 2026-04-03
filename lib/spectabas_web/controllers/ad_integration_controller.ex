@@ -2,9 +2,33 @@ defmodule SpectabasWeb.AdIntegrationController do
   use SpectabasWeb, :controller
 
   alias Spectabas.AdIntegrations
+  alias Spectabas.AdIntegrations.{Vault}
   alias Spectabas.AdIntegrations.Platforms.{GoogleAds, BingAds, MetaAds}
 
   require Logger
+
+  # Encrypt sensitive token data before storing in session cookie
+  defp encrypt_session_tokens(data) do
+    data
+    |> Jason.encode!()
+    |> Vault.encrypt()
+    |> Base.encode64()
+  end
+
+  # Decrypt session tokens, returns nil on failure
+  defp decrypt_session_tokens(nil), do: nil
+
+  defp decrypt_session_tokens(encoded) when is_binary(encoded) do
+    with {:ok, encrypted} <- Base.decode64(encoded),
+         json when is_binary(json) <- Vault.decrypt(encrypted),
+         {:ok, data} <- Jason.decode(json) do
+      data
+    else
+      _ -> nil
+    end
+  end
+
+  defp decrypt_session_tokens(_), do: nil
 
   def callback(conn, %{"platform" => platform, "code" => code, "state" => state}) do
     case Phoenix.Token.verify(SpectabasWeb.Endpoint, "ad_oauth", state, max_age: 600) do
@@ -46,13 +70,16 @@ defmodule SpectabasWeb.AdIntegrationController do
         {:ok, customers} when length(customers) > 1 ->
           # Multiple accounts — store tokens in session, redirect to picker
           conn
-          |> put_session(:google_ads_pending_tokens, %{
-            "access_token" => tokens.access_token,
-            "refresh_token" => tokens.refresh_token,
-            "expires_in" => tokens.expires_in,
-            "site_id" => site.id,
-            "customers" => Enum.map(customers, fn c -> %{"id" => c.id, "name" => c.name} end)
-          })
+          |> put_session(
+            :google_ads_pending_tokens,
+            encrypt_session_tokens(%{
+              "access_token" => tokens.access_token,
+              "refresh_token" => tokens.refresh_token,
+              "expires_in" => tokens.expires_in,
+              "site_id" => site.id,
+              "customers" => Enum.map(customers, fn c -> %{"id" => c.id, "name" => c.name} end)
+            })
+          )
           |> redirect(to: ~p"/auth/ad/google_ads/pick_account?site_id=#{site.id}")
 
         {:ok, []} ->
@@ -97,21 +124,24 @@ defmodule SpectabasWeb.AdIntegrationController do
 
         multiple ->
           conn
-          |> put_session(:bing_ads_pending_tokens, %{
-            "access_token" => tokens.access_token,
-            "refresh_token" => tokens.refresh_token,
-            "expires_in" => tokens.expires_in,
-            "site_id" => site.id,
-            "accounts" =>
-              Enum.map(multiple, fn a ->
-                %{
-                  "id" => a.id,
-                  "name" => a.name,
-                  "customer_id" => a.customer_id,
-                  "number" => a.number
-                }
-              end)
-          })
+          |> put_session(
+            :bing_ads_pending_tokens,
+            encrypt_session_tokens(%{
+              "access_token" => tokens.access_token,
+              "refresh_token" => tokens.refresh_token,
+              "expires_in" => tokens.expires_in,
+              "site_id" => site.id,
+              "accounts" =>
+                Enum.map(multiple, fn a ->
+                  %{
+                    "id" => a.id,
+                    "name" => a.name,
+                    "customer_id" => a.customer_id,
+                    "number" => a.number
+                  }
+                end)
+            })
+          )
           |> redirect(to: ~p"/auth/ad/bing_ads/pick_account?site_id=#{site.id}")
       end
     else
@@ -137,16 +167,19 @@ defmodule SpectabasWeb.AdIntegrationController do
 
           {:ok, multiple} ->
             conn
-            |> put_session(:meta_ads_pending_tokens, %{
-              "access_token" => tokens.access_token,
-              "refresh_token" => tokens[:refresh_token] || tokens.access_token,
-              "expires_in" => tokens[:expires_in],
-              "site_id" => site.id,
-              "accounts" =>
-                Enum.map(multiple, fn a ->
-                  %{"id" => a.id, "name" => a.name, "currency" => a.currency}
-                end)
-            })
+            |> put_session(
+              :meta_ads_pending_tokens,
+              encrypt_session_tokens(%{
+                "access_token" => tokens.access_token,
+                "refresh_token" => tokens[:refresh_token] || tokens.access_token,
+                "expires_in" => tokens[:expires_in],
+                "site_id" => site.id,
+                "accounts" =>
+                  Enum.map(multiple, fn a ->
+                    %{"id" => a.id, "name" => a.name, "currency" => a.currency}
+                  end)
+              })
+            )
             |> redirect(to: ~p"/auth/ad/meta_ads/pick_account?site_id=#{site.id}")
 
           {:error, reason} ->
@@ -174,7 +207,7 @@ defmodule SpectabasWeb.AdIntegrationController do
 
   # Account picker page — shows list of Google Ads accounts
   def pick_account(conn, %{"site_id" => site_id}) do
-    pending = get_session(conn, :google_ads_pending_tokens)
+    pending = get_session(conn, :google_ads_pending_tokens) |> decrypt_session_tokens()
     site_id_int = String.to_integer(site_id)
 
     if is_map(pending) && (pending["site_id"] || pending[:site_id]) == site_id_int do
@@ -189,7 +222,7 @@ defmodule SpectabasWeb.AdIntegrationController do
 
   # User selected an account from the picker
   def select_account(conn, %{"site_id" => site_id, "account_id" => account_id}) do
-    pending = get_session(conn, :google_ads_pending_tokens)
+    pending = get_session(conn, :google_ads_pending_tokens) |> decrypt_session_tokens()
 
     # Handle both atom and string keys from session
     tokens = normalize_pending(pending)
@@ -219,7 +252,7 @@ defmodule SpectabasWeb.AdIntegrationController do
 
   # Meta Ads account picker page
   def meta_pick_account(conn, %{"site_id" => site_id}) do
-    pending = get_session(conn, :meta_ads_pending_tokens)
+    pending = get_session(conn, :meta_ads_pending_tokens) |> decrypt_session_tokens()
     site_id_int = String.to_integer(site_id)
 
     if is_map(pending) && (pending["site_id"] || pending[:site_id]) == site_id_int do
@@ -234,7 +267,7 @@ defmodule SpectabasWeb.AdIntegrationController do
 
   # User selected a Meta Ads account
   def meta_select_account(conn, %{"site_id" => site_id, "account_id" => account_id}) do
-    pending = get_session(conn, :meta_ads_pending_tokens)
+    pending = get_session(conn, :meta_ads_pending_tokens) |> decrypt_session_tokens()
     tokens = normalize_pending(pending)
 
     if tokens do
@@ -262,7 +295,7 @@ defmodule SpectabasWeb.AdIntegrationController do
 
   # Bing Ads account picker page
   def bing_pick_account(conn, %{"site_id" => site_id}) do
-    pending = get_session(conn, :bing_ads_pending_tokens)
+    pending = get_session(conn, :bing_ads_pending_tokens) |> decrypt_session_tokens()
     site_id_int = String.to_integer(site_id)
 
     if is_map(pending) && (pending["site_id"] || pending[:site_id]) == site_id_int do
@@ -277,7 +310,7 @@ defmodule SpectabasWeb.AdIntegrationController do
 
   # User selected a Bing Ads account
   def bing_select_account(conn, %{"site_id" => site_id, "account_id" => account_id}) do
-    pending = get_session(conn, :bing_ads_pending_tokens)
+    pending = get_session(conn, :bing_ads_pending_tokens) |> decrypt_session_tokens()
     tokens = normalize_pending(pending)
 
     if tokens do
