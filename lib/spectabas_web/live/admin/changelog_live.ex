@@ -45,6 +45,16 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v4.7.0 — 2026-04-02 UTC",
+       [
+         %{
+           title: "Feature: Enhanced dashboard pages with richer metrics",
+           description:
+             "Entry Pages now shows bounce rate and avg duration. Exit Pages shows avg duration. " <>
+               "Events shows sessions and avg per visitor. Goals shows unique completers and conversion rate. " <>
+               "Campaigns shows 30-day traffic stats (visitors, sessions, bounce rate) per campaign."
+         }
+       ]},
       {"v4.6.0 — 2026-04-02 UTC",
        [
          %{

@@ -91,11 +91,17 @@ defmodule SpectabasWeb.Dashboard.EventsLive do
                 <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                   Visitors
                 </th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                  Sessions
+                </th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                  Avg/Visitor
+                </th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200">
               <tr :if={@events == []}>
-                <td colspan="3" class="px-6 py-8 text-center text-gray-500">
+                <td colspan="5" class="px-6 py-8 text-center text-gray-500">
                   No custom events found. Use
                   <code class="text-xs bg-gray-100 px-1 py-0.5 rounded">
                     Spectabas.track("event_name", {"{props}"})
@@ -110,6 +116,12 @@ defmodule SpectabasWeb.Dashboard.EventsLive do
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
                   {format_number(to_num(ev["visitors"]))}
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                  {format_number(to_num(ev["sessions"]))}
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                  {ev["avg_per_visitor"]}
                 </td>
               </tr>
             </tbody>

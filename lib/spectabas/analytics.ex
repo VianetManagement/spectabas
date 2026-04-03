@@ -289,19 +289,23 @@ defmodule Spectabas.Analytics do
       SELECT
         url_path,
         count() AS entries,
-        uniq(visitor_id) AS unique_visitors
+        uniq(visitor_id) AS unique_visitors,
+        round(countIf(pv = 1) / greatest(count(), 1) * 100, 1) AS bounce_rate,
+        round(avg(coalesce(dur, 0)), 0) AS avg_duration
       FROM (
         SELECT
           session_id,
           any(visitor_id) AS visitor_id,
-          argMin(url_path, timestamp) AS url_path
+          argMin(url_path, timestamp) AS url_path,
+          countIf(event_type = 'pageview') AS pv,
+          maxIf(duration_s, event_type = 'duration' AND duration_s > 0) AS dur
         FROM events
         WHERE site_id = #{ClickHouse.param(site.id)}
-          AND event_type = 'pageview'
-          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
           AND ip_is_bot = 0
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
           AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
         GROUP BY session_id
+        HAVING countIf(event_type = 'pageview') > 0
       )
       GROUP BY url_path
       ORDER BY entries DESC
@@ -323,19 +327,21 @@ defmodule Spectabas.Analytics do
       SELECT
         url_path,
         count() AS exits,
-        uniq(visitor_id) AS unique_visitors
+        uniq(visitor_id) AS unique_visitors,
+        round(avg(coalesce(dur, 0)), 0) AS avg_duration
       FROM (
         SELECT
           session_id,
           any(visitor_id) AS visitor_id,
-          argMax(url_path, timestamp) AS url_path
+          argMax(url_path, timestamp) AS url_path,
+          maxIf(duration_s, event_type = 'duration' AND duration_s > 0) AS dur
         FROM events
         WHERE site_id = #{ClickHouse.param(site.id)}
-          AND event_type = 'pageview'
+          AND ip_is_bot = 0
           AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
           AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-          AND ip_is_bot = 0
         GROUP BY session_id
+        HAVING countIf(event_type = 'pageview') > 0
       )
       GROUP BY url_path
       ORDER BY exits DESC
@@ -502,6 +508,44 @@ defmodule Spectabas.Analytics do
       GROUP BY #{dimension}
       ORDER BY pageviews DESC
       LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Campaign performance: visitors, sessions, bounce rate, avg duration per utm_campaign."
+  def campaign_performance(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        campaign,
+        sum(pv) AS pageviews,
+        uniq(visitor_id) AS visitors,
+        count() AS sessions,
+        round(countIf(pv = 1) / greatest(count(), 1) * 100, 1) AS bounce_rate,
+        round(avg(coalesce(dur, 0)), 0) AS avg_duration
+      FROM (
+        SELECT
+          session_id,
+          any(visitor_id) AS visitor_id,
+          any(utm_campaign) AS campaign,
+          countIf(event_type = 'pageview') AS pv,
+          maxIf(duration_s, event_type = 'duration' AND duration_s > 0) AS dur
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND utm_campaign != ''
+          AND ip_is_bot = 0
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        GROUP BY session_id
+        HAVING pv > 0
+      )
+      GROUP BY campaign
+      ORDER BY visitors DESC
+      LIMIT 50
       """
 
       ClickHouse.query(sql)
@@ -2224,6 +2268,20 @@ defmodule Spectabas.Analytics do
       if goals == [] do
         {:ok, []}
       else
+        # Get total unique visitors for conversion rate calculation
+        total_visitors =
+          case ClickHouse.query("""
+            SELECT uniq(visitor_id) AS total
+            FROM events
+            WHERE site_id = #{ClickHouse.param(site.id)}
+              AND event_type = 'pageview' AND ip_is_bot = 0
+              AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+              AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+          """) do
+            {:ok, [%{"total" => t}]} -> to_int(t)
+            _ -> 0
+          end
+
         # Batch all goals into a single query with UNION ALL
         unions =
           goals
@@ -2231,7 +2289,9 @@ defmodule Spectabas.Analytics do
             condition = goal_condition(goal)
 
             """
-            SELECT #{ClickHouse.param(to_string(goal.id))} AS goal_id, count() AS completions
+            SELECT #{ClickHouse.param(to_string(goal.id))} AS goal_id,
+              count() AS completions,
+              uniq(visitor_id) AS unique_completers
             FROM events
             WHERE site_id = #{ClickHouse.param(site.id)}
               AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
@@ -2244,17 +2304,27 @@ defmodule Spectabas.Analytics do
 
         counts =
           case ClickHouse.query(unions) do
-            {:ok, rows} -> Map.new(rows, fn r -> {r["goal_id"], to_int(r["completions"])} end)
+            {:ok, rows} ->
+              Map.new(rows, fn r ->
+                {r["goal_id"], %{completions: to_int(r["completions"]), unique_completers: to_int(r["unique_completers"])}}
+              end)
             _ -> %{}
           end
 
         results =
           Enum.map(goals, fn goal ->
+            stats = Map.get(counts, to_string(goal.id), %{completions: 0, unique_completers: 0})
+            conv_rate = if total_visitors > 0,
+              do: Float.round(stats.unique_completers / total_visitors * 100, 2),
+              else: 0.0
+
             %{
               goal_id: goal.id,
               name: goal.name,
               goal_type: goal.goal_type,
-              completions: Map.get(counts, to_string(goal.id), 0)
+              completions: stats.completions,
+              unique_completers: stats.unique_completers,
+              conversion_rate: conv_rate
             }
           end)
 
@@ -2993,7 +3063,9 @@ defmodule Spectabas.Analytics do
       SELECT
         event_name,
         count() AS hits,
-        uniq(visitor_id) AS visitors
+        uniq(visitor_id) AS visitors,
+        uniq(session_id) AS sessions,
+        round(count() / greatest(uniq(visitor_id), 1), 1) AS avg_per_visitor
       FROM events
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND event_type = 'custom'

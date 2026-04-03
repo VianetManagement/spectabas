@@ -3,8 +3,10 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
 
   @moduledoc "Campaign management with UTM URL builder."
 
-  alias Spectabas.{Accounts, Sites, Campaigns}
+  alias Spectabas.{Accounts, Sites, Campaigns, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
+  import SpectabasWeb.Dashboard.DateHelpers
+  import Spectabas.TypeHelpers
 
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
@@ -19,12 +21,19 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
     else
       campaigns = Campaigns.list_campaigns(site)
 
+      perf =
+        case Analytics.campaign_performance(site, user, range_to_period("30d")) do
+          {:ok, data} -> Map.new(data, fn r -> {r["campaign"], r} end)
+          _ -> %{}
+        end
+
       {:ok,
        socket
        |> assign(:page_title, "Campaigns - #{site.name}")
        |> assign(:site, site)
        |> assign(:user, user)
        |> assign(:campaigns, campaigns)
+       |> assign(:perf, perf)
        |> assign(:show_form, false)
        |> assign(:form, to_form(campaign_changeset()))}
     end
@@ -242,29 +251,43 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
               <tr>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Source
+                  Source / Medium
                 </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Medium
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                  Visitors (30d)
+                </th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                  Sessions
+                </th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                  Bounce Rate
                 </th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Status
-                </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Tagged URL
                 </th>
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr :if={@campaigns == []}>
-                <td colspan="5" class="px-6 py-8 text-center text-gray-500">
+                <td colspan="6" class="px-6 py-8 text-center text-gray-500">
                   No campaigns yet. Create one above to start tracking your marketing efforts.
                 </td>
               </tr>
               <tr :for={c <- @campaigns} class="hover:bg-gray-50">
+                <% p = Map.get(@perf, c.utm_campaign, %{}) %>
                 <td class="px-6 py-4 text-sm font-medium text-gray-900">{c.name}</td>
-                <td class="px-6 py-4 text-sm text-gray-500">{c.utm_source}</td>
-                <td class="px-6 py-4 text-sm text-gray-500">{c.utm_medium}</td>
+                <td class="px-6 py-4 text-sm text-gray-500">
+                  {c.utm_source} / {c.utm_medium}
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                  {format_number(to_num(p["visitors"]))}
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                  {format_number(to_num(p["sessions"]))}
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                  {if p["bounce_rate"], do: "#{p["bounce_rate"]}%", else: "-"}
+                </td>
                 <td class="px-6 py-4">
                   <span class={[
                     "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
@@ -272,9 +295,6 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
                   ]}>
                     {if c.active, do: "Active", else: "Inactive"}
                   </span>
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-500 truncate max-w-xs font-mono text-xs">
-                  {Campaigns.build_url(c)}
                 </td>
               </tr>
             </tbody>

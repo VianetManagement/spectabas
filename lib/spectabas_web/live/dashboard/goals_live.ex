@@ -21,7 +21,7 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
 
       completions =
         case Analytics.goal_completions(site, user, :week) do
-          {:ok, data} -> data
+          {:ok, data} -> Map.new(data, fn r -> {r.goal_id, r} end)
           _ -> %{}
         end
 
@@ -196,13 +196,19 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
                   Completions (7d)
                 </th>
                 <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Unique Visitors
+                </th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Conv Rate
+                </th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr :if={@goals == []}>
-                <td colspan="5" class="px-6 py-8 text-center text-gray-500">No goals configured.</td>
+                <td colspan="7" class="px-6 py-8 text-center text-gray-500">No goals configured.</td>
               </tr>
               <tr :for={goal <- @goals} class="hover:bg-gray-50">
                 <td class="px-6 py-4 text-sm font-medium text-gray-900">{goal.name}</td>
@@ -220,8 +226,15 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
                 <td class="px-6 py-4 text-sm text-gray-500 font-mono">
                   {goal.page_path || goal.event_name || "-"}
                 </td>
-                <td class="px-6 py-4 text-sm text-gray-900 text-right font-semibold">
-                  {Map.get(@completions, goal.id, 0)}
+                <% stats = Map.get(@completions, goal.id, %{completions: 0, unique_completers: 0, conversion_rate: 0.0}) %>
+                <td class="px-6 py-4 text-sm text-gray-900 text-right font-semibold tabular-nums">
+                  {stats.completions}
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                  {stats.unique_completers}
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                  {stats.conversion_rate}%
                 </td>
                 <td class="px-6 py-4 text-right">
                   <button
