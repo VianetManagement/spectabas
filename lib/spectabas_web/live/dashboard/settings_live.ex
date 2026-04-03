@@ -179,50 +179,95 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
         if v == "", do: acc, else: Map.put(acc, k, v)
       end)
 
-    case Spectabas.AdIntegrations.Credentials.save(site, platform, creds) do
-      {:ok, updated_site} ->
-        Spectabas.Audit.log("ad_credentials.saved", %{
-          user_id: socket.assigns.current_scope.user.id,
-          site_id: site.id,
-          platform: platform
-        })
+    # Validate Stripe/Braintree keys before saving
+    validation =
+      cond do
+        platform == "stripe" and creds["api_key"] != "" ->
+          validate_stripe_key(creds["api_key"])
 
-        # For Stripe/Braintree, also create/update the integration record directly (no OAuth flow)
-        socket =
-          cond do
-            platform == "stripe" and creds["api_key"] != "" ->
-              {:ok, _} =
-                Spectabas.AdIntegrations.connect(site.id, "stripe", %{
-                  access_token: creds["api_key"],
-                  refresh_token: "",
-                  account_id: "",
-                  account_name: "Stripe"
-                })
+        true ->
+          :ok
+      end
 
-              assign(socket, :ad_integrations, Spectabas.AdIntegrations.list_for_site(site.id))
+    case validation do
+      {:error, msg} ->
+        {:noreply, put_flash(socket, :error, "Invalid API key: #{msg}")}
 
-            platform == "braintree" and creds["merchant_id"] != "" ->
-              {:ok, _} =
-                Spectabas.AdIntegrations.connect(site.id, "braintree", %{
-                  access_token: creds["merchant_id"],
-                  refresh_token: "",
-                  account_id: creds["merchant_id"],
-                  account_name: "Braintree"
-                })
+      :ok ->
+        case Spectabas.AdIntegrations.Credentials.save(site, platform, creds) do
+          {:ok, updated_site} ->
+            Spectabas.Audit.log("ad_credentials.saved", %{
+              user_id: socket.assigns.current_scope.user.id,
+              site_id: site.id,
+              platform: platform
+            })
 
-              assign(socket, :ad_integrations, Spectabas.AdIntegrations.list_for_site(site.id))
+            # For Stripe/Braintree, also create/update the integration record directly (no OAuth flow)
+            socket =
+              cond do
+                platform == "stripe" and creds["api_key"] != "" ->
+                  # Delete any existing revoked integration first to avoid conflicts
+                  existing =
+                    Enum.find(
+                      Spectabas.AdIntegrations.list_for_site(site.id),
+                      &(&1.platform == "stripe")
+                    )
 
-            true ->
-              socket
-          end
+                  if existing && existing.status == "revoked" do
+                    Spectabas.Repo.delete(existing)
+                  end
 
-        {:noreply,
-         socket
-         |> put_flash(:info, "#{platform_label(platform)} credentials saved.")
-         |> assign(:site, updated_site)}
+                  {:ok, _} =
+                    Spectabas.AdIntegrations.connect(site.id, "stripe", %{
+                      access_token: creds["api_key"],
+                      refresh_token: "",
+                      account_id: "",
+                      account_name: "Stripe"
+                    })
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to save credentials.")}
+                  assign(
+                    socket,
+                    :ad_integrations,
+                    Spectabas.AdIntegrations.list_for_site(site.id)
+                  )
+
+                platform == "braintree" and creds["merchant_id"] != "" ->
+                  existing =
+                    Enum.find(
+                      Spectabas.AdIntegrations.list_for_site(site.id),
+                      &(&1.platform == "braintree")
+                    )
+
+                  if existing && existing.status == "revoked" do
+                    Spectabas.Repo.delete(existing)
+                  end
+
+                  {:ok, _} =
+                    Spectabas.AdIntegrations.connect(site.id, "braintree", %{
+                      access_token: creds["merchant_id"],
+                      refresh_token: "",
+                      account_id: creds["merchant_id"],
+                      account_name: "Braintree"
+                    })
+
+                  assign(
+                    socket,
+                    :ad_integrations,
+                    Spectabas.AdIntegrations.list_for_site(site.id)
+                  )
+
+                true ->
+                  socket
+              end
+
+            {:noreply,
+             socket
+             |> put_flash(:info, "#{platform_label(platform)} credentials saved.")
+             |> assign(:site, updated_site)}
+
+          {:error, _} ->
+            {:noreply, put_flash(socket, :error, "Failed to save credentials.")}
+        end
     end
   end
 
@@ -1074,6 +1119,31 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
       </div>
     </.dashboard_layout>
     """
+  end
+
+  # Validate a Stripe API key by making a lightweight API call
+  defp validate_stripe_key(key) do
+    case Req.get("https://api.stripe.com/v1/balance",
+           headers: [
+             {"authorization", "Bearer #{key}"},
+             {"stripe-version", "2024-12-18.acacia"}
+           ]
+         ) do
+      {:ok, %{status: 200}} ->
+        :ok
+
+      {:ok, %{status: 401}} ->
+        {:error, "Authentication failed. Check that the key is correct and active."}
+
+      {:ok, %{status: 403}} ->
+        {:error, "Key does not have sufficient permissions."}
+
+      {:ok, %{status: s}} ->
+        {:error, "Stripe returned HTTP #{s}."}
+
+      {:error, reason} ->
+        {:error, "Could not reach Stripe: #{inspect(reason)}"}
+    end
   end
 
   defp platform_label("google_ads"), do: "Google Ads"
