@@ -745,15 +745,15 @@ defmodule SpectabasWeb.HealthController do
       results =
         [
           {"refund_amount",
-           Spectabas.ClickHouse.execute(
+           Spectabas.ClickHouse.execute_admin(
              "ALTER TABLE ecommerce_events ADD COLUMN IF NOT EXISTS refund_amount Decimal(12, 2) DEFAULT 0"
            )},
           {"import_source",
-           Spectabas.ClickHouse.execute(
+           Spectabas.ClickHouse.execute_admin(
              "ALTER TABLE ecommerce_events ADD COLUMN IF NOT EXISTS import_source LowCardinality(String) DEFAULT ''"
            )},
           {"subscription_events",
-           Spectabas.ClickHouse.execute("""
+           Spectabas.ClickHouse.execute_admin("""
            CREATE TABLE IF NOT EXISTS subscription_events (
              site_id UInt64,
              subscription_id String,
