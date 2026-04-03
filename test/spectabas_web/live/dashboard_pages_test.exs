@@ -116,9 +116,9 @@ defmodule SpectabasWeb.DashboardPagesTest do
       assert html =~ "Ecommerce"
     end
 
-    test "channels", %{conn: conn, site: site} do
-      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/channels")
-      assert html =~ "All Channels"
+    test "acquisition", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/acquisition")
+      assert html =~ "Acquisition"
     end
 
     test "bot traffic", %{conn: conn, site: site} do

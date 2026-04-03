@@ -102,22 +102,10 @@ defmodule SpectabasWeb.Dashboard.CategoryLive do
       active: "acquisition-landing",
       pages: [
         %{
-          key: "channels",
-          path: "channels",
-          label: "All Channels",
-          desc: "Traffic grouped by channel: Direct, Organic Search, Paid, Social, Referral, Email. See pageviews, visitors, and sessions per channel."
-        },
-        %{
-          key: "sources",
-          path: "sources",
-          label: "Sources",
-          desc: "Individual referrer domains and UTM sources with 6 tabs: Source, Medium, Campaign, Term, Content, and Referrer URLs."
-        },
-        %{
-          key: "attribution",
-          path: "attribution",
-          label: "Attribution",
-          desc: "First-touch vs last-touch attribution for traffic sources. See which channels bring new visitors vs which channels close conversions."
+          key: "acquisition",
+          path: "acquisition",
+          label: "Acquisition",
+          desc: "Traffic channels with drill-down, referrer domains, UTM parameters, and engagement metrics — all in one view. Switch between channel overview and individual sources."
         },
         %{
           key: "campaigns",

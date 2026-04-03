@@ -160,19 +160,9 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
 
           <.nav_section label="Acquisition" color="text-emerald-500" to={~p"/dashboard/sites/#{@site.id}/c/acquisition"}>
             <.nav_item
-              to={~p"/dashboard/sites/#{@site.id}/channels"}
-              label="All Channels"
-              active={@active == "channels"}
-            />
-            <.nav_item
-              to={~p"/dashboard/sites/#{@site.id}/sources"}
-              label="Sources"
-              active={@active == "sources"}
-            />
-            <.nav_item
-              to={~p"/dashboard/sites/#{@site.id}/attribution"}
-              label="Attribution"
-              active={@active == "attribution"}
+              to={~p"/dashboard/sites/#{@site.id}/acquisition"}
+              label="Acquisition"
+              active={@active == "acquisition"}
             />
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/campaigns"}
@@ -358,10 +348,10 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
                 Pages
               </.link>
               <.link
-                navigate={~p"/dashboard/sites/#{@site.id}/sources"}
-                class={"px-2.5 py-2 sm:px-2 sm:py-1 text-xs rounded whitespace-nowrap " <> if(@active == "sources", do: "bg-indigo-50 text-indigo-700 font-medium", else: "text-gray-600")}
+                navigate={~p"/dashboard/sites/#{@site.id}/acquisition"}
+                class={"px-2.5 py-2 sm:px-2 sm:py-1 text-xs rounded whitespace-nowrap " <> if(@active == "acquisition", do: "bg-indigo-50 text-indigo-700 font-medium", else: "text-gray-600")}
               >
-                Sources
+                Acquisition
               </.link>
               <.link
                 navigate={~p"/dashboard/sites/#{@site.id}/visitor-log"}
@@ -448,9 +438,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
       {~p"/dashboard/sites/#{site_id}/downloads", "Downloads"},
       {~p"/dashboard/sites/#{site_id}/events", "Events"},
       {~p"/dashboard/sites/#{site_id}/performance", "Performance"},
-      {~p"/dashboard/sites/#{site_id}/channels", "Channels"},
-      {~p"/dashboard/sites/#{site_id}/sources", "Sources"},
-      {~p"/dashboard/sites/#{site_id}/attribution", "Attribution"},
+      {~p"/dashboard/sites/#{site_id}/acquisition", "Acquisition"},
       {~p"/dashboard/sites/#{site_id}/campaigns", "Campaigns"},
       {~p"/dashboard/sites/#{site_id}/geo", "Geography"},
       {~p"/dashboard/sites/#{site_id}/map", "Map"},
@@ -499,8 +487,9 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
     "search" => "Behavior", "outbound-links" => "Behavior", "downloads" => "Behavior",
     "events" => "Behavior", "performance" => "Behavior",
     # Acquisition
-    "channels" => "Acquisition", "sources" => "Acquisition",
-    "attribution" => "Acquisition", "campaigns" => "Acquisition",
+    "acquisition" => "Acquisition", "channels" => "Acquisition",
+    "sources" => "Acquisition", "attribution" => "Acquisition",
+    "campaigns" => "Acquisition",
     # Audience
     "geo" => "Audience", "map" => "Audience", "devices" => "Audience",
     "network" => "Audience", "bot-traffic" => "Audience", "visitor-log" => "Audience",

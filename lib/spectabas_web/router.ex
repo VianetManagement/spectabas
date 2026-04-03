@@ -153,15 +153,16 @@ defmodule SpectabasWeb.Router do
       live "/sites/:site_id/c/:category", Dashboard.CategoryLive, :index
       live "/sites/:site_id/realtime", Dashboard.RealtimeLive, :show
       live "/sites/:site_id/pages", Dashboard.PagesLive, :index
-      live "/sites/:site_id/channels", Dashboard.ChannelsLive, :index
+      live "/sites/:site_id/acquisition", Dashboard.AcquisitionLive, :index
+      live "/sites/:site_id/channels", Dashboard.AcquisitionLive, :index
+      live "/sites/:site_id/sources", Dashboard.AcquisitionLive, :sources
       live "/sites/:site_id/bot-traffic", Dashboard.BotTrafficLive, :index
-      live "/sites/:site_id/sources", Dashboard.SourcesLive, :index
       live "/sites/:site_id/geo", Dashboard.GeoLive, :index
       live "/sites/:site_id/entry-exit", Dashboard.EntryExitLive, :index
       live "/sites/:site_id/map", Dashboard.MapLive, :index
       live "/sites/:site_id/visitor-log", Dashboard.VisitorLogLive, :index
       live "/sites/:site_id/transitions", Dashboard.TransitionsLive, :index
-      live "/sites/:site_id/attribution", Dashboard.AttributionLive, :index
+      live "/sites/:site_id/attribution", Dashboard.AcquisitionLive, :index
       live "/sites/:site_id/search", Dashboard.SearchLive, :index
       live "/sites/:site_id/cohort", Dashboard.CohortLive, :index
       live "/sites/:site_id/insights", Dashboard.InsightsLive, :index

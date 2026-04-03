@@ -45,6 +45,48 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v4.6.0 — 2026-04-02 UTC",
+       [
+         %{
+           title: "Feature: Consolidated Acquisition page",
+           description:
+             "Merged All Channels, Sources, and Channel Attribution into a single Acquisition page. " <>
+               "Channels view shows engagement metrics (bounce rate, avg duration, pages/session) with drill-down. " <>
+               "Sources view has referrer + 5 UTM tabs. Old URLs redirect to the new page."
+         },
+         %{
+           title: "Fix: Visitor Quality calculations (bounce rate, return rate, duration)",
+           description:
+             "Bounce rate used is_bounce column that was never set by ingest (always 100%). Restructured as 3-level " <>
+               "session-based query. Return rate was always 100% (identity division). Duration excluded visitors " <>
+               "with no duration events, inflating average."
+         },
+         %{
+           title: "Fix: Meta Ads JSON response parsing across all endpoints",
+           description:
+             "Meta Graph API returns raw JSON strings instead of parsed maps. Added ensure_parsed/1 helper " <>
+               "on all 4 endpoints: token exchange, refresh, account fetch, and daily spend sync."
+         },
+         %{
+           title: "Fix: Ad spend sync no longer creates duplicate rows",
+           description:
+             "Yesterday's data now only synced once per UTC day. Today's partial data synced every 6h. " <>
+               "Eliminates need for periodic OPTIMIZE TABLE FINAL."
+         },
+         %{
+           title: "UI: Distinct ad platform pill colors",
+           description:
+             "Google Ads blue, Bing Ads amber, Meta Ads purple — updated across 6 pages."
+         },
+         %{
+           title: "UI: Clickable page URLs on Buyer Patterns",
+           description: "Page paths now link to the actual page on the tracked site with an external link icon."
+         },
+         %{
+           title: "UI: Revenue Cohorts explainer text",
+           description: "Added explanation of how cohort rows and columns work."
+         }
+       ]},
       {"v4.5.0 — 2026-04-02 UTC",
        [
          %{

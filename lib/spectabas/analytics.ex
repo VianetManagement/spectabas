@@ -523,24 +523,36 @@ defmodule Spectabas.Analytics do
           "AND referrer_domain NOT IN (#{domains})"
         end
 
-      # Classify channels in SQL so uniq(visitor_id) is correct per channel
-      # (Elixir-side summing of uniq counts across groups overcounts visitors)
       channel_sql = channel_case_expression()
 
+      # Session-level subquery for accurate bounce rate and duration
       sql = """
       SELECT
-        (#{channel_sql}) AS channel,
-        countIf(event_type = 'pageview') AS pageviews,
+        channel,
+        sum(pv) AS pageviews,
         uniq(visitor_id) AS visitors,
-        uniq(session_id) AS sessions,
-        uniq(referrer_domain) AS sources
-      FROM events
-      WHERE site_id = #{ClickHouse.param(site.id)}
-        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-        AND ip_is_bot = 0
-        AND event_type = 'pageview'
-        #{exclude_clause}
+        count() AS sessions,
+        uniq(referrer_domain) AS sources,
+        round(countIf(pv = 1) / greatest(count(), 1) * 100, 1) AS bounce_rate,
+        round(avg(coalesce(dur, 0)), 0) AS avg_duration,
+        round(sum(pv) / greatest(count(), 1), 1) AS pages_per_session
+      FROM (
+        SELECT
+          session_id,
+          any(visitor_id) AS visitor_id,
+          any(referrer_domain) AS referrer_domain,
+          (#{channel_sql}) AS channel,
+          countIf(event_type = 'pageview') AS pv,
+          maxIf(duration_s, event_type = 'duration' AND duration_s > 0) AS dur
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+          AND ip_is_bot = 0
+          #{exclude_clause}
+        GROUP BY session_id
+        HAVING pv > 0
+      )
       GROUP BY channel
       ORDER BY pageviews DESC
       """

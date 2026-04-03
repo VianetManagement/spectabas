@@ -1005,9 +1005,13 @@ defmodule SpectabasWeb.DocsLive do
             """
           },
           %{
-            id: "channels",
-            title: "All Channels",
+            id: "acquisition",
+            title: "Acquisition",
             body: """
+            Consolidated view of all traffic acquisition data with two views:
+
+            ### Channels View (default)
+
             Groups all traffic into marketing channels automatically based on referrer domains and UTM parameters:
 
             - **Search Engines** — Google, Bing, DuckDuckGo, Yahoo, Baidu, Yandex, Ecosia, Brave
@@ -1020,14 +1024,11 @@ defmodule SpectabasWeb.DocsLive do
             - **Direct** — no referrer and no UTM parameters
             - **Other Campaigns** — UTM source set but no referrer domain
 
-            Each channel shows pageviews, visitors, sessions, and how many distinct sources contributed. Click a channel to drill into the Sources page.
-            """
-          },
-          %{
-            id: "sources",
-            title: "Sources",
-            body: """
-            Shows where your traffic comes from, organized in six tabs:
+            Each channel shows visitors, sessions, pageviews, bounce rate, average duration, and pages per session. Click a channel to drill into the individual sources within it.
+
+            ### Sources View
+
+            Switch to the Sources view to see individual referrer domains and UTM parameters across six tabs:
 
             - **Referrers** — domains that link to your site (google.com, twitter.com, etc.)
             - **UTM Source** — the `utm_source` parameter from tagged URLs
@@ -1036,26 +1037,7 @@ defmodule SpectabasWeb.DocsLive do
             - **UTM Term** — the `utm_term` parameter (paid search keywords)
             - **UTM Content** — the `utm_content` parameter (ad variations, A/B test labels)
 
-            Each UTM tab only shows entries where that parameter was set — no blank rows.
-
-            **Click any source** to see the visitors from that source in the Visitor Log.
-
-            Your own site's domain and spectabas.com are automatically filtered out to avoid self-referrals.
-            """
-          },
-          %{
-            id: "attribution",
-            title: "Channel Attribution",
-            body: """
-            Shows which traffic channels bring visitors, using two attribution models:
-
-            - **First Touch** — credits the channel that first brought the visitor to your site
-            - **Last Touch** — credits the most recent channel before the visitor's latest activity
-
-
-            > **Example:** A visitor first finds you via Google Ads, then returns a week later via an email newsletter. First touch credits Google Ads; last touch credits the newsletter.
-
-            Use this to understand which channels attract new visitors vs which channels drive returning engagement.
+            **Click any source** to see the visitors from that source in the Visitor Log. Your own site's domain is automatically filtered out.
             """
           },
           %{
