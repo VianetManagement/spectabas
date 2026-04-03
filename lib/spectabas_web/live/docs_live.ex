@@ -564,6 +564,217 @@ defmodule SpectabasWeb.DocsLive do
             """
           },
           %{
+            id: "ad-blocker-evasion",
+            title: "Ad Blocker Evasion (Reverse Proxy)",
+            body: """
+            By default, your tracking script loads from `b.yourdomain.com` — a dedicated analytics subdomain. Most ad blockers don't target custom subdomains, but strict blocklists (like uBlock Origin in hard mode) can detect the pattern.
+
+            The reverse proxy approach serves the tracker and beacons from **your main domain** (e.g., `www.yourdomain.com/t/...`), making them completely indistinguishable from your own application code. No ad blocker can detect this without blocking your entire site.
+
+            ### How It Works
+
+            | Visitor requests | Proxied to Spectabas |
+            |------------------|----------------------|
+            | `www.yourdomain.com/t/v1.js` | `www.spectabas.com/assets/v1.js` |
+            | `www.yourdomain.com/t/c/e` | `www.spectabas.com/c/e` |
+            | `www.yourdomain.com/t/c/i` | `www.spectabas.com/c/i` |
+            | `www.yourdomain.com/t/c/*` | `www.spectabas.com/c/*` |
+
+            ### Choose Your Proxy Method
+
+            There are two approaches depending on your infrastructure:
+
+            ---
+
+            ### Option A: Cloudflare Worker (Recommended)
+
+            **Use this if your site is behind Cloudflare.** This is the simplest and most reliable method — no application code changes needed, works across any hosting region, and Cloudflare-to-Render traffic is trusted (no firewall blocks).
+
+            **Step 1: Create the Worker**
+
+            In your Cloudflare dashboard: **Workers & Pages > Create > Create Worker**. Name it `analytics-proxy` and paste:
+
+            ```javascript
+            export default {
+              async fetch(request) {
+                const url = new URL(request.url);
+
+                // Proxy tracker script
+                if (url.pathname === '/t/v1.js') {
+                  const resp = await fetch('https://www.spectabas.com/assets/v1.js');
+                  return new Response(resp.body, {
+                    headers: {
+                      'content-type': 'application/javascript',
+                      'cache-control': 'public, max-age=3600'
+                    }
+                  });
+                }
+
+                // Proxy beacon endpoints
+                if (url.pathname.startsWith('/t/c/')) {
+                  const target = 'https://www.spectabas.com'
+                    + url.pathname.replace('/t', '') + url.search;
+                  const resp = await fetch(target, {
+                    method: request.method,
+                    body: request.method === 'POST' ? request.body : undefined,
+                    headers: {
+                      'content-type': 'application/json',
+                      'x-spectabas-real-ip': request.headers.get('cf-connecting-ip') || '',
+                      'x-forwarded-for': request.headers.get('cf-connecting-ip') || '',
+                      'user-agent': request.headers.get('user-agent') || ''
+                    }
+                  });
+                  return new Response(resp.body, { status: resp.status });
+                }
+
+                // Everything else passes through to origin
+                return fetch(request);
+              }
+            }
+            ```
+
+            **Step 2: Add a Route**
+
+            In your Worker settings: **Settings > Routes > Add Route**:
+            - Route: `www.yourdomain.com/t/*`
+            - Worker: `analytics-proxy`
+
+            **Step 3: Update your tracking snippet**
+
+            ```html
+            <script defer data-id="YOUR_KEY"
+              data-proxy="https://www.yourdomain.com/t"
+              src="https://www.yourdomain.com/t/v1.js"></script>
+            ```
+
+            That's it. No application code changes, no server config, no WAF rules needed.
+
+            > **Why Cloudflare Worker?** Server-to-server proxies (e.g., a Phoenix plug or Nginx upstream) can be blocked by Render's built-in Cloudflare DDoS protection, which returns 403 "error code: 1000" for non-browser POST requests. Cloudflare Worker requests come from Cloudflare's own IP range, which is trusted by Render's edge.
+
+            > **Cloudflare Bot Fight Mode:** If you have Bot Fight Mode enabled (Security > Bots), add a WAF skip rule for `/t/*` paths. Bot Fight Mode serves JS challenges that `sendBeacon` cannot solve, which would block tracking beacons before they reach the Worker.
+
+            ---
+
+            ### Option B: Application-Level Proxy (Phoenix/Elixir)
+
+            **Use this if your site is NOT behind Cloudflare** and is hosted on Render in the **same region** as Spectabas (Ohio). If in different regions, use Option A instead.
+
+            This approach adds a plug to your Phoenix application that intercepts `/t/*` requests and forwards them to Spectabas via Render's private network.
+
+            **Step 1: Create the proxy plug**
+
+            Create `lib/your_app_web/plugs/analytics_proxy.ex`:
+
+            ```elixir
+            defmodule YourAppWeb.Plugs.AnalyticsProxy do
+              import Plug.Conn
+
+              # Use Render private network (same region only):
+              @analytics_host "http://SERVICE_ID.internal:10000"
+              # Or public URL if same region is not available:
+              # @analytics_host "https://www.spectabas.com"
+
+              def init(opts), do: opts
+
+              def call(%{request_path: "/t/v1.js"} = conn, _opts) do
+                proxy_get(conn, @analytics_host <> "/assets/v1.js")
+              end
+
+              def call(%{request_path: "/t/c/" <> rest} = conn, _opts) do
+                target = @analytics_host <> "/c/" <> rest
+                qs = conn.query_string
+                url = if qs != "", do: target <> "?" <> qs, else: target
+                case conn.method do
+                  "GET" -> proxy_get(conn, url)
+                  "POST" -> proxy_post(conn, url)
+                  _ -> conn |> send_resp(405, "") |> halt()
+                end
+              end
+
+              def call(conn, _opts), do: conn
+
+              defp proxy_get(conn, url) do
+                case Req.get(url) do
+                  {:ok, %{status: status, body: body}} ->
+                    conn
+                    |> put_resp_content_type("application/javascript")
+                    |> put_resp_header("cache-control", "public, max-age=3600")
+                    |> send_resp(status, body)
+                    |> halt()
+                  _ -> conn |> send_resp(502, "") |> halt()
+                end
+              end
+
+              defp proxy_post(conn, url) do
+                {:ok, body, conn} = read_body(conn)
+                client_ip =
+                  (get_req_header(conn, "cf-connecting-ip") |> List.first())
+                  || (get_req_header(conn, "x-forwarded-for") |> List.first())
+                  || (:inet.ntoa(conn.remote_ip) |> to_string())
+
+                case Req.post(url,
+                       body: body,
+                       headers: [
+                         {"content-type", "application/json"},
+                         {"x-spectabas-real-ip", client_ip},
+                         {"x-forwarded-for", client_ip},
+                         {"user-agent", get_req_header(conn, "user-agent") |> List.first() || ""}
+                       ]) do
+                  {:ok, %{status: status, body: resp_body}} ->
+                    conn |> send_resp(status, resp_body || "") |> halt()
+                  _ -> conn |> send_resp(502, "") |> halt()
+                end
+              end
+            end
+            ```
+
+            **Step 2: Add to endpoint.ex** (BEFORE `Plug.Parsers`):
+
+            ```elixir
+            plug YourAppWeb.Plugs.AnalyticsProxy
+            plug Plug.Parsers, ...
+            ```
+
+            **Step 3: Update tracking snippet** (same as Option A):
+
+            ```html
+            <script defer data-id="YOUR_KEY"
+              data-proxy="https://www.yourdomain.com/t"
+              src="https://www.yourdomain.com/t/v1.js"></script>
+            ```
+
+            > **Important:** The plug MUST be in `endpoint.ex` before `Plug.Parsers`, not in `router.ex`. If placed in the router, CSRF protection returns 403 and `Plug.Parsers` consumes the request body before the proxy can read it.
+
+            > **Same-region requirement:** Render's private network (`SERVICE_ID.internal:10000`) only works between services in the same region. If your app is in a different region than Spectabas, requests to the public URL (`www.spectabas.com`) may be blocked by Render's Cloudflare layer with "error code: 1000". Use the Cloudflare Worker approach (Option A) instead.
+
+            > **Req dependency:** Add `{:req, "~> 0.5"}` to your `mix.exs` deps if not already present.
+
+            ### Data Accuracy
+
+            Both proxy methods preserve all tracking data:
+
+            | Data Point | How It's Preserved |
+            |------------|-------------------|
+            | **Client IP** | `X-Spectabas-Real-IP` header carries the real visitor IP through to Spectabas for geo enrichment |
+            | **User Agent** | Forwarded in the `User-Agent` header for browser/OS/device detection |
+            | **Cookies** | Set by the tracker JS on the page domain (not the script origin) — no migration needed |
+            | **Click IDs** | Captured by the tracker JS from the URL — unaffected by proxy |
+            | **Origin validation** | Proxy requests have no Origin/Referer headers — Spectabas allows these automatically |
+
+            ### Choosing Between Proxy and CNAME
+
+            | | CNAME (default) | Reverse Proxy |
+            |---|---|---|
+            | **Setup** | DNS record only | Cloudflare Worker or Phoenix plug |
+            | **Ad blocker resistance** | Good (custom subdomain) | Excellent (same-origin, undetectable) |
+            | **Strict blocklists** | Can be blocked | Cannot be blocked |
+            | **Maintenance** | None | Minimal (Worker is set-and-forget) |
+            | **Latency** | Direct | +1-5ms (Worker) or +10-50ms (Phoenix proxy) |
+
+            For most sites, the CNAME approach works fine. Use the reverse proxy only if you're seeing significant traffic loss from ad blockers.
+            """
+          },
+          %{
             id: "js-api",
             title: "JavaScript API",
             body: """
@@ -2465,6 +2676,73 @@ defmodule SpectabasWeb.DocsLive do
       %{
         category: "Administration",
         items: [
+          %{
+            id: "stripe-setup",
+            title: "Stripe Integration",
+            body: """
+            Import Stripe charges automatically as ecommerce events. Revenue Attribution, Revenue Cohorts, Buyer Patterns, and all ecommerce dashboards populate with zero custom code.
+
+            ### Prerequisites
+
+            - Your site must use the [server-side Identify API](/docs/api#identify) to associate visitor sessions with customer email addresses
+            - Stripe charges are matched to visitors by email — unidentified visitors' charges still sync but won't be linked to browsing behavior
+
+            ### Step 1: Create a Restricted API Key in Stripe
+
+            A restricted key limits Spectabas to read-only access to payment data. This is more secure than using your default secret key.
+
+            1. Log in to the [Stripe Dashboard](https://dashboard.stripe.com)
+            2. Go to **Developers > API keys** (or visit `dashboard.stripe.com/apikeys`)
+            3. Click **+ Create restricted key**
+            4. **Name:** Enter "Spectabas Analytics" (or any name you'll recognize)
+            5. **Permissions** — set exactly these:
+
+            | Resource | Permission |
+            |----------|------------|
+            | **Charges** | **Read** |
+            | **Customers** | **Read** |
+            | All others | None |
+
+            6. Click **Create key**
+            7. **Copy the key immediately** — it starts with `rk_live_` and won't be shown again
+
+            > **Why restricted?** Your default secret key (`sk_live_`) has full access to refunds, transfers, customer management, and everything else. A restricted key with only Charges:Read and Customers:Read limits Spectabas to reading payment data — it cannot modify anything in your Stripe account.
+
+            > **Test mode:** Use a test key (`rk_test_` or `sk_test_`) to verify the integration works before going live. Test charges won't appear in your analytics.
+
+            ### Step 2: Connect in Spectabas
+
+            1. Go to your site's **Settings** page
+            2. Scroll to the **Integrations** section
+            3. Find the **Stripe** card and click **Configure**
+            4. Paste your restricted API key in the "Stripe Secret Key" field
+            5. Click **Save Credentials**
+            6. The card shows "Connected" — click **Sync Now** to pull charges immediately
+
+            ### Step 3: Verify
+
+            After syncing (takes a few seconds):
+
+            - Go to **Conversions > Revenue Attribution** — revenue from Stripe charges should appear
+            - Check the **Ecommerce** page for order counts and totals
+            - Stripe charges show with order IDs starting with `ch_` (Stripe charge IDs)
+
+            ### How the Sync Works
+
+            - Spectabas fetches all **succeeded charges** from the Stripe API for the sync period
+            - For each charge, it looks up the customer's **email** and finds the matching identified visitor in your site's visitor database
+            - The charge is written to your ecommerce events with: charge ID as order ID, amount as revenue, charge currency, and the original charge timestamp
+            - **Deduplication:** Charge IDs are unique — re-syncing never creates duplicate records
+            - **Sync schedule:** Every 6 hours (today + yesterday), or manually via the Sync Now button
+
+            ### Important Notes
+
+            - **Double-counting:** If you already send the same transactions via the [Transaction API](/docs/api#ecommerce), Stripe import will create duplicate revenue. Use one method per payment flow — either Stripe import OR the Transaction API, not both.
+            - **Refunds:** Only successful charges are synced. Refunds, disputes, and partial refunds are not currently tracked. Refunded charges remain in your analytics.
+            - **Multiple Stripe accounts:** Each site can connect one Stripe account. If you process payments through multiple Stripe accounts, connect the primary one.
+            - **Currency:** Charge amounts are converted from Stripe's cents format (e.g., 9999 → $99.99) and stored in the charge's currency.
+            """
+          },
           %{
             id: "api-keys-setup",
             title: "API Keys",
