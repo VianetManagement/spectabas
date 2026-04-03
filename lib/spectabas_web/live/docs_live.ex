@@ -2707,16 +2707,20 @@ defmodule SpectabasWeb.DocsLive do
             4. **Name:** Enter "Spectabas Analytics" (or any name you'll recognize)
             5. **Permissions** — set exactly these:
 
-            | Resource | Permission |
-            |----------|------------|
-            | **Charges** | **Read** |
-            | **Customers** | **Read** |
-            | All others | None |
+            | Resource | Permission | Why |
+            |----------|------------|-----|
+            | **Charges** | **Read** | Fetches completed payments for revenue tracking |
+            | **Customers** | **Read** | Looks up customer email to match charges to visitors |
+            | **Refunds** | **Read** | Tracks refunds to adjust net revenue and LTV |
+            | **Subscriptions** | **Read** | Enables MRR tracking, plan breakdown, and churn detection |
+            | **Prices** | **Read** | Reads plan names and pricing for subscription details |
+            | **Products** | **Read** | Reads product names for subscription plan labels |
+            | All others | **None** | |
 
             6. Click **Create key**
             7. **Copy the key immediately** — it starts with `rk_live_` and won't be shown again
 
-            > **Why restricted?** Your default secret key (`sk_live_`) has full access to refunds, transfers, customer management, and everything else. A restricted key with only Charges:Read and Customers:Read limits Spectabas to reading payment data — it cannot modify anything in your Stripe account.
+            > **Why restricted?** Your default secret key (`sk_live_`) has full access to refunds, transfers, customer management, and everything else. A restricted key with read-only access to the six resources above limits Spectabas to reading payment and subscription data — it cannot modify anything in your Stripe account.
 
             > **Test mode:** Use a test key (`rk_test_` or `sk_test_`) to verify the integration works before going live. Test charges won't appear in your analytics.
 
@@ -2766,6 +2770,7 @@ defmodule SpectabasWeb.DocsLive do
             - **MRR calculation:** Monthly plans use their amount directly. Yearly plans are divided by 12 for the monthly equivalent. Only active, trialing, and past_due subscriptions count toward MRR.
             - **Multiple Stripe accounts:** Each site can connect one Stripe account. If you process payments through multiple Stripe accounts, connect the primary one.
             - **Currency:** Charge amounts are converted from Stripe's cents format (e.g., 9999 → $99.99). Currency symbols are displayed automatically ($, €, £, etc.).
+            - **Clear Data:** If you connected the wrong Stripe account or need to start fresh, click the **Clear Data** button on the Stripe integration card. This deletes all imported ecommerce events and subscription snapshots. ClickHouse DELETE is async — data disappears within a few minutes.
             """
           },
           %{
