@@ -60,6 +60,26 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
     end
   end
 
+  def handle_event("save_intent_config", params, socket) do
+    config = %{
+      "buying_paths" => text_to_paths(params["buying_paths"]),
+      "engaging_paths" => text_to_paths(params["engaging_paths"]),
+      "support_paths" => text_to_paths(params["support_paths"]),
+      "researching_threshold" => parse_threshold(params["researching_threshold"])
+    }
+
+    case Sites.update_site(socket.assigns.site, %{intent_config: config}) do
+      {:ok, site} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Intent classification updated.")
+         |> assign(:site, site)}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to save intent config.")}
+    end
+  end
+
   def handle_event("register_render_domain", _params, socket) do
     domain = socket.assigns.site.domain
 
@@ -494,6 +514,77 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
           </.form>
         </div>
 
+        <%!-- Visitor Intent Configuration --%>
+        <div class="bg-white rounded-lg shadow p-6 mt-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-1">Visitor Intent Classification</h2>
+          <p class="text-sm text-gray-500 mb-4">
+            Customize which URL paths trigger each intent badge. One path fragment per line (matches anywhere in the URL).
+          </p>
+          <form phx-submit="save_intent_config" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">
+                  Buying paths
+                  <span class="text-gray-400 font-normal">(conversion pages)</span>
+                </label>
+                <textarea
+                  name="buying_paths"
+                  rows="4"
+                  class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-xs font-mono"
+                  placeholder="/pricing&#10;/checkout&#10;/subscribe"
+                >{paths_to_text((@site.intent_config || %{})["buying_paths"])}</textarea>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">
+                  Engaging paths
+                  <span class="text-gray-400 font-normal">(core app features)</span>
+                </label>
+                <textarea
+                  name="engaging_paths"
+                  rows="4"
+                  class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-xs font-mono"
+                  placeholder="/search&#10;/listings&#10;/messages"
+                >{paths_to_text((@site.intent_config || %{})["engaging_paths"])}</textarea>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">
+                  Support paths
+                  <span class="text-gray-400 font-normal">(help/contact pages)</span>
+                </label>
+                <textarea
+                  name="support_paths"
+                  rows="4"
+                  class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-xs font-mono"
+                  placeholder="/help&#10;/contact&#10;/faq"
+                >{paths_to_text((@site.intent_config || %{})["support_paths"])}</textarea>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">
+                  Researching threshold
+                  <span class="text-gray-400 font-normal">(min pageviews)</span>
+                </label>
+                <input
+                  type="number"
+                  name="researching_threshold"
+                  value={(@site.intent_config || %{})["researching_threshold"] || 2}
+                  min="2"
+                  max="10"
+                  class="block w-24 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                />
+                <p class="text-[10px] text-gray-400 mt-1">Sessions with this many+ pageviews classified as "researching"</p>
+              </div>
+            </div>
+            <div class="flex justify-end">
+              <button
+                type="submit"
+                class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm"
+              >
+                Save Intent Config
+              </button>
+            </div>
+          </form>
+        </div>
+
         <%!-- Ad Integrations --%>
         <div class="bg-white rounded-lg shadow p-6 mt-6">
           <div class="flex items-center justify-between mb-2">
@@ -757,4 +848,26 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
         :unknown
     end
   end
+
+  defp paths_to_text(nil), do: ""
+  defp paths_to_text(paths) when is_list(paths), do: Enum.join(paths, "\n")
+  defp paths_to_text(_), do: ""
+
+  defp text_to_paths(nil), do: []
+  defp text_to_paths(text) do
+    text
+    |> String.split(~r/[\n,]+/)
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+  end
+
+  defp parse_threshold(nil), do: 2
+  defp parse_threshold(val) when is_binary(val) do
+    case Integer.parse(val) do
+      {n, _} when n >= 2 -> n
+      _ -> 2
+    end
+  end
+  defp parse_threshold(val) when is_integer(val) and val >= 2, do: val
+  defp parse_threshold(_), do: 2
 end

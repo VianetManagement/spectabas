@@ -956,6 +956,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   defp short_tz(_), do: "Unknown"
 
   defp intent_color("buying"), do: "bg-green-100 text-green-600"
+  defp intent_color("engaging"), do: "bg-emerald-100 text-emerald-600"
   defp intent_color("researching"), do: "bg-blue-100 text-blue-600"
   defp intent_color("comparing"), do: "bg-purple-100 text-purple-600"
   defp intent_color("support"), do: "bg-yellow-100 text-yellow-600"

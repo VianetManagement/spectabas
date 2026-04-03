@@ -375,6 +375,7 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
   defp ad_label(other), do: other
 
   defp intent_pill("buying"), do: "bg-green-100 text-green-800"
+  defp intent_pill("engaging"), do: "bg-emerald-100 text-emerald-800"
   defp intent_pill("researching"), do: "bg-blue-100 text-blue-800"
   defp intent_pill("comparing"), do: "bg-purple-100 text-purple-800"
   defp intent_pill("support"), do: "bg-yellow-100 text-yellow-800"

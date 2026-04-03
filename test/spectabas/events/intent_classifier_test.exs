@@ -110,6 +110,20 @@ defmodule Spectabas.Events.IntentClassifierTest do
       event = %{
         ip_is_bot: 0,
         ip_is_datacenter: 0,
+        url_path: "/blog/post-123",
+        referrer_domain: "",
+        utm_medium: "",
+        utm_source: ""
+      }
+
+      assert IntentClassifier.classify(event, %{pageview_count: 1, is_returning: true}) ==
+               "returning"
+    end
+
+    test "classifies returning visitor on engaging page as engaging" do
+      event = %{
+        ip_is_bot: 0,
+        ip_is_datacenter: 0,
         url_path: "/dashboard",
         referrer_domain: "",
         utm_medium: "",
@@ -117,7 +131,7 @@ defmodule Spectabas.Events.IntentClassifierTest do
       }
 
       assert IntentClassifier.classify(event, %{pageview_count: 5, is_returning: true}) ==
-               "returning"
+               "engaging"
     end
 
     test "classifies researching from high pageviews" do

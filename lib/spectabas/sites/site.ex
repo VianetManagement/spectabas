@@ -22,6 +22,7 @@ defmodule Spectabas.Sites.Site do
     field :native_start_date, :date
     field :import_end_date, :date
     field :ad_credentials_encrypted, :binary
+    field :intent_config, :map, default: %{}
 
     timestamps(type: :utc_datetime)
   end
@@ -46,7 +47,8 @@ defmodule Spectabas.Sites.Site do
       :ip_allowlist,
       :ip_blocklist,
       :native_start_date,
-      :import_end_date
+      :import_end_date,
+      :intent_config
     ])
     |> validate_required([:name, :domain])
     |> validate_length(:name, max: 255)

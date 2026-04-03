@@ -45,6 +45,22 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v4.8.0 — 2026-04-02 UTC",
+       [
+         %{
+           title: "Feature: Site-configurable visitor intent classification",
+           description:
+             "Intent classifier now reads per-site path configuration from Settings. New 'engaging' intent " <>
+               "for core app features (search, listings, messaging). Lowered researching threshold to 2 pages. " <>
+               "Returning visitors detected regardless of referrer. Pre-configured for all active sites."
+         },
+         %{
+           title: "Feature: Intent configuration UI in Site Settings",
+           description:
+             "Customize buying, engaging, and support path patterns per site. Set researching threshold. " <>
+               "Paths matched as fragments (e.g. '/listings' matches '/listings/123')."
+         }
+       ]},
       {"v4.7.0 — 2026-04-02 UTC",
        [
          %{

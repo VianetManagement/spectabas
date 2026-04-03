@@ -97,7 +97,7 @@ defmodule Spectabas.Events.Ingest do
       is_returning: (session.pageview_count || 0) > 0
     }
 
-    intent = IntentClassifier.classify(event, session_context)
+    intent = IntentClassifier.classify(event, session_context, site.intent_config || %{})
     event = Map.put(event, :visitor_intent, intent)
 
     {:ok, event}
