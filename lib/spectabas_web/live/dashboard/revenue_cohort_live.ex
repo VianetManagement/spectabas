@@ -154,6 +154,8 @@ defmodule SpectabasWeb.Dashboard.RevenueCohortLive do
         </div>
         <p :if={@cohorts != []} class="text-xs text-gray-500 mt-2">
           Each cell shows revenue per customer. Hover for customer count.
+          Cohorts are grouped by the week of each customer's first purchase — a new row appears each week as new customers buy for the first time.
+          Columns track how much those same customers spend in subsequent weeks, showing retention and lifetime value over time.
         </p>
       </div>
     </.dashboard_layout>
