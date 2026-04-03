@@ -44,13 +44,26 @@ defmodule SpectabasWeb.Admin.AuditLive do
 
   defp load_logs(socket) do
     %{page: page, event_filter: event_filter} = socket.assigns
+    user = socket.assigns.current_scope.user
 
+    # Scope audit logs to account (platform_admin sees all)
     query =
-      from(a in AuditLog,
-        order_by: [desc: a.occurred_at],
-        limit: ^@page_size,
-        offset: ^((page - 1) * @page_size)
-      )
+      if user.role == :platform_admin do
+        from(a in AuditLog,
+          order_by: [desc: a.occurred_at],
+          limit: ^@page_size,
+          offset: ^((page - 1) * @page_size)
+        )
+      else
+        from(a in AuditLog,
+          left_join: u in Spectabas.Accounts.User,
+          on: a.user_id == u.id,
+          where: u.account_id == ^user.account_id or is_nil(a.user_id),
+          order_by: [desc: a.occurred_at],
+          limit: ^@page_size,
+          offset: ^((page - 1) * @page_size)
+        )
+      end
 
     query =
       if event_filter != "" do
@@ -60,7 +73,7 @@ defmodule SpectabasWeb.Admin.AuditLive do
       end
 
     logs = Repo.all(query)
-    total = Repo.aggregate(base_query(event_filter), :count, :id)
+    total = Repo.aggregate(base_query(event_filter, user), :count, :id)
 
     socket
     |> assign(:logs, logs)
@@ -68,10 +81,23 @@ defmodule SpectabasWeb.Admin.AuditLive do
     |> assign(:total_pages, max(1, ceil(total / @page_size)))
   end
 
-  defp base_query(""), do: from(a in AuditLog)
+  defp base_query(event_filter, user) do
+    base =
+      if user.role == :platform_admin do
+        from(a in AuditLog)
+      else
+        from(a in AuditLog,
+          left_join: u in Spectabas.Accounts.User,
+          on: a.user_id == u.id,
+          where: u.account_id == ^user.account_id or is_nil(a.user_id)
+        )
+      end
 
-  defp base_query(event_filter) do
-    from(a in AuditLog, where: ilike(a.event, ^"%#{event_filter}%"))
+    if event_filter != "" do
+      from(a in base, where: ilike(a.event, ^"%#{event_filter}%"))
+    else
+      base
+    end
   end
 
   @impl true

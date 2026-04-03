@@ -39,36 +39,45 @@ defmodule SpectabasWeb.Admin.SitesLive do
   def handle_event("create_site", %{"site" => params}, socket) do
     user = socket.assigns.current_scope.user
 
-    if not Spectabas.Accounts.can_create_site?(user) do
-      {:noreply, put_flash(socket, :error, "Site limit reached for this account.")}
-    else
-      # Inject account_id into params
-      params = Map.put(params, "account_id", user.account_id)
+    cond do
+      is_nil(user.account_id) ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "Platform admins must create sites from the Platform > Account Detail page."
+         )}
 
-      case Sites.create_site(params) do
-        {:ok, site} ->
-          render_msg =
-            case Sites.register_render_domain(site.domain) do
-              :ok -> " Custom domain #{site.domain} registered on Render."
-              {:ok, :already_exists} -> " Domain #{site.domain} already registered on Render."
-              {:error, reason} -> " Warning: failed to register domain on Render: #{reason}"
-            end
+      not Spectabas.Accounts.can_create_site?(user) ->
+        {:noreply, put_flash(socket, :error, "Site limit reached for this account.")}
 
-          sites = Spectabas.Accounts.accessible_sites(user)
+      true ->
+        params = Map.put(params, "account_id", user.account_id)
 
-          {:noreply,
-           socket
-           |> put_flash(
-             :info,
-             "Site created.#{render_msg} Add a CNAME for #{site.domain} → www.spectabas.com"
-           )
-           |> assign(:sites, sites)
-           |> assign(:show_form, false)
-           |> assign(:form, to_form(site_changeset()))}
+        case Sites.create_site(params) do
+          {:ok, site} ->
+            render_msg =
+              case Sites.register_render_domain(site.domain) do
+                :ok -> " Custom domain #{site.domain} registered on Render."
+                {:ok, :already_exists} -> " Domain #{site.domain} already registered on Render."
+                {:error, reason} -> " Warning: failed to register domain on Render: #{reason}"
+              end
 
-        {:error, changeset} ->
-          {:noreply, assign(socket, :form, to_form(changeset))}
-      end
+            sites = Spectabas.Accounts.accessible_sites(user)
+
+            {:noreply,
+             socket
+             |> put_flash(
+               :info,
+               "Site created.#{render_msg} Add a CNAME for #{site.domain} → www.spectabas.com"
+             )
+             |> assign(:sites, sites)
+             |> assign(:show_form, false)
+             |> assign(:form, to_form(site_changeset()))}
+
+          {:error, changeset} ->
+            {:noreply, assign(socket, :form, to_form(changeset))}
+        end
     end
   end
 
@@ -89,13 +98,17 @@ defmodule SpectabasWeb.Admin.SitesLive do
     admin = socket.assigns.current_scope.user
     site = Sites.get_site!(site_id)
 
-    case Sites.delete_site(admin, site) do
-      {:ok, _} ->
-        sites = Sites.list_sites()
-        {:noreply, socket |> put_flash(:info, "Site deleted.") |> assign(:sites, sites)}
+    if not Spectabas.Accounts.can_access_site?(admin, site) do
+      {:noreply, put_flash(socket, :error, "Unauthorized")}
+    else
+      case Sites.delete_site(admin, site) do
+        {:ok, _} ->
+          sites = Spectabas.Accounts.accessible_sites(admin)
+          {:noreply, socket |> put_flash(:info, "Site deleted.") |> assign(:sites, sites)}
 
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to delete site: #{inspect(reason)}")}
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, "Failed to delete site: #{inspect(reason)}")}
+      end
     end
   end
 

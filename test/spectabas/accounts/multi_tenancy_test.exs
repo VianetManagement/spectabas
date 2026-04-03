@@ -169,6 +169,64 @@ defmodule Spectabas.Accounts.MultiTenancyTest do
     end
   end
 
+  describe "cross-account security" do
+    test "superadmin cannot access site from another account" do
+      acct_a = create_account("Sec A", "sec-a-#{System.unique_integer([:positive])}")
+      acct_b = create_account("Sec B", "sec-b-#{System.unique_integer([:positive])}")
+
+      admin_a = create_user("sec-a-#{System.unique_integer()}@test.com", :superadmin, acct_a)
+
+      site_b =
+        create_site("Sec Site B", "b.sec-b-#{System.unique_integer([:positive])}.com", acct_b)
+
+      refute Accounts.can_access_site?(admin_a, site_b)
+    end
+
+    test "admin cannot access site from another account" do
+      acct_a = create_account("Adm A", "adm-a-#{System.unique_integer([:positive])}")
+      acct_b = create_account("Adm B", "adm-b-#{System.unique_integer([:positive])}")
+
+      admin_a = create_user("adm-a-#{System.unique_integer()}@test.com", :admin, acct_a)
+
+      site_b =
+        create_site("Adm Site B", "b.adm-b-#{System.unique_integer([:positive])}.com", acct_b)
+
+      refute Accounts.can_access_site?(admin_a, site_b)
+    end
+
+    test "analyst with permission cannot access site from another account" do
+      acct_a = create_account("Ana A", "ana-a-#{System.unique_integer([:positive])}")
+      acct_b = create_account("Ana B", "ana-b-#{System.unique_integer([:positive])}")
+
+      analyst = create_user("ana-#{System.unique_integer()}@test.com", :analyst, acct_a)
+
+      site_b =
+        create_site("Ana Site B", "b.ana-b-#{System.unique_integer([:positive])}.com", acct_b)
+
+      # Even if they somehow got a permission record, account check blocks access
+      refute Accounts.can_access_site?(analyst, site_b)
+    end
+
+    test "platform_admin can access site from any account" do
+      acct = create_account("PA Cross", "pa-cross-#{System.unique_integer([:positive])}")
+
+      site =
+        create_site("PA Cross Site", "b.pa-cross-#{System.unique_integer([:positive])}.com", acct)
+
+      pa = create_platform_admin("pa-cross-#{System.unique_integer()}@test.com")
+
+      assert Accounts.can_access_site?(pa, site)
+    end
+
+    test "superadmin can access own account's site" do
+      acct = create_account("Own A", "own-a-#{System.unique_integer([:positive])}")
+      admin = create_user("own-a-#{System.unique_integer()}@test.com", :superadmin, acct)
+      site = create_site("Own Site", "b.own-a-#{System.unique_integer([:positive])}.com", acct)
+
+      assert Accounts.can_access_site?(admin, site)
+    end
+  end
+
   describe "invitations with accounts" do
     test "invitation carries account_id to new user" do
       acct = create_account("Invite Acct", "inv-#{System.unique_integer([:positive])}")

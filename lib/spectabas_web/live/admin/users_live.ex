@@ -68,23 +68,30 @@ defmodule SpectabasWeb.Admin.UsersLive do
     admin = socket.assigns.current_scope.user
     email = String.trim(socket.assigns.invite_email)
     role = socket.assigns.invite_role
-
-    # Invite into the admin's account (platform_admin uses their Vianet account for /admin invites)
     account_id = admin.account_id
 
-    case Accounts.invite_user(admin, email, role, account_id) do
-      {:ok, _invitation} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Invitation sent to #{email}.")
-         |> assign(:show_invite, false)
-         |> assign(:invite_email, "")
-         |> assign(:invite_role, "analyst")
-         |> assign(:invite_error, nil)
-         |> assign(:pending_invitations, Accounts.list_pending_invitations(admin))}
+    if is_nil(account_id) do
+      {:noreply,
+       assign(
+         socket,
+         :invite_error,
+         "Platform admins must invite users from Platform > Account Detail page."
+       )}
+    else
+      case Accounts.invite_user(admin, email, role, account_id) do
+        {:ok, _invitation} ->
+          {:noreply,
+           socket
+           |> put_flash(:info, "Invitation sent to #{email}.")
+           |> assign(:show_invite, false)
+           |> assign(:invite_email, "")
+           |> assign(:invite_role, "analyst")
+           |> assign(:invite_error, nil)
+           |> assign(:pending_invitations, Accounts.list_pending_invitations(admin))}
 
-      {:error, reason} ->
-        {:noreply, assign(socket, :invite_error, inspect(reason))}
+        {:error, reason} ->
+          {:noreply, assign(socket, :invite_error, inspect(reason))}
+      end
     end
   end
 
@@ -92,53 +99,69 @@ defmodule SpectabasWeb.Admin.UsersLive do
     admin = socket.assigns.current_scope.user
     invitation = Spectabas.Repo.get!(Spectabas.Accounts.Invitation, id)
 
-    case Accounts.resend_invitation(admin, invitation) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Invitation resent to #{invitation.email}.")
-         |> assign(:pending_invitations, Accounts.list_pending_invitations(admin))}
+    if admin.role != :platform_admin and invitation.account_id != admin.account_id do
+      {:noreply, put_flash(socket, :error, "Unauthorized")}
+    else
+      case Accounts.resend_invitation(admin, invitation) do
+        {:ok, _} ->
+          {:noreply,
+           socket
+           |> put_flash(:info, "Invitation resent to #{invitation.email}.")
+           |> assign(:pending_invitations, Accounts.list_pending_invitations(admin))}
 
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to resend: #{inspect(reason)}")}
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, "Failed to resend: #{inspect(reason)}")}
+      end
     end
   end
 
   def handle_event("delete_invite", %{"id" => id}, socket) do
+    admin = socket.assigns.current_scope.user
     invitation = Spectabas.Repo.get!(Spectabas.Accounts.Invitation, id)
 
-    case Accounts.delete_invitation(invitation) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Invitation for #{invitation.email} revoked.")
-         |> assign(
-           :pending_invitations,
-           Accounts.list_pending_invitations(socket.assigns.current_scope.user)
-         )}
+    if admin.role != :platform_admin and invitation.account_id != admin.account_id do
+      {:noreply, put_flash(socket, :error, "Unauthorized")}
+    else
+      case Accounts.delete_invitation(invitation) do
+        {:ok, _} ->
+          {:noreply,
+           socket
+           |> put_flash(:info, "Invitation for #{invitation.email} revoked.")
+           |> assign(
+             :pending_invitations,
+             Accounts.list_pending_invitations(socket.assigns.current_scope.user)
+           )}
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to revoke invitation.")}
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, "Failed to revoke invitation.")}
+      end
     end
   end
 
   # -- Edit user events --
 
   def handle_event("edit_user", %{"id" => user_id}, socket) do
+    admin = socket.assigns.current_scope.user
     user = Accounts.get_user!(user_id)
-    perms = Accounts.list_user_permissions(user)
-    site_ids = Enum.map(perms, & &1.site_id) |> MapSet.new()
 
-    {:noreply,
-     socket
-     |> assign(:editing_user, user)
-     |> assign(:edit_form, %{
-       "display_name" => user.display_name || "",
-       "role" => to_string(user.role),
-       "timezone" => user.timezone || "America/New_York",
-       "force_2fa" => user.force_2fa
-     })
-     |> assign(:edit_site_ids, site_ids)}
+    # Account ownership check (platform_admin can edit anyone)
+    if admin.role != :platform_admin and user.account_id != admin.account_id do
+      {:noreply, put_flash(socket, :error, "Unauthorized")}
+    else
+      perms = Accounts.list_user_permissions(user)
+      site_ids = Enum.map(perms, & &1.site_id) |> MapSet.new()
+
+      {:noreply,
+       socket
+       |> assign(:editing_user, user)
+       |> assign(:edit_form, %{
+         "display_name" => user.display_name || "",
+         "role" => to_string(user.role),
+         "timezone" => user.timezone || "America/New_York",
+         "force_2fa" => user.force_2fa
+       })
+       |> assign(:edit_site_ids, site_ids)}
+    end
   end
 
   def handle_event("close_edit", _params, socket) do
@@ -208,16 +231,21 @@ defmodule SpectabasWeb.Admin.UsersLive do
     admin = socket.assigns.current_scope.user
     user = Accounts.get_user!(user_id)
 
-    case Accounts.delete_user(admin, user) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "User deleted.")
-         |> assign(:users, Accounts.list_users(socket.assigns.current_scope.user))
-         |> assign(:editing_user, nil)}
+    # Account ownership check
+    if admin.role != :platform_admin and user.account_id != admin.account_id do
+      {:noreply, put_flash(socket, :error, "Unauthorized")}
+    else
+      case Accounts.delete_user(admin, user) do
+        {:ok, _} ->
+          {:noreply,
+           socket
+           |> put_flash(:info, "User deleted.")
+           |> assign(:users, Accounts.list_users(socket.assigns.current_scope.user))
+           |> assign(:editing_user, nil)}
 
-      {:error, reason} ->
-        {:noreply, put_flash(socket, :error, "Failed to delete user: #{inspect(reason)}")}
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, "Failed to delete user: #{inspect(reason)}")}
+      end
     end
   end
 
@@ -577,20 +605,26 @@ defmodule SpectabasWeb.Admin.UsersLive do
     current_perms = Accounts.list_user_permissions(user)
     current_ids = Enum.map(current_perms, & &1.site_id) |> MapSet.new()
 
-    # Grant new
+    # Grant new — only for sites the admin can access
     to_grant = MapSet.difference(desired_site_ids, current_ids)
 
     Enum.each(to_grant, fn site_id ->
       site = Sites.get_site!(site_id)
-      Accounts.grant_permission(admin, user, site, user.role)
+
+      if Accounts.can_access_site?(admin, site) do
+        Accounts.grant_permission(admin, user, site, user.role)
+      end
     end)
 
-    # Revoke removed
+    # Revoke removed — only for sites the admin can access
     to_revoke = MapSet.difference(current_ids, desired_site_ids)
 
     Enum.each(to_revoke, fn site_id ->
       site = Sites.get_site!(site_id)
-      Accounts.revoke_permission(admin, user, site)
+
+      if Accounts.can_access_site?(admin, site) do
+        Accounts.revoke_permission(admin, user, site)
+      end
     end)
   end
 
