@@ -462,6 +462,34 @@ defmodule SpectabasWeb.HealthController do
     end
   end
 
+  def intent_diag(conn, _params) do
+    # Show intent distribution across all sites with sample URLs per intent
+    sql = """
+    SELECT
+      visitor_intent AS intent,
+      site_id,
+      uniq(visitor_id) AS visitors,
+      count() AS events,
+      groupArray(10)(url_path) AS sample_paths,
+      groupArray(10)(referrer_domain) AS sample_referrers
+    FROM events
+    WHERE timestamp >= now() - INTERVAL 7 DAY
+      AND ip_is_bot = 0
+      AND event_type = 'pageview'
+      AND visitor_intent != ''
+    GROUP BY visitor_intent, site_id
+    ORDER BY visitors DESC
+    """
+
+    result =
+      case Spectabas.ClickHouse.query(sql) do
+        {:ok, rows} -> rows
+        {:error, e} -> %{error: inspect(e)}
+      end
+
+    json(conn, %{intent_distribution: result})
+  end
+
   defp safe_test(fun) do
     case fun.() do
       {:ok, data} -> %{status: "ok", rows: length(List.wrap(data))}
