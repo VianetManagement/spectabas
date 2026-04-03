@@ -60,6 +60,52 @@ defmodule Spectabas.Analytics.Segment do
     end)
   end
 
+  @doc """
+  Returns dropdown options for categorical filter fields.
+  Queries ClickHouse for distinct values seen in the last 90 days.
+  """
+  def filter_options(site_id) do
+    from =
+      DateTime.utc_now() |> DateTime.add(-90 * 86400) |> Calendar.strftime("%Y-%m-%d %H:%M:%S")
+
+    to = DateTime.utc_now() |> Calendar.strftime("%Y-%m-%d %H:%M:%S")
+    site_p = ClickHouse.param(site_id)
+    from_p = ClickHouse.param(from)
+    to_p = ClickHouse.param(to)
+
+    base_where =
+      "site_id = #{site_p} AND timestamp >= #{from_p} AND timestamp <= #{to_p} AND ip_is_bot = 0 AND event_type = 'pageview'"
+
+    queries = %{
+      "countries" =>
+        "SELECT DISTINCT ip_country AS v FROM events WHERE #{base_where} AND ip_country != '' ORDER BY v",
+      "country_names" =>
+        "SELECT DISTINCT ip_country_name AS v FROM events WHERE #{base_where} AND ip_country_name != '' ORDER BY v",
+      "browsers" =>
+        "SELECT DISTINCT browser AS v FROM events WHERE #{base_where} AND browser != '' ORDER BY v",
+      "operating_systems" =>
+        "SELECT DISTINCT os AS v FROM events WHERE #{base_where} AND os != '' ORDER BY v",
+      "device_types" =>
+        "SELECT DISTINCT device_type AS v FROM events WHERE #{base_where} AND device_type != '' ORDER BY v"
+    }
+
+    # Static options that don't need a query
+    static = %{
+      "intents" => ~w(buying engaging researching comparing support returning browsing bot),
+      "event_types" => ~w(pageview custom)
+    }
+
+    dynamic =
+      Enum.reduce(queries, %{}, fn {key, sql}, acc ->
+        case ClickHouse.query(sql) do
+          {:ok, rows} -> Map.put(acc, key, Enum.map(rows, & &1["v"]))
+          _ -> Map.put(acc, key, [])
+        end
+      end)
+
+    Map.merge(dynamic, static)
+  end
+
   defp valid_filter?(%{"field" => f, "op" => op, "value" => v})
        when is_binary(f) and is_binary(op) and is_binary(v) do
     f in @allowed_fields and v != "" and op in ~w(is is_not contains not_contains)

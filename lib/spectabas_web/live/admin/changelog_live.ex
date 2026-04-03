@@ -45,6 +45,22 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.1.0 — 2026-04-03 UTC",
+       [
+         %{
+           title: "UX: Dashboard defaults to Today view",
+           description:
+             "Overview dashboard now loads with 'Today' as the default time range instead of '7d'. " <>
+               "Shows current-day activity immediately on page load."
+         },
+         %{
+           title: "UX: Filter value dropdowns for categorical fields",
+           description:
+             "Segment filter value input now shows a dropdown for categorical fields: " <>
+               "IP Country, Country Name, Browser, OS, Device Type, Visitor Intent, and Event Type. " <>
+               "Options are populated from actual site data (last 90 days). Free-text input remains for other fields."
+         }
+       ]},
       {"v5.0.0 — 2026-04-03 UTC",
        [
          %{

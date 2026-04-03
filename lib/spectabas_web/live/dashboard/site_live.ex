@@ -34,12 +34,14 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
        |> assign(:page_title, site.name)
        |> assign(:site, site)
        |> assign(:user, user)
-       |> assign(:preset, "7d")
-       |> assign(:date_from, Date.add(today, -7))
+       |> assign(:preset, "today")
+       |> assign(:date_from, today)
        |> assign(:date_to, today)
        |> assign(:compare, true)
        |> assign(:show_date_picker, false)
        |> assign(:segment, [])
+       |> assign(:segment_field, nil)
+       |> assign(:filter_options, %{})
        |> assign(:saved_segments, Segments.list_saved_segments(user, site))
        |> assign(:show_save_input, false)
        |> assign(:override_date_range, nil)
@@ -140,6 +142,27 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
        |> load_stats()}
     else
       _ -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("segment_field_changed", params, socket) do
+    field = Map.get(params, "field")
+
+    if field do
+      dropdown_fields = SpectabasWeb.Dashboard.SegmentComponent.dropdown_fields()
+
+      # Load filter options on first request, then cache in assigns
+      socket =
+        if Map.get(dropdown_fields, field) && socket.assigns.filter_options == %{} do
+          options = Spectabas.Analytics.Segment.filter_options(socket.assigns.site.id)
+          assign(socket, :filter_options, options)
+        else
+          socket
+        end
+
+      {:noreply, assign(socket, :segment_field, field)}
+    else
+      {:noreply, socket}
     end
   end
 
@@ -582,6 +605,8 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           segment={@segment}
           saved_segments={@saved_segments}
           show_save_input={@show_save_input}
+          filter_options={@filter_options}
+          segment_field={@segment_field}
         />
 
         <%!-- Stat Cards with Comparison --%>

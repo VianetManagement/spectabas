@@ -8,13 +8,32 @@ defmodule SpectabasWeb.Dashboard.SegmentComponent do
 
   alias Spectabas.Analytics.Segment
 
+  @doc """
+  Fields that support dropdown value selection.
+  Maps field name to a category key used in filter_options.
+  """
+  def dropdown_fields do
+    %{
+      "ip_country" => "countries",
+      "ip_country_name" => "country_names",
+      "browser" => "browsers",
+      "os" => "operating_systems",
+      "device_type" => "device_types",
+      "visitor_intent" => "intents",
+      "event_type" => "event_types"
+    }
+  end
+
   attr :segment, :list, default: []
   attr :on_change, :string, default: "update_segment"
   attr :saved_segments, :list, default: []
   attr :show_save_input, :boolean, default: false
+  attr :filter_options, :map, default: %{}
+  attr :segment_field, :string, default: nil
 
   def segment_filter(assigns) do
     assigns = assign(assigns, :fields, Segment.available_fields())
+    assigns = assign(assigns, :dropdown_fields, dropdown_fields())
 
     ~H"""
     <div class="bg-white rounded-lg shadow p-4 mb-6">
@@ -38,7 +57,11 @@ defmodule SpectabasWeb.Dashboard.SegmentComponent do
           </button>
         </div>
 
-        <form phx-submit={@on_change} class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-1">
+        <form
+          phx-submit={@on_change}
+          phx-change="segment_field_changed"
+          class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-1"
+        >
           <input type="hidden" name="action" value="add" />
           <select name="field" class="text-sm sm:text-xs rounded border-gray-300 py-2 sm:py-1 pr-8">
             <option :for={f <- @fields} value={f.field}>{f.label}</option>
@@ -49,12 +72,22 @@ defmodule SpectabasWeb.Dashboard.SegmentComponent do
             <option value="contains">contains</option>
             <option value="not_contains">not contains</option>
           </select>
-          <input
-            type="text"
-            name="value"
-            placeholder="value"
-            class="text-sm sm:text-xs rounded border-gray-300 py-2 sm:py-1 w-full sm:w-32"
-          />
+          <%= if options = filter_options_for(@filter_options, @dropdown_fields, assigns[:segment_field]) do %>
+            <select
+              name="value"
+              class="text-sm sm:text-xs rounded border-gray-300 py-2 sm:py-1 w-full sm:w-40"
+            >
+              <option value="">Select...</option>
+              <option :for={opt <- options} value={opt}>{opt}</option>
+            </select>
+          <% else %>
+            <input
+              type="text"
+              name="value"
+              placeholder="value"
+              class="text-sm sm:text-xs rounded border-gray-300 py-2 sm:py-1 w-full sm:w-32"
+            />
+          <% end %>
           <button
             type="submit"
             class="text-sm sm:text-xs bg-indigo-600 text-white px-3 py-2 sm:px-2 sm:py-1 rounded hover:bg-indigo-700"
@@ -154,4 +187,15 @@ defmodule SpectabasWeb.Dashboard.SegmentComponent do
   defp op_label("contains"), do: "~"
   defp op_label("not_contains"), do: "!~"
   defp op_label(op), do: op
+
+  @doc "Get dropdown options for a field, or nil if it's a free-text field."
+  def filter_options_for(filter_options, dropdown_fields, selected_field) do
+    with field when is_binary(field) <- selected_field,
+         category when is_binary(category) <- Map.get(dropdown_fields, field),
+         options when is_list(options) <- Map.get(filter_options, category) do
+      options
+    else
+      _ -> nil
+    end
+  end
 end
