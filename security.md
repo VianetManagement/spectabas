@@ -1,73 +1,102 @@
-# Spectabas Security Audit Prompt
+# Spectabas Security Audit Prompt (v4.8.0)
 
 You are performing a comprehensive security audit of Spectabas, a multi-tenant web analytics SaaS platform built with Elixir/Phoenix. The platform collects visitor behavior data via a JavaScript tracker, stores events in ClickHouse, and serves analytics dashboards via Phoenix LiveView.
 
 ## System Architecture
 
-- **Elixir 1.17 / Phoenix 1.8** with LiveView
-- **PostgreSQL** — users, sessions, visitors, invitations, audit logs, sites, API keys
-- **ClickHouse** — analytics events (pageviews, custom events, ecommerce, RUM, CWV)
-- **Render** — Docker-based deployment with auto-deploy on push to main
+- **Elixir 1.17 / Phoenix 1.8** with LiveView, scope-based auth
+- **PostgreSQL** — users, sessions, visitors, sites, API keys, audit logs, ad integrations, goals, campaigns, segments, email reports
+- **ClickHouse** — analytics events (pageviews, custom events, ecommerce, RUM, CWV), ad spend data (ReplacingMergeTree), imported rollup tables
+- **Render** — Docker-based deployment (non-root user), auto-deploy on push to main
 - **Resend** — transactional email delivery
 - **Geolix** — IP geolocation (DB-IP + MaxMind GeoLite2 MMDB files)
 - **tzdata** — timezone database for site-local date boundaries
 - **wax_** — WebAuthn/FIDO2 passkey 2FA
+- **Oban** — background job queue (ad sync, email reports, spam detection, GeoIP updates)
 
 ## Attack Surface
 
-### 1. Event Collection Endpoint (`/c/e`, `/c/p`, `/c/i`, `/c/x`, `/c/o`)
-- Public, unauthenticated POST/GET endpoints
-- Accepts JSON payloads from any origin (CORS enabled)
+### 1. Event Collection Endpoints (public, unauthenticated)
+- `POST /c/e` — event collection (pageview, custom, duration, ecommerce_order, ecommerce_item, xdtoken)
+- `GET /c/p` — noscript pixel tracking
+- `POST /c/i` — client-side visitor identification (email, user_id traits)
+- `POST /c/x` — cross-domain token exchange
+- `POST /c/o` — opt-out cookie setter
 - Rate-limited via Hammer (300/min per IP for collect, 10/min for login)
 - Validates payload via Ecto embedded schema (CollectPayload)
+- Origin/Referer validation against site domain + subdomains
 - Resolves site by public key or domain
-- Origin/Referer validation against allowed domains
-- Accepts custom event types: `pageview`, `custom`, `duration`, `ecommerce_order`, `ecommerce_item`, `xdtoken`
-- Custom events include `_rum` (navigation timing), `_cwv` (Core Web Vitals), `_form_abuse` (form abuse signals)
 
 ### 2. JavaScript Tracker (`/assets/v1.js`)
 - Served from customer analytics subdomains (e.g., `b.example.com`)
+- `data-proxy` attribute enables reverse proxy mode through main domain
 - Sends beacons with visitor ID, session ID, page URL, referrer, screen dimensions
 - GDPR mode: cookie-based (off) or fingerprint-based (on)
 - Cross-domain token exchange via `/c/x`
-- Client-side bot detection signals (`_bot`, `_hi`)
+- Client-side bot detection (`_bot`, `_hi`)
 - Browser fingerprinting: canvas, WebGL, navigator signals, MurmurHash3
-- Form abuse detection: monitors submit frequency, paste events, click patterns
 - RUM collection: Performance API navigation timing, PerformanceObserver for CWV
+- Click ID capture: gclid, msclkid, fbclid from URL → sessionStorage → beacon
 - Public JavaScript API: `Spectabas.track()`, `Spectabas.identify()`, `Spectabas.optOut()`, `Spectabas.ecommerce.addOrder()`, `Spectabas.ecommerce.addItem()`
 
-### 3. Dashboard (LiveView, authenticated)
-- All analytics queries interpolate values using `ClickHouse.param/1`
-- Segment filters build WHERE clauses from user input
-- Visitor profiles show IP addresses and cross-reference other visitors
-- Admin pages manage users, sites, invitations, audit logs
-- Performance dashboard renders RUM data from custom event properties
-- Documentation page uses custom markdown renderer with `raw/1` output
+### 3. REST API (`/api/v1/*`, token-authenticated)
+- Bearer token authentication via API keys with granular scopes
+- Scopes: `read:stats`, `read:visitors`, `write:events`, `write:identify`, `admin:sites`
+- Tokens can be restricted to specific site IDs
+- Optional expiry dates on tokens
+- All API calls logged (request/response bodies, 30-day retention)
+- Endpoints: stats, pages, sources, countries, devices, realtime, identify, ecommerce transactions
 
-### 4. REST API (`/api/v1/*`)
-- Bearer token authentication via API keys
-- Endpoints: stats, pages, sources, countries, devices, realtime
-- Date range parameters parsed from query string
+### 4. Dashboard (LiveView, authenticated)
+- 36 analytics pages across 7 sidebar categories
+- All ClickHouse queries use `ClickHouse.param/1` for value interpolation
+- Segment filters build WHERE clauses from user input (`analytics/segment.ex`)
+- Visitor profiles show IP addresses and cross-reference other visitors by IP
+- Admin pages: user management, site management, ingest diagnostics, API logs, spam filter, changelog
+- Docs page uses custom markdown renderer with `raw/1` output
 
 ### 5. Authentication & Authorization
 - Phoenix 1.8 scope-based auth (current_scope, not current_user)
 - Magic link login (email token)
-- Password authentication
+- Password authentication (bcrypt)
 - Optional TOTP 2FA (NimbleTOTP)
 - Optional WebAuthn/passkey 2FA (wax_ library)
 - Role-based access: superadmin, admin, analyst, viewer
-- Invitation system with token-based acceptance
-- Session tokens in cookies
+- Granular per-site access for analyst/viewer roles
 - Admin can force 2FA per user
+- Session tokens in cookies
 
-### 6. Infrastructure
-- Docker deployment on Render (non-root runtime user)
-- ClickHouse with separate reader/writer users
-- PostgreSQL with Ecto
-- MaxMind license key in environment variable
-- Resend API key for email
-- Render API key for custom domain registration
-- Health endpoint returns detailed service status (postgres, clickhouse, buffer state)
+### 6. Ad Platform Integrations (OAuth2)
+- Google Ads, Bing Ads, Meta/Facebook Ads connections per site
+- OAuth2 tokens encrypted at rest via AES-256-GCM (Vault module, key derived from SECRET_KEY_BASE)
+- Platform credentials (client_id, client_secret, developer_token) stored as encrypted JSON blob in sites.ad_credentials_encrypted
+- Account picker flow stores pending tokens in session during OAuth
+- Oban worker syncs spend data every 6 hours
+
+### 7. Site-Configurable Intent Classification
+- `sites.intent_config` stores path pattern lists (buying, engaging, support paths)
+- Configurable from Site Settings by any user with site access
+- Paths are substring-matched against visitor URL paths during ingest
+- No regex or code execution — pure `String.contains?/2`
+
+### 8. Email Reports
+- Per-user per-site subscriptions (daily/weekly/monthly)
+- Unsubscribe via signed Phoenix.Token (30-day validity)
+- HTML emails with analytics data
+- Oban dispatcher every 15 minutes
+
+### 9. Ecommerce
+- Transaction API: `POST /api/v1/sites/:site_id/ecommerce/transactions`
+- Accepts: order_id, revenue, items, visitor_id, email
+- Email association links orders to visitor profiles
+- Stored in ClickHouse ecommerce_events table
+
+### 10. Infrastructure
+- Docker on Render (non-root runtime user)
+- ClickHouse with separate reader/writer users (writer has INSERT, SELECT, ALTER, OPTIMIZE)
+- Health endpoints: `/health` (public, returns ok/degraded only), `/health/*` diagnostic endpoints (admin-only)
+- Token-protected utility endpoints: `/matomo-import-test`, `/send-setup-emails`, `/click-id-diag`
+- GeoIP databases refreshed via Oban cron (1st and 15th of month)
 
 ---
 
@@ -75,174 +104,171 @@ You are performing a comprehensive security audit of Spectabas, a multi-tenant w
 
 ### A. SQL/Query Injection
 
-1. **ClickHouse injection via `ClickHouse.param/1`**: Review the `param/1` function in `lib/spectabas/clickhouse.ex`. Does it properly escape all value types (strings, integers, floats, nil)? Can a malicious string bypass the escaping? Check for single-quote escaping, backslash escaping, and null byte handling.
+1. **ClickHouse `param/1` escaping**: Review `lib/spectabas/clickhouse.ex` `param/1`. Does it properly escape strings (single quotes, backslashes, null bytes)? Check all value types.
 
-2. **Segment filter injection**: Review `lib/spectabas/analytics/segment.ex`. The `to_sql/1` function builds WHERE clauses from user-supplied field names, operators, and values. Check:
-   - Can a user supply a field name that isn't in `@allowed_fields` and execute arbitrary SQL?
-   - Can the operator value be something other than `is/is_not/contains/not_contains`?
-   - Can the value contain SQL injection payloads that bypass `ClickHouse.param/1`?
-   - Are field names interpolated directly into SQL without parameterization?
+2. **Segment filter injection**: Review `lib/spectabas/analytics/segment.ex` `to_sql/1`. User-supplied field names, operators, and values build WHERE clauses. Verify:
+   - Field names validated against `@allowed_fields` whitelist
+   - Operators restricted to known set
+   - Values parameterized via `ClickHouse.param/1`
+   - No raw interpolation of user input
 
-3. **Ecto SQL injection**: Check all `Ecto.Query` usage for raw SQL fragments. Search for `fragment`, `from`, raw SQL strings in Repo calls.
+3. **ClickHouse `execute/1` callers**: This function runs SQL with write credentials. Audit every caller — can any user input reach it unsanitized? Check: ad spend optimize, schema setup, backfill-geo, data cleanup workers.
 
-4. **ClickHouse `execute/1`**: This function runs SQL with write credentials. Check all callers — is any user input reaching this function unsanitized?
+4. **API access log LIKE query**: `admin/api_logs_live.ex` uses `like(l.path, ^"%#{path}%")` for filtering. Is this Ecto-parameterized or raw interpolation?
 
-5. **RUM query injection via JSON properties**: RUM/CWV queries use `JSONExtractString(properties, 'key')` where key names are hardcoded. But verify that no user-supplied key names are interpolated into `JSONExtractString` calls anywhere in the analytics module.
+5. **Spam filter domain storage**: Domains from admin input stored in DB and used in ClickHouse query exclusions. Verify parameterization of spam domain list in analytics queries.
+
+6. **ClickHouse insert path**: `ClickHouse.insert/2` sends rows as JSON bodies. Verify table name sanitization via `sanitize_table/1` whitelist. Verify no SQL injection via JSON field values.
 
 ### B. Authentication & Session Security
 
-6. **Magic link token security**: Review `UserToken` — how are login tokens generated, stored, and validated? What's the TTL? Can tokens be reused? Are they single-use?
+7. **Magic link token**: Review token generation, TTL, single-use enforcement. Can tokens be reused after first login?
 
-7. **Session fixation**: After login, is the session ID rotated? Check `UserSessionController.create/2`.
+8. **Session fixation**: After login, is session ID rotated? Check `UserSessionController.create/2`.
 
-8. **Cookie security**: Check cookie flags — HttpOnly, Secure, SameSite. Review the session configuration in `config.exs` and `runtime.exs`.
+9. **Cookie security**: Verify HttpOnly, Secure, SameSite flags on session and remember-me cookies.
 
-9. **Password storage**: How are passwords hashed? Check `User` schema and `register_user/1`. Is bcrypt/argon2 used with appropriate cost?
+10. **API key storage**: Are keys hashed before storage? Can they be enumerated? Check `lib/spectabas/api_keys.ex`.
 
-10. **TOTP 2FA**: Review the TOTP implementation. Are backup codes provided? Is the TOTP secret stored encrypted?
+11. **WebAuthn security**: Review `lib/spectabas/accounts/webauthn.ex`:
+    - Challenge stored server-side and validated on response?
+    - Origin validated in wax_ config?
+    - Credential ownership enforced (user_id match on deletion)?
+    - `binary_to_term(:safe)` used for stored credentials?
 
-11. **WebAuthn/passkey 2FA**: Review `lib/spectabas/accounts/webauthn.ex`. Check:
-    - Is the challenge stored server-side and validated on response?
-    - Is the origin validated in the wax_ configuration?
-    - Can an attacker register a credential for another user?
-    - Is the credential ID stored and checked for uniqueness?
-    - Are attestation and assertion properly verified?
+12. **OAuth state tokens**: Ad integration OAuth uses `Phoenix.Token.verify` with 600s max_age. Is the state token single-use? Can it be replayed?
 
-12. **API key security**: Review `lib/spectabas/api_keys.ex`. How are keys generated, stored, and verified? Are they hashed before storage? Can they be enumerated?
+13. **OAuth tokens in session**: During account picker flow, pending OAuth tokens are stored in the session. Are they cleared after use? What if the user abandons the flow?
 
 ### C. Authorization & Access Control
 
-13. **Site access checks**: Review `Accounts.can_access_site?/2`. Does every dashboard LiveView and API endpoint check site access? Look for pages that might bypass this check. There are now 23+ dashboard pages — verify all of them.
+14. **Site access on all 36 pages**: Every dashboard LiveView must call `Accounts.can_access_site?/2`. Verify ALL pages, especially newer ones: Acquisition, Visitor Quality, Time to Convert, Ad Visitor Paths, Ad-to-Churn, Organic Lift, Revenue Cohorts, Buyer Patterns, Churn Risk.
 
-14. **Role escalation**: Can a viewer or analyst modify their own role? Review all `handle_event` handlers in admin LiveViews. Is the admin role check enforced in the `RequireAdmin` plug?
+15. **Role escalation**: Can analyst/viewer users modify roles, manage users, or access admin pages? Verify `RequireAdmin` plug coverage.
 
-15. **Invitation token security**: Review the invitation flow. Can an attacker:
-    - Enumerate valid invitation tokens?
-    - Accept an invitation with a different email than intended?
-    - Use an expired invitation?
-    - Replay an already-accepted invitation?
+16. **Segment IDOR**: `get_segment!/3` scopes by user_id and site_id. Verify no bypass path exists (direct ID access without ownership check).
 
-16. **Cross-tenant data access**: Can a user with access to Site A query data for Site B? Check all analytics functions for proper `site_id` filtering. Pay special attention to the new RUM queries (`rum_overview`, `rum_web_vitals`, `rum_by_page`, `rum_by_device`, `rum_vitals_by_page`, `rum_vitals_summary`).
+17. **Intent config authorization**: Any authenticated user with site access can modify `intent_config` via Settings. Should this be admin-only?
+
+18. **API scope enforcement**: Verify every API controller action checks the correct scope. Pay attention to: `write:identify` (server-side identify), `write:events` (ecommerce transactions), `admin:sites`.
+
+19. **Cross-tenant isolation**: Can user of Site A query ClickHouse data for Site B? Check all analytics functions for `site_id` filtering. Special attention to: ad_spend queries (FINAL), ecommerce queries, visitor detail/IP cross-reference.
+
+20. **API key site restrictions**: Tokens scoped to specific site_ids. Verify `authorize_site/2` checks `allowed_site_ids` before allowing access.
 
 ### D. Input Validation & XSS
 
-17. **Stored XSS via event data**: The tracker sends `url_path`, `referrer_url`, `event_name`, and custom properties (`p`). These are stored in ClickHouse and displayed in dashboards. Check:
-    - Are these values escaped when rendered in LiveView templates?
-    - Can a malicious `url_path` like `<script>alert(1)</script>` execute in the dashboard?
-    - Are custom properties (`p` map) sanitized?
-    - Are RUM/CWV property values (from the `properties` JSON column) escaped when displayed on the Performance page?
+21. **Stored XSS via tracker data**: `url_path`, `referrer_url`, `event_name`, custom properties stored in ClickHouse and displayed in dashboards. LiveView auto-escapes `{value}` — but verify no `raw/1` usage with these values.
 
-18. **XSS via documentation markdown renderer**: The docs page (`lib/spectabas_web/live/docs_live.ex`) uses a custom markdown renderer that outputs HTML via `raw/1`. Review:
-    - Does the `escape/1` function properly sanitize all user-controllable content before `raw/1` output?
-    - Can markdown content bypass escaping (e.g., via nested backticks, HTML entities)?
-    - The renderer handles: paragraphs, headings, code blocks, lists, tables, blockquotes, horizontal rules. Check each for escaping completeness.
-    - Note: the docs content is developer-defined (not user input), but the search query is user input — verify it's not rendered unsanitized.
+22. **Docs markdown renderer**: `docs_live.ex` uses custom renderer with `raw/1` output. Content is developer-defined but the search query is user input. Verify search query sanitization.
 
-19. **XSS via HEEx templates**: LiveView's `{value}` interpolation auto-escapes by default. But check for any use of `raw/1`, `Phoenix.HTML.raw/1`, or `{:safe, ...}` that bypasses escaping. Search all `.ex` and `.heex` files.
+23. **Template `raw/1` audit**: Search all `.ex` files for `raw/1`, `Phoenix.HTML.raw/1`, `{:safe, ...}`. Each use must be verified safe.
 
-20. **Reflected XSS**: Check URL parameters that are rendered back to the user (e.g., `?page=/path` in transitions, `?filter_field=...` in visitor log).
+24. **Reflected XSS**: URL parameters rendered back to user: `?page=` in transitions, `?filter_field=` / `?filter_value=` in visitor log, `?site_id=` in OAuth callbacks.
 
-21. **Content-Security-Policy**: Review the CSP plug at `lib/spectabas_web/plugs/content_security_policy.ex`. Is it restrictive enough? Does it allow `unsafe-inline` or `unsafe-eval`?
+25. **Intent config XSS**: Path patterns from `intent_config` are only used server-side in `String.contains?/2` — not rendered in templates. Verify no template renders raw intent_config paths.
+
+26. **Content-Security-Policy**: Review CSP plug. Is `unsafe-inline` or `unsafe-eval` allowed? Does it cover `frame-ancestors`, `object-src`, `form-action`?
 
 ### E. Rate Limiting & DoS
 
-22. **Event collection rate limiting**: Review the rate limit configuration. What are the limits per IP? Can an attacker flood the ClickHouse buffer? Current: 300/min per IP for collect.
+27. **Event collection flooding**: 300/min per IP. Can an attacker with multiple IPs exhaust the IngestBuffer (max 10K events) or overwhelm ClickHouse?
 
-23. **Login rate limiting**: Check rate limits on `/users/log-in`, password reset, and TOTP verification. Current: 10/min per IP.
+28. **Per-site rate limiting**: 1000 events/sec per site. Can an attacker target one site to suppress legitimate events?
 
-24. **API rate limiting**: Review `ApiRateLimit` plug. What are the limits?
+29. **API rate limiting**: Review `ApiRateLimit` plug limits. Can authenticated API users exhaust ClickHouse with expensive queries?
 
-25. **IngestBuffer DoS**: The buffer batches events and flushes every 500ms. What happens if an attacker sends millions of events? Is there a max batch size? Can it crash the GenServer? Current max: 10,000 events.
+30. **ClickHouse query cost**: Segment filters, date ranges, and RUM quantileIf aggregations can be expensive. API date range is capped at 12 months. Verify dashboard queries also have limits.
 
-26. **ClickHouse resource exhaustion**: Can a user craft a segment filter or date range that causes an expensive ClickHouse query? (e.g., 12-month range with no LIMIT, complex LIKE patterns, RUM queries with quantileIf aggregations).
+31. **Ad spend sync DoS**: Oban worker runs every 6h. If token refresh fails repeatedly, does it retry indefinitely? Check max_attempts.
 
-27. **Identify endpoint abuse**: The `/c/i` endpoint associates traits with visitors. Can an attacker spray arbitrary traits at scale to exhaust storage or pollute visitor data?
+32. **Identify endpoint abuse**: `/c/i` and `/api/v1/sites/:id/identify` — can an attacker spray arbitrary traits to exhaust Postgres storage?
 
 ### F. Data Privacy & GDPR
 
-28. **IP anonymization**: In GDPR-on mode, is the IP anonymized BEFORE the Geolix lookup or after? Is the full IP ever stored or logged?
+33. **IP handling in GDPR-on mode**: Is IP anonymized before geolocation? Is the full IP ever stored or logged?
 
-29. **Tracking parameter stripping**: In GDPR-on mode, are UTM params, gclid, fbclid properly stripped from stored URLs?
+34. **Tracking parameter stripping**: GDPR-on mode strips UTMs and click IDs from stored URLs. Verify completeness.
 
-30. **Browser fingerprinting privacy**: Review the fingerprint generation in both `s.js` (client-side: canvas, WebGL, navigator signals) and `ingest.ex` (server-side). The client-side fingerprint uses canvas pixel data, WebGL renderer strings, and 15+ browser signals. Check:
-    - Can the fingerprint be reversed to identify a specific person?
-    - Is the fingerprint stable enough to track users across sessions but not so unique it becomes PII?
-    - In GDPR-on mode, is the fingerprint the ONLY identifier (no cookies)?
+35. **Fingerprint privacy**: Canvas + WebGL + navigator fingerprint. Can it identify individuals? Is it the only identifier in GDPR-on mode (no cookies)?
 
-31. **Data retention**: Is there a TTL on ClickHouse events? What about PostgreSQL visitor/session records? Check the ClickHouse TTL configuration. Current: 2-year TTL.
+36. **Data retention**: ClickHouse 2-year TTL on events. Verify TTL is enforced. Check Postgres retention for: visitor records, session records, API logs (30-day), audit logs.
 
-32. **Opt-out mechanism**: Review the `/c/o` endpoint and `_sab_optout` cookie. Is it respected in all tracking scenarios? Check that the tracker checks the cookie before sending ANY data (including RUM and CWV events).
+37. **Opt-out mechanism**: `_sab_optout` cookie checked before ALL tracking (pageviews, RUM, CWV, identify, cross-domain). Verify completeness including noscript pixel `/c/p`.
 
-33. **Identify endpoint privacy**: `Spectabas.identify()` lets websites associate email, user_id, etc. with visitors. Is this data protected? Can another site's admin see traits set by a different site?
+38. **Ecommerce email association**: Transaction API accepts `email` to link orders to visitors. Is this data cross-site isolated? Can Site A see emails set by Site B?
 
-### G. Infrastructure Security
+### G. Infrastructure & Secrets
 
-34. **Secrets in code**: Search for hardcoded API keys, passwords, or tokens in the codebase. Check `.env` files, config files, and the Dockerfile.
+39. **Secrets in code**: Search for hardcoded keys/passwords. Check config files, Dockerfile, migration files. Note: migration 20260402000001 contains site domain names — verify no secrets.
 
-35. **ClickHouse credentials**: Are the reader/writer passwords sufficiently strong? Are they transmitted securely (HTTP vs HTTPS)? ClickHouse is on a private Render service — verify it's not publicly accessible.
+40. **ClickHouse credentials**: Reader/writer passwords in environment variables. ClickHouse on private Render service — verify no public access.
 
-36. **Docker security**: Review the Dockerfile. Does the runtime container run as non-root? Are unnecessary packages installed?
+41. **Ad integration encryption**: Vault module derives AES-256-GCM key from SECRET_KEY_BASE via SHA-256. Single key for all tokens. If SECRET_KEY_BASE rotates, all ad tokens become unreadable. Is there a key rotation strategy?
 
-37. **Error information leakage**: Do error responses (400, 500) expose stack traces, database schemas, or internal paths to users?
+42. **Ad credentials in Postgres**: `sites.ad_credentials_encrypted` stores client_id/client_secret/developer_token as encrypted binary. Verify Vault encryption is applied (not just base64).
 
-38. **Health endpoint information disclosure**: `/health` now returns detailed service status (`postgres`, `clickhouse`, `ingest_buffer`). This is public and unauthenticated. Does it reveal too much about internal architecture? Should it be limited to just `ok/error`?
+43. **Error information leakage**: Do 400/500 responses expose stack traces or internal paths? Check error views and exception handling.
 
-39. **Diagnostic endpoints**: `/health/diag`, `/health/dashboard-test`, `/health/audit-test`, `/health/backfill-geo` — are these authenticated? Verify they require admin auth. What sensitive data do they expose (IP addresses, event data, site public keys)?
+44. **Public health endpoint**: `/health` returns ok/degraded. Verify no internal details leak. The token-protected utility endpoints (`/matomo-import-test`, `/send-setup-emails`, `/click-id-diag`) — what token protects them? Is it hardcoded?
+
+45. **Admin diagnostic endpoints**: `/health/diag`, `/health/intent-diag`, `/health/optimize-ad-spend` — all admin-only. Verify they don't expose sensitive data (full IP addresses, API keys, ClickHouse passwords).
 
 ### H. Tracker Security
 
-40. **Origin validation bypass**: Review `check_origin/2` in CollectController. Can an attacker spoof the Origin/Referer headers to inject events for a site they don't own?
+46. **Origin validation bypass**: Review `check_origin/2` in CollectController. Allows any subdomain of parent domain. Can an attacker on `evil.example.com` inject events for `b.example.com`?
 
-41. **Public key enumeration**: Can an attacker enumerate valid site public keys by testing the `/c/e` endpoint? The endpoint returns 204 for both found and not-found sites — verify this is consistent.
+47. **Reverse proxy (data-proxy) security**: When `data-proxy` is set, tracker sends beacons through the main domain. Does this bypass origin validation? Can a malicious proxy inject events?
 
-42. **Cross-domain token security**: Review the xdomain token system. Is the token strong enough? Can it be brute-forced? Is it time-limited? Can a token be replayed?
+48. **Public key enumeration**: `/c/e` returns 204 for found and not-found sites. Verify consistent response to prevent enumeration.
 
-43. **Event payload manipulation**: Can an attacker send fake events with arbitrary `visitor_id`, `session_id`, or `ip_address` values to pollute analytics data?
+49. **Click ID injection**: Attacker sends fake gclid/msclkid/fbclid values to pollute ad attribution data. These flow into ROAS calculations. Is there any validation?
 
-44. **RUM data injection**: Can an attacker send fake `_rum` or `_cwv` events with extreme values (e.g., page_load = "999999999") to skew performance metrics? Is there any validation on the property values beyond "must be a string under 256 chars"?
+50. **RUM data injection**: Fake `_rum` or `_cwv` events with extreme values. Any bounds checking on performance metric values?
 
-45. **Form abuse detection evasion**: The client-side form abuse detector can be trivially bypassed by modifying or not loading the tracker. Is this documented as a limitation? Is the `_form_abuse` event treated as advisory, not authoritative?
-
-46. **Tracker script tampering**: The tracker is served with `Cache-Control: public, max-age=86400`. Could an attacker serving from a compromised CDN or MITM inject malicious JavaScript? Is Subresource Integrity (SRI) feasible for the tracker?
+51. **Ecommerce event injection**: Fake `ecommerce_order` events with inflated revenue. The collection endpoint is public — is there any authentication for ecommerce events?
 
 ### I. Dependency Security
 
-47. **Hex package audit**: Run `mix deps.audit` or manually check for known vulnerabilities in dependencies. Pay attention to: `wax_`, `tzdata`, `hammer`, `oban`, `swoosh`.
+52. **Hex package audit**: Run `mix deps.audit`. Check: `wax_`, `tzdata`, `hammer`, `oban`, `swoosh`, `req`.
 
-48. **JavaScript dependencies**: Check `assets/vendor/chart.umd.js` for known vulnerabilities. Is it the latest version?
+53. **Chart.js**: Vendored at `assets/vendor/chart.umd.js`. Check version for known CVEs.
 
-49. **GeoIP database integrity**: Are the DB-IP and MaxMind downloads verified (checksums)? Could a MITM attack substitute a malicious MMDB file?
-
-50. **tzdata updates**: The tzdata library downloads timezone data. Is the download verified? Could a compromised tzdata source affect date boundary calculations?
+54. **GeoIP database integrity**: MMDB downloads verified with checksums? MITM risk?
 
 ### J. Business Logic
 
-51. **Ecommerce data integrity**: Can an attacker send fake `ecommerce_order` events with inflated revenue to manipulate the ecommerce dashboard?
+55. **Visitor deduplication bypass**: GDPR-on uses fingerprint dedup. Can attacker generate many unique fingerprints to inflate counts?
 
-52. **Visitor deduplication bypass**: The system deduplicates visitors by fingerprint when cookies are unavailable. Can an attacker generate many unique fingerprints to inflate visitor counts?
+56. **Goal/funnel manipulation**: Fake custom events can trigger goal completions and advance funnel stages. Document as limitation or add server-side validation.
 
-53. **Anomaly detection manipulation**: The insights/anomaly detector compares last 7 days vs prior 7 days. Can an attacker poison the baseline period to suppress or trigger false alerts?
+57. **Ad spend data integrity**: ClickHouse `ad_spend` uses ReplacingMergeTree. Without FINAL, duplicate rows inflate totals. Verify ALL ad_spend queries use FINAL (fixed in v4.5.0 — confirm no regression).
 
-54. **Goal/funnel manipulation**: Can fake custom events trigger goal conversions or advance funnel stages to distort conversion metrics?
+58. **Intent classification manipulation**: Attacker sends events with URLs matching buying/engaging paths to inflate intent metrics. Intent is classified at ingest based on URL path — no authentication required.
+
+59. **Spam filter bypass**: SpamFilter excludes known spam referrer domains. Attacker can use unknown domains or empty referrers. Auto-detection worker may have false negatives.
+
+60. **Email report content injection**: Email reports include page paths and source names from ClickHouse data. If an attacker injects malicious URL paths, could they appear in HTML emails? Check email template escaping.
 
 ---
 
-## Previous Audit Results (v0.8.0)
+## Previous Audit Results
 
-The following 10 findings were identified and fixed in the v0.8.0 security audit:
+### Audit v1 (v0.8.0) — 10 findings fixed
+1. Health endpoints authenticated 2. Opt-out cookie check 3. Login rate limiting
+4. Invitation email verification 5. Null byte sanitization 6. Buffer overflow protection
+7. ClickHouse TTL 8. MMDB integrity checks 9. Input validation 10. Session fixation
 
-1. Health endpoints authenticated (now require admin)
-2. Opt-out cookie check added to collection endpoint
-3. Login rate limiting added (10/min/IP)
-4. Invitation email verification (matches intended recipient)
-5. Null byte sanitization on all user input
-6. IngestBuffer max size limit (10K events)
-7. ClickHouse TTL (2-year event expiry)
-8. MMDB integrity checks on GeoIP load
-9. Input validation strengthened on collection endpoints
-10. Session fixation — tokens regenerated on auth state changes
+### Audit v2 (v1.6.0) — 10 findings fixed
+1. WebAuthn binary_to_term :safe 2. WebAuthn credential ownership 3. Pixel opt-out
+4. Origin validation 5. API date range cap 6. Config secrets removed
+7. CSP object-src 8. Cookie security 9. Health endpoint limited 10. SQL parameterization
 
-**Verify all 10 remain effective and haven't been regressed.**
+### Audit v3 (v2.6.0) — 5 findings fixed
+1. SQL injection in visitor_log 2. Segment IDOR 3. Origin validation on /c/i and /c/x
+4. Silent event loss 5. Deferred stats parallelized
+
+**Verify all 25 previous findings remain effective and haven't regressed.**
 
 ---
 
