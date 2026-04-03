@@ -161,7 +161,7 @@ defmodule SpectabasWeb.Dashboard.VisitorQualityLive do
                       <div class="w-16 bg-gray-200 rounded-full h-2">
                         <div class={"h-2 rounded-full #{score_bar_color(parse_float(row["quality_score"]))}"} style={"width: #{min(parse_float(row["quality_score"]), 100)}%"}></div>
                       </div>
-                      <span class={"text-sm font-bold tabular-nums #{score_color(parse_float(row["quality_score"]))}"}>{row["quality_score"]}</span>
+                      <span class={"text-sm font-bold tabular-nums w-8 text-right #{score_color(parse_float(row["quality_score"]))}"}>{row["quality_score"]}</span>
                     </div>
                   </td>
                   <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{format_number(to_num(row["visitors"]))}</td>
