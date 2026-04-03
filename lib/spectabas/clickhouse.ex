@@ -120,6 +120,7 @@ defmodule Spectabas.ClickHouse do
         shipping Decimal(12, 2) DEFAULT 0,
         discount Decimal(12, 2) DEFAULT 0,
         refund_amount Decimal(12, 2) DEFAULT 0,
+        import_source LowCardinality(String) DEFAULT '',
         currency LowCardinality(String) DEFAULT 'USD',
         items String DEFAULT '[]',
         timestamp DateTime DEFAULT now()
@@ -315,6 +316,7 @@ defmodule Spectabas.ClickHouse do
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_referrer referrer_domain TYPE bloom_filter GRANULARITY 4",
       # Schema migrations — add columns that may not exist on older tables
       "ALTER TABLE #{db}.ecommerce_events ADD COLUMN IF NOT EXISTS refund_amount Decimal(12, 2) DEFAULT 0",
+      "ALTER TABLE #{db}.ecommerce_events ADD COLUMN IF NOT EXISTS import_source LowCardinality(String) DEFAULT ''",
       # Subscription events table (idempotent — CREATE IF NOT EXISTS above)
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_event_type event_type TYPE bloom_filter GRANULARITY 4",
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_event_name event_name TYPE bloom_filter GRANULARITY 4",

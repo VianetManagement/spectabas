@@ -149,6 +149,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
                 "order_id" => txn.id,
                 "revenue" => txn.amount,
                 "subtotal" => txn.amount,
+                "import_source" => "braintree",
                 "tax" => 0,
                 "shipping" => 0,
                 "discount" => 0,

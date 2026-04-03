@@ -140,6 +140,7 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
                 "order_id" => charge.charge_id,
                 "revenue" => charge.amount,
                 "subtotal" => charge.amount,
+                "import_source" => "stripe",
                 "tax" => 0,
                 "shipping" => 0,
                 "discount" => 0,

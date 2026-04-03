@@ -111,6 +111,42 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
      |> assign(:ad_integrations, Spectabas.AdIntegrations.list_for_site(socket.assigns.site.id))}
   end
 
+  def handle_event("backfill_payment_data", %{"id" => id, "days" => days}, socket) do
+    integration = Spectabas.AdIntegrations.get!(id) |> Spectabas.Repo.preload(:site)
+    num_days = String.to_integer(days)
+
+    Task.start(fn ->
+      today = Date.utc_today()
+
+      Enum.each(0..num_days, fn offset ->
+        date = Date.add(today, -offset)
+
+        case integration.platform do
+          "stripe" ->
+            Spectabas.AdIntegrations.Platforms.StripePlatform.sync_charges(
+              integration.site,
+              integration,
+              date
+            )
+
+          "braintree" ->
+            Spectabas.AdIntegrations.Platforms.BraintreePlatform.sync_transactions(
+              integration.site,
+              integration,
+              date
+            )
+        end
+      end)
+    end)
+
+    {:noreply,
+     put_flash(
+       socket,
+       :info,
+       "Backfill started for last #{num_days} days. This runs in the background — check back in a few minutes."
+     )}
+  end
+
   def handle_event("sync_ad_now", %{"id" => id}, socket) do
     integration = Spectabas.AdIntegrations.get!(id) |> Spectabas.Repo.preload(:site)
 
@@ -276,21 +312,13 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
     site_id = integration.site_id
     site_p = Spectabas.ClickHouse.param(site_id)
 
-    # Delete imported ecommerce events (Stripe charges start with ch_, Braintree uses transaction IDs)
-    ecom_result =
-      case integration.platform do
-        "stripe" ->
-          Spectabas.ClickHouse.execute(
-            "ALTER TABLE ecommerce_events DELETE WHERE site_id = #{site_p} AND order_id LIKE 'ch_%'"
-          )
+    # Delete only ecommerce events imported by this specific integration
+    platform_p = Spectabas.ClickHouse.param(integration.platform)
 
-        "braintree" ->
-          # Braintree transaction IDs don't have a consistent prefix, so delete all
-          # ecommerce events with empty session_id (imported, not tracked via JS)
-          Spectabas.ClickHouse.execute(
-            "ALTER TABLE ecommerce_events DELETE WHERE site_id = #{site_p} AND session_id = ''"
-          )
-      end
+    ecom_result =
+      Spectabas.ClickHouse.execute(
+        "ALTER TABLE ecommerce_events DELETE WHERE site_id = #{site_p} AND import_source = #{platform_p}"
+      )
 
     # Delete subscription snapshots for this site
     sub_result =
@@ -848,9 +876,18 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                     </button>
                     <%= if platform in ["stripe", "braintree"] do %>
                       <button
+                        phx-click="backfill_payment_data"
+                        phx-value-id={integration.id}
+                        phx-value-days="90"
+                        data-confirm={"Backfill last 90 days of #{label} data? This runs in the background and may take a few minutes."}
+                        class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-green-700 bg-green-50 hover:bg-green-100 border border-green-200"
+                      >
+                        Backfill 90d
+                      </button>
+                      <button
                         phx-click="clear_payment_data"
                         phx-value-id={integration.id}
-                        data-confirm={"Clear ALL imported #{label} data for this site? This deletes ecommerce events and subscription snapshots imported from #{label}. This cannot be undone."}
+                        data-confirm={"Clear ALL imported #{label} data for this site? Only deletes data imported from #{label} — API transactions are NOT affected. This cannot be undone."}
                         class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200"
                       >
                         Clear Data
