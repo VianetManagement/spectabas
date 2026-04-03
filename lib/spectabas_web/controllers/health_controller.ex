@@ -742,19 +742,21 @@ defmodule SpectabasWeb.HealthController do
     unless valid_token?(token) do
       conn |> put_status(403) |> json(%{error: "forbidden"})
     else
+      db = Application.get_env(:spectabas, Spectabas.ClickHouse)[:database] || "spectabas"
+
       results =
         [
           {"refund_amount",
            Spectabas.ClickHouse.execute_admin(
-             "ALTER TABLE ecommerce_events ADD COLUMN IF NOT EXISTS refund_amount Decimal(12, 2) DEFAULT 0"
+             "ALTER TABLE #{db}.ecommerce_events ADD COLUMN IF NOT EXISTS refund_amount Decimal(12, 2) DEFAULT 0"
            )},
           {"import_source",
            Spectabas.ClickHouse.execute_admin(
-             "ALTER TABLE ecommerce_events ADD COLUMN IF NOT EXISTS import_source LowCardinality(String) DEFAULT ''"
+             "ALTER TABLE #{db}.ecommerce_events ADD COLUMN IF NOT EXISTS import_source LowCardinality(String) DEFAULT ''"
            )},
           {"subscription_events",
            Spectabas.ClickHouse.execute_admin("""
-           CREATE TABLE IF NOT EXISTS subscription_events (
+           CREATE TABLE IF NOT EXISTS #{db}.subscription_events (
              site_id UInt64,
              subscription_id String,
              customer_email String,
