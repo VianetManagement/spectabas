@@ -789,6 +789,10 @@ defmodule SpectabasWeb.HealthController do
     conn |> put_status(403) |> json(%{error: "forbidden"})
   end
 
+  def ecom_diag(conn, %{"token" => _token, "site_id" => _site_id, "action" => "sync"} = params) do
+    ecom_diag_sync(conn, params)
+  end
+
   def ecom_diag(conn, %{"token" => token, "site_id" => site_id}) do
     unless valid_token?(token) do
       conn |> put_status(403) |> json(%{error: "forbidden"})
@@ -850,7 +854,7 @@ defmodule SpectabasWeb.HealthController do
     end
   end
 
-  def ecom_diag(conn, %{"token" => token, "site_id" => site_id, "action" => "sync"}) do
+  defp ecom_diag_sync(conn, %{"token" => token, "site_id" => site_id}) do
     unless valid_token?(token) do
       conn |> put_status(403) |> json(%{error: "forbidden"})
     else
