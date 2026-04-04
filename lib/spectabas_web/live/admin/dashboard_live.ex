@@ -90,6 +90,15 @@ defmodule SpectabasWeb.Admin.DashboardLive do
 
       <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
         <.link
+          navigate={~p"/admin/integrations"}
+          class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+        >
+          <h3 class="font-semibold text-gray-900 mb-1">Integration Status</h3>
+          <p class="text-sm text-gray-500">
+            Health, sync status, and connectivity tests for all third-party integrations
+          </p>
+        </.link>
+        <.link
           navigate={~p"/admin/audit"}
           class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
         >
