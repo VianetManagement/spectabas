@@ -8,6 +8,7 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
   require Logger
 
   alias Spectabas.AdIntegrations
+  alias Spectabas.AdIntegrations.SyncLock
   alias Spectabas.ClickHouse
 
   @stripe_api "https://api.stripe.com/v1"
@@ -110,16 +111,16 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
   def sync_charges(site, integration, date) do
     lock_key = "stripe_sync:#{integration.id}:#{Date.to_iso8601(date)}"
 
-    if locked?(lock_key) do
+    if SyncLock.locked?(lock_key) do
       Logger.info("[StripSync] Skipping #{date} — already syncing")
       :ok
     else
-      acquire_lock(lock_key)
+      SyncLock.acquire(lock_key)
 
       try do
         do_sync_charges(site, integration, date)
       after
-        release_lock(lock_key)
+        SyncLock.release(lock_key)
       end
     end
   end
@@ -185,9 +186,13 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
           AdIntegrations.mark_synced(integration)
           :ok
         else
+          # Batch-resolve all emails to avoid N+1 queries
+          emails = new_charges |> Enum.map(& &1.email) |> Enum.uniq() |> Enum.reject(&(&1 == ""))
+          visitor_map = batch_resolve_visitors(site.id, emails)
+
           rows =
             Enum.map(new_charges, fn charge ->
-              visitor_id = resolve_visitor(site.id, charge.email)
+              visitor_id = Map.get(visitor_map, charge.email, "")
 
               %{
                 "site_id" => site.id,
@@ -502,9 +507,18 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
         now = DateTime.utc_now()
         today = Date.utc_today()
 
+        # Batch-resolve all emails to avoid N+1 queries
+        emails =
+          subscriptions
+          |> Enum.map(& &1.customer_email)
+          |> Enum.uniq()
+          |> Enum.reject(&(&1 == ""))
+
+        visitor_map = batch_resolve_visitors(site.id, emails)
+
         rows =
           Enum.map(subscriptions, fn sub ->
-            visitor_id = resolve_visitor(site.id, sub.customer_email)
+            visitor_id = Map.get(visitor_map, sub.customer_email, "")
 
             %{
               "site_id" => site.id,
@@ -568,39 +582,18 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
     end
   end
 
-  # Look up visitor by email in Postgres
-  defp resolve_visitor(site_id, email) when is_binary(email) and email != "" do
+  # Batch-resolve visitor IDs by email in Postgres (avoids N+1)
+  defp batch_resolve_visitors(site_id, emails) when emails != [] do
     import Ecto.Query
 
-    case Spectabas.Repo.one(
-           from(v in Spectabas.Visitors.Visitor,
-             where: v.site_id == ^site_id and v.email == ^email,
-             select: v.id,
-             limit: 1
-           )
-         ) do
-      nil -> ""
-      id -> id
-    end
+    Spectabas.Repo.all(
+      from(v in Spectabas.Visitors.Visitor,
+        where: v.site_id == ^site_id and v.email in ^emails,
+        select: {v.email, v.id}
+      )
+    )
+    |> Map.new()
   end
 
-  defp resolve_visitor(_, _), do: ""
-
-  # Simple process-level lock to prevent concurrent syncs for the same integration+date
-  defp locked?(key) do
-    case :persistent_term.get({__MODULE__, key}, nil) do
-      nil -> false
-      ts -> System.monotonic_time(:second) - ts < 300
-    end
-  end
-
-  defp acquire_lock(key) do
-    :persistent_term.put({__MODULE__, key}, System.monotonic_time(:second))
-  end
-
-  defp release_lock(key) do
-    :persistent_term.erase({__MODULE__, key})
-  catch
-    _, _ -> :ok
-  end
+  defp batch_resolve_visitors(_, _), do: %{}
 end

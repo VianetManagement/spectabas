@@ -5,6 +5,9 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers, except: [format_number: 1]
 
+  @allowed_sort_cols ~w(clicks impressions ctr position)
+  @allowed_sort_dirs ~w(asc desc)
+
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
     user = socket.assigns.current_scope.user
@@ -35,7 +38,7 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     {:noreply, socket |> assign(:source_filter, source) |> load_data()}
   end
 
-  def handle_event("sort", %{"col" => col}, socket) do
+  def handle_event("sort", %{"col" => col}, socket) when col in @allowed_sort_cols do
     new_dir =
       if col == socket.assigns.sort_by do
         if socket.assigns.sort_dir == "desc", do: "asc", else: "desc"
@@ -43,7 +46,14 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
         "desc"
       end
 
-    {:noreply, socket |> assign(:sort_by, col) |> assign(:sort_dir, new_dir) |> load_data()}
+    # Belt-and-suspenders: validate sort_dir even though it's toggled in code
+    safe_dir = if new_dir in @allowed_sort_dirs, do: new_dir, else: "desc"
+
+    {:noreply, socket |> assign(:sort_by, col) |> assign(:sort_dir, safe_dir) |> load_data()}
+  end
+
+  def handle_event("sort", _params, socket) do
+    {:noreply, socket}
   end
 
   defp load_data(socket) do

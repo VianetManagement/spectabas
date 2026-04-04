@@ -7,6 +7,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
   require Logger
 
   alias Spectabas.{AdIntegrations, ClickHouse}
+  alias Spectabas.AdIntegrations.SyncLock
 
   @doc """
   Fetch settled/submitted transactions from Braintree for a given date.
@@ -115,16 +116,16 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
   def sync_transactions(site, integration, date) do
     lock_key = "bt_sync:#{integration.id}:#{Date.to_iso8601(date)}"
 
-    if locked?(lock_key) do
+    if SyncLock.locked?(lock_key) do
       Logger.info("[BraintreeSync] Skipping #{date} — already syncing")
       :ok
     else
-      acquire_lock(lock_key)
+      SyncLock.acquire(lock_key)
 
       try do
         do_sync_transactions(site, integration, date)
       after
-        release_lock(lock_key)
+        SyncLock.release(lock_key)
       end
     end
   end
@@ -146,9 +147,13 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
           AdIntegrations.mark_synced(integration)
           :ok
         else
+          # Batch-resolve all emails to avoid N+1 queries
+          emails = new_txns |> Enum.map(& &1.email) |> Enum.uniq() |> Enum.reject(&(&1 == ""))
+          visitor_map = batch_resolve_visitors(site.id, emails)
+
           rows =
             Enum.map(new_txns, fn txn ->
-              visitor_id = resolve_visitor(site.id, txn.email)
+              visitor_id = Map.get(visitor_map, txn.email, "")
 
               %{
                 "site_id" => site.id,
@@ -230,9 +235,13 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
         :ok
 
       {:ok, subs} ->
+        # Batch-resolve all emails to avoid N+1 queries
+        emails = subs |> Enum.map(& &1.email) |> Enum.uniq() |> Enum.reject(&(&1 == ""))
+        visitor_map = batch_resolve_visitors(site.id, emails)
+
         rows =
           Enum.map(subs, fn sub ->
-            visitor_id = resolve_visitor(site.id, sub.email)
+            visitor_id = Map.get(visitor_map, sub.email, "")
 
             # Calculate MRR: if billing cycle is 12 months, divide by 12
             mrr =
@@ -450,37 +459,18 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
     end
   end
 
-  defp resolve_visitor(site_id, email) when is_binary(email) and email != "" do
+  # Batch-resolve visitor IDs by email in Postgres (avoids N+1)
+  defp batch_resolve_visitors(site_id, emails) when emails != [] do
     import Ecto.Query
 
-    case Spectabas.Repo.one(
-           from(v in Spectabas.Visitors.Visitor,
-             where: v.site_id == ^site_id and v.email == ^email,
-             select: v.id,
-             limit: 1
-           )
-         ) do
-      nil -> ""
-      id -> id
-    end
+    Spectabas.Repo.all(
+      from(v in Spectabas.Visitors.Visitor,
+        where: v.site_id == ^site_id and v.email in ^emails,
+        select: {v.email, v.id}
+      )
+    )
+    |> Map.new()
   end
 
-  defp resolve_visitor(_, _), do: ""
-
-  defp locked?(key) do
-    case :persistent_term.get({__MODULE__, key}, nil) do
-      nil -> false
-      ts -> System.monotonic_time(:second) - ts < 300
-    end
-  end
-
-  defp acquire_lock(key) do
-    :persistent_term.put({__MODULE__, key}, System.monotonic_time(:second))
-  end
-
-  defp release_lock(key) do
-    :persistent_term.erase({__MODULE__, key})
-  catch
-    _, _ -> :ok
-  end
+  defp batch_resolve_visitors(_, _), do: %{}
 end

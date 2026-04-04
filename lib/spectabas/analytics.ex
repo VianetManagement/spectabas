@@ -3546,20 +3546,28 @@ defmodule Spectabas.Analytics do
   Otherwise, show all data (API + JS tracker).
   """
   def ecommerce_source_filter(%Site{id: site_id}) do
-    # If the site has ANY Stripe integration record (active or revoked), filter to pi_* only.
-    # This is more resilient than checking only "active" — integration records can temporarily
-    # disappear during reconnection but the pi_* data is still there.
-    has_stripe =
-      Spectabas.Repo.exists?(
-        from(a in Spectabas.AdIntegrations.AdIntegration,
-          where: a.site_id == ^site_id and a.platform == "stripe"
-        )
-      )
+    # Cache per-request in process dictionary to avoid repeated Repo.exists? calls
+    # (this function is called 23+ times per ecommerce page load).
+    cache_key = {:ecommerce_source_filter, site_id}
 
-    if has_stripe do
-      "AND order_id LIKE 'pi_%'"
-    else
-      ""
+    case Process.get(cache_key) do
+      nil ->
+        # If the site has ANY Stripe integration record (active or revoked), filter to pi_* only.
+        # This is more resilient than checking only "active" — integration records can temporarily
+        # disappear during reconnection but the pi_* data is still there.
+        has_stripe =
+          Spectabas.Repo.exists?(
+            from(a in Spectabas.AdIntegrations.AdIntegration,
+              where: a.site_id == ^site_id and a.platform == "stripe"
+            )
+          )
+
+        result = if has_stripe, do: "AND order_id LIKE 'pi_%'", else: ""
+        Process.put(cache_key, result)
+        result
+
+      cached ->
+        cached
     end
   end
 
