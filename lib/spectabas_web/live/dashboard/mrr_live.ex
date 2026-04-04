@@ -56,7 +56,7 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
     FROM ecommerce_events
     WHERE site_id = #{site_p}
       #{Spectabas.Analytics.ecommerce_source_filter(site)}
-      AND timestamp >= now() - INTERVAL 12 MONTH
+      AND timestamp >= now() - INTERVAL 36 MONTH
     GROUP BY month
     ORDER BY month ASC
     """
@@ -256,7 +256,7 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
           <%!-- Monthly Revenue Chart --%>
           <%= if @monthly_revenue != [] do %>
             <div class="bg-white rounded-lg shadow p-6 mb-8">
-              <h2 class="text-lg font-semibold text-gray-900 mb-4">Monthly Revenue (12 months)</h2>
+              <h2 class="text-lg font-semibold text-gray-900 mb-4">Monthly Revenue</h2>
               <div class="space-y-1.5">
                 <% max_rev =
                   @monthly_revenue |> Enum.map(&to_float(&1["net_revenue"])) |> Enum.max(fn -> 1 end) %>
