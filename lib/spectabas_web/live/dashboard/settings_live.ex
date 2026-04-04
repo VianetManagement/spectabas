@@ -868,11 +868,10 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                     <div :if={integration.last_error} class="text-red-600 font-medium">
                       Error: {String.slice(integration.last_error || "", 0, 80)}
                     </div>
-                    <div class="flex items-center gap-2 mt-1">
+                    <form phx-change="update_sync_frequency" class="flex items-center gap-2 mt-1">
+                      <input type="hidden" name="id" value={integration.id} />
                       <span class="text-gray-500">Sync every</span>
                       <select
-                        phx-change="update_sync_frequency"
-                        phx-value-id={integration.id}
                         name="frequency"
                         class="text-sm rounded border-gray-300 py-1 pr-8"
                       >
@@ -885,7 +884,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                           </option>
                         <% end %>
                       </select>
-                    </div>
+                    </form>
                   </div>
                   <div class="flex items-center gap-3 mt-3">
                     <button
