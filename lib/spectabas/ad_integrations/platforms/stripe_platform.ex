@@ -125,6 +125,40 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
   end
 
   defp do_sync_charges(site, integration, date) do
+    # Fast skip: if we already have pi_* data for this day, skip the Stripe API call entirely
+    if day_already_synced?(site.id, date) do
+      :ok
+    else
+      do_fetch_and_insert(site, integration, date)
+    end
+  end
+
+  defp day_already_synced?(site_id, date) do
+    from_dt = DateTime.new!(date, ~T[00:00:00], "Etc/UTC")
+    to_dt = DateTime.new!(Date.add(date, 1), ~T[00:00:00], "Etc/UTC")
+
+    sql = """
+    SELECT count() AS cnt FROM ecommerce_events
+    WHERE site_id = #{ClickHouse.param(site_id)}
+      AND timestamp >= #{ClickHouse.param(Calendar.strftime(from_dt, "%Y-%m-%d %H:%M:%S"))}
+      AND timestamp < #{ClickHouse.param(Calendar.strftime(to_dt, "%Y-%m-%d %H:%M:%S"))}
+      AND order_id LIKE 'pi_%'
+    """
+
+    case ClickHouse.query(sql) do
+      {:ok, [%{"cnt" => cnt}]} ->
+        case cnt do
+          n when is_integer(n) -> n > 0
+          n when is_binary(n) -> String.to_integer(n) > 0
+          _ -> false
+        end
+
+      _ ->
+        false
+    end
+  end
+
+  defp do_fetch_and_insert(site, integration, date) do
     case fetch_charges(integration, date) do
       {:ok, []} ->
         Logger.info("[StripSync] No charges for #{date}")
