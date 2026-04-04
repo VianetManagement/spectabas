@@ -923,7 +923,7 @@ defmodule SpectabasWeb.HealthController do
              SELECT count() AS cnt, sum(revenue) AS rev
              FROM ecommerce_events
              WHERE site_id = #{Spectabas.ClickHouse.param(site.id)}
-               AND order_id LIKE 'ch_%'
+               AND (order_id LIKE 'ch_%' OR order_id LIKE 'pi_%')
              """) do
           {:ok, [row | _]} -> row
           _ -> %{}
@@ -946,7 +946,7 @@ defmodule SpectabasWeb.HealthController do
       case Spectabas.ClickHouse.query("""
            SELECT order_id, count() AS cnt, any(revenue) AS rev
            FROM ecommerce_events
-           WHERE site_id = #{site_p} AND order_id LIKE 'ch_%'
+           WHERE site_id = #{site_p} AND (order_id LIKE 'ch_%' OR order_id LIKE 'pi_%')
            GROUP BY order_id
            HAVING cnt > 1
            ORDER BY cnt DESC
@@ -967,11 +967,11 @@ defmodule SpectabasWeb.HealthController do
              (SELECT sum(rev) FROM (
                SELECT order_id, any(revenue) AS rev
                FROM ecommerce_events
-               WHERE site_id = #{site_p} AND order_id LIKE 'ch_%'
+               WHERE site_id = #{site_p} AND (order_id LIKE 'ch_%' OR order_id LIKE 'pi_%')
                GROUP BY order_id
              )) AS total_rev_deduped
            FROM ecommerce_events
-           WHERE site_id = #{site_p} AND order_id LIKE 'ch_%'
+           WHERE site_id = #{site_p} AND (order_id LIKE 'ch_%' OR order_id LIKE 'pi_%')
            """) do
         {:ok, [row | _]} -> row
         {:error, e} -> %{"error" => inspect(e)}
@@ -985,7 +985,7 @@ defmodule SpectabasWeb.HealthController do
              sum(revenue) AS rev
            FROM ecommerce_events
            WHERE site_id = #{site_p}
-             AND order_id LIKE 'ch_%'
+             AND (order_id LIKE 'ch_%' OR order_id LIKE 'pi_%')
              AND toStartOfMonth(timestamp) = '2026-03-01'
            """) do
         {:ok, [row | _]} -> row
@@ -999,7 +999,7 @@ defmodule SpectabasWeb.HealthController do
              sum(revenue) AS rev
            FROM ecommerce_events
            WHERE site_id = #{site_p}
-             AND order_id LIKE 'ch_%'
+             AND (order_id LIKE 'ch_%' OR order_id LIKE 'pi_%')
              AND toStartOfMonth(toTimezone(timestamp, 'America/New_York')) = '2026-03-01'
            """) do
         {:ok, [row | _]} -> row
@@ -1014,7 +1014,7 @@ defmodule SpectabasWeb.HealthController do
              uniqExact(order_id) AS orders,
              sum(revenue) AS rev
            FROM ecommerce_events
-           WHERE site_id = #{site_p} AND order_id LIKE 'ch_%'
+           WHERE site_id = #{site_p} AND (order_id LIKE 'ch_%' OR order_id LIKE 'pi_%')
            GROUP BY month ORDER BY month
            """) do
         {:ok, rows} -> rows

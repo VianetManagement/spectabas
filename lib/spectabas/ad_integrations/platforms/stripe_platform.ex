@@ -27,11 +27,13 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
     fetch_charges_page(api_key, day_start, day_end, nil, [])
   end
 
+  # Use PaymentIntents API instead of Charges — PaymentIntents are deduplicated
+  # (one per actual payment), while Charges can have multiple per payment (retries,
+  # 3D Secure, etc.) which causes overcounting.
   defp fetch_charges_page(api_key, day_start, day_end, starting_after, acc) do
     params = %{
       "created[gte]" => DateTime.to_unix(day_start),
       "created[lt]" => DateTime.to_unix(day_end),
-      "status" => "succeeded",
       "limit" => "100",
       "expand[]" => "data.customer"
     }
@@ -43,40 +45,43 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
 
     qs = URI.encode_query(params)
 
-    case Req.get("#{@stripe_api}/charges?#{qs}",
+    case Req.get("#{@stripe_api}/payment_intents?#{qs}",
            headers: [
              {"authorization", "Bearer #{api_key}"},
              {"stripe-version", "2024-12-18.acacia"}
            ]
          ) do
-      {:ok, %{status: 200, body: %{"data" => charges, "has_more" => has_more}}} ->
+      {:ok, %{status: 200, body: %{"data" => intents, "has_more" => has_more}}} ->
         parsed =
-          Enum.map(charges, fn charge ->
+          intents
+          |> Enum.filter(fn pi -> pi["status"] == "succeeded" end)
+          |> Enum.map(fn pi ->
             email =
               cond do
-                is_binary(charge["receipt_email"]) and charge["receipt_email"] != "" ->
-                  charge["receipt_email"]
+                is_binary(pi["receipt_email"]) and pi["receipt_email"] != "" ->
+                  pi["receipt_email"]
 
-                is_map(charge["customer"]) ->
-                  charge["customer"]["email"] || ""
+                is_map(pi["customer"]) ->
+                  pi["customer"]["email"] || ""
 
                 true ->
                   ""
               end
 
+            # Use pi_ ID as order_id (unique per payment, unlike ch_ which can have multiples)
             %{
-              charge_id: charge["id"],
+              charge_id: pi["id"],
               email: email,
-              amount: (charge["amount"] || 0) / 100.0,
-              currency: String.upcase(charge["currency"] || "usd"),
-              created_at: DateTime.from_unix!(charge["created"])
+              amount: (pi["amount_received"] || pi["amount"] || 0) / 100.0,
+              currency: String.upcase(pi["currency"] || "usd"),
+              created_at: DateTime.from_unix!(pi["created"])
             }
           end)
 
         new_acc = acc ++ parsed
 
-        if has_more and length(charges) > 0 do
-          last_id = List.last(charges)["id"]
+        if has_more and length(intents) > 0 do
+          last_id = List.last(intents)["id"]
           fetch_charges_page(api_key, day_start, day_end, last_id, new_acc)
         else
           {:ok, new_acc}
@@ -474,7 +479,7 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
     WHERE site_id = #{ClickHouse.param(site_id)}
       AND timestamp >= #{ClickHouse.param(Calendar.strftime(from_dt, "%Y-%m-%d %H:%M:%S"))}
       AND timestamp < #{ClickHouse.param(Calendar.strftime(to_dt, "%Y-%m-%d %H:%M:%S"))}
-      AND order_id LIKE 'ch_%'
+      AND (order_id LIKE 'ch_%' OR order_id LIKE 'pi_%')
     """
 
     case ClickHouse.query(sql) do
