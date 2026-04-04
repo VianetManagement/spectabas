@@ -70,12 +70,13 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
     # MRR from latest subscription snapshots
     mrr_sql = """
     SELECT
-      sum(mrr_amount) AS total_mrr,
+      sumIf(mrr_amount, status IN ('active', 'past_due', 'trialing')) AS total_mrr,
       countIf(status = 'active') AS active_subs,
       countIf(status = 'canceled') AS canceled_subs,
       countIf(status = 'past_due') AS past_due_subs,
+      countIf(status = 'trialing') AS trialing_subs,
       if(countIf(status IN ('active', 'past_due', 'trialing')) > 0,
-        round(sum(mrr_amount) / countIf(status IN ('active', 'past_due', 'trialing')), 2),
+        round(sumIf(mrr_amount, status IN ('active', 'past_due', 'trialing')) / countIf(status IN ('active', 'past_due', 'trialing')), 2),
         0) AS avg_mrr_per_sub,
       count() AS total_subs
     FROM subscription_events FINAL
