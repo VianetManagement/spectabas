@@ -937,6 +937,101 @@ defmodule SpectabasWeb.HealthController do
     end
   end
 
+  def ecom_diag(conn, %{"token" => token, "site_id" => site_id, "action" => "check_dupes"}) do
+    unless valid_token?(token) do
+      conn |> put_status(403) |> json(%{error: "forbidden"})
+    else
+      site_p = Spectabas.ClickHouse.param(site_id)
+
+      # Count duplicate order_ids
+      dupes =
+        case Spectabas.ClickHouse.query("""
+             SELECT order_id, count() AS cnt, any(revenue) AS rev
+             FROM ecommerce_events
+             WHERE site_id = #{site_p} AND order_id LIKE 'ch_%'
+             GROUP BY order_id
+             HAVING cnt > 1
+             ORDER BY cnt DESC
+             LIMIT 20
+             """) do
+          {:ok, rows} -> rows
+          {:error, e} -> [%{"error" => inspect(e)}]
+        end
+
+      # Total impact of duplicates
+      dupe_impact =
+        case Spectabas.ClickHouse.query("""
+             SELECT
+               count() AS total_rows,
+               uniqExact(order_id) AS unique_orders,
+               count() - uniqExact(order_id) AS duplicate_rows,
+               sum(revenue) AS total_rev_with_dupes,
+               (SELECT sum(rev) FROM (
+                 SELECT order_id, any(revenue) AS rev
+                 FROM ecommerce_events
+                 WHERE site_id = #{site_p} AND order_id LIKE 'ch_%'
+                 GROUP BY order_id
+               )) AS total_rev_deduped
+             FROM ecommerce_events
+             WHERE site_id = #{site_p} AND order_id LIKE 'ch_%'
+             """) do
+          {:ok, [row | _]} -> row
+          {:error, e} -> %{"error" => inspect(e)}
+        end
+
+      # March specifically
+      march =
+        case Spectabas.ClickHouse.query("""
+             SELECT
+               count() AS total_rows,
+               uniqExact(order_id) AS unique_orders,
+               sum(revenue) AS total_rev_with_dupes,
+               (SELECT sum(rev) FROM (
+                 SELECT order_id, any(revenue) AS rev
+                 FROM ecommerce_events
+                 WHERE site_id = #{site_p}
+                   AND order_id LIKE 'ch_%'
+                   AND toStartOfMonth(timestamp) = '2026-03-01'
+                 GROUP BY order_id
+               )) AS total_rev_deduped
+             FROM ecommerce_events
+             WHERE site_id = #{site_p}
+               AND order_id LIKE 'ch_%'
+               AND toStartOfMonth(timestamp) = '2026-03-01'
+             """) do
+          {:ok, [row | _]} -> row
+          {:error, e} -> %{"error" => inspect(e)}
+        end
+
+      json(conn, %{
+        duplicate_samples: dupes,
+        overall_impact: dupe_impact,
+        march: march
+      })
+    end
+  end
+
+  def ecom_diag(conn, %{"token" => token, "site_id" => site_id, "action" => "fix_dupes"}) do
+    unless valid_token?(token) do
+      conn |> put_status(403) |> json(%{error: "forbidden"})
+    else
+      site_p = Spectabas.ClickHouse.param(site_id)
+
+      # ClickHouse dedup: use OPTIMIZE with DEDUPLICATE BY
+      # This removes exact duplicate rows
+      result =
+        Spectabas.ClickHouse.execute_admin(
+          "OPTIMIZE TABLE ecommerce_events FINAL DEDUPLICATE BY site_id, order_id"
+        )
+
+      json(conn, %{
+        action: "fix_dupes",
+        optimize_result: inspect(result),
+        message: "OPTIMIZE DEDUPLICATE submitted. Check check_dupes again in a minute."
+      })
+    end
+  end
+
   def ecom_diag(conn, _params) do
     conn |> put_status(403) |> json(%{error: "forbidden"})
   end
