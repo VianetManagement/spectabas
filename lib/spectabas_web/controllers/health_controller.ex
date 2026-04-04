@@ -860,9 +860,21 @@ defmodule SpectabasWeb.HealthController do
   end
 
   defp ecom_diag_sync(conn, %{"token" => _token, "site_id" => site_id} = params) do
-    days = String.to_integer(params["days"] || "1")
     bg = params["bg"] == "1"
     site = Spectabas.Sites.get_site!(site_id)
+    today = Date.utc_today()
+
+    # Support &start=2024-01-01 for explicit start date, or &days=N
+    {start_date, days} =
+      case params["start"] do
+        nil ->
+          d = String.to_integer(params["days"] || "1")
+          {Date.add(today, -d), d}
+
+        start_str ->
+          sd = Date.from_iso8601!(start_str)
+          {sd, Date.diff(today, sd)}
+      end
 
     integration =
       Spectabas.AdIntegrations.list_for_site(site.id)
@@ -901,13 +913,12 @@ defmodule SpectabasWeb.HealthController do
         end
       end
     else
-      today = Date.utc_today()
-
       if bg do
         # Background mode — start from oldest date, work forward
         Task.start(fn ->
           require Logger
-          start_date = Date.add(today, -days)
+
+          Logger.info("[StripSync:backfill] Starting from #{start_date}, #{days} days")
 
           Enum.each(0..days, fn offset ->
             date = Date.add(start_date, offset)
@@ -928,15 +939,16 @@ defmodule SpectabasWeb.HealthController do
 
         json(conn, %{
           status: "started_in_background",
+          start_date: Date.to_iso8601(start_date),
           days: days + 1,
           message:
-            "Sync running in background. Already-imported days are skipped. Check logs for progress."
+            "Sync running from #{start_date} forward. Already-imported days (pi_*) are skipped. Check logs for progress."
         })
       else
         # Foreground mode — wait for results (may timeout for large ranges)
         results =
           Enum.map(0..days, fn offset ->
-            date = Date.add(today, -offset)
+            date = Date.add(start_date, offset)
 
             sync_result =
               Spectabas.AdIntegrations.Platforms.StripePlatform.sync_charges(

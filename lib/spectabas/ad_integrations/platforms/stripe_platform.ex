@@ -127,8 +127,10 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
   defp do_sync_charges(site, integration, date) do
     # Fast skip: if we already have pi_* data for this day, skip the Stripe API call entirely
     if day_already_synced?(site.id, date) do
+      Logger.debug("[StripSync] Fast-skip #{date} — already has pi_* data")
       :ok
     else
+      Logger.info("[StripSync] Fetching #{date} from Stripe API")
       do_fetch_and_insert(site, integration, date)
     end
   end
