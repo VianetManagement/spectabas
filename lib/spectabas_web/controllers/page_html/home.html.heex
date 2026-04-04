@@ -1,108 +1,270 @@
 <div class="bg-white">
   <!-- Hero Section -->
-  <div class="relative isolate px-6 pt-14 lg:px-8">
+  <div class="relative isolate overflow-hidden">
+    <!-- Animated gradient background -->
+    <div class="absolute inset-0 -z-10 bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+    </div>
     <div
       class="absolute inset-x-0 -top-40 -z-10 transform-gpu overflow-hidden blur-3xl sm:-top-80"
       aria-hidden="true"
     >
-      <div class="relative left-[calc(50%-11rem)] aspect-[1155/678] w-[36.125rem] -translate-x-1/2 rotate-[30deg] bg-gradient-to-tr from-indigo-200 to-indigo-400 opacity-30 sm:left-[calc(50%-30rem)] sm:w-[72.1875rem]">
+      <div class="relative left-[calc(50%-11rem)] aspect-[1155/678] w-[36.125rem] -translate-x-1/2 rotate-[30deg] bg-gradient-to-tr from-indigo-300 to-purple-400 opacity-20 sm:left-[calc(50%-30rem)] sm:w-[72.1875rem]">
+      </div>
+    </div>
+    <div
+      class="absolute inset-x-0 bottom-0 -z-10 transform-gpu overflow-hidden blur-3xl"
+      aria-hidden="true"
+    >
+      <div class="relative left-[calc(50%+11rem)] aspect-[1155/678] w-[36.125rem] -translate-x-1/2 rotate-[-30deg] bg-gradient-to-bl from-purple-300 to-indigo-400 opacity-15 sm:left-[calc(50%+15rem)] sm:w-[72.1875rem]">
       </div>
     </div>
 
-    <div class="mx-auto max-w-2xl py-32 sm:py-48 lg:py-56">
-      <div class="text-center">
-        <h1 class="text-4xl font-bold tracking-tight text-gray-900 sm:text-6xl">
-          The ultimate analytics platform in the universe
-        </h1>
-        <p class="mt-6 text-lg leading-8 text-gray-600">
-          Privacy-first web analytics with revenue tracking, Stripe integration, MRR monitoring,
-          search keyword insights, and 36+ dashboard pages. GDPR-compliant, lightweight, and powerful.
-        </p>
-        <p class="mt-4 text-sm text-gray-400 italic">
-          From Latin <span class="font-medium">spectābas</span> — "you were observing"
-        </p>
-        <div class="mt-10 flex items-center justify-center gap-x-6">
-          <a
-            href={~p"/users/log-in"}
-            class="rounded-md bg-indigo-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-          >
-            Sign in to dashboard
-          </a>
-          <a href={~p"/users/log-in"} class="text-sm font-semibold leading-6 text-gray-900">
-            Get started <span aria-hidden="true">&rarr;</span>
-          </a>
+    <div class="mx-auto max-w-3xl px-6 py-32 sm:py-48 lg:py-56 text-center">
+      <!-- Badge -->
+      <div class="mb-8 inline-flex items-center gap-2 rounded-full bg-indigo-50 px-4 py-1.5 text-sm font-medium text-indigo-700 ring-1 ring-inset ring-indigo-200">
+        <span class="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+        Now with Stripe, Braintree, and Search Console integrations
+      </div>
+
+      <h1 class="text-5xl font-extrabold tracking-tight text-gray-900 sm:text-7xl bg-clip-text">
+        The ultimate analytics platform in the universe
+      </h1>
+      <p class="mt-8 text-xl leading-8 text-gray-600 max-w-2xl mx-auto">
+        Harness the power of next-generation observability infrastructure to unlock transformative
+        insights across every touchpoint of your digital ecosystem.
+      </p>
+      <p class="mt-4 text-sm text-gray-400 italic">
+        From Latin <span class="font-medium">spectābas</span> — "you were observing"
+      </p>
+      <div class="mt-10 flex items-center justify-center gap-x-6">
+        <a
+          href={~p"/users/log-in"}
+          class="rounded-xl bg-indigo-600 px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-indigo-600/30 hover:bg-indigo-500 hover:shadow-indigo-500/40 transition-all duration-200"
+        >
+          Start your journey
+        </a>
+        <a
+          href={~p"/users/log-in"}
+          class="text-sm font-semibold leading-6 text-gray-900 hover:text-indigo-600 transition-colors"
+        >
+          Explore the platform <span aria-hidden="true">&rarr;</span>
+        </a>
+      </div>
+    </div>
+  </div>
+  
+<!-- Stats bar -->
+  <div class="bg-indigo-600">
+    <div class="mx-auto max-w-7xl px-6 py-10 lg:px-8">
+      <div class="grid grid-cols-2 gap-8 lg:grid-cols-4 text-center">
+        <div>
+          <div class="text-3xl font-extrabold text-white">38+</div>
+          <div class="mt-1 text-sm text-indigo-200">Dashboard Pages</div>
+        </div>
+        <div>
+          <div class="text-3xl font-extrabold text-white">7</div>
+          <div class="mt-1 text-sm text-indigo-200">Integration Partners</div>
+        </div>
+        <div>
+          <div class="text-3xl font-extrabold text-white">100%</div>
+          <div class="mt-1 text-sm text-indigo-200">Privacy Compliant</div>
+        </div>
+        <div>
+          <div class="text-3xl font-extrabold text-white">&lt;8KB</div>
+          <div class="mt-1 text-sm text-indigo-200">Tracker Script</div>
         </div>
       </div>
     </div>
   </div>
   
-<!-- Features Section -->
-  <div class="mx-auto max-w-7xl px-6 lg:px-8 pb-24">
-    <div class="mx-auto max-w-2xl lg:text-center">
-      <h2 class="text-base font-semibold leading-7 text-indigo-600">Analytics done right</h2>
+<!-- Feature cards -->
+  <div class="mx-auto max-w-7xl px-6 py-24 lg:px-8">
+    <div class="mx-auto max-w-2xl text-center mb-16">
+      <h2 class="text-base font-semibold text-indigo-600 uppercase tracking-wider">
+        Reimagine your data
+      </h2>
       <p class="mt-2 text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
-        Everything you need to understand your audience
+        Synergistic intelligence at every layer
+      </p>
+      <p class="mt-4 text-lg text-gray-600">
+        Our vertically integrated analytics stack delivers end-to-end visibility with zero-friction
+        deployment and enterprise-grade scalability.
       </p>
     </div>
 
-    <div class="mx-auto mt-16 max-w-2xl sm:mt-20 lg:mt-24 lg:max-w-none">
-      <div class="grid max-w-xl grid-cols-1 gap-x-8 gap-y-16 lg:max-w-none lg:grid-cols-3">
-        <!-- Feature 1 -->
-        <div class="flex flex-col">
-          <div class="flex items-center gap-x-3 text-base font-semibold leading-7 text-gray-900">
-            <svg class="h-5 w-5 flex-none text-indigo-600" viewBox="0 0 20 20" fill="currentColor">
-              <path
-                fill-rule="evenodd"
-                d="M16.403 12.652a3 3 0 000-5.304 3 3 0 00-3.75-3.751 3 3 0 00-5.305 0 3 3 0 00-3.751 3.75 3 3 0 000 5.305 3 3 0 003.75 3.751 3 3 0 005.305 0 3 3 0 003.751-3.75zm-2.546-4.46a.75.75 0 00-1.214-.883l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z"
-                clip-rule="evenodd"
-              />
-            </svg>
-            GDPR-Compliant Tracking
-          </div>
-          <div class="mt-4 flex flex-auto flex-col text-base leading-7 text-gray-600">
-            <p class="flex-auto">
-              Privacy-first by design. Cookie-free fingerprinting mode, automatic IP anonymization,
-              and full GDPR compliance without annoying consent banners.
-            </p>
-          </div>
+    <div class="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
+      <!-- Card 1 -->
+      <div class="group relative rounded-2xl bg-white p-8 shadow-sm ring-1 ring-gray-200 hover:shadow-lg hover:ring-indigo-200 transition-all duration-300">
+        <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors duration-300">
+          <svg
+            class="h-6 w-6"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke-width="2"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5m.75-9l3-1.5 3 1.5M12 12.75V16.5"
+            />
+          </svg>
         </div>
-        
-<!-- Feature 2 -->
-        <div class="flex flex-col">
-          <div class="flex items-center gap-x-3 text-base font-semibold leading-7 text-gray-900">
-            <svg class="h-5 w-5 flex-none text-indigo-600" viewBox="0 0 20 20" fill="currentColor">
-              <path d="M15.5 2A1.5 1.5 0 0014 3.5v13a1.5 1.5 0 001.5 1.5h1a1.5 1.5 0 001.5-1.5v-13A1.5 1.5 0 0016.5 2h-1zM9.5 6A1.5 1.5 0 008 7.5v9A1.5 1.5 0 009.5 18h1a1.5 1.5 0 001.5-1.5v-9A1.5 1.5 0 0010.5 6h-1zM3.5 10A1.5 1.5 0 002 11.5v5A1.5 1.5 0 003.5 18h1A1.5 1.5 0 006 16.5v-5A1.5 1.5 0 004.5 10h-1z" />
-            </svg>
-            Multi-Site Dashboard
-          </div>
-          <div class="mt-4 flex flex-auto flex-col text-base leading-7 text-gray-600">
-            <p class="flex-auto">
-              Manage all your websites from a single dashboard. Real-time visitor counts,
-              traffic sources, geographic data, and device breakdowns at a glance.
-            </p>
-          </div>
-        </div>
-        
-<!-- Feature 3 -->
-        <div class="flex flex-col">
-          <div class="flex items-center gap-x-3 text-base font-semibold leading-7 text-gray-900">
-            <svg class="h-5 w-5 flex-none text-indigo-600" viewBox="0 0 20 20" fill="currentColor">
-              <path
-                fill-rule="evenodd"
-                d="M12.577 4.878a.75.75 0 01.919-.53l4.78 1.281a.75.75 0 01.531.919l-1.281 4.78a.75.75 0 01-1.449-.387l.81-3.022a19.407 19.407 0 00-5.594 5.203.75.75 0 01-1.139.093L7.55 10.51l-4.72 4.72a.75.75 0 01-1.06-1.06l5.25-5.25a.75.75 0 011.06 0l2.346 2.346a20.893 20.893 0 015.264-4.974l-2.523.674a.75.75 0 01-.53-.919z"
-                clip-rule="evenodd"
-              />
-            </svg>
-            Real-Time Insights
-          </div>
-          <div class="mt-4 flex flex-auto flex-col text-base leading-7 text-gray-600">
-            <p class="flex-auto">
-              See visitors on your site right now. Track goals, funnels, and e-commerce conversions
-              with a lightweight script that won't slow down your pages.
-            </p>
-          </div>
-        </div>
+        <h3 class="mt-6 text-lg font-semibold text-gray-900">Holistic Behavioral Intelligence</h3>
+        <p class="mt-2 text-sm text-gray-600">
+          Our proprietary visitor intent engine leverages multi-dimensional signal processing to
+          automatically classify engagement patterns across your entire digital surface area.
+        </p>
       </div>
+      
+<!-- Card 2 -->
+      <div class="group relative rounded-2xl bg-white p-8 shadow-sm ring-1 ring-gray-200 hover:shadow-lg hover:ring-indigo-200 transition-all duration-300">
+        <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-green-100 text-green-600 group-hover:bg-green-600 group-hover:text-white transition-colors duration-300">
+          <svg
+            class="h-6 w-6"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke-width="2"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z"
+            />
+          </svg>
+        </div>
+        <h3 class="mt-6 text-lg font-semibold text-gray-900">Revenue Lifecycle Orchestration</h3>
+        <p class="mt-2 text-sm text-gray-600">
+          Seamlessly ingest transaction data from Stripe and Braintree to build a unified
+          revenue attribution graph. From first touch to lifetime value, every dollar finds its origin.
+        </p>
+      </div>
+      
+<!-- Card 3 -->
+      <div class="group relative rounded-2xl bg-white p-8 shadow-sm ring-1 ring-gray-200 hover:shadow-lg hover:ring-indigo-200 transition-all duration-300">
+        <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-purple-100 text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition-colors duration-300">
+          <svg
+            class="h-6 w-6"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke-width="2"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z"
+            />
+          </svg>
+        </div>
+        <h3 class="mt-6 text-lg font-semibold text-gray-900">Omnichannel Acquisition Mapping</h3>
+        <p class="mt-2 text-sm text-gray-600">
+          Unify Google Ads, Meta, Microsoft, and organic search into a single pane of glass.
+          Our cross-platform ROAS engine delivers unprecedented clarity on ad spend efficiency.
+        </p>
+      </div>
+      
+<!-- Card 4 -->
+      <div class="group relative rounded-2xl bg-white p-8 shadow-sm ring-1 ring-gray-200 hover:shadow-lg hover:ring-indigo-200 transition-all duration-300">
+        <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-100 text-amber-600 group-hover:bg-amber-600 group-hover:text-white transition-colors duration-300">
+          <svg
+            class="h-6 w-6"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke-width="2"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"
+            />
+          </svg>
+        </div>
+        <h3 class="mt-6 text-lg font-semibold text-gray-900">Zero-Trust Privacy Architecture</h3>
+        <p class="mt-2 text-sm text-gray-600">
+          Built from the ground up with a privacy-by-design paradigm. AES-256-GCM credential
+          encryption, cookieless tracking modes, and GDPR compliance baked into every data flow.
+        </p>
+      </div>
+      
+<!-- Card 5 -->
+      <div class="group relative rounded-2xl bg-white p-8 shadow-sm ring-1 ring-gray-200 hover:shadow-lg hover:ring-indigo-200 transition-all duration-300">
+        <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-rose-100 text-rose-600 group-hover:bg-rose-600 group-hover:text-white transition-colors duration-300">
+          <svg
+            class="h-6 w-6"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke-width="2"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"
+            />
+          </svg>
+        </div>
+        <h3 class="mt-6 text-lg font-semibold text-gray-900">Real-Time Streaming Telemetry</h3>
+        <p class="mt-2 text-sm text-gray-600">
+          Sub-second event propagation through our high-throughput ingestion pipeline.
+          Core Web Vitals, custom events, and ecommerce signals — all in real time.
+        </p>
+      </div>
+      
+<!-- Card 6 -->
+      <div class="group relative rounded-2xl bg-white p-8 shadow-sm ring-1 ring-gray-200 hover:shadow-lg hover:ring-indigo-200 transition-all duration-300">
+        <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-100 text-cyan-600 group-hover:bg-cyan-600 group-hover:text-white transition-colors duration-300">
+          <svg
+            class="h-6 w-6"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke-width="2"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
+            />
+          </svg>
+        </div>
+        <h3 class="mt-6 text-lg font-semibold text-gray-900">Predictive Search Intelligence</h3>
+        <p class="mt-2 text-sm text-gray-600">
+          Ingest Google Search Console and Bing Webmaster data to correlate organic keyword
+          performance with conversion outcomes. See which searches drive revenue.
+        </p>
+      </div>
+    </div>
+  </div>
+  
+<!-- Gradient CTA -->
+  <div class="relative isolate overflow-hidden bg-gradient-to-r from-indigo-600 to-purple-600">
+    <div class="absolute inset-0 -z-10 opacity-20">
+      <svg class="h-full w-full" viewBox="0 0 800 400" preserveAspectRatio="none">
+        <defs>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" stroke-width="0.5" />
+          </pattern>
+        </defs>
+        <rect width="800" height="400" fill="url(#grid)" />
+      </svg>
+    </div>
+    <div class="mx-auto max-w-4xl px-6 py-20 text-center">
+      <h2 class="text-3xl font-bold text-white sm:text-4xl">
+        Ready to transcend your analytics paradigm?
+      </h2>
+      <p class="mt-4 text-lg text-indigo-100">
+        Join the vanguard of data-driven organizations leveraging Spectabas to
+        operationalize insights at the speed of business.
+      </p>
+      <a
+        href={~p"/users/log-in"}
+        class="mt-8 inline-block rounded-xl bg-white px-8 py-3.5 text-sm font-semibold text-indigo-600 shadow-lg hover:bg-indigo-50 transition-all duration-200"
+      >
+        Activate your platform
+      </a>
     </div>
   </div>
   
