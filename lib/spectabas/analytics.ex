@@ -3572,10 +3572,13 @@ defmodule Spectabas.Analytics do
   Otherwise, show all data (API + JS tracker).
   """
   def ecommerce_source_filter(%Site{id: site_id}) do
+    # If the site has ANY Stripe integration record (active or revoked), filter to pi_* only.
+    # This is more resilient than checking only "active" — integration records can temporarily
+    # disappear during reconnection but the pi_* data is still there.
     has_stripe =
       Spectabas.Repo.exists?(
         from(a in Spectabas.AdIntegrations.AdIntegration,
-          where: a.site_id == ^site_id and a.platform == "stripe" and a.status == "active"
+          where: a.site_id == ^site_id and a.platform == "stripe"
         )
       )
 
