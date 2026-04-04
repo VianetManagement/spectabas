@@ -78,28 +78,32 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
       true ->
         encoded = URI.encode(site_url, &URI.char_unreserved?/1)
 
-        case Req.get(
+        body =
+          Jason.encode!(%{
+            startDate: Date.to_iso8601(Date.add(Date.utc_today(), -5)),
+            endDate: Date.to_iso8601(Date.add(Date.utc_today(), -3)),
+            dimensions: ["query"],
+            rowLimit: 1
+          })
+
+        case Req.post(
                "https://www.googleapis.com/webmasters/v3/sites/#{encoded}/searchAnalytics/query",
-               body:
-                 Jason.encode!(%{
-                   startDate: Date.to_iso8601(Date.add(Date.utc_today(), -5)),
-                   endDate: Date.to_iso8601(Date.add(Date.utc_today(), -3)),
-                   dimensions: ["query"],
-                   rowLimit: 1
-                 }),
+               body: body,
                headers: [
                  {"authorization", "Bearer #{access_token}"},
                  {"content-type", "application/json"}
-               ],
-               method: :post
+               ]
              ) do
           {:ok, %{status: 200, body: %{"rows" => rows}}} ->
-            %{status: :ok, message: "Connected, #{length(rows)} row(s) returned for test query"}
+            %{
+              status: :ok,
+              message: "Connected, #{length(rows)} row(s) for test query. site_url=#{site_url}"
+            }
 
           {:ok, %{status: 200}} ->
             %{
               status: :ok,
-              message: "Connected, no data for test date range (normal if site is new)"
+              message: "Connected, no data for test dates (normal if new). site_url=#{site_url}"
             }
 
           {:ok, %{status: 401}} ->
@@ -109,13 +113,23 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
             msg =
               if is_map(b), do: get_in(b, ["error", "message"]) || "Forbidden", else: "Forbidden"
 
-            %{status: :error, message: "Access denied: #{msg}"}
+            %{status: :error, message: "Access denied: #{msg}. site_url=#{site_url}"}
 
           {:ok, %{status: s, body: b}} ->
-            msg =
-              if is_map(b), do: get_in(b, ["error", "message"]) || "HTTP #{s}", else: "HTTP #{s}"
+            detail =
+              cond do
+                is_map(b) ->
+                  get_in(b, ["error", "message"]) ||
+                    get_in(b, ["error", "errors", Access.at(0), "message"]) || inspect(b)
 
-            %{status: :error, message: msg}
+                is_binary(b) ->
+                  String.slice(b, 0, 200)
+
+                true ->
+                  "HTTP #{s}"
+              end
+
+            %{status: :error, message: "HTTP #{s}: #{detail}. site_url=#{site_url}"}
 
           {:error, reason} ->
             %{status: :error, message: "Connection failed: #{inspect(reason)}"}
