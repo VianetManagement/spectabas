@@ -40,6 +40,56 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
     {:noreply, assign(socket, :test_results, test_results)}
   end
 
+  def handle_event("fix_gsc_url", %{"id" => id}, socket) do
+    integration = AdIntegrations.get!(id)
+    site_url = (integration.extra || %{})["site_url"] || ""
+
+    # Add sc-domain: prefix if missing for domain properties
+    fixed_url =
+      cond do
+        String.starts_with?(site_url, "sc-domain:") -> site_url
+        String.starts_with?(site_url, "http") -> site_url
+        site_url != "" -> "sc-domain:#{site_url}"
+        true -> site_url
+      end
+
+    if fixed_url != site_url do
+      extra = Map.put(integration.extra || %{}, "site_url", fixed_url)
+
+      integration
+      |> Spectabas.AdIntegrations.AdIntegration.changeset(%{
+        extra: extra,
+        account_id: fixed_url,
+        account_name: fixed_url
+      })
+      |> Repo.update()
+
+      {:noreply,
+       socket
+       |> put_flash(:info, "Fixed GSC site_url: #{site_url} → #{fixed_url}")
+       |> assign(:integrations, reload_integrations(socket))}
+    else
+      {:noreply, put_flash(socket, :info, "site_url already correct: #{site_url}")}
+    end
+  end
+
+  defp reload_integrations(socket) do
+    user = socket.assigns.current_scope.user
+
+    sites =
+      if user.role == :platform_admin do
+        Spectabas.Sites.list_sites()
+      else
+        Spectabas.Accounts.accessible_sites(user)
+      end
+
+    Enum.flat_map(sites, fn site ->
+      AdIntegrations.list_for_site(site.id)
+      |> Repo.preload(:site)
+    end)
+    |> Enum.sort_by(& &1.updated_at, {:desc, DateTime})
+  end
+
   defp test_integration(%{platform: "stripe"} = integration) do
     api_key = AdIntegrations.decrypt_access_token(integration)
 
@@ -228,6 +278,15 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
                     >
                       Test
                     </button>
+                    <%= if integration.platform == "google_search_console" do %>
+                      <button
+                        phx-click="fix_gsc_url"
+                        phx-value-id={integration.id}
+                        class="inline-flex items-center px-2 py-1 text-xs font-medium rounded text-green-700 bg-green-50 hover:bg-green-100 border border-green-200"
+                      >
+                        Fix URL
+                      </button>
+                    <% end %>
                   </td>
                 </tr>
                 <%= if test_result = @test_results[integration.id] do %>
