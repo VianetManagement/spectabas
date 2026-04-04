@@ -138,8 +138,8 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleSearchConsole do
               device: Enum.at(keys, 3, ""),
               clicks: row["clicks"] || 0,
               impressions: row["impressions"] || 0,
-              ctr: Float.round((row["ctr"] || 0) * 100, 2),
-              position: Float.round(row["position"] || 0, 1)
+              ctr: safe_round((row["ctr"] || 0) * 100, 2),
+              position: safe_round(row["position"] || 0, 1)
             }
           end)
 
@@ -248,4 +248,8 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleSearchConsole do
         {:error, inspect(reason)}
     end
   end
+
+  defp safe_round(n, decimals) when is_float(n), do: Float.round(n, decimals)
+  defp safe_round(n, _decimals) when is_integer(n), do: n / 1.0
+  defp safe_round(_, _), do: 0.0
 end
