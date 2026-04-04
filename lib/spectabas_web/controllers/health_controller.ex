@@ -1011,19 +1011,48 @@ defmodule SpectabasWeb.HealthController do
   defp ecom_diag_fix_dupes(conn, site_id) do
     site_p = Spectabas.ClickHouse.param(site_id)
 
-    db = Application.get_env(:spectabas, Spectabas.ClickHouse)[:database] || "spectabas"
+    # Find duplicate order_ids and delete all but the earliest row for each
+    dupes_sql = """
+    SELECT order_id
+    FROM ecommerce_events
+    WHERE site_id = #{site_p}
+    GROUP BY order_id
+    HAVING count() > 1
+    """
 
-    # DEDUPLICATE BY must include all ORDER BY columns (site_id, timestamp, order_id)
-    result =
-      Spectabas.ClickHouse.execute_admin(
-        "OPTIMIZE TABLE #{db}.ecommerce_events FINAL DEDUPLICATE BY site_id, timestamp, order_id"
-      )
+    case Spectabas.ClickHouse.query(dupes_sql) do
+      {:ok, rows} when rows != [] ->
+        dupe_ids = Enum.map(rows, & &1["order_id"])
 
-    json(conn, %{
-      action: "fix_dupes",
-      optimize_result: inspect(result),
-      message: "OPTIMIZE DEDUPLICATE submitted. Check check_dupes again in a minute."
-    })
+        # For each duplicate, keep the row with the earliest timestamp, delete the rest
+        results =
+          Enum.map(dupe_ids, fn oid ->
+            oid_p = Spectabas.ClickHouse.param(oid)
+
+            del_sql = """
+            ALTER TABLE ecommerce_events DELETE
+            WHERE site_id = #{site_p}
+              AND order_id = #{oid_p}
+              AND timestamp > (
+                SELECT min(timestamp) FROM ecommerce_events
+                WHERE site_id = #{site_p} AND order_id = #{oid_p}
+              )
+            """
+
+            {oid, inspect(Spectabas.ClickHouse.execute(del_sql))}
+          end)
+
+        json(conn, %{
+          action: "fix_dupes",
+          duplicates_found: length(dupe_ids),
+          results: Map.new(results),
+          message:
+            "Deleted extra rows for #{length(dupe_ids)} duplicate orders. Check again in a minute."
+        })
+
+      _ ->
+        json(conn, %{action: "fix_dupes", duplicates_found: 0, message: "No duplicates found."})
+    end
   end
 
   defp test_sites do
