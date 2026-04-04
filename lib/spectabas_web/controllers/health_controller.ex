@@ -861,6 +861,7 @@ defmodule SpectabasWeb.HealthController do
 
   defp ecom_diag_sync(conn, %{"token" => _token, "site_id" => site_id} = params) do
     days = String.to_integer(params["days"] || "1")
+    bg = params["bg"] == "1"
     site = Spectabas.Sites.get_site!(site_id)
 
     integration =
@@ -902,39 +903,68 @@ defmodule SpectabasWeb.HealthController do
     else
       today = Date.utc_today()
 
-      # Sync each day and collect results
-      results =
-        Enum.map(0..days, fn offset ->
-          date = Date.add(today, -offset)
+      if bg do
+        # Background mode — return immediately, sync in a Task
+        Task.start(fn ->
+          require Logger
 
-          sync_result =
+          Enum.each(0..days, fn offset ->
+            date = Date.add(today, -offset)
+
             Spectabas.AdIntegrations.Platforms.StripePlatform.sync_charges(
               site,
               integration,
               date
             )
 
-          {Date.to_iso8601(date), inspect(sync_result)}
+            if rem(offset, 30) == 0 do
+              Logger.info("[StripSync:backfill] Progress: day #{offset}/#{days} (#{date})")
+            end
+          end)
+
+          Logger.info("[StripSync:backfill] Complete — #{days + 1} days processed")
         end)
 
-      # Check what's in CH now
-      total =
-        case Spectabas.ClickHouse.query("""
-             SELECT count() AS cnt, sum(revenue) AS rev
-             FROM ecommerce_events
-             WHERE site_id = #{Spectabas.ClickHouse.param(site.id)}
-               AND (order_id LIKE 'ch_%' OR order_id LIKE 'pi_%')
-             """) do
-          {:ok, [row | _]} -> row
-          _ -> %{}
-        end
+        json(conn, %{
+          status: "started_in_background",
+          days: days + 1,
+          message:
+            "Sync running in background. Already-imported days are skipped. Check logs for progress."
+        })
+      else
+        # Foreground mode — wait for results (may timeout for large ranges)
+        results =
+          Enum.map(0..days, fn offset ->
+            date = Date.add(today, -offset)
 
-      json(conn, %{
-        integration_id: integration.id,
-        days_synced: days + 1,
-        sync_results: Map.new(results),
-        stripe_total_in_ch: total
-      })
+            sync_result =
+              Spectabas.AdIntegrations.Platforms.StripePlatform.sync_charges(
+                site,
+                integration,
+                date
+              )
+
+            {Date.to_iso8601(date), inspect(sync_result)}
+          end)
+
+        total =
+          case Spectabas.ClickHouse.query("""
+               SELECT count() AS cnt, sum(revenue) AS rev
+               FROM ecommerce_events
+               WHERE site_id = #{Spectabas.ClickHouse.param(site.id)}
+                 AND (order_id LIKE 'ch_%' OR order_id LIKE 'pi_%')
+               """) do
+            {:ok, [row | _]} -> row
+            _ -> %{}
+          end
+
+        json(conn, %{
+          integration_id: integration.id,
+          days_synced: days + 1,
+          sync_results: Map.new(results),
+          stripe_total_in_ch: total
+        })
+      end
     end
   end
 
