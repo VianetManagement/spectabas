@@ -330,6 +330,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
               label="Settings"
               active={@active == "settings"}
             />
+            <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/integration-log"}
+              label="Integration Log"
+              active={@active == "integration-log"}
+            />
           </.nav_section>
         </nav>
       </aside>
@@ -501,7 +506,8 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
       {~p"/dashboard/sites/#{site_id}/buyer-patterns", "Buyer Patterns"},
       {~p"/dashboard/sites/#{site_id}/churn-risk", "Churn Risk"},
       {~p"/dashboard/sites/#{site_id}/email-reports", "Email Reports"},
-      {~p"/dashboard/sites/#{site_id}/settings", "Settings"}
+      {~p"/dashboard/sites/#{site_id}/settings", "Settings"},
+      {~p"/dashboard/sites/#{site_id}/integration-log", "Integration Log"}
     ]
   end
 
@@ -578,6 +584,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
     "email-reports" => "Tools",
     "exports" => "Tools",
     "settings" => "Tools",
+    "integration-log" => "Tools",
     # Category landing pages
     "overview-landing" => nil,
     "behavior-landing" => "Behavior",
