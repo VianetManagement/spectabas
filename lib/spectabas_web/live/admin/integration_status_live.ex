@@ -50,13 +50,37 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
           "google_search_console" ->
             date = Date.add(Date.utc_today(), -3)
             site_url = (integration.extra || %{})["site_url"] || ""
-            access_token = AdIntegrations.decrypt_access_token(integration)
 
-            # Check token
-            token_status =
-              if AdIntegrations.token_expired?(integration),
-                do: "EXPIRED (expires_at: #{integration.token_expires_at})",
-                else: "valid"
+            # Refresh token if expired
+            {integration, token_status} =
+              if AdIntegrations.token_expired?(integration) do
+                rt = AdIntegrations.decrypt_refresh_token(integration)
+
+                creds =
+                  Spectabas.AdIntegrations.Credentials.get_for_platform(
+                    integration.site,
+                    "google_search_console"
+                  )
+
+                case Spectabas.AdIntegrations.Platforms.GoogleSearchConsole.refresh_token(
+                       integration.site,
+                       rt
+                     ) do
+                  {:ok, %{access_token: at, expires_in: ei}} ->
+                    expires_at =
+                      DateTime.utc_now()
+                      |> DateTime.add(ei || 3600, :second)
+                      |> DateTime.truncate(:second)
+
+                    {:ok, updated} = AdIntegrations.update_tokens(integration, at, rt, expires_at)
+                    {updated, "refreshed (was expired)"}
+
+                  {:error, reason} ->
+                    {integration, "REFRESH FAILED: #{inspect(reason)}"}
+                end
+              else
+                {integration, "valid"}
+              end
 
             # Try fetch
             fetch_result =
