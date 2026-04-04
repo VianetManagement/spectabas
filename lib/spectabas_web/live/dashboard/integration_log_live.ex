@@ -14,7 +14,8 @@ defmodule SpectabasWeb.Dashboard.IntegrationLogLive do
     unless Accounts.can_access_site?(user, site) do
       {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
     else
-      integrations = AdIntegrations.list_for_site(site.id)
+      all_integrations = AdIntegrations.list_for_site(site.id)
+      integrations = Enum.filter(all_integrations, &(&1.status != "revoked"))
 
       # Get audit log entries for this site's integrations
       integration_ids = Enum.map(integrations, & &1.id)
