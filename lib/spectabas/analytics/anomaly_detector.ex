@@ -508,6 +508,7 @@ defmodule Spectabas.Analytics.AnomalyDetector do
         AND visitor_id IN (
           SELECT DISTINCT visitor_id FROM ecommerce_events
           WHERE site_id = #{ClickHouse.param(site.id)}
+            #{Spectabas.Analytics.ecommerce_source_filter(site)}
         )
       GROUP BY visitor_id
       HAVING prior >= 3 AND recent <= prior / 2
@@ -623,6 +624,7 @@ defmodule Spectabas.Analytics.AnomalyDetector do
     SELECT sum(revenue) AS r
     FROM ecommerce_events
     WHERE site_id = #{ClickHouse.param(site.id)}
+      #{Spectabas.Analytics.ecommerce_source_filter(site)}
       AND timestamp >= #{ClickHouse.param(fmt(from))}
       AND timestamp <= #{ClickHouse.param(fmt(to))}
     """

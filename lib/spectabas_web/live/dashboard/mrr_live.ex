@@ -36,6 +36,7 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
       round(avg(revenue), 2) AS avg_order
     FROM ecommerce_events
     WHERE site_id = #{site_p}
+      #{Spectabas.Analytics.ecommerce_source_filter(site)}
     """
 
     revenue_stats =
@@ -54,6 +55,7 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
       countDistinct(order_id) AS orders
     FROM ecommerce_events
     WHERE site_id = #{site_p}
+      #{Spectabas.Analytics.ecommerce_source_filter(site)}
       AND timestamp >= now() - INTERVAL 12 MONTH
     GROUP BY month
     ORDER BY month ASC
