@@ -45,7 +45,7 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
         _ -> %{}
       end
 
-    # Revenue by month (last 12 months, in site timezone)
+    # Revenue by month (all time, in site timezone)
     tz_p = ClickHouse.param(site.timezone || "UTC")
 
     monthly_sql = """
@@ -56,7 +56,6 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
     FROM ecommerce_events
     WHERE site_id = #{site_p}
       #{Spectabas.Analytics.ecommerce_source_filter(site)}
-      AND timestamp >= now() - INTERVAL 36 MONTH
     GROUP BY month
     ORDER BY month ASC
     """
