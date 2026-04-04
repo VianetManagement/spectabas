@@ -1315,6 +1315,15 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
     require Logger
     integrations = Spectabas.AdIntegrations.list_for_site(site.id)
 
+    # Fix integrations stuck in "error" status back to "active"
+    Enum.each(integrations, fn i ->
+      if i.status == "error" do
+        i
+        |> Spectabas.AdIntegrations.AdIntegration.changeset(%{status: "active"})
+        |> Spectabas.Repo.update()
+      end
+    end)
+
     Enum.each(["stripe", "braintree", "bing_webmaster"], fn platform ->
       creds = Spectabas.AdIntegrations.Credentials.get_for_platform(site, platform)
       has_active = Enum.any?(integrations, &(&1.platform == platform and &1.status == "active"))

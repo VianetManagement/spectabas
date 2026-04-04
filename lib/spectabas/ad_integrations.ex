@@ -115,9 +115,10 @@ defmodule Spectabas.AdIntegrations do
   end
 
   def mark_error(integration, error) do
+    # Keep status as "active" so the cron continues to retry.
+    # Only record the error message — don't change status.
     integration
     |> AdIntegration.changeset(%{
-      status: "error",
       last_error: String.slice(to_string(error), 0, 500)
     })
     |> Repo.update()
