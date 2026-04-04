@@ -854,10 +854,11 @@ defmodule SpectabasWeb.HealthController do
     end
   end
 
-  defp ecom_diag_sync(conn, %{"token" => token, "site_id" => site_id}) do
+  defp ecom_diag_sync(conn, %{"token" => token, "site_id" => site_id} = params) do
     unless valid_token?(token) do
       conn |> put_status(403) |> json(%{error: "forbidden"})
     else
+      days = String.to_integer(params["days"] || "1")
       site = Spectabas.Sites.get_site!(site_id)
 
       integration =
@@ -899,59 +900,38 @@ defmodule SpectabasWeb.HealthController do
       else
         today = Date.utc_today()
 
-        # Try to fetch charges directly and show what happens
-        fetch_result =
-          case Spectabas.AdIntegrations.Platforms.StripePlatform.fetch_charges(integration, today) do
-            {:ok, charges} ->
-              %{
-                count: length(charges),
-                sample:
-                  Enum.take(charges, 3)
-                  |> Enum.map(fn c ->
-                    %{
-                      id: c.charge_id,
-                      amount: c.amount,
-                      email: c.email,
-                      created: DateTime.to_iso8601(c.created_at)
-                    }
-                  end)
-              }
+        # Sync each day and collect results
+        results =
+          Enum.map(0..days, fn offset ->
+            date = Date.add(today, -offset)
 
-            {:error, reason} ->
-              %{error: inspect(reason)}
-          end
+            sync_result =
+              Spectabas.AdIntegrations.Platforms.StripePlatform.sync_charges(
+                site,
+                integration,
+                date
+              )
 
-        # Try a direct insert of one test-less charge to see if CH accepts it
-        insert_test =
-          case Spectabas.ClickHouse.insert("ecommerce_events", [
-                 %{
-                   "site_id" => site.id,
-                   "visitor_id" => "",
-                   "session_id" => "",
-                   "order_id" => "test_diag_#{System.unique_integer([:positive])}",
-                   "revenue" => 0.01,
-                   "subtotal" => 0.01,
-                   "tax" => 0,
-                   "shipping" => 0,
-                   "discount" => 0,
-                   "refund_amount" => 0,
-                   "import_source" => "diag",
-                   "currency" => "USD",
-                   "items" => "[]",
-                   "timestamp" => Calendar.strftime(DateTime.utc_now(), "%Y-%m-%d %H:%M:%S")
-                 }
-               ]) do
-            :ok -> "insert_ok"
-            {:error, reason} -> "insert_failed: #{inspect(reason) |> String.slice(0, 300)}"
+            {Date.to_iso8601(date), inspect(sync_result)}
+          end)
+
+        # Check what's in CH now
+        total =
+          case Spectabas.ClickHouse.query("""
+               SELECT count() AS cnt, sum(revenue) AS rev
+               FROM ecommerce_events
+               WHERE site_id = #{Spectabas.ClickHouse.param(site.id)}
+                 AND order_id LIKE 'ch_%'
+               """) do
+            {:ok, [row | _]} -> row
+            _ -> %{}
           end
 
         json(conn, %{
           integration_id: integration.id,
-          integration_status: integration.status,
-          last_synced: integration.last_synced_at,
-          last_error: integration.last_error,
-          stripe_fetch: fetch_result,
-          ch_insert_test: insert_test
+          days_synced: days + 1,
+          sync_results: Map.new(results),
+          stripe_total_in_ch: total
         })
       end
     end

@@ -34,7 +34,7 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
       sum(refund_amount) AS total_refunds,
       countDistinct(order_id) AS total_orders,
       round(avg(revenue), 2) AS avg_order
-    FROM #{Spectabas.Analytics.ecommerce_dedup()}
+    FROM ecommerce_events
     WHERE site_id = #{site_p}
     """
 
@@ -52,7 +52,7 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
       toStartOfMonth(toTimezone(timestamp, #{tz_p})) AS month,
       sum(revenue) - sum(refund_amount) AS net_revenue,
       countDistinct(order_id) AS orders
-    FROM #{Spectabas.Analytics.ecommerce_dedup()}
+    FROM ecommerce_events
     WHERE site_id = #{site_p}
       AND timestamp >= now() - INTERVAL 12 MONTH
     GROUP BY month
