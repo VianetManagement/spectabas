@@ -358,16 +358,19 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
   end
 
   defp fetch_subscriptions_page(api_key, starting_after, acc) do
-    params = %{
-      "status" => "all",
-      "limit" => "100",
-      "expand[]" => "data.customer"
-    }
+    # Build query string manually to support multiple expand[] params
+    base_params = [
+      {"status", "all"},
+      {"limit", "100"},
+      {"expand[]", "data.customer"},
+      {"expand[]", "data.discount.coupon"},
+      {"expand[]", "data.items.data.price"}
+    ]
 
     params =
       if starting_after,
-        do: Map.put(params, "starting_after", starting_after),
-        else: params
+        do: base_params ++ [{"starting_after", starting_after}],
+        else: base_params
 
     qs = URI.encode_query(params)
 
@@ -386,23 +389,53 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
                 _ -> ""
               end
 
-            item = get_in(sub, ["items", "data", Access.at(0)]) || %{}
-            price = item["price"] || %{}
+            # Sum all line items (subscriptions can have multiple items)
+            items = get_in(sub, ["items", "data"]) || []
+            first_item = List.first(items) || %{}
+            price = first_item["price"] || %{}
 
             plan_name = price["nickname"] || price["product"] || ""
             interval = get_in(price, ["recurring", "interval"]) || "month"
             interval_count = get_in(price, ["recurring", "interval_count"]) || 1
-            unit_amount = (price["unit_amount"] || 0) / 100.0
             currency = String.upcase(price["currency"] || "usd")
 
-            # Calculate MRR: normalize any billing interval to monthly equivalent
+            # Total amount across all items: unit_amount * quantity per item
+            total_amount =
+              Enum.reduce(items, 0.0, fn item, acc ->
+                item_price = item["price"] || %{}
+                unit = (item_price["unit_amount"] || 0) / 100.0
+                qty = item["quantity"] || 1
+                acc + unit * qty
+              end)
+
+            # Apply subscription-level discount if present
+            discount_pct =
+              case get_in(sub, ["discount", "coupon", "percent_off"]) do
+                pct when is_number(pct) -> pct
+                _ -> 0
+              end
+
+            amount_off =
+              case get_in(sub, ["discount", "coupon", "amount_off"]) do
+                amt when is_number(amt) -> amt / 100.0
+                _ -> 0
+              end
+
+            discounted_amount =
+              cond do
+                discount_pct > 0 -> total_amount * (1 - discount_pct / 100.0)
+                amount_off > 0 -> max(total_amount - amount_off, 0)
+                true -> total_amount
+              end
+
+            # Calculate MRR: normalize billing interval to monthly equivalent
             mrr =
               case interval do
-                "year" -> Float.round(unit_amount / (12.0 * interval_count), 2)
-                "month" -> Float.round(unit_amount / interval_count, 2)
-                "week" -> Float.round(unit_amount * 52.0 / (12.0 * interval_count), 2)
-                "day" -> Float.round(unit_amount * 365.0 / (12.0 * interval_count), 2)
-                _ -> unit_amount
+                "year" -> Float.round(discounted_amount / (12.0 * interval_count), 2)
+                "month" -> Float.round(discounted_amount / interval_count, 2)
+                "week" -> Float.round(discounted_amount * 52.0 / (12.0 * interval_count), 2)
+                "day" -> Float.round(discounted_amount * 365.0 / (12.0 * interval_count), 2)
+                _ -> discounted_amount
               end
 
             canceled_at_dt =
@@ -415,7 +448,7 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
               customer_email: customer_email,
               plan_name: plan_name,
               plan_interval: interval,
-              amount: unit_amount,
+              amount: discounted_amount,
               mrr: mrr,
               currency: currency,
               status: sub["status"] || "unknown",
