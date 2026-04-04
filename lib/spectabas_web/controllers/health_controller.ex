@@ -904,12 +904,13 @@ defmodule SpectabasWeb.HealthController do
       today = Date.utc_today()
 
       if bg do
-        # Background mode — return immediately, sync in a Task
+        # Background mode — start from oldest date, work forward
         Task.start(fn ->
           require Logger
+          start_date = Date.add(today, -days)
 
           Enum.each(0..days, fn offset ->
-            date = Date.add(today, -offset)
+            date = Date.add(start_date, offset)
 
             Spectabas.AdIntegrations.Platforms.StripePlatform.sync_charges(
               site,
