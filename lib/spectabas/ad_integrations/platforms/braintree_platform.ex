@@ -113,6 +113,23 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
 
   @doc "Sync transactions for a date into ecommerce_events."
   def sync_transactions(site, integration, date) do
+    lock_key = "bt_sync:#{integration.id}:#{Date.to_iso8601(date)}"
+
+    if locked?(lock_key) do
+      Logger.info("[BraintreeSync] Skipping #{date} — already syncing")
+      :ok
+    else
+      acquire_lock(lock_key)
+
+      try do
+        do_sync_transactions(site, integration, date)
+      after
+        release_lock(lock_key)
+      end
+    end
+  end
+
+  defp do_sync_transactions(site, integration, date) do
     case fetch_transactions(integration, date) do
       {:ok, []} ->
         Logger.info("[BraintreeSync] No transactions for #{date}")
@@ -449,4 +466,21 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
   end
 
   defp resolve_visitor(_, _), do: ""
+
+  defp locked?(key) do
+    case :persistent_term.get({__MODULE__, key}, nil) do
+      nil -> false
+      ts -> System.monotonic_time(:second) - ts < 300
+    end
+  end
+
+  defp acquire_lock(key) do
+    :persistent_term.put({__MODULE__, key}, System.monotonic_time(:second))
+  end
+
+  defp release_lock(key) do
+    :persistent_term.erase({__MODULE__, key})
+  catch
+    _, _ -> :ok
+  end
 end

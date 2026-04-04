@@ -103,6 +103,23 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
   Matches charges to visitors via email lookup.
   """
   def sync_charges(site, integration, date) do
+    lock_key = "stripe_sync:#{integration.id}:#{Date.to_iso8601(date)}"
+
+    if locked?(lock_key) do
+      Logger.info("[StripSync] Skipping #{date} — already syncing")
+      :ok
+    else
+      acquire_lock(lock_key)
+
+      try do
+        do_sync_charges(site, integration, date)
+      after
+        release_lock(lock_key)
+      end
+    end
+  end
+
+  defp do_sync_charges(site, integration, date) do
     case fetch_charges(integration, date) do
       {:ok, []} ->
         Logger.info("[StripSync] No charges for #{date}")
@@ -483,4 +500,22 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
   end
 
   defp resolve_visitor(_, _), do: ""
+
+  # Simple process-level lock to prevent concurrent syncs for the same integration+date
+  defp locked?(key) do
+    case :persistent_term.get({__MODULE__, key}, nil) do
+      nil -> false
+      ts -> System.monotonic_time(:second) - ts < 300
+    end
+  end
+
+  defp acquire_lock(key) do
+    :persistent_term.put({__MODULE__, key}, System.monotonic_time(:second))
+  end
+
+  defp release_lock(key) do
+    :persistent_term.erase({__MODULE__, key})
+  catch
+    _, _ -> :ok
+  end
 end
