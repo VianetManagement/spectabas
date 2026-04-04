@@ -20,6 +20,7 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
         AdIntegrations.list_for_site(site.id)
         |> Repo.preload(:site)
       end)
+      |> Enum.reject(&(&1.status == "revoked"))
       |> Enum.sort_by(& &1.updated_at, {:desc, DateTime})
 
     {:ok,
