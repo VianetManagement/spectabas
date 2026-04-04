@@ -977,34 +977,56 @@ defmodule SpectabasWeb.HealthController do
         {:error, e} -> %{"error" => inspect(e)}
       end
 
-    # March specifically
-    march =
+    # March in UTC vs Eastern
+    march_utc =
       case Spectabas.ClickHouse.query("""
            SELECT
-             count() AS total_rows,
              uniqExact(order_id) AS unique_orders,
-             sum(revenue) AS total_rev_with_dupes,
-             (SELECT sum(rev) FROM (
-               SELECT order_id, any(revenue) AS rev
-               FROM ecommerce_events
-               WHERE site_id = #{site_p}
-                 AND order_id LIKE 'ch_%'
-                 AND toStartOfMonth(timestamp) = '2026-03-01'
-               GROUP BY order_id
-             )) AS total_rev_deduped
+             sum(revenue) AS rev
            FROM ecommerce_events
            WHERE site_id = #{site_p}
              AND order_id LIKE 'ch_%'
              AND toStartOfMonth(timestamp) = '2026-03-01'
            """) do
         {:ok, [row | _]} -> row
-        {:error, e} -> %{"error" => inspect(e)}
+        _ -> %{}
+      end
+
+    march_eastern =
+      case Spectabas.ClickHouse.query("""
+           SELECT
+             uniqExact(order_id) AS unique_orders,
+             sum(revenue) AS rev
+           FROM ecommerce_events
+           WHERE site_id = #{site_p}
+             AND order_id LIKE 'ch_%'
+             AND toStartOfMonth(toTimezone(timestamp, 'America/New_York')) = '2026-03-01'
+           """) do
+        {:ok, [row | _]} -> row
+        _ -> %{}
+      end
+
+    # All months breakdown (Eastern)
+    by_month =
+      case Spectabas.ClickHouse.query("""
+           SELECT
+             toStartOfMonth(toTimezone(timestamp, 'America/New_York')) AS month,
+             uniqExact(order_id) AS orders,
+             sum(revenue) AS rev
+           FROM ecommerce_events
+           WHERE site_id = #{site_p} AND order_id LIKE 'ch_%'
+           GROUP BY month ORDER BY month
+           """) do
+        {:ok, rows} -> rows
+        _ -> []
       end
 
     json(conn, %{
       duplicate_samples: dupes,
       overall_impact: dupe_impact,
-      march: march
+      march_utc: march_utc,
+      march_eastern: march_eastern,
+      by_month_eastern: by_month
     })
   end
 
