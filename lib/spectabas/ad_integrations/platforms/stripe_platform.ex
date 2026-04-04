@@ -391,12 +391,17 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
 
             plan_name = price["nickname"] || price["product"] || ""
             interval = get_in(price, ["recurring", "interval"]) || "month"
+            interval_count = get_in(price, ["recurring", "interval_count"]) || 1
             unit_amount = (price["unit_amount"] || 0) / 100.0
             currency = String.upcase(price["currency"] || "usd")
 
+            # Calculate MRR: normalize any billing interval to monthly equivalent
             mrr =
               case interval do
-                "year" -> Float.round(unit_amount / 12.0, 2)
+                "year" -> Float.round(unit_amount / (12.0 * interval_count), 2)
+                "month" -> Float.round(unit_amount / interval_count, 2)
+                "week" -> Float.round(unit_amount * 52.0 / (12.0 * interval_count), 2)
+                "day" -> Float.round(unit_amount * 365.0 / (12.0 * interval_count), 2)
                 _ -> unit_amount
               end
 
