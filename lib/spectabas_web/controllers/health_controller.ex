@@ -865,7 +865,37 @@ defmodule SpectabasWeb.HealthController do
         |> Enum.find(&(&1.platform == "stripe" and &1.status == "active"))
 
       if is_nil(integration) do
-        json(conn, %{error: "No active Stripe integration for site #{site_id}"})
+        # Try to auto-repair from saved credentials
+        creds = Spectabas.AdIntegrations.Credentials.get_for_platform(site, "stripe")
+        api_key = creds["api_key"]
+
+        if api_key in [nil, ""] do
+          json(conn, %{
+            error: "No active Stripe integration and no saved API key for site #{site_id}"
+          })
+        else
+          # Clean up any revoked records
+          Spectabas.AdIntegrations.list_for_site(site.id)
+          |> Enum.filter(&(&1.platform == "stripe"))
+          |> Enum.each(&Spectabas.Repo.delete/1)
+
+          case Spectabas.AdIntegrations.connect(site.id, "stripe", %{
+                 access_token: api_key,
+                 refresh_token: "",
+                 account_id: "",
+                 account_name: "Stripe"
+               }) do
+            {:ok, new_int} ->
+              json(conn, %{
+                status: "repaired",
+                integration_id: new_int.id,
+                message: "Re-created Stripe integration. Run action=sync again."
+              })
+
+            {:error, reason} ->
+              json(conn, %{error: "Failed to create integration: #{inspect(reason)}"})
+          end
+        end
       else
         today = Date.utc_today()
 
