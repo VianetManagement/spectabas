@@ -789,251 +789,247 @@ defmodule SpectabasWeb.HealthController do
     conn |> put_status(403) |> json(%{error: "forbidden"})
   end
 
-  def ecom_diag(conn, %{"token" => _token, "site_id" => _site_id, "action" => "sync"} = params) do
-    ecom_diag_sync(conn, params)
-  end
-
-  def ecom_diag(conn, %{"token" => token, "site_id" => site_id}) do
+  def ecom_diag(conn, %{"token" => token, "site_id" => site_id} = params) do
     unless valid_token?(token) do
       conn |> put_status(403) |> json(%{error: "forbidden"})
     else
-      site_p = Spectabas.ClickHouse.param(site_id)
-
-      # Today's raw events
-      raw =
-        case Spectabas.ClickHouse.query("""
-             SELECT order_id, revenue, import_source, visitor_id,
-               toTimezone(timestamp, 'America/New_York') AS ts_et
-             FROM ecommerce_events
-             WHERE site_id = #{site_p}
-               AND toDate(toTimezone(timestamp, 'America/New_York')) = today()
-             ORDER BY timestamp DESC
-             LIMIT 100
-             """) do
-          {:ok, rows} -> rows
-          {:error, e} -> [%{"error" => inspect(e)}]
-        end
-
-      # Today's totals by import_source
-      totals =
-        case Spectabas.ClickHouse.query("""
-             SELECT
-               import_source,
-               count() AS cnt,
-               sum(revenue) AS rev,
-               sum(refund_amount) AS refunds
-             FROM ecommerce_events
-             WHERE site_id = #{site_p}
-               AND toDate(toTimezone(timestamp, 'America/New_York')) = today()
-             GROUP BY import_source
-             """) do
-          {:ok, rows} -> rows
-          {:error, e} -> [%{"error" => inspect(e)}]
-        end
-
-      # Today's deduped total
-      deduped =
-        case Spectabas.ClickHouse.query("""
-             SELECT
-               count() AS cnt,
-               sum(revenue) AS rev,
-               sum(refund_amount) AS refunds
-             FROM #{Spectabas.Analytics.ecommerce_dedup()}
-             WHERE site_id = #{site_p}
-               AND toDate(toTimezone(timestamp, 'America/New_York')) = today()
-             """) do
-          {:ok, rows} -> rows
-          {:error, e} -> [%{"error" => inspect(e)}]
-        end
-
-      json(conn, %{
-        today_raw_events: raw,
-        today_by_source: totals,
-        today_deduped: deduped
-      })
-    end
-  end
-
-  defp ecom_diag_sync(conn, %{"token" => token, "site_id" => site_id} = params) do
-    unless valid_token?(token) do
-      conn |> put_status(403) |> json(%{error: "forbidden"})
-    else
-      days = String.to_integer(params["days"] || "1")
-      site = Spectabas.Sites.get_site!(site_id)
-
-      integration =
-        Spectabas.AdIntegrations.list_for_site(site.id)
-        |> Enum.find(&(&1.platform == "stripe" and &1.status == "active"))
-
-      if is_nil(integration) do
-        # Try to auto-repair from saved credentials
-        creds = Spectabas.AdIntegrations.Credentials.get_for_platform(site, "stripe")
-        api_key = creds["api_key"]
-
-        if api_key in [nil, ""] do
-          json(conn, %{
-            error: "No active Stripe integration and no saved API key for site #{site_id}"
-          })
-        else
-          # Clean up any revoked records
-          Spectabas.AdIntegrations.list_for_site(site.id)
-          |> Enum.filter(&(&1.platform == "stripe"))
-          |> Enum.each(&Spectabas.Repo.delete/1)
-
-          case Spectabas.AdIntegrations.connect(site.id, "stripe", %{
-                 access_token: api_key,
-                 refresh_token: "",
-                 account_id: "",
-                 account_name: "Stripe"
-               }) do
-            {:ok, new_int} ->
-              json(conn, %{
-                status: "repaired",
-                integration_id: new_int.id,
-                message: "Re-created Stripe integration. Run action=sync again."
-              })
-
-            {:error, reason} ->
-              json(conn, %{error: "Failed to create integration: #{inspect(reason)}"})
-          end
-        end
-      else
-        today = Date.utc_today()
-
-        # Sync each day and collect results
-        results =
-          Enum.map(0..days, fn offset ->
-            date = Date.add(today, -offset)
-
-            sync_result =
-              Spectabas.AdIntegrations.Platforms.StripePlatform.sync_charges(
-                site,
-                integration,
-                date
-              )
-
-            {Date.to_iso8601(date), inspect(sync_result)}
-          end)
-
-        # Check what's in CH now
-        total =
-          case Spectabas.ClickHouse.query("""
-               SELECT count() AS cnt, sum(revenue) AS rev
-               FROM ecommerce_events
-               WHERE site_id = #{Spectabas.ClickHouse.param(site.id)}
-                 AND order_id LIKE 'ch_%'
-               """) do
-            {:ok, [row | _]} -> row
-            _ -> %{}
-          end
-
-        json(conn, %{
-          integration_id: integration.id,
-          days_synced: days + 1,
-          sync_results: Map.new(results),
-          stripe_total_in_ch: total
-        })
+      case params["action"] do
+        "sync" -> ecom_diag_sync(conn, params)
+        "check_dupes" -> ecom_diag_check_dupes(conn, site_id)
+        "fix_dupes" -> ecom_diag_fix_dupes(conn, site_id)
+        _ -> ecom_diag_today(conn, site_id)
       end
     end
   end
 
-  def ecom_diag(conn, %{"token" => token, "site_id" => site_id, "action" => "check_dupes"}) do
-    unless valid_token?(token) do
-      conn |> put_status(403) |> json(%{error: "forbidden"})
+  defp ecom_diag_today(conn, site_id) do
+    site_p = Spectabas.ClickHouse.param(site_id)
+
+    # Today's raw events
+    raw =
+      case Spectabas.ClickHouse.query("""
+           SELECT order_id, revenue, import_source, visitor_id,
+             toTimezone(timestamp, 'America/New_York') AS ts_et
+           FROM ecommerce_events
+           WHERE site_id = #{site_p}
+             AND toDate(toTimezone(timestamp, 'America/New_York')) = today()
+           ORDER BY timestamp DESC
+           LIMIT 100
+           """) do
+        {:ok, rows} -> rows
+        {:error, e} -> [%{"error" => inspect(e)}]
+      end
+
+    # Today's totals by import_source
+    totals =
+      case Spectabas.ClickHouse.query("""
+           SELECT
+             import_source,
+             count() AS cnt,
+             sum(revenue) AS rev,
+             sum(refund_amount) AS refunds
+           FROM ecommerce_events
+           WHERE site_id = #{site_p}
+             AND toDate(toTimezone(timestamp, 'America/New_York')) = today()
+           GROUP BY import_source
+           """) do
+        {:ok, rows} -> rows
+        {:error, e} -> [%{"error" => inspect(e)}]
+      end
+
+    # Today's deduped total
+    deduped =
+      case Spectabas.ClickHouse.query("""
+           SELECT
+             count() AS cnt,
+             sum(revenue) AS rev,
+             sum(refund_amount) AS refunds
+           FROM #{Spectabas.Analytics.ecommerce_dedup()}
+           WHERE site_id = #{site_p}
+             AND toDate(toTimezone(timestamp, 'America/New_York')) = today()
+           """) do
+        {:ok, rows} -> rows
+        {:error, e} -> [%{"error" => inspect(e)}]
+      end
+
+    json(conn, %{
+      today_raw_events: raw,
+      today_by_source: totals,
+      today_deduped: deduped
+    })
+  end
+
+  defp ecom_diag_sync(conn, %{"token" => _token, "site_id" => site_id} = params) do
+    days = String.to_integer(params["days"] || "1")
+    site = Spectabas.Sites.get_site!(site_id)
+
+    integration =
+      Spectabas.AdIntegrations.list_for_site(site.id)
+      |> Enum.find(&(&1.platform == "stripe" and &1.status == "active"))
+
+    if is_nil(integration) do
+      # Try to auto-repair from saved credentials
+      creds = Spectabas.AdIntegrations.Credentials.get_for_platform(site, "stripe")
+      api_key = creds["api_key"]
+
+      if api_key in [nil, ""] do
+        json(conn, %{
+          error: "No active Stripe integration and no saved API key for site #{site_id}"
+        })
+      else
+        # Clean up any revoked records
+        Spectabas.AdIntegrations.list_for_site(site.id)
+        |> Enum.filter(&(&1.platform == "stripe"))
+        |> Enum.each(&Spectabas.Repo.delete/1)
+
+        case Spectabas.AdIntegrations.connect(site.id, "stripe", %{
+               access_token: api_key,
+               refresh_token: "",
+               account_id: "",
+               account_name: "Stripe"
+             }) do
+          {:ok, new_int} ->
+            json(conn, %{
+              status: "repaired",
+              integration_id: new_int.id,
+              message: "Re-created Stripe integration. Run action=sync again."
+            })
+
+          {:error, reason} ->
+            json(conn, %{error: "Failed to create integration: #{inspect(reason)}"})
+        end
+      end
     else
-      site_p = Spectabas.ClickHouse.param(site_id)
+      today = Date.utc_today()
 
-      # Count duplicate order_ids
-      dupes =
-        case Spectabas.ClickHouse.query("""
-             SELECT order_id, count() AS cnt, any(revenue) AS rev
-             FROM ecommerce_events
-             WHERE site_id = #{site_p} AND order_id LIKE 'ch_%'
-             GROUP BY order_id
-             HAVING cnt > 1
-             ORDER BY cnt DESC
-             LIMIT 20
-             """) do
-          {:ok, rows} -> rows
-          {:error, e} -> [%{"error" => inspect(e)}]
-        end
+      # Sync each day and collect results
+      results =
+        Enum.map(0..days, fn offset ->
+          date = Date.add(today, -offset)
 
-      # Total impact of duplicates
-      dupe_impact =
-        case Spectabas.ClickHouse.query("""
-             SELECT
-               count() AS total_rows,
-               uniqExact(order_id) AS unique_orders,
-               count() - uniqExact(order_id) AS duplicate_rows,
-               sum(revenue) AS total_rev_with_dupes,
-               (SELECT sum(rev) FROM (
-                 SELECT order_id, any(revenue) AS rev
-                 FROM ecommerce_events
-                 WHERE site_id = #{site_p} AND order_id LIKE 'ch_%'
-                 GROUP BY order_id
-               )) AS total_rev_deduped
-             FROM ecommerce_events
-             WHERE site_id = #{site_p} AND order_id LIKE 'ch_%'
-             """) do
-          {:ok, [row | _]} -> row
-          {:error, e} -> %{"error" => inspect(e)}
-        end
+          sync_result =
+            Spectabas.AdIntegrations.Platforms.StripePlatform.sync_charges(
+              site,
+              integration,
+              date
+            )
 
-      # March specifically
-      march =
+          {Date.to_iso8601(date), inspect(sync_result)}
+        end)
+
+      # Check what's in CH now
+      total =
         case Spectabas.ClickHouse.query("""
-             SELECT
-               count() AS total_rows,
-               uniqExact(order_id) AS unique_orders,
-               sum(revenue) AS total_rev_with_dupes,
-               (SELECT sum(rev) FROM (
-                 SELECT order_id, any(revenue) AS rev
-                 FROM ecommerce_events
-                 WHERE site_id = #{site_p}
-                   AND order_id LIKE 'ch_%'
-                   AND toStartOfMonth(timestamp) = '2026-03-01'
-                 GROUP BY order_id
-               )) AS total_rev_deduped
+             SELECT count() AS cnt, sum(revenue) AS rev
              FROM ecommerce_events
-             WHERE site_id = #{site_p}
+             WHERE site_id = #{Spectabas.ClickHouse.param(site.id)}
                AND order_id LIKE 'ch_%'
-               AND toStartOfMonth(timestamp) = '2026-03-01'
              """) do
           {:ok, [row | _]} -> row
-          {:error, e} -> %{"error" => inspect(e)}
+          _ -> %{}
         end
 
       json(conn, %{
-        duplicate_samples: dupes,
-        overall_impact: dupe_impact,
-        march: march
+        integration_id: integration.id,
+        days_synced: days + 1,
+        sync_results: Map.new(results),
+        stripe_total_in_ch: total
       })
     end
   end
 
-  def ecom_diag(conn, %{"token" => token, "site_id" => site_id, "action" => "fix_dupes"}) do
-    unless valid_token?(token) do
-      conn |> put_status(403) |> json(%{error: "forbidden"})
-    else
-      site_p = Spectabas.ClickHouse.param(site_id)
+  defp ecom_diag_check_dupes(conn, site_id) do
+    site_p = Spectabas.ClickHouse.param(site_id)
 
-      # ClickHouse dedup: use OPTIMIZE with DEDUPLICATE BY
-      # This removes exact duplicate rows
-      result =
-        Spectabas.ClickHouse.execute_admin(
-          "OPTIMIZE TABLE ecommerce_events FINAL DEDUPLICATE BY site_id, order_id"
-        )
+    # Count duplicate order_ids
+    dupes =
+      case Spectabas.ClickHouse.query("""
+           SELECT order_id, count() AS cnt, any(revenue) AS rev
+           FROM ecommerce_events
+           WHERE site_id = #{site_p} AND order_id LIKE 'ch_%'
+           GROUP BY order_id
+           HAVING cnt > 1
+           ORDER BY cnt DESC
+           LIMIT 20
+           """) do
+        {:ok, rows} -> rows
+        {:error, e} -> [%{"error" => inspect(e)}]
+      end
 
-      json(conn, %{
-        action: "fix_dupes",
-        optimize_result: inspect(result),
-        message: "OPTIMIZE DEDUPLICATE submitted. Check check_dupes again in a minute."
-      })
-    end
+    # Total impact of duplicates
+    dupe_impact =
+      case Spectabas.ClickHouse.query("""
+           SELECT
+             count() AS total_rows,
+             uniqExact(order_id) AS unique_orders,
+             count() - uniqExact(order_id) AS duplicate_rows,
+             sum(revenue) AS total_rev_with_dupes,
+             (SELECT sum(rev) FROM (
+               SELECT order_id, any(revenue) AS rev
+               FROM ecommerce_events
+               WHERE site_id = #{site_p} AND order_id LIKE 'ch_%'
+               GROUP BY order_id
+             )) AS total_rev_deduped
+           FROM ecommerce_events
+           WHERE site_id = #{site_p} AND order_id LIKE 'ch_%'
+           """) do
+        {:ok, [row | _]} -> row
+        {:error, e} -> %{"error" => inspect(e)}
+      end
+
+    # March specifically
+    march =
+      case Spectabas.ClickHouse.query("""
+           SELECT
+             count() AS total_rows,
+             uniqExact(order_id) AS unique_orders,
+             sum(revenue) AS total_rev_with_dupes,
+             (SELECT sum(rev) FROM (
+               SELECT order_id, any(revenue) AS rev
+               FROM ecommerce_events
+               WHERE site_id = #{site_p}
+                 AND order_id LIKE 'ch_%'
+                 AND toStartOfMonth(timestamp) = '2026-03-01'
+               GROUP BY order_id
+             )) AS total_rev_deduped
+           FROM ecommerce_events
+           WHERE site_id = #{site_p}
+             AND order_id LIKE 'ch_%'
+             AND toStartOfMonth(timestamp) = '2026-03-01'
+           """) do
+        {:ok, [row | _]} -> row
+        {:error, e} -> %{"error" => inspect(e)}
+      end
+
+    json(conn, %{
+      duplicate_samples: dupes,
+      overall_impact: dupe_impact,
+      march: march
+    })
   end
 
-  def ecom_diag(conn, _params) do
-    conn |> put_status(403) |> json(%{error: "forbidden"})
+  defp ecom_diag_fix_dupes(conn, site_id) do
+    site_p = Spectabas.ClickHouse.param(site_id)
+
+    # ClickHouse dedup: use OPTIMIZE with DEDUPLICATE BY
+    # This removes exact duplicate rows
+    result =
+      Spectabas.ClickHouse.execute_admin(
+        "OPTIMIZE TABLE ecommerce_events FINAL DEDUPLICATE BY site_id, order_id"
+      )
+
+    db = Application.get_env(:spectabas, Spectabas.ClickHouse)[:database] || "spectabas"
+
+    result =
+      Spectabas.ClickHouse.execute_admin(
+        "OPTIMIZE TABLE #{db}.ecommerce_events FINAL DEDUPLICATE BY site_id, order_id"
+      )
+
+    json(conn, %{
+      action: "fix_dupes",
+      optimize_result: inspect(result),
+      message: "OPTIMIZE DEDUPLICATE submitted. Check check_dupes again in a minute."
+    })
   end
 
   defp test_sites do
