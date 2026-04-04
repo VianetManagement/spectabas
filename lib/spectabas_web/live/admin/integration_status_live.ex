@@ -41,6 +41,68 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
     {:noreply, assign(socket, :test_results, test_results)}
   end
 
+  def handle_event("sync_test", %{"id" => id}, socket) do
+    integration = AdIntegrations.get!(id) |> Repo.preload(:site)
+
+    result =
+      try do
+        case integration.platform do
+          "google_search_console" ->
+            date = Date.add(Date.utc_today(), -3)
+            site_url = (integration.extra || %{})["site_url"] || ""
+            access_token = AdIntegrations.decrypt_access_token(integration)
+
+            # Check token
+            token_status =
+              if AdIntegrations.token_expired?(integration),
+                do: "EXPIRED (expires_at: #{integration.token_expires_at})",
+                else: "valid"
+
+            # Try fetch
+            fetch_result =
+              Spectabas.AdIntegrations.Platforms.GoogleSearchConsole.fetch_search_data(
+                integration,
+                site_url,
+                date
+              )
+
+            # Try insert if fetch worked
+            insert_result =
+              case fetch_result do
+                {:ok, rows} when rows != [] ->
+                  Spectabas.AdIntegrations.Platforms.GoogleSearchConsole.sync_search_data(
+                    integration.site,
+                    integration,
+                    date
+                  )
+
+                {:ok, []} ->
+                  "no_data_for_#{date}"
+
+                {:error, reason} ->
+                  "fetch_error: #{inspect(reason)}"
+              end
+
+            %{
+              status: :ok,
+              message:
+                "token=#{token_status}, site_url=#{site_url}, date=#{date}, " <>
+                  "fetch=#{inspect(elem(fetch_result, 0))}(#{if match?({:ok, rows} when is_list(rows), fetch_result), do: length(elem(fetch_result, 1)), else: "err"} rows), " <>
+                  "insert=#{inspect(insert_result)}"
+            }
+
+          _ ->
+            %{status: :ok, message: "Sync test not implemented for #{integration.platform}"}
+        end
+      rescue
+        e ->
+          %{status: :error, message: "Crash: #{Exception.message(e)}"}
+      end
+
+    test_results = Map.put(socket.assigns.test_results, integration.id, result)
+    {:noreply, assign(socket, :test_results, test_results)}
+  end
+
   def handle_event("fix_gsc_url", %{"id" => id}, socket) do
     integration = AdIntegrations.get!(id)
     site_url = (integration.extra || %{})["site_url"] || ""
@@ -279,6 +341,15 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
                     >
                       Test
                     </button>
+                    <%= if integration.platform in ["google_search_console", "bing_webmaster"] do %>
+                      <button
+                        phx-click="sync_test"
+                        phx-value-id={integration.id}
+                        class="inline-flex items-center px-2 py-1 text-xs font-medium rounded text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200"
+                      >
+                        Sync Test
+                      </button>
+                    <% end %>
                     <%= if integration.platform == "google_search_console" do %>
                       <button
                         phx-click="fix_gsc_url"
