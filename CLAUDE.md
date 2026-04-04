@@ -61,7 +61,7 @@ mix ecto.setup
 mix phx.server
 ```
 
-Tests: `mix test` (458 tests, no ClickHouse needed)
+Tests: `mix test` (609 tests, no ClickHouse needed)
 Format: `mix format`
 Compile check: `mix compile --warnings-as-errors`
 
@@ -100,6 +100,8 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - `/health/backfill-geo` — re-enriches events with empty geo data
 - `/admin/ingest` — live ingest diagnostics (BEAM memory, buffer size, ETS cache stats, ClickHouse pool)
 - `/admin/api-logs` — API access logs with request/response detail modal (30-day retention)
+- `/health/ecom-diag` — ecommerce diagnostics, supports `action=sync&start=YYYY-MM-DD&bg=1` for backfill
+- `/health/fix-ch-schema` — adds missing ClickHouse columns (uses admin/default user for DDL)
 
 ### GeoIP Database Updates
 - DB-IP + MaxMind refresh via Oban cron on 1st and 15th of each month at 06:00 UTC
@@ -115,12 +117,12 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - Segment filters (filter by any dimension) with saved segment presets
 - Visitor intent breakdown
 
-### Analytics Pages (sidebar navigation, 36 pages across 7 categories)
+### Analytics Pages (sidebar navigation, 38 pages across 7 categories)
 - **Overview**: Dashboard, Insights (8 anomaly types), Journeys, Realtime
 - **Behavior**: Pages, Entry/Exit, Page Transitions, Site Search, Outbound Links, Downloads, Events, Performance (RUM)
-- **Acquisition**: Acquisition (channels with engagement metrics + sources with UTM tabs, consolidated from 3 pages), Campaigns (UTM builder)
+- **Acquisition**: Acquisition (channels with engagement metrics + sources with UTM tabs, consolidated from 3 pages), Campaigns (UTM builder), Search Keywords (GSC + Bing)
 - **Audience**: Geography, Visitor Map, Devices, Network, Bot Traffic, Visitor Log, Cohort Retention, Churn Risk
-- **Conversions**: Goals, Funnels, Ecommerce, Revenue Attribution (sortable, paid/organic split with pills), Revenue Cohorts, Buyer Patterns
+- **Conversions**: Goals, Funnels, Ecommerce, Revenue Attribution (sortable, paid/organic split with pills), Revenue Cohorts, Buyer Patterns, MRR & Subscriptions
 - **Ad Effectiveness**: Visitor Quality (0-100 scoring), Time to Convert, Ad Visitor Paths, Ad-to-Churn, Organic Lift
 - **Tools**: Reports, Email Reports, Exports, Settings
 - Each category has a landing page at `/sites/:id/c/:category` with descriptions for every page
@@ -151,12 +153,15 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Funnel Revenue** — funnels show revenue from visitors at each step (ecommerce sites only)
 - **Abandoned Funnel Export** — CSV export of visitor IDs + emails who dropped off at each funnel step
 - **Ad Platform Integrations** — Google Ads, Bing Ads, Meta/Facebook Ads OAuth2 connections with daily spend sync. Encrypted token storage (AES-256-GCM). Settings UI per site with Sync Now button. Oban sync every 6h. Google Ads account picker for MCC/multi-account setups.
-- **Stripe Import** — Connect Stripe via API key (not OAuth) from Site Settings. Syncs charges, refunds, and subscriptions every 6h via `StripeSync` Oban worker. Charges written to `ecommerce_events`, refunds update `refund_amount` column, subscriptions snapshot to `subscription_events` (ReplacingMergeTree). Matches to visitors via email lookup. API key needs Read access to: Charges, Customers, Refunds, Subscriptions, Prices, Products.
-- **MRR & Subscriptions** — Dashboard page under Conversions showing current MRR, active/past_due/canceled subscription counts, plan breakdown, avg MRR per subscriber, recent cancellations (30d), and MRR trend bar chart (30d). Powered by daily subscription snapshots from Stripe.
+- **Stripe Import** — Connect Stripe via API key (not OAuth) from Site Settings. Uses PaymentIntents API (pi_* IDs, NOT Charges API) to avoid overcounting. Syncs charges, refunds, and subscriptions via `StripeSync` Oban worker. Charges written to `ecommerce_events` with `import_source = "stripe"`, refunds update `refund_amount` column, subscriptions snapshot to `subscription_events` (ReplacingMergeTree). Matches to visitors via email lookup. API key needs Read access to: PaymentIntents, Customers, Refunds, Subscriptions, Prices, Products.
+- **MRR & Subscriptions** — Dashboard page under Conversions showing current MRR, active/past_due/canceled subscription counts, plan breakdown, avg MRR per subscriber, recent cancellations (30d), and MRR trend bar chart (30d). Powered by daily subscription snapshots from Stripe/Braintree. MRR calculation: sum(unit_amount * quantity) per item, apply discount, normalize by billing interval (weekly/monthly/quarterly/annual).
 - **Customer LTV** — Visitor profile page shows Lifetime Value card: net revenue (gross - refunds), total orders, refund total. Auto-populated from ecommerce_events.
 - **Currency Formatting** — `Spectabas.Currency.format/2` renders amounts with proper symbols ($, EUR, GBP, JPY, etc.) instead of currency codes. Used across all revenue displays.
 - **Braintree Import** — Connect Braintree via Merchant ID + Public/Private keys from Site Settings. Same capabilities as Stripe: transactions → ecommerce_events, refunds → refund_amount updates, subscriptions → subscription_events snapshots. Uses Braintree XML search API with Basic auth.
 - **Configurable Sync Frequency** — Each integration has a per-integration sync frequency (5min to 24h) stored in `extra["sync_frequency_minutes"]`. Default: 15 min for payment providers (Stripe/Braintree), 6h for ad platforms. Oban cron runs every 5 min; `should_sync?/1` checks if enough time has elapsed since last sync.
+- **Google Search Console** — OAuth2 integration syncing search queries, impressions, clicks, CTR, and position per page per day. Daily sync with 2-3 day delay. ClickHouse `search_console` table with ReplacingMergeTree.
+- **Bing Webmaster** — API key integration syncing the same search metrics from Bing/Yahoo. Same ClickHouse table with `source` column distinguishing Google vs Bing.
+- **Search Keywords Page** — Dashboard page under Acquisition showing top queries, top pages, sortable columns, source filter (Google/Bing/All), date range selector, position color-coding (green <=3, blue <=10, amber <=20, red >20).
 - **ROAS on Revenue Attribution** — Ad Spend Overview card (total spend, ad-attributed revenue, ROAS, clicks, impressions, per-platform breakdown). Campaign tab shows inline Spend/ROAS/CPC columns. Standalone Ad Spend by Campaign table on other tabs. ROAS color-coded.
 - **Click ID Attribution** — Tracker captures gclid (Google), msclkid (Bing), fbclid (Meta) from landing URLs. Stored in ClickHouse `click_id`/`click_id_type` columns. Revenue from visitors with click IDs attributed to the platform for ROAS calculation.
 - **Ad Effectiveness Suite** — 5 pages under new sidebar section: Visitor Quality (engagement scoring 0-100), Time to Convert (days/sessions to purchase), Ad Visitor Paths (page sequences by outcome), Ad-to-Churn (campaign churn correlation), Organic Lift (ad spend vs organic traffic correlation)
@@ -260,9 +265,6 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Accessible top nav** — WCAG AA contrast compliance
 - **Documentation pages** — docs split into `/docs` (index), `/docs/getting-started`, `/docs/dashboard`, `/docs/conversions`, `/docs/api`, `/docs/admin` with cross-category search. Requires login (behind :require_authenticated_user). Public pages: `/privacy`, `/terms`, homepage.
 - **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.5.0)
-- **Google Search Console** — OAuth2 integration syncing search queries, impressions, clicks, CTR, and position per page per day. Daily sync with 2-3 day delay. ClickHouse `search_console` table with ReplacingMergeTree.
-- **Bing Webmaster** — API key integration syncing the same search metrics from Bing/Yahoo. Same ClickHouse table with `source` column distinguishing Google vs Bing.
-- **Search Keywords Page** — Dashboard page under Acquisition showing top queries, top pages, sortable columns, source filter, date range selector, position color-coding (green <=3, blue <=10, amber <=20, red >20).
 - **Legal** — Privacy Policy at `/privacy` and Terms of Service at `/terms` (public, no auth required). Entity: Spectabas, Kent County MI. Contact: howdy@spectabas.com. Arbitration clause (AAA, Kent County). 18+ age restriction.
 
 ## Important Patterns
@@ -301,3 +303,18 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Ad platform credentials**: Stored per-site as encrypted JSON blob in `sites.ad_credentials_encrypted`. No environment variables needed. Managed via `Spectabas.AdIntegrations.Credentials` module. Each site configures its own OAuth app credentials from the Settings page.
 - **ClickHouse argMinIf/argMaxIf empty string**: These functions return `''` (empty string, not NULL) when no rows match the condition. Always wrap with `nullIf(..., '')` before `ifNull` fallback, e.g. `ifNull(nullIf(argMinIf(expr, ts, cond), ''), 'Direct')`.
 - **RUM collection**: Tracker sends `_rum` (nav timing) and `_cwv` (Core Web Vitals) custom events. Uses `performance.getEntriesByType("navigation")` with `performance.timing` fallback. IMPORTANT: PerformanceNavigationTiming uses `nav.startTime` (always 0) for the navigation baseline — NOT `nav.navigationStart` which only exists on the deprecated `performance.timing`. Queries use `quantileIf` to exclude zeros. ClickHouse `quantileIf` returns `nan` when no rows match — `parse_rows` sanitizes `nan`→`null` before JSON parsing.
+- **Stripe PaymentIntents vs Charges**: Always use `/v1/payment_intents` (pi_* IDs), NOT `/v1/charges` (ch_* IDs). Charges can have multiples per payment (e.g. auth + capture), causing overcounting. PaymentIntents represent a single logical payment.
+- **Ecommerce source filtering**: When ANY Stripe integration record exists (active or not), revenue dashboards filter to `import_source = 'stripe'` only (pi_* orders). Prevents double-counting with API-submitted transactions.
+- **import_source column**: `ecommerce_events` has `import_source` LowCardinality(String) — values: `"stripe"`, `"braintree"`, `""` (API). Clear Data only deletes rows matching that integration's source. This prevents one integration's Clear Data from wiping another's data.
+- **Integration mark_error**: Does NOT change status to "error" — keeps `status: "active"` so cron continues retrying. Only stores error message and increments error count.
+- **Sync lock**: `persistent_term`-based lock per integration ID prevents concurrent sync runs from inserting duplicate data.
+- **Fast-skip with always re-sync**: Historical backfill checks ClickHouse for existing data before calling payment APIs (skips already-synced days). But today and yesterday always re-sync to capture new transactions.
+- **ClickHouse schema migrations**: `CREATE TABLE IF NOT EXISTS` does NOT add new columns to existing tables. Use `ALTER TABLE ADD COLUMN IF NOT EXISTS` for new columns on existing tables.
+- **ClickHouse OPTIMIZE DEDUPLICATE BY**: Must include ALL ORDER BY columns in the BY clause, not just a subset.
+- **Integration auto-repair**: Settings page `mount` calls `auto_repair_integrations/1` to fix orphaned records (credentials exist but no integration record). Integration records also auto-created on first sync.
+- **Session token encryption**: OAuth tokens stored in session cookies are encrypted via `Spectabas.AdIntegrations.Vault` before storage.
+- **Integration credential masking**: Saved API keys/secrets show as masked (`****...last4`) in form fields. Full values only stored, never re-displayed.
+- **Integration IDOR protection**: `authorize_integration!/2` verifies the integration belongs to the current site before any operation (sync, clear, delete).
+- **ecom-diag endpoint**: Supports `action=sync&start=YYYY-MM-DD&bg=1` for historical backfill in background.
+- **fix-ch-schema endpoint**: Uses `execute_admin` (ClickHouse default user) for DDL operations since writer user may lack ALTER TABLE privileges for schema changes.
+- **Subscription MRR calculation**: `sum(unit_amount * quantity)` across all subscription items, apply percentage/fixed discount, normalize by billing interval (weekly×4.33, monthly×1, quarterly÷3, annual÷12).

@@ -1315,9 +1315,11 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
     require Logger
     integrations = Spectabas.AdIntegrations.list_for_site(site.id)
 
-    # Fix integrations stuck in "error" status back to "active"
+    # Fix payment integrations stuck in "error" status back to "active"
+    # Only for Stripe/Braintree — ad platforms (Google/Bing/Meta) may be in "error" for
+    # legitimate reasons (expired token, revoked access) and need manual reconnection.
     Enum.each(integrations, fn i ->
-      if i.status == "error" do
+      if i.status == "error" and i.platform in ["stripe", "braintree"] do
         i
         |> Spectabas.AdIntegrations.AdIntegration.changeset(%{status: "active"})
         |> Spectabas.Repo.update()
