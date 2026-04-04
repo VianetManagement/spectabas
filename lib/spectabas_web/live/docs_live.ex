@@ -2836,20 +2836,48 @@ defmodule SpectabasWeb.DocsLive do
 
             ### Setup
 
-            **Step 1: Create OAuth credentials** (reuse your Google Ads project if you have one)
+            **Step 1: Enable the Search Console API**
 
-            - Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
-            - Enable the **Search Console API** (APIs & Services > Library > search for "Search Console API")
-            - Create OAuth 2.0 credentials (Web application)
-            - Add redirect URI: `https://www.spectabas.com/auth/ad/google_search_console/callback`
-            - Copy Client ID and Client Secret
+            - Go to [Google Cloud Console](https://console.cloud.google.com) and select your project (use the same project as Google Ads if you have one)
+            - Navigate to **APIs & Services > Library**
+            - Search for **"Google Search Console API"** (not "Search Console" — the full name)
+            - Click on it and press **Enable**
 
-            **Step 2: Connect in Spectabas**
+            **Step 2: Create or update OAuth credentials**
 
-            - Site Settings > Integrations > Google Search Console > Configure
-            - Enter Client ID and Client Secret > Save Credentials
-            - Click Connect — authorize in Google
-            - Spectabas auto-selects the matching GSC property
+            If you already have Google Ads connected, you can reuse the same Client ID and Secret — just add the new redirect URI:
+
+            - Go to [APIs & Services > Credentials](https://console.cloud.google.com/apis/credentials)
+            - Click on your existing **OAuth 2.0 Client ID** (or create a new one: **+ Create Credentials > OAuth 2.0 Client ID**, type "Web application")
+            - Under **Authorized redirect URIs**, click **Add URI** and enter:
+              ```
+              https://www.spectabas.com/auth/ad/google_search_console/callback
+              ```
+            - Click **Save**
+            - Copy the **Client ID** and **Client Secret** (if creating new)
+
+            > **Important:** The redirect URI must be exactly `https://www.spectabas.com/auth/ad/google_search_console/callback` — this is different from the Google Ads redirect URI. Both can be on the same OAuth client.
+
+            > **"OAuth client was not found" error (401)?** This means the Client ID doesn't match any OAuth client in your Google Cloud project. Double-check you're using the correct Client ID from the Credentials page, and that the Search Console API is enabled on the same project.
+
+            **Step 3: Add your site to Google Search Console**
+
+            If your site isn't already verified in GSC:
+            - Go to [Google Search Console](https://search.google.com/search-console)
+            - Click **Add Property**
+            - Choose **URL prefix** and enter your site URL (e.g., `https://www.roommates.com`)
+            - Complete the verification (HTML tag, DNS record, or Google Analytics method)
+
+            **Step 4: Connect in Spectabas**
+
+            - Go to your site's **Settings** page
+            - Scroll to **Integrations > Google Search Console**
+            - Click **Configure**
+            - Enter the Client ID and Client Secret from Step 2
+            - Click **Save Credentials**
+            - Click **Connect** — you'll be redirected to Google to authorize
+            - Grant the "View Search Console data" permission
+            - Spectabas auto-selects the matching GSC property for your site's domain
 
             ### What Gets Synced
 
@@ -2869,6 +2897,15 @@ defmodule SpectabasWeb.DocsLive do
             ### Where It Appears
 
             **Acquisition > Search Keywords** — top queries, top pages, sortable by any column, filterable by source and date range.
+
+            ### Troubleshooting
+
+            - **"OAuth client was not found" (401 invalid_client)** — The Client ID you entered doesn't match an OAuth client in your Google Cloud project. Go to [Credentials](https://console.cloud.google.com/apis/credentials) and verify the Client ID. Make sure the Search Console API is enabled on the **same project** as the OAuth client.
+            - **"redirect_uri_mismatch"** — The redirect URI in your OAuth client doesn't include the GSC callback. Add `https://www.spectabas.com/auth/ad/google_search_console/callback` to the Authorized redirect URIs list. Note: this is different from the Google Ads callback URI — both can be on the same client.
+            - **"No Search Console properties found"** — Your Google account doesn't own or have access to any verified GSC properties. Go to [Google Search Console](https://search.google.com/search-console), add your site, and complete verification first.
+            - **"Access denied" after authorization** — Make sure the Google account you're authorizing has at least "Restricted" permission on the GSC property. Site owners and full users can authorize.
+            - **No data after connecting** — GSC data has a 2-3 day reporting delay. Data from today won't appear until 2-3 days later. Click Sync Now to pull the latest available data.
+            - **Using same credentials as Google Ads?** — Yes, you can use the same Client ID and Secret. Just add the GSC redirect URI to the same OAuth client. The scopes are different and requested separately during authorization.
             """
           },
           %{

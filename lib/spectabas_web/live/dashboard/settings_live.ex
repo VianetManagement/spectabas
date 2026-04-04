@@ -1101,12 +1101,15 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                           </a>
                           &gt; Settings &gt; API. You need Merchant ID, Public Key, and Private Key.
                         <% "google_search_console" -> %>
-                          Create OAuth credentials in <a
-                            href="https://console.cloud.google.com/apis/credentials"
-                            target="_blank"
-                            class="text-indigo-600 underline"
-                          >Google Cloud Console</a>.
-                          Enable the Search Console API. Use the same project as Google Ads if you have one.
+                          Use the same OAuth Client ID and Secret as Google Ads.
+                          Add redirect URI:
+                          <code class="text-xs bg-gray-100 px-1 rounded">
+                            https://www.spectabas.com/auth/ad/google_search_console/callback
+                          </code>
+                          and enable the Search Console API.
+                          <a href="/docs/admin#search-console-setup" class="text-indigo-600 underline">
+                            Full setup guide
+                          </a>
                         <% "bing_webmaster" -> %>
                           Get your API key from
                           <a
