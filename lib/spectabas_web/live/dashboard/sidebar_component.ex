@@ -177,6 +177,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
               active={@active == "acquisition"}
             />
             <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/search-keywords"}
+              label="Search Keywords"
+              active={@active == "search-keywords"}
+            />
+            <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/campaigns"}
               label="Campaigns"
               active={@active == "campaigns"}
@@ -478,6 +483,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
       {~p"/dashboard/sites/#{site_id}/events", "Events"},
       {~p"/dashboard/sites/#{site_id}/performance", "Performance"},
       {~p"/dashboard/sites/#{site_id}/acquisition", "Acquisition"},
+      {~p"/dashboard/sites/#{site_id}/search-keywords", "Search Keywords"},
       {~p"/dashboard/sites/#{site_id}/campaigns", "Campaigns"},
       {~p"/dashboard/sites/#{site_id}/geo", "Geography"},
       {~p"/dashboard/sites/#{site_id}/map", "Map"},
@@ -539,6 +545,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
     "performance" => "Behavior",
     # Acquisition
     "acquisition" => "Acquisition",
+    "search-keywords" => "Acquisition",
     "channels" => "Acquisition",
     "sources" => "Acquisition",
     "attribution" => "Acquisition",

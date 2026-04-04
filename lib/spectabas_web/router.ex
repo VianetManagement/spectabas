@@ -160,6 +160,7 @@ defmodule SpectabasWeb.Router do
       live "/sites/:site_id/c/:category", Dashboard.CategoryLive, :index
       live "/sites/:site_id/realtime", Dashboard.RealtimeLive, :show
       live "/sites/:site_id/pages", Dashboard.PagesLive, :index
+      live "/sites/:site_id/search-keywords", Dashboard.SearchKeywordsLive, :index
       live "/sites/:site_id/acquisition", Dashboard.AcquisitionLive, :index
       live "/sites/:site_id/channels", Dashboard.AcquisitionLive, :index
       live "/sites/:site_id/sources", Dashboard.AcquisitionLive, :sources

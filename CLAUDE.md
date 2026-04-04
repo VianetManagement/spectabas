@@ -259,7 +259,10 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Mobile responsiveness** — scrollable tables, collapsible mobile nav bar
 - **Accessible top nav** — WCAG AA contrast compliance
 - **Documentation pages** — docs split into `/docs` (index), `/docs/getting-started`, `/docs/dashboard`, `/docs/conversions`, `/docs/api`, `/docs/admin` with cross-category search. Requires login (behind :require_authenticated_user). Public pages: `/privacy`, `/terms`, homepage.
-- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.4.0)
+- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.5.0)
+- **Google Search Console** — OAuth2 integration syncing search queries, impressions, clicks, CTR, and position per page per day. Daily sync with 2-3 day delay. ClickHouse `search_console` table with ReplacingMergeTree.
+- **Bing Webmaster** — API key integration syncing the same search metrics from Bing/Yahoo. Same ClickHouse table with `source` column distinguishing Google vs Bing.
+- **Search Keywords Page** — Dashboard page under Acquisition showing top queries, top pages, sortable columns, source filter, date range selector, position color-coding (green <=3, blue <=10, amber <=20, red >20).
 - **Legal** — Privacy Policy at `/privacy` and Terms of Service at `/terms` (public, no auth required). Entity: Spectabas, Kent County MI. Contact: howdy@spectabas.com. Arbitration clause (AAA, Kent County). 18+ age restriction.
 
 ## Important Patterns

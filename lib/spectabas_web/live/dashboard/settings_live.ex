@@ -157,6 +157,9 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
       "braintree" ->
         Task.start(fn -> Spectabas.Workers.BraintreeSync.sync_now(integration) end)
 
+      p when p in ["google_search_console", "bing_webmaster"] ->
+        Task.start(fn -> Spectabas.Workers.SearchConsoleSync.sync_now(integration) end)
+
       _ ->
         Oban.insert(Spectabas.Workers.AdSpendSyncOne.new(%{"integration_id" => integration.id}))
     end
@@ -204,6 +207,17 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
             "merchant_id" => params["merchant_id"] || "",
             "public_key" => params["public_key"] || "",
             "private_key" => params["private_key"] || ""
+          }
+
+        "google_search_console" ->
+          %{
+            "client_id" => params["client_id"] || "",
+            "client_secret" => params["client_secret"] || ""
+          }
+
+        "bing_webmaster" ->
+          %{
+            "api_key" => params["api_key"] || ""
           }
       end
 
@@ -305,6 +319,36 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
 
                     {:error, reason} ->
                       Logger.error("[CredSave] Braintree connect failed: #{inspect(reason)}")
+                  end
+
+                  assign(
+                    socket,
+                    :ad_integrations,
+                    Spectabas.AdIntegrations.list_for_site(site.id)
+                  )
+
+                platform == "bing_webmaster" and creds["api_key"] != "" ->
+                  existing =
+                    Enum.find(
+                      Spectabas.AdIntegrations.list_for_site(site.id),
+                      &(&1.platform == "bing_webmaster")
+                    )
+
+                  if existing && existing.status == "revoked" do
+                    Spectabas.Repo.delete(existing)
+                  end
+
+                  case Spectabas.AdIntegrations.connect(site.id, "bing_webmaster", %{
+                         access_token: creds["api_key"],
+                         refresh_token: "",
+                         account_id: "",
+                         account_name: "Bing Webmaster"
+                       }) do
+                    {:ok, _} ->
+                      :ok
+
+                    {:error, reason} ->
+                      Logger.error("[CredSave] Bing Webmaster connect failed: #{inspect(reason)}")
                   end
 
                   assign(
@@ -830,7 +874,9 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
               {"bing_ads", "Microsoft Ads", "bg-amber-100 text-amber-700"},
               {"meta_ads", "Meta Ads", "bg-purple-100 text-purple-700"},
               {"stripe", "Stripe", "bg-indigo-100 text-indigo-700"},
-              {"braintree", "Braintree", "bg-teal-100 text-teal-700"}
+              {"braintree", "Braintree", "bg-teal-100 text-teal-700"},
+              {"google_search_console", "Google Search Console", "bg-green-100 text-green-700"},
+              {"bing_webmaster", "Bing Webmaster", "bg-cyan-100 text-cyan-700"}
             ] do %>
               <% integration =
                 Enum.find(@ad_integrations, &(&1.platform == platform && &1.status == "active")) %>
@@ -1016,10 +1062,27 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                             Braintree Control Panel
                           </a>
                           &gt; Settings &gt; API. You need Merchant ID, Public Key, and Private Key.
+                        <% "google_search_console" -> %>
+                          Create OAuth credentials in <a
+                            href="https://console.cloud.google.com/apis/credentials"
+                            target="_blank"
+                            class="text-indigo-600 underline"
+                          >Google Cloud Console</a>.
+                          Enable the Search Console API. Use the same project as Google Ads if you have one.
+                        <% "bing_webmaster" -> %>
+                          Get your API key from
+                          <a
+                            href="https://www.bing.com/webmasters/apikey"
+                            target="_blank"
+                            class="text-indigo-600 underline"
+                          >
+                            Bing Webmaster Tools
+                          </a>
+                          &gt; Settings &gt; API access.
                       <% end %>
                     </p>
                     <%= cond do %>
-                      <% platform in ["google_ads", "bing_ads"] -> %>
+                      <% platform in ["google_ads", "bing_ads", "google_search_console"] -> %>
                         <div>
                           <label class="block text-sm font-medium text-gray-700">Client ID</label>
                           <input
@@ -1131,6 +1194,23 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                             class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
                           />
                         </div>
+                      <% platform == "bing_webmaster" -> %>
+                        <div>
+                          <label class="block text-sm font-medium text-gray-700">
+                            Bing Webmaster API Key
+                          </label>
+                          <input
+                            type="password"
+                            name="api_key"
+                            value=""
+                            placeholder={
+                              if creds["api_key"],
+                                do: mask_credential(creds["api_key"]),
+                                else: "API Key"
+                            }
+                            class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2"
+                          />
+                        </div>
                       <% true -> %>
                         <div>
                           <label class="block text-sm font-medium text-gray-700">App ID</label>
@@ -1224,6 +1304,8 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   defp platform_label("meta_ads"), do: "Meta Ads"
   defp platform_label("stripe"), do: "Stripe"
   defp platform_label("braintree"), do: "Braintree"
+  defp platform_label("google_search_console"), do: "Google Search Console"
+  defp platform_label("bing_webmaster"), do: "Bing Webmaster"
   defp platform_label(p), do: p
 
   # Mask saved credentials — show first 4 + last 4 chars with dots in between
@@ -1233,7 +1315,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
     require Logger
     integrations = Spectabas.AdIntegrations.list_for_site(site.id)
 
-    Enum.each(["stripe", "braintree"], fn platform ->
+    Enum.each(["stripe", "braintree", "bing_webmaster"], fn platform ->
       creds = Spectabas.AdIntegrations.Credentials.get_for_platform(site, platform)
       has_active = Enum.any?(integrations, &(&1.platform == platform and &1.status == "active"))
 
@@ -1241,6 +1323,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
         case platform do
           "stripe" -> creds["api_key"]
           "braintree" -> creds["merchant_id"]
+          "bing_webmaster" -> creds["api_key"]
         end
 
       if key not in [nil, ""] and not has_active do
@@ -1293,10 +1376,20 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
     state = Phoenix.Token.sign(SpectabasWeb.Endpoint, "ad_oauth", site.id)
 
     case platform do
-      "google_ads" -> Spectabas.AdIntegrations.Platforms.GoogleAds.authorize_url(site, state)
-      "bing_ads" -> Spectabas.AdIntegrations.Platforms.BingAds.authorize_url(site, state)
-      "meta_ads" -> Spectabas.AdIntegrations.Platforms.MetaAds.authorize_url(site, state)
-      _ -> "#"
+      "google_ads" ->
+        Spectabas.AdIntegrations.Platforms.GoogleAds.authorize_url(site, state)
+
+      "bing_ads" ->
+        Spectabas.AdIntegrations.Platforms.BingAds.authorize_url(site, state)
+
+      "meta_ads" ->
+        Spectabas.AdIntegrations.Platforms.MetaAds.authorize_url(site, state)
+
+      "google_search_console" ->
+        Spectabas.AdIntegrations.Platforms.GoogleSearchConsole.authorize_url(site, state)
+
+      _ ->
+        "#"
     end
   end
 

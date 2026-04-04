@@ -2,7 +2,7 @@ defmodule Spectabas.AdIntegrations.AdIntegration do
   use Ecto.Schema
   import Ecto.Changeset
 
-  @platforms ~w(google_ads bing_ads meta_ads stripe braintree)
+  @platforms ~w(google_ads bing_ads meta_ads stripe braintree google_search_console bing_webmaster)
 
   schema "ad_integrations" do
     belongs_to :site, Spectabas.Sites.Site

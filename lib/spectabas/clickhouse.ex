@@ -314,6 +314,25 @@ defmodule Spectabas.ClickHouse do
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_country ip_country TYPE bloom_filter GRANULARITY 4",
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_browser browser TYPE bloom_filter GRANULARITY 4",
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_referrer referrer_domain TYPE bloom_filter GRANULARITY 4",
+      """
+      CREATE TABLE IF NOT EXISTS #{db}.search_console (
+        site_id UInt64,
+        date Date,
+        query String,
+        page String,
+        country LowCardinality(String) DEFAULT '',
+        device LowCardinality(String) DEFAULT '',
+        source LowCardinality(String) DEFAULT 'google',
+        clicks UInt32 DEFAULT 0,
+        impressions UInt32 DEFAULT 0,
+        ctr Float32 DEFAULT 0,
+        position Float32 DEFAULT 0,
+        synced_at DateTime DEFAULT now()
+      ) ENGINE = ReplacingMergeTree(synced_at)
+      PARTITION BY toYYYYMM(date)
+      ORDER BY (site_id, date, query, page, source)
+      SETTINGS index_granularity = 8192
+      """,
       # Schema migrations — add columns that may not exist on older tables
       "ALTER TABLE #{db}.ecommerce_events ADD COLUMN IF NOT EXISTS refund_amount Decimal(12, 2) DEFAULT 0",
       "ALTER TABLE #{db}.ecommerce_events ADD COLUMN IF NOT EXISTS import_source LowCardinality(String) DEFAULT ''",
@@ -521,7 +540,7 @@ defmodule Spectabas.ClickHouse do
     "'#{e}'"
   end
 
-  @allowed_tables ~w(events daily_stats source_stats country_stats device_stats network_stats ecommerce_events subscription_events imported_daily_stats imported_pages imported_sources imported_countries imported_devices ad_spend)
+  @allowed_tables ~w(events daily_stats source_stats country_stats device_stats network_stats ecommerce_events subscription_events search_console imported_daily_stats imported_pages imported_sources imported_countries imported_devices ad_spend)
   defp sanitize_table(t) when t in @allowed_tables, do: t
   defp sanitize_table(t), do: raise(ArgumentError, "Unknown ClickHouse table: #{t}")
 

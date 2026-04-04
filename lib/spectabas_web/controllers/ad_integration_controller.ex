@@ -199,6 +199,60 @@ defmodule SpectabasWeb.AdIntegrationController do
     end
   end
 
+  defp handle_platform_callback(conn, "google_search_console", site, code) do
+    alias Spectabas.AdIntegrations.Platforms.GoogleSearchConsole
+
+    case GoogleSearchConsole.exchange_code(site, code) do
+      {:ok, tokens} ->
+        # List available GSC properties
+        case GoogleSearchConsole.list_sites(tokens.access_token) do
+          {:ok, [single]} ->
+            merged =
+              Map.merge(tokens, %{
+                account_id: single.url,
+                account_name: single.url,
+                extra: %{"site_url" => single.url}
+              })
+
+            save_and_redirect(conn, "google_search_console", site.id, merged)
+
+          {:ok, sites} when length(sites) > 1 ->
+            # For now, pick the first one that matches the site's parent domain
+            parent = Spectabas.Sites.parent_domain_for(site)
+
+            selected =
+              Enum.find(sites, List.first(sites), fn s ->
+                String.contains?(s.url, parent || "")
+              end)
+
+            merged =
+              Map.merge(tokens, %{
+                account_id: selected.url,
+                account_name: selected.url,
+                extra: %{"site_url" => selected.url}
+              })
+
+            save_and_redirect(conn, "google_search_console", site.id, merged)
+
+          {:ok, []} ->
+            conn
+            |> put_flash(
+              :error,
+              "No Search Console properties found. Verify your site is added in GSC."
+            )
+            |> redirect(to: ~p"/dashboard/sites/#{site.id}/settings")
+
+          {:error, reason} ->
+            conn
+            |> put_flash(:error, "Failed to list GSC properties: #{reason}")
+            |> redirect(to: ~p"/dashboard/sites/#{site.id}/settings")
+        end
+
+      {:error, reason} ->
+        exchange_error(conn, "Google Search Console", site.id, reason)
+    end
+  end
+
   defp handle_platform_callback(conn, _, _site, _code) do
     conn
     |> put_flash(:error, "Unknown ad platform.")

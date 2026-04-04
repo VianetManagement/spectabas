@@ -45,6 +45,23 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.5.0 — 2026-04-04 UTC",
+       [
+         %{
+           title: "Feature: Google Search Console & Bing Webmaster integration",
+           description:
+             "New Search Keywords page under Acquisition showing organic search queries, impressions, " <>
+               "clicks, CTR, and average position. Google Search Console via OAuth2, Bing Webmaster via API key. " <>
+               "Data syncs daily (2-3 day delay for GSC). Sortable columns, source filter (Google/Bing/All), " <>
+               "date range selector, top pages by search, position color-coding."
+         },
+         %{
+           title: "Feature: Ecommerce source filtering",
+           description:
+             "When Stripe is connected, revenue dashboards automatically show only Stripe data (pi_* orders). " <>
+               "API transactions are still collected but not displayed — prevents double-counting."
+         }
+       ]},
       {"v5.4.0 — 2026-04-03 UTC",
        [
          %{

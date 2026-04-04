@@ -73,7 +73,9 @@ config :spectabas, Oban,
        {"0 */6 * * *", Spectabas.Workers.AdSpendSync},
        # Every 5 minutes — check payment integrations (per-integration frequency in extra map)
        {"*/5 * * * *", Spectabas.Workers.StripeSync},
-       {"*/5 * * * *", Spectabas.Workers.BraintreeSync}
+       {"*/5 * * * *", Spectabas.Workers.BraintreeSync},
+       # Daily at 8am UTC — sync search console data (2-3 day delay for GSC)
+       {"0 8 * * *", Spectabas.Workers.SearchConsoleSync}
      ]}
   ]
 

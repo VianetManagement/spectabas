@@ -2829,6 +2829,69 @@ defmodule SpectabasWeb.DocsLive do
             """
           },
           %{
+            id: "search-console-setup",
+            title: "Google Search Console",
+            body: """
+            Import search analytics data — queries, impressions, clicks, CTR, and position rankings.
+
+            ### Setup
+
+            **Step 1: Create OAuth credentials** (reuse your Google Ads project if you have one)
+
+            - Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+            - Enable the **Search Console API** (APIs & Services > Library > search for "Search Console API")
+            - Create OAuth 2.0 credentials (Web application)
+            - Add redirect URI: `https://www.spectabas.com/auth/ad/google_search_console/callback`
+            - Copy Client ID and Client Secret
+
+            **Step 2: Connect in Spectabas**
+
+            - Site Settings > Integrations > Google Search Console > Configure
+            - Enter Client ID and Client Secret > Save Credentials
+            - Click Connect — authorize in Google
+            - Spectabas auto-selects the matching GSC property
+
+            ### What Gets Synced
+
+            | Field | Description |
+            |-------|-------------|
+            | Query | The search term the user typed |
+            | Page | The URL that appeared in search results |
+            | Country | Searcher's country |
+            | Device | Desktop, Mobile, or Tablet |
+            | Clicks | Number of clicks from this query/page |
+            | Impressions | Number of times this page appeared for this query |
+            | CTR | Click-through rate (clicks / impressions) |
+            | Position | Average ranking position in search results |
+
+            Data syncs daily. GSC has a 2-3 day reporting delay — today's data won't be available until 2-3 days from now.
+
+            ### Where It Appears
+
+            **Acquisition > Search Keywords** — top queries, top pages, sortable by any column, filterable by source and date range.
+            """
+          },
+          %{
+            id: "bing-webmaster-setup",
+            title: "Bing Webmaster",
+            body: """
+            Import search analytics from Bing and Yahoo search.
+
+            ### Setup
+
+            - Go to [Bing Webmaster Tools](https://www.bing.com/webmasters) > Settings > API access
+            - Copy your API key
+            - Site Settings > Integrations > Bing Webmaster > Configure
+            - Paste API key > Save Credentials
+
+            ### What Gets Synced
+
+            Same fields as Google Search Console (queries, clicks, impressions, CTR, position) but from Bing/Yahoo search traffic.
+
+            Data appears on the **Search Keywords** page alongside Google data. Use the source filter to view Google-only, Bing-only, or combined.
+            """
+          },
+          %{
             id: "api-keys-setup",
             title: "API Keys",
             body: """

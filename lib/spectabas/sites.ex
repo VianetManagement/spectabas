@@ -11,6 +11,17 @@ defmodule Spectabas.Sites do
   @doc """
   List all sites, ordered by name.
   """
+  @doc "Extract parent domain from a site's analytics subdomain (e.g., b.example.com → example.com)."
+  def parent_domain_for(%Site{domain: domain}) do
+    parts = String.split(domain, ".")
+
+    if length(parts) > 2 do
+      parts |> Enum.drop(1) |> Enum.join(".")
+    else
+      domain
+    end
+  end
+
   def list_sites do
     Repo.all(from s in Site, order_by: [asc: s.name])
   end

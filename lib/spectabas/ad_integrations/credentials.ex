@@ -77,6 +77,16 @@ defmodule Spectabas.AdIntegrations.Credentials do
       creds["private_key"] not in [nil, ""]
   end
 
+  def configured?(site, "google_search_console") do
+    creds = get_for_platform(site, "google_search_console")
+    creds["client_id"] not in [nil, ""] and creds["client_secret"] not in [nil, ""]
+  end
+
+  def configured?(site, "bing_webmaster") do
+    creds = get_for_platform(site, "bing_webmaster")
+    creds["api_key"] not in [nil, ""]
+  end
+
   def configured?(_, _), do: false
 
   defp decrypt_all(%{ad_credentials_encrypted: nil}), do: %{}
