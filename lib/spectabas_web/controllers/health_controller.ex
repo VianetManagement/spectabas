@@ -762,6 +762,25 @@ defmodule SpectabasWeb.HealthController do
            Spectabas.ClickHouse.execute_admin(
              "ALTER TABLE #{db}.ecommerce_events ADD COLUMN IF NOT EXISTS import_source LowCardinality(String) DEFAULT ''"
            )},
+          {"ad_spend",
+           Spectabas.ClickHouse.execute_admin("""
+           CREATE TABLE IF NOT EXISTS #{db}.ad_spend (
+             site_id UInt64,
+             date Date,
+             platform LowCardinality(String),
+             account_id String DEFAULT '',
+             campaign_id String DEFAULT '',
+             campaign_name String DEFAULT '',
+             spend Decimal(12, 2) DEFAULT 0,
+             clicks UInt64 DEFAULT 0,
+             impressions UInt64 DEFAULT 0,
+             currency LowCardinality(String) DEFAULT 'USD',
+             synced_at DateTime DEFAULT now()
+           ) ENGINE = ReplacingMergeTree(synced_at)
+           PARTITION BY toYYYYMM(date)
+           ORDER BY (site_id, date, platform, campaign_id)
+           SETTINGS index_granularity = 8192
+           """)},
           {"search_console",
            Spectabas.ClickHouse.execute_admin("""
            CREATE TABLE IF NOT EXISTS #{db}.search_console (
