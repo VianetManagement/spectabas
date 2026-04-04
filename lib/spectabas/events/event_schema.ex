@@ -96,7 +96,13 @@ defmodule Spectabas.Events.EventSchema do
   defp to_float(nil), do: 0.0
   defp to_float(v) when is_float(v), do: v
   defp to_float(v) when is_integer(v), do: v / 1
-  defp to_float(v) when is_binary(v), do: String.to_float(v)
+
+  defp to_float(v) when is_binary(v) do
+    case Float.parse(v) do
+      {f, _} -> f
+      :error -> 0.0
+    end
+  end
 
   defp to_uint8(nil), do: 0
   defp to_uint8(true), do: 1

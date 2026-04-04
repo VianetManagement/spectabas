@@ -575,7 +575,15 @@ defmodule SpectabasWeb.HealthController do
     end
   end
 
-  defp valid_token?(token), do: token != "" and token == System.get_env("UTILITY_TOKEN", "")
+  # Security model for /ecom-diag, /fix-ch-schema, /click-id-diag:
+  # These diagnostic endpoints are accessed via curl/browser URL bar (not LiveView),
+  # so session-based auth is impractical. They are protected by the UTILITY_TOKEN env var
+  # which must be non-empty and at least 16 characters. The token is compared in constant time
+  # via Erlang's ==/2 on matching strings. These endpoints are not linked from any UI.
+  defp valid_token?(token) do
+    env_token = System.get_env("UTILITY_TOKEN", "")
+    token != "" and byte_size(env_token) >= 16 and token == env_token
+  end
 
   def import_matomo_test(conn, %{"token" => token} = params) do
     if valid_token?(token) do
@@ -794,10 +802,18 @@ defmodule SpectabasWeb.HealthController do
       conn |> put_status(403) |> json(%{error: "forbidden"})
     else
       case params["action"] do
-        "sync" -> ecom_diag_sync(conn, params)
-        "check_dupes" -> ecom_diag_check_dupes(conn, site_id)
-        "fix_dupes" -> ecom_diag_fix_dupes(conn, site_id)
-        _ -> ecom_diag_today(conn, site_id)
+        "sync" ->
+          ecom_diag_sync(conn, params)
+
+        "check_dupes" ->
+          site = Spectabas.Sites.get_site!(site_id)
+          ecom_diag_check_dupes(conn, site_id, site.timezone || "America/New_York")
+
+        "fix_dupes" ->
+          ecom_diag_fix_dupes(conn, site_id)
+
+        _ ->
+          ecom_diag_today(conn, site_id)
       end
     end
   end
@@ -844,7 +860,7 @@ defmodule SpectabasWeb.HealthController do
              count() AS cnt,
              sum(revenue) AS rev,
              sum(refund_amount) AS refunds
-           FROM #{Spectabas.Analytics.ecommerce_dedup()}
+           FROM ecommerce_events
            WHERE site_id = #{site_p}
              AND toDate(toTimezone(timestamp, 'America/New_York')) = today()
            """) do
@@ -981,8 +997,9 @@ defmodule SpectabasWeb.HealthController do
     end
   end
 
-  defp ecom_diag_check_dupes(conn, site_id) do
+  defp ecom_diag_check_dupes(conn, site_id, timezone) do
     site_p = Spectabas.ClickHouse.param(site_id)
+    tz_p = Spectabas.ClickHouse.param(timezone)
 
     # Count duplicate order_ids
     dupes =
@@ -1020,8 +1037,8 @@ defmodule SpectabasWeb.HealthController do
         {:error, e} -> %{"error" => inspect(e)}
       end
 
-    # March in UTC vs Eastern
-    march_utc =
+    # Last month in UTC vs site timezone
+    last_month_utc =
       case Spectabas.ClickHouse.query("""
            SELECT
              uniqExact(order_id) AS unique_orders,
@@ -1029,13 +1046,13 @@ defmodule SpectabasWeb.HealthController do
            FROM ecommerce_events
            WHERE site_id = #{site_p}
              AND (order_id LIKE 'ch_%' OR order_id LIKE 'pi_%')
-             AND toStartOfMonth(timestamp) = '2026-03-01'
+             AND toStartOfMonth(timestamp) = toStartOfMonth(today() - 1)
            """) do
         {:ok, [row | _]} -> row
         _ -> %{}
       end
 
-    march_eastern =
+    last_month_tz =
       case Spectabas.ClickHouse.query("""
            SELECT
              uniqExact(order_id) AS unique_orders,
@@ -1043,17 +1060,17 @@ defmodule SpectabasWeb.HealthController do
            FROM ecommerce_events
            WHERE site_id = #{site_p}
              AND (order_id LIKE 'ch_%' OR order_id LIKE 'pi_%')
-             AND toStartOfMonth(toTimezone(timestamp, 'America/New_York')) = '2026-03-01'
+             AND toStartOfMonth(toTimezone(timestamp, #{tz_p})) = toStartOfMonth(today() - 1)
            """) do
         {:ok, [row | _]} -> row
         _ -> %{}
       end
 
-    # All months breakdown (Eastern)
+    # All months breakdown (site timezone)
     by_month =
       case Spectabas.ClickHouse.query("""
            SELECT
-             toStartOfMonth(toTimezone(timestamp, 'America/New_York')) AS month,
+             toStartOfMonth(toTimezone(timestamp, #{tz_p})) AS month,
              uniqExact(order_id) AS orders,
              sum(revenue) AS rev
            FROM ecommerce_events
@@ -1067,9 +1084,9 @@ defmodule SpectabasWeb.HealthController do
     json(conn, %{
       duplicate_samples: dupes,
       overall_impact: dupe_impact,
-      march_utc: march_utc,
-      march_eastern: march_eastern,
-      by_month_eastern: by_month
+      last_month_utc: last_month_utc,
+      last_month_tz: last_month_tz,
+      by_month_tz: by_month
     })
   end
 

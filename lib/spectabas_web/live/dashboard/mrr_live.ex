@@ -288,7 +288,7 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
               <div class="bg-white rounded-lg shadow p-5">
                 <dt class="text-sm font-medium text-gray-500 mb-1">Orders</dt>
                 <dd class="text-3xl font-bold text-gray-900">
-                  {fmt_num(@revenue_stats["total_orders"] || "0")}
+                  {format_number(@revenue_stats["total_orders"] || "0")}
                 </dd>
               </div>
               <div class="bg-white rounded-lg shadow p-5">
@@ -344,7 +344,7 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
                         {Spectabas.Currency.format(to_float(point["net_revenue"]), @site.currency)}
                       </span>
                       <span class="text-xs text-gray-400 w-20 text-right shrink-0">
-                        {fmt_num(point["orders"])} orders
+                        {format_number(point["orders"])} orders
                       </span>
                     </div>
                   <% end %>
@@ -374,7 +374,7 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
                 <div class="bg-white rounded-lg shadow p-5">
                   <dt class="text-sm font-medium text-gray-500 mb-1">Active</dt>
                   <dd class="text-3xl font-bold text-gray-900">
-                    {fmt_num(@mrr_stats["active_subs"] || "0")}
+                    {format_number(@mrr_stats["active_subs"] || "0")}
                   </dd>
                   <dd class="text-xs text-gray-400 mt-1">subscriptions</dd>
                 </div>
@@ -391,13 +391,13 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
                 <div class="bg-white rounded-lg shadow p-5">
                   <dt class="text-sm font-medium text-gray-500 mb-1">Past Due</dt>
                   <dd class={"text-3xl font-bold " <> if(to_num(@mrr_stats["past_due_subs"] || "0") > 0, do: "text-amber-600", else: "text-gray-900")}>
-                    {fmt_num(@mrr_stats["past_due_subs"] || "0")}
+                    {format_number(@mrr_stats["past_due_subs"] || "0")}
                   </dd>
                 </div>
                 <div class="bg-white rounded-lg shadow p-5">
                   <dt class="text-sm font-medium text-gray-500 mb-1">Canceled</dt>
                   <dd class={"text-3xl font-bold " <> if(to_num(@mrr_stats["canceled_subs"] || "0") > 0, do: "text-red-600", else: "text-gray-900")}>
-                    {fmt_num(@mrr_stats["canceled_subs"] || "0")}
+                    {format_number(@mrr_stats["canceled_subs"] || "0")}
                   </dd>
                 </div>
               </div>
@@ -425,7 +425,7 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
                           {Spectabas.Currency.format(to_float(point["mrr"]), @site.currency)}
                         </span>
                         <span class="text-xs text-gray-400 w-16 text-right shrink-0">
-                          {fmt_num(point["subs"])} subs
+                          {format_number(point["subs"])} subs
                         </span>
                       </div>
                     <% end %>
@@ -467,7 +467,9 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
                                 {plan["plan_interval"]}
                               </span>
                             </td>
-                            <td class="text-right py-3 text-sm">{fmt_num(plan["sub_count"])}</td>
+                            <td class="text-right py-3 text-sm">
+                              {format_number(plan["sub_count"])}
+                            </td>
                             <td class="text-right py-3">
                               <div class="font-semibold text-purple-700">
                                 {Spectabas.Currency.format(to_float(plan["plan_mrr"]), @site.currency)}
@@ -631,17 +633,6 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
   defp status_color("past_due"), do: "bg-amber-100 text-amber-700"
   defp status_color("canceled"), do: "bg-red-100 text-red-700"
   defp status_color(_), do: "bg-gray-100 text-gray-600"
-
-  defp fmt_num(n) do
-    n
-    |> to_num()
-    |> Integer.to_string()
-    |> String.graphemes()
-    |> Enum.reverse()
-    |> Enum.chunk_every(3)
-    |> Enum.join(",")
-    |> String.reverse()
-  end
 
   defp format_date(nil), do: "—"
   defp format_date(""), do: "—"

@@ -176,7 +176,7 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
       {:ok, charges} ->
         # Skip charges already imported (prevents re-importing same ch_* IDs on re-sync).
         # Cross-source dedup (API vs Stripe for same payment) is handled at query time
-        # via ecommerce_dedup() — all sources insert freely, queries deduplicate.
+        # via ecommerce_source_filter — all sources insert freely, queries filter by source.
         existing_ids = existing_order_ids(site.id, date)
         new_charges = Enum.reject(charges, fn c -> c.charge_id in existing_ids end)
 

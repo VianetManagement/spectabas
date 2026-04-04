@@ -9,6 +9,7 @@ defmodule Spectabas.Analytics.AnomalyDetector do
   alias Spectabas.{ClickHouse, Accounts}
   alias Spectabas.Sites.Site
   alias Spectabas.Accounts.User
+  import Spectabas.TypeHelpers, only: [to_int: 1, to_float: 1]
 
   @thresholds %{
     traffic_drop: -30,
@@ -658,27 +659,4 @@ defmodule Spectabas.Analytics.AnomalyDetector do
   end
 
   defp fmt(%DateTime{} = dt), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S")
-
-  defp to_int(n) when is_integer(n), do: n
-
-  defp to_int(n) when is_binary(n) do
-    case Integer.parse(n) do
-      {i, _} -> i
-      :error -> 0
-    end
-  end
-
-  defp to_int(_), do: 0
-
-  defp to_float(n) when is_float(n), do: n
-  defp to_float(n) when is_integer(n), do: n * 1.0
-
-  defp to_float(n) when is_binary(n) do
-    case Float.parse(n) do
-      {f, _} -> f
-      :error -> 0.0
-    end
-  end
-
-  defp to_float(_), do: 0.0
 end

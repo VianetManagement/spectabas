@@ -138,7 +138,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
 
       {:ok, transactions} ->
         # Skip transactions already imported (prevents re-importing same IDs on re-sync).
-        # Cross-source dedup handled at query time via ecommerce_dedup().
+        # Cross-source dedup handled at query time via ecommerce_source_filter.
         existing_ids = existing_order_ids(site.id, date)
         new_txns = Enum.reject(transactions, fn t -> t.id in existing_ids end)
 

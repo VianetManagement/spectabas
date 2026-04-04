@@ -3541,32 +3541,6 @@ defmodule Spectabas.Analytics do
   defp format_datetime(dt_string) when is_binary(dt_string), do: dt_string
 
   @doc """
-  Deduplicated ecommerce subquery — prevents double-counting when the same
-  transaction is recorded by both the API and a payment provider (Stripe/Braintree).
-  Groups by amount + 10-minute time window, keeps the imported version (has charge ID)
-  over the API version when both exist.
-  """
-  def ecommerce_dedup do
-    # Dedup key: site + visitor + amount + 10-minute window.
-    # Two DIFFERENT customers with the same amount in the same window are kept (different visitor_id).
-    # The SAME customer with the same amount in the same window (API + Stripe duplicate) is deduped.
-    # Visitors with empty visitor_id are kept as-is (can't dedup without identity).
-    """
-    (SELECT * FROM (
-      SELECT *,
-        if(visitor_id = '',
-          1,
-          ROW_NUMBER() OVER (
-            PARTITION BY site_id, visitor_id, round(revenue, 2), toStartOfInterval(timestamp, INTERVAL 10 MINUTE)
-            ORDER BY order_id
-          )
-        ) AS _dedup_rn
-      FROM ecommerce_events
-    ) WHERE _dedup_rn = 1)
-    """
-  end
-
-  @doc """
   Returns a SQL WHERE fragment that filters ecommerce_events by source.
   If the site has an active Stripe integration, only show Stripe data (pi_*).
   Otherwise, show all data (API + JS tracker).

@@ -324,7 +324,7 @@ defmodule Spectabas.AdIntegrationsTest do
   end
 
   describe "mark_error/2" do
-    test "sets status to error with message", %{site: site} do
+    test "records error message but keeps status active", %{site: site} do
       {:ok, integration} =
         AdIntegrations.connect(site.id, "bing_ads", %{
           access_token: "a",
@@ -332,7 +332,7 @@ defmodule Spectabas.AdIntegrationsTest do
         })
 
       {:ok, errored} = AdIntegrations.mark_error(integration, "API rate limit exceeded")
-      assert errored.status == "error"
+      assert errored.status == "active"
       assert errored.last_error == "API rate limit exceeded"
     end
 

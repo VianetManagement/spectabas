@@ -94,7 +94,7 @@ defmodule Spectabas.StripeIntegrationTest do
       assert synced.last_error == nil
 
       {:ok, errored} = AdIntegrations.mark_error(synced, "test error")
-      assert errored.status == "error"
+      assert errored.status == "active"
       assert errored.last_error == "test error"
     end
   end

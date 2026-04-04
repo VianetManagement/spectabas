@@ -113,30 +113,44 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
 
   def handle_event("backfill_payment_data", %{"id" => id, "days" => days}, socket) do
     integration = authorize_integration!(id, socket) |> Spectabas.Repo.preload(:site)
-    num_days = String.to_integer(days)
+
+    num_days =
+      case Integer.parse(days) do
+        {n, _} when n > 0 and n <= 365 -> n
+        _ -> 30
+      end
 
     Task.start(fn ->
-      today = Date.utc_today()
+      try do
+        today = Date.utc_today()
 
-      Enum.each(0..num_days, fn offset ->
-        date = Date.add(today, -offset)
+        Enum.each(0..num_days, fn offset ->
+          date = Date.add(today, -offset)
 
-        case integration.platform do
-          "stripe" ->
-            Spectabas.AdIntegrations.Platforms.StripePlatform.sync_charges(
-              integration.site,
-              integration,
-              date
-            )
+          case integration.platform do
+            "stripe" ->
+              Spectabas.AdIntegrations.Platforms.StripePlatform.sync_charges(
+                integration.site,
+                integration,
+                date
+              )
 
-          "braintree" ->
-            Spectabas.AdIntegrations.Platforms.BraintreePlatform.sync_transactions(
-              integration.site,
-              integration,
-              date
-            )
-        end
-      end)
+            "braintree" ->
+              Spectabas.AdIntegrations.Platforms.BraintreePlatform.sync_transactions(
+                integration.site,
+                integration,
+                date
+              )
+
+            _ ->
+              :noop
+          end
+        end)
+      rescue
+        e ->
+          require Logger
+          Logger.error("[Backfill] Payment backfill failed: #{Exception.message(e)}")
+      end
     end)
 
     {:noreply,
@@ -152,13 +166,37 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
 
     case integration.platform do
       "stripe" ->
-        Task.start(fn -> Spectabas.Workers.StripeSync.sync_now(integration) end)
+        Task.start(fn ->
+          try do
+            Spectabas.Workers.StripeSync.sync_now(integration)
+          rescue
+            e ->
+              require Logger
+              Logger.error("[SyncNow] Stripe sync failed: #{Exception.message(e)}")
+          end
+        end)
 
       "braintree" ->
-        Task.start(fn -> Spectabas.Workers.BraintreeSync.sync_now(integration) end)
+        Task.start(fn ->
+          try do
+            Spectabas.Workers.BraintreeSync.sync_now(integration)
+          rescue
+            e ->
+              require Logger
+              Logger.error("[SyncNow] Braintree sync failed: #{Exception.message(e)}")
+          end
+        end)
 
       p when p in ["google_search_console", "bing_webmaster"] ->
-        Task.start(fn -> Spectabas.Workers.SearchConsoleSync.sync_now(integration) end)
+        Task.start(fn ->
+          try do
+            Spectabas.Workers.SearchConsoleSync.sync_now(integration)
+          rescue
+            e ->
+              require Logger
+              Logger.error("[SyncNow] SearchConsole sync failed: #{Exception.message(e)}")
+          end
+        end)
 
       _ ->
         Oban.insert(Spectabas.Workers.AdSpendSyncOne.new(%{"integration_id" => integration.id}))

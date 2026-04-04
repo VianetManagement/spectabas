@@ -7,6 +7,7 @@ defmodule Spectabas.Workers.AdSpendSync do
 
   alias Spectabas.{AdIntegrations, ClickHouse}
   alias Spectabas.AdIntegrations.Platforms.{GoogleAds, BingAds, MetaAds}
+  import Spectabas.TypeHelpers, only: [to_int: 1]
 
   @impl Oban.Worker
   def perform(_job) do
@@ -47,21 +48,10 @@ defmodule Spectabas.Workers.AdSpendSync do
     """
 
     case ClickHouse.query(sql) do
-      {:ok, [%{"cnt" => cnt}]} -> to_num(cnt) > 0
+      {:ok, [%{"cnt" => cnt}]} -> to_int(cnt) > 0
       _ -> false
     end
   end
-
-  defp to_num(n) when is_integer(n), do: n
-
-  defp to_num(n) when is_binary(n) do
-    case Integer.parse(n) do
-      {i, _} -> i
-      :error -> 0
-    end
-  end
-
-  defp to_num(_), do: 0
 
   @doc "Sync a single integration for a given date. Called by AdSpendSyncOne."
   def sync_one(integration, date), do: sync_integration(integration, date)
