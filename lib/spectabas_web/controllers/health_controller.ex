@@ -1011,18 +1011,12 @@ defmodule SpectabasWeb.HealthController do
   defp ecom_diag_fix_dupes(conn, site_id) do
     site_p = Spectabas.ClickHouse.param(site_id)
 
-    # ClickHouse dedup: use OPTIMIZE with DEDUPLICATE BY
-    # This removes exact duplicate rows
-    result =
-      Spectabas.ClickHouse.execute_admin(
-        "OPTIMIZE TABLE ecommerce_events FINAL DEDUPLICATE BY site_id, order_id"
-      )
-
     db = Application.get_env(:spectabas, Spectabas.ClickHouse)[:database] || "spectabas"
 
+    # DEDUPLICATE BY must include all ORDER BY columns (site_id, timestamp, order_id)
     result =
       Spectabas.ClickHouse.execute_admin(
-        "OPTIMIZE TABLE #{db}.ecommerce_events FINAL DEDUPLICATE BY site_id, order_id"
+        "OPTIMIZE TABLE #{db}.ecommerce_events FINAL DEDUPLICATE BY site_id, timestamp, order_id"
       )
 
     json(conn, %{
