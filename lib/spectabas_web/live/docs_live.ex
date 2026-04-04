@@ -2374,220 +2374,24 @@ defmodule SpectabasWeb.DocsLive do
             """
           },
           %{
-            id: "ad-integrations",
-            title: "Ad Platform Integrations",
+            id: "integration-overview",
+            title: "Integration Overview",
             body: """
-            Connect your advertising accounts and payment providers to track Return on Ad Spend (ROAS) and revenue directly in Spectabas. Supported platforms: **Google Ads**, **Microsoft/Bing Ads**, **Meta/Facebook Ads**, and **Stripe** (charge import).
+            Connect your advertising accounts and payment providers to track Return on Ad Spend (ROAS) and revenue directly in Spectabas. Supported platforms: **Google Ads**, **Microsoft/Bing Ads**, **Meta/Facebook Ads**, **Stripe**, and **Braintree**.
+
+            For platform-specific setup instructions, see:
+            - [Google Ads](/docs/conversions#google-ads-setup)
+            - [Microsoft/Bing Ads](/docs/conversions#bing-ads-setup)
+            - [Meta/Facebook Ads](/docs/conversions#meta-ads-setup)
+            - [Stripe](/docs/admin#stripe-setup)
+            - [Braintree](/docs/admin#braintree-setup)
 
             ### How It Works
 
             - An admin connects each ad account via OAuth2 from **Site Settings > Ad Platform Integrations**
             - Spectabas syncs daily campaign spend data (spend, clicks, impressions) every 6 hours
+            - Payment providers (Stripe, Braintree) sync completed charges every 6 hours
             - The **Revenue Attribution** page joins ad spend with purchase data to calculate ROAS per campaign
-
-            ### Setting Up
-
-            ### Google Ads (3 credentials: Client ID, Client Secret, Developer Token)
-
-            **Step 1: Create a Google Cloud project**
-
-            - Go to Google Cloud Console (`console.cloud.google.com`)
-            - Click the project dropdown at the top left, then **New Project**
-            - Name it something like "Spectabas Analytics" and click **Create**
-            - Make sure the new project is selected in the dropdown
-
-            **Step 2: Enable the Google Ads API**
-
-            - In the left sidebar, go to **APIs & Services > Library**
-            - Search for "Google Ads API"
-            - Click on it and press **Enable**
-
-            **Step 3: Create OAuth credentials**
-
-            - Go to **APIs & Services > Credentials** in the left sidebar
-            - Click **+ Create Credentials > OAuth 2.0 Client ID**
-            - If prompted, configure the OAuth consent screen first (choose "External", fill in app name and email)
-            - For Application type, select **Web application**
-            - Name it "Spectabas"
-            - Under **Authorized redirect URIs**, click **Add URI** and enter: `https://www.spectabas.com/auth/ad/google_ads/callback`
-            - Click **Create**
-            - A dialog shows your **Client ID** and **Client Secret** — copy both
-
-            **Step 4: Get a Developer Token**
-
-            - Sign in to Google Ads (`ads.google.com`) with the account that manages your ad campaigns
-            - Go to **Tools & Settings > Setup > API Center** (or visit `ads.google.com/aw/apicenter` directly)
-            - If you don't have a developer token yet, click **Apply for access**
-            - Choose **Basic access** (self-approved, sufficient for Spectabas)
-            - Copy your **Developer Token**
-
-            **Step 5: Enter in Spectabas**
-
-            - Go to your site's **Settings** page
-            - Scroll to **Ad Platform Integrations > Google Ads**
-            - Click **Configure**
-            - Paste the Client ID, Client Secret, and Developer Token
-            - Click **Save Credentials**
-            - Click **Connect** to authorize
-
-            ---
-
-            ### Microsoft/Bing Ads (3 credentials: Client ID, Client Secret, Developer Token)
-
-            **Step 1: Register an app in Azure**
-
-            - Go to Azure Portal (`portal.azure.com`)
-            - Search for "App registrations" in the top search bar and click it
-            - Click **+ New registration**
-            - Name: "Spectabas Ad Sync"
-            - Supported account types: **Accounts in any organizational directory** (Multitenant)
-            - Redirect URI: select **Web** and enter `https://www.spectabas.com/auth/ad/bing_ads/callback`
-            - Click **Register**
-
-            **Step 2: Get the Client ID**
-
-            - On the app's **Overview** page, copy the **Application (client) ID** — this is your Client ID
-
-            **Step 3: Create a Client Secret**
-
-            - In the left sidebar, click **Certificates & secrets**
-            - Click **+ New client secret**
-            - Enter a description (e.g., "Spectabas") and choose an expiry (24 months recommended)
-            - Click **Add**
-            - Copy the **Value** (not the Secret ID) — this is your Client Secret. It's only shown once.
-
-            **Step 4: Get a Developer Token**
-
-            - Go to Microsoft Advertising Developer Portal (`developers.ads.microsoft.com`)
-            - Sign in with your Microsoft Advertising account
-            - Request a **Developer Token** if you don't have one
-            - Copy the token
-
-            **Step 5: Enter in Spectabas**
-
-            - Go to your site's **Settings > Ad Platform Integrations > Microsoft Ads**
-            - Click **Configure**
-            - Paste the Client ID, Client Secret, and Developer Token
-            - Click **Save Credentials**, then **Connect**
-
-            ---
-
-            ### Meta/Facebook Ads (2 credentials: App ID, App Secret)
-
-            **Step 1: Create a Business App**
-
-            - Go to Meta for Developers (`developers.facebook.com`) and log in with the Facebook account that manages your ads
-            - Click **My Apps** in the top right, then **Create App**
-            - Meta may show either a use-case flow or a type-selection flow:
-            - **If you see "What do you want your app to do?"** — select **Other**, then select **Business** as the app type
-            - **If you see use-case options** — select **Advertise** or **Other** and choose **Business** when prompted
-            - Enter an app name (e.g., "Spectabas Analytics")
-            - Associate it with your Business portfolio if prompted (this is the Business Manager account that owns your ad accounts)
-            - Click **Create App**
-
-            > **Business app type is required.** Consumer apps cannot access the Marketing API or ad insights. If you accidentally created a Consumer app, delete it and start over with Business.
-
-            **Step 2: Add the Marketing API product**
-
-            - On your app's dashboard, scroll to the **Add Products** section
-            - Find **Marketing API** and click **Set Up**
-            - This enables the ad insights endpoints — no additional configuration needed within this product
-            - The Marketing API does NOT create a separate token — Spectabas uses the OAuth2 token from Facebook Login
-
-            **Step 3: Add Facebook Login product**
-
-            - On the same dashboard, find **Facebook Login for Business** (or **Facebook Login**) and click **Set Up**
-            - Choose **Web** as the platform
-            - In the left sidebar, go to **Facebook Login > Settings**
-            - Under **Valid OAuth Redirect URIs**, add: `https://www.spectabas.com/auth/ad/meta_ads/callback`
-            - Make sure **Client OAuth Login** and **Web OAuth Login** are both **ON**
-            - Click **Save Changes**
-
-            **Step 4: Switch to Live Mode**
-
-            - At the top of the App Dashboard, you'll see a toggle that says **Development** or **In Development**
-            - Switch it to **Live**
-            - Meta may require you to complete **Business Verification** first (verify your company identity at `business.facebook.com/settings/info`)
-            - If you're the only person connecting (app admin), Development Mode works, but Live Mode is needed if other team members will connect their own accounts
-
-            **Step 5: Get App ID and Secret**
-
-            - In the left sidebar, go to **App Settings > Basic**
-            - Your **App ID** is shown at the top of the page
-            - Click **Show** next to **App Secret** and copy it
-            - Both values are needed for Spectabas
-
-            **Step 6: Enter in Spectabas**
-
-            - Go to your site's **Settings > Ad Platform Integrations > Meta Ads**
-            - Click **Configure**
-            - Paste the App ID and App Secret
-            - Click **Save Credentials**, then **Connect**
-            - You'll be redirected to Facebook to authorize — grant the `ads_read` permission when prompted
-            - Spectabas will fetch your accessible ad accounts and connect
-
-            > **No app review needed.** The `ads_read` permission works with Standard Access for reading your own ad account data. You do NOT need to submit for Advanced Access or go through Meta's app review process. The Marketing API product does not create its own token — the OAuth2 user token from Facebook Login handles everything.
-
-            > **Token refresh:** Spectabas exchanges the initial token for a 60-day long-lived token. The sync worker automatically refreshes this before it expires. If a token does expire, disconnect and reconnect from the Settings page.
-
-            > **All credentials are encrypted** at rest using AES-256-GCM and stored per-site in the database. No environment variables or server access needed. Each site can use its own OAuth apps or share credentials across sites.
-
-            ---
-
-            ### Stripe (1 credential: Secret API Key)
-
-            Stripe integration imports completed charges directly into your ecommerce data. Unlike the ad platforms above, Stripe uses a simple API key instead of OAuth — no app registration or redirect URLs needed.
-
-            **What it does:** Every 6 hours, Spectabas fetches completed Stripe charges and writes them to your ecommerce events. Each charge is matched to an identified visitor via their email address. This means Revenue Attribution, Revenue Cohorts, Buyer Patterns, and all ecommerce dashboards populate automatically.
-
-            **Prerequisite:** Your site must use the [server-side Identify API](/docs/api#identify) to associate visitor sessions with customer emails. Stripe charges are matched to visitors by email — if a visitor hasn't been identified, their charges still sync but won't be linked to their browsing behavior.
-
-            **Step 1: Create a Restricted API Key in Stripe**
-
-            A restricted key is more secure than your account's default secret key because it only grants the specific permissions Spectabas needs.
-
-            - Go to the [Stripe Dashboard](https://dashboard.stripe.com/apikeys) > **Developers** > **API keys**
-            - Click **+ Create restricted key**
-            - Name it "Spectabas Analytics" (or any name you'll recognize)
-            - Set the following permissions:
-
-            | Resource | Permission | Why |
-            |----------|------------|-----|
-            | **Charges** | **Read** | Fetches completed payments for revenue tracking |
-            | **Customers** | **Read** | Looks up customer email to match charges to visitors |
-            | **Refunds** | **Read** | Tracks refunds to adjust net revenue and LTV |
-            | **Subscriptions** | **Read** | Enables MRR tracking, plan breakdown, and churn detection |
-            | **Prices** | **Read** | Reads plan names and pricing for subscription details |
-            | **Products** | **Read** | Reads product names for subscription plan labels |
-            | All others | **None** | |
-
-            - Click **Create key**
-            - Copy the key (starts with `rk_live_`) — you won't be able to see it again
-
-            > **Why a restricted key?** The default secret key (`sk_live_`) has full access to your entire Stripe account including refunds, transfers, and customer management. A restricted key with read-only access to the resources above limits Spectabas to reading payment and subscription data — it cannot modify anything in your Stripe account.
-
-            > **Test mode:** You can use a test mode key (`rk_test_` or `sk_test_`) to verify the integration works before switching to live. Test mode charges won't appear in your analytics.
-
-            **Step 2: Enter in Spectabas**
-
-            - Go to your site's **Settings** page
-            - Scroll to **Ad Platform Integrations** > **Stripe**
-            - Click **Configure**
-            - Paste your Stripe secret key or restricted key
-            - Click **Save Credentials**
-            - The card will show "Connected" — click **Sync Now** to pull charges immediately, or wait for the next automatic sync (every 6 hours)
-
-            **Step 3: Verify**
-
-            - After syncing, go to **Conversions > Revenue Attribution** — you should see revenue data from Stripe charges
-            - Check the **Ecommerce** page for order counts and revenue totals
-            - Stripe charges appear with order IDs starting with `ch_` (Stripe charge IDs)
-
-            > **Deduplication:** Spectabas uses the Stripe charge ID as the order ID. If a charge is already in your ecommerce events (e.g., from a previous sync), it won't be inserted again. This means you can safely click "Sync Now" multiple times.
-
-            > **Existing ecommerce data:** If you already send transaction events via the JavaScript tracker or the server-side Transaction API, Stripe charges are additive. Each Stripe charge gets its own unique `ch_*` order ID, so there's no conflict with your existing `ORD-*` style order IDs. However, if you're tracking the same purchases through both Stripe import AND your own transaction API, you'll double-count revenue. Choose one method per payment flow.
-
-            > **Refunds and disputes:** The current integration syncs successful charges only. Refunds, disputes, and partial refunds are not yet tracked. If a charge is refunded after syncing, the revenue remains in your analytics data.
 
             ### Connecting an Account
 
@@ -2610,11 +2414,11 @@ defmodule SpectabasWeb.DocsLive do
             | Clicks | Total ad clicks |
             | Impressions | Total ad impressions |
 
-            **Stripe** — completed charges:
+            **Payment providers** (Stripe, Braintree) — completed charges:
 
             | Field | Description |
             |-------|-------------|
-            | Charge ID | Stripe charge ID (e.g., `ch_1234...`) used as order ID |
+            | Charge/Transaction ID | Platform ID (e.g., `ch_1234...`) used as order ID |
             | Revenue | Charge amount (converted from cents) |
             | Currency | Charge currency (USD, EUR, etc.) |
             | Email | Customer email — matched to identified visitors |
@@ -2674,11 +2478,203 @@ defmodule SpectabasWeb.DocsLive do
             - **No ROAS showing on Revenue Attribution** — Campaign names don't match between your UTM parameters and the ad platform. Check that `utm_campaign` values in your ad URLs exactly match the campaign names in Google/Bing/Meta.
             - **Data seems outdated** — Syncs happen every 6 hours. The most recent data is from yesterday (ad platforms don't report same-day spend in real time).
             - **Disconnecting doesn't delete spend data** — Historical ad spend data in ClickHouse is retained after disconnecting. Only the OAuth tokens are deleted.
-            - **Stripe charges not showing** — Verify visitors are identified via the Identify API with the same email used in Stripe. Charges from unidentified visitors sync but show as empty visitor_id.
-            - **Stripe "Invalid API key" error** — Check that you pasted the full key including the `sk_live_` or `rk_live_` prefix. Test mode keys (`sk_test_`, `rk_test_`) only return test data.
-            - **Stripe "permission denied" errors** — The restricted key needs Read access to: Charges, Customers, Refunds, Subscriptions, Prices, and Products. Regenerate the key with all six permissions.
-            - **MRR page shows no data** — Subscription snapshots are taken during each sync. Click Sync Now on the Settings page, then check MRR & Subscriptions.
-            - **Duplicate revenue from Stripe** — If you also send the same transactions via the Transaction API, revenue will be double-counted. Use one method per payment flow.
+            """
+          },
+          %{
+            id: "google-ads-setup",
+            title: "Google Ads",
+            body: """
+            Connect Google Ads to sync daily campaign spend data and calculate ROAS in Spectabas. Requires 3 credentials: Client ID, Client Secret, and Developer Token.
+
+            > See also: [Integration Overview](/docs/conversions#integration-overview) for ROAS, Click IDs, and sync schedule.
+
+            ### Step 1: Create a Google Cloud project
+
+            - Go to Google Cloud Console (`console.cloud.google.com`)
+            - Click the project dropdown at the top left, then **New Project**
+            - Name it something like "Spectabas Analytics" and click **Create**
+            - Make sure the new project is selected in the dropdown
+
+            ### Step 2: Enable the Google Ads API
+
+            - In the left sidebar, go to **APIs & Services > Library**
+            - Search for "Google Ads API"
+            - Click on it and press **Enable**
+
+            ### Step 3: Create OAuth credentials
+
+            - Go to **APIs & Services > Credentials** in the left sidebar
+            - Click **+ Create Credentials > OAuth 2.0 Client ID**
+            - If prompted, configure the OAuth consent screen first (choose "External", fill in app name and email)
+            - For Application type, select **Web application**
+            - Name it "Spectabas"
+            - Under **Authorized redirect URIs**, click **Add URI** and enter: `https://www.spectabas.com/auth/ad/google_ads/callback`
+            - Click **Create**
+            - A dialog shows your **Client ID** and **Client Secret** — copy both
+
+            ### Step 4: Get a Developer Token
+
+            - Sign in to Google Ads (`ads.google.com`) with the account that manages your ad campaigns
+            - Go to **Tools & Settings > Setup > API Center** (or visit `ads.google.com/aw/apicenter` directly)
+            - If you don't have a developer token yet, click **Apply for access**
+            - Choose **Basic access** (self-approved, sufficient for Spectabas)
+            - Copy your **Developer Token**
+
+            ### Step 5: Enter in Spectabas
+
+            - Go to your site's **Settings** page
+            - Scroll to **Ad Platform Integrations > Google Ads**
+            - Click **Configure**
+            - Paste the Client ID, Client Secret, and Developer Token
+            - Click **Save Credentials**
+            - Click **Connect** to authorize
+
+            ### Google-specific notes
+
+            - **MCC (Manager) accounts:** If your Google Ads account is managed by an MCC, Spectabas shows an account picker after connecting. Select the specific ad account(s) to sync.
+            - **Basic API access** is sufficient — you do not need Standard access for reading your own campaign data.
+            - **Auto-tagging:** Google Ads appends `gclid` to landing page URLs automatically. Spectabas captures this for platform-level ROAS attribution.
+            - **UTM templates:** For campaign-level ROAS, set a tracking template in Google Ads: `{lpurl}?utm_source=google&utm_medium=cpc&utm_campaign={campaignname}`
+
+            ### Troubleshooting
+
+            - **"Access denied" after connecting** — Make sure the Google account you authorized has access to the Google Ads account. Manager (MCC) accounts need to select the correct sub-account.
+            - **No spend data after sync** — Verify the Google Ads API is enabled in Google Cloud Console. Also check that the account has active campaigns with spend in the last 30 days.
+            - **Developer token pending** — Basic access tokens are usually auto-approved. If yours is still pending, check the API Center in Google Ads for status.
+            """
+          },
+          %{
+            id: "bing-ads-setup",
+            title: "Microsoft/Bing Ads",
+            body: """
+            Connect Microsoft Advertising (Bing Ads) to sync daily campaign spend data and calculate ROAS in Spectabas. Requires 3 credentials: Client ID, Client Secret, and Developer Token.
+
+            > See also: [Integration Overview](/docs/conversions#integration-overview) for ROAS, Click IDs, and sync schedule.
+
+            ### Step 1: Register an app in Azure
+
+            - Go to Azure Portal (`portal.azure.com`)
+            - Search for "App registrations" in the top search bar and click it
+            - Click **+ New registration**
+            - Name: "Spectabas Ad Sync"
+            - Supported account types: **Accounts in any organizational directory** (Multitenant)
+            - Redirect URI: select **Web** and enter `https://www.spectabas.com/auth/ad/bing_ads/callback`
+            - Click **Register**
+
+            ### Step 2: Get the Client ID
+
+            - On the app's **Overview** page, copy the **Application (client) ID** — this is your Client ID
+
+            ### Step 3: Create a Client Secret
+
+            - In the left sidebar, click **Certificates & secrets**
+            - Click **+ New client secret**
+            - Enter a description (e.g., "Spectabas") and choose an expiry (24 months recommended)
+            - Click **Add**
+            - Copy the **Value** (not the Secret ID) — this is your Client Secret. It's only shown once.
+
+            ### Step 4: Get a Developer Token
+
+            - Go to Microsoft Advertising Developer Portal (`developers.ads.microsoft.com`)
+            - Sign in with your Microsoft Advertising account
+            - Request a **Developer Token** if you don't have one
+            - Copy the token
+
+            ### Step 5: Enter in Spectabas
+
+            - Go to your site's **Settings > Ad Platform Integrations > Microsoft Ads**
+            - Click **Configure**
+            - Paste the Client ID, Client Secret, and Developer Token
+            - Click **Save Credentials**, then **Connect**
+
+            ### Bing-specific notes
+
+            - **Auto-tagging:** Microsoft Ads appends `msclkid` to landing page URLs. Spectabas captures this for platform-level ROAS attribution.
+            - **UTM templates:** For campaign-level ROAS, set a tracking template: `{lpurl}?utm_source=bing&utm_medium=cpc&utm_campaign={CampaignName}`
+            - **Client secret expiry:** Azure app secrets expire (24 months max). Set a calendar reminder to rotate before expiry. When it expires, update the secret in Spectabas settings and reconnect.
+
+            ### Troubleshooting
+
+            - **"Invalid client secret"** — Azure secrets expire. Check **Certificates & secrets** in Azure Portal. If expired, create a new secret and update it in Spectabas.
+            - **No spend data** — Verify the Microsoft Advertising account has active campaigns. The developer token must also be approved.
+            - **"Insufficient permissions"** — The Azure app registration must use "Multitenant" account type. Single-tenant apps cannot access the Microsoft Ads API.
+            """
+          },
+          %{
+            id: "meta-ads-setup",
+            title: "Meta/Facebook Ads",
+            body: """
+            Connect Meta (Facebook) Ads to sync daily campaign spend data and calculate ROAS in Spectabas. Requires 2 credentials: App ID and App Secret.
+
+            > See also: [Integration Overview](/docs/conversions#integration-overview) for ROAS, Click IDs, and sync schedule.
+
+            ### Step 1: Create a Business App
+
+            - Go to Meta for Developers (`developers.facebook.com`) and log in with the Facebook account that manages your ads
+            - Click **My Apps** in the top right, then **Create App**
+            - Meta may show either a use-case flow or a type-selection flow:
+            - **If you see "What do you want your app to do?"** — select **Other**, then select **Business** as the app type
+            - **If you see use-case options** — select **Advertise** or **Other** and choose **Business** when prompted
+            - Enter an app name (e.g., "Spectabas Analytics")
+            - Associate it with your Business portfolio if prompted (this is the Business Manager account that owns your ad accounts)
+            - Click **Create App**
+
+            > **Business app type is required.** Consumer apps cannot access the Marketing API or ad insights. If you accidentally created a Consumer app, delete it and start over with Business.
+
+            ### Step 2: Add the Marketing API product
+
+            - On your app's dashboard, scroll to the **Add Products** section
+            - Find **Marketing API** and click **Set Up**
+            - This enables the ad insights endpoints — no additional configuration needed within this product
+            - The Marketing API does NOT create a separate token — Spectabas uses the OAuth2 token from Facebook Login
+
+            ### Step 3: Add Facebook Login product
+
+            - On the same dashboard, find **Facebook Login for Business** (or **Facebook Login**) and click **Set Up**
+            - Choose **Web** as the platform
+            - In the left sidebar, go to **Facebook Login > Settings**
+            - Under **Valid OAuth Redirect URIs**, add: `https://www.spectabas.com/auth/ad/meta_ads/callback`
+            - Make sure **Client OAuth Login** and **Web OAuth Login** are both **ON**
+            - Click **Save Changes**
+
+            ### Step 4: Switch to Live Mode
+
+            - At the top of the App Dashboard, you'll see a toggle that says **Development** or **In Development**
+            - Switch it to **Live**
+            - Meta may require you to complete **Business Verification** first (verify your company identity at `business.facebook.com/settings/info`)
+            - If you're the only person connecting (app admin), Development Mode works, but Live Mode is needed if other team members will connect their own accounts
+
+            ### Step 5: Get App ID and Secret
+
+            - In the left sidebar, go to **App Settings > Basic**
+            - Your **App ID** is shown at the top of the page
+            - Click **Show** next to **App Secret** and copy it
+            - Both values are needed for Spectabas
+
+            ### Step 6: Enter in Spectabas
+
+            - Go to your site's **Settings > Ad Platform Integrations > Meta Ads**
+            - Click **Configure**
+            - Paste the App ID and App Secret
+            - Click **Save Credentials**, then **Connect**
+            - You'll be redirected to Facebook to authorize — grant the `ads_read` permission when prompted
+            - Spectabas will fetch your accessible ad accounts and connect
+
+            ### Meta-specific notes
+
+            - **No app review needed.** The `ads_read` permission works with Standard Access for reading your own ad account data. You do NOT need to submit for Advanced Access or go through Meta's app review process.
+            - **Token refresh:** Spectabas exchanges the initial token for a 60-day long-lived token. The sync worker automatically refreshes this before it expires. If a token does expire, disconnect and reconnect from the Settings page.
+            - **All credentials are encrypted** at rest using AES-256-GCM and stored per-site in the database. No environment variables or server access needed.
+            - **fbclid:** Meta appends `fbclid` to landing page URLs. Spectabas captures this for platform-level ROAS attribution.
+            - **UTM tags:** Meta does not have auto-tagging templates like Google/Bing. Add UTM parameters manually in your ad's URL parameters field.
+
+            ### Troubleshooting
+
+            - **"App not set up" error** — Make sure both the Marketing API and Facebook Login products are added to your app. The Marketing API product must be added even though it doesn't create its own token.
+            - **"Consumer app" error** — Delete the app and recreate it as a **Business** type. Consumer apps cannot access ad insights.
+            - **Token expired after 60 days** — The auto-refresh should handle this, but if it fails, disconnect and reconnect from Settings. The new token will be exchanged for another 60-day long-lived token.
+            - **No ad accounts found** — The Facebook user who authorized must have access to the ad account in Business Manager. Check **Business Settings > Ad Accounts** at `business.facebook.com`.
+            - **Development vs Live mode** — In Development mode, only app admins can connect. Switch to Live mode if other team members need to connect their own accounts.
             """
           }
         ]

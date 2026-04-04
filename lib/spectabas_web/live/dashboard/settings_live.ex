@@ -896,7 +896,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
           <div class="flex items-center justify-between mb-3">
             <h2 class="text-lg font-semibold text-gray-900">Integrations</h2>
             <.link
-              navigate="/docs/admin#ad-integrations"
+              navigate="/docs/conversions#integration-overview"
               class="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
             >
               Setup guide &rarr;
@@ -1074,7 +1074,10 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                             target="_blank"
                             class="text-indigo-600 underline"
                           >Meta for Developers</a>. See
-                          <a href="/docs/admin#ad-integrations" class="text-indigo-600 underline">
+                          <a
+                            href="/docs/conversions#integration-overview"
+                            class="text-indigo-600 underline"
+                          >
                             setup guide
                           </a>
                           for details.
