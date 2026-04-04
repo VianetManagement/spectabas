@@ -850,6 +850,79 @@ defmodule SpectabasWeb.HealthController do
     end
   end
 
+  def ecom_diag(conn, %{"token" => token, "site_id" => site_id, "action" => "sync"}) do
+    unless valid_token?(token) do
+      conn |> put_status(403) |> json(%{error: "forbidden"})
+    else
+      site = Spectabas.Sites.get_site!(site_id)
+
+      integration =
+        Spectabas.AdIntegrations.list_for_site(site.id)
+        |> Enum.find(&(&1.platform == "stripe" and &1.status == "active"))
+
+      if is_nil(integration) do
+        json(conn, %{error: "No active Stripe integration for site #{site_id}"})
+      else
+        today = Date.utc_today()
+
+        # Try to fetch charges directly and show what happens
+        fetch_result =
+          case Spectabas.AdIntegrations.Platforms.StripePlatform.fetch_charges(integration, today) do
+            {:ok, charges} ->
+              %{
+                count: length(charges),
+                sample:
+                  Enum.take(charges, 3)
+                  |> Enum.map(fn c ->
+                    %{
+                      id: c.charge_id,
+                      amount: c.amount,
+                      email: c.email,
+                      created: DateTime.to_iso8601(c.created_at)
+                    }
+                  end)
+              }
+
+            {:error, reason} ->
+              %{error: inspect(reason)}
+          end
+
+        # Try a direct insert of one test-less charge to see if CH accepts it
+        insert_test =
+          case Spectabas.ClickHouse.insert("ecommerce_events", [
+                 %{
+                   "site_id" => site.id,
+                   "visitor_id" => "",
+                   "session_id" => "",
+                   "order_id" => "test_diag_#{System.unique_integer([:positive])}",
+                   "revenue" => 0.01,
+                   "subtotal" => 0.01,
+                   "tax" => 0,
+                   "shipping" => 0,
+                   "discount" => 0,
+                   "refund_amount" => 0,
+                   "import_source" => "diag",
+                   "currency" => "USD",
+                   "items" => "[]",
+                   "timestamp" => Calendar.strftime(DateTime.utc_now(), "%Y-%m-%d %H:%M:%S")
+                 }
+               ]) do
+            :ok -> "insert_ok"
+            {:error, reason} -> "insert_failed: #{inspect(reason) |> String.slice(0, 300)}"
+          end
+
+        json(conn, %{
+          integration_id: integration.id,
+          integration_status: integration.status,
+          last_synced: integration.last_synced_at,
+          last_error: integration.last_error,
+          stripe_fetch: fetch_result,
+          ch_insert_test: insert_test
+        })
+      end
+    end
+  end
+
   def ecom_diag(conn, _params) do
     conn |> put_status(403) |> json(%{error: "forbidden"})
   end
