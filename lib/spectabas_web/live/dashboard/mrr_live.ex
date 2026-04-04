@@ -162,6 +162,46 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
         _ -> []
       end
 
+    # Upcoming renewals — actual billing amounts grouped by renewal month
+    renewals_sql = """
+    SELECT
+      toStartOfMonth(current_period_end) AS renewal_month,
+      plan_interval,
+      count() AS sub_count,
+      sum(if(plan_interval = 'year', mrr_amount * 12, mrr_amount)) AS billing_amount,
+      sum(mrr_amount) AS mrr_contribution
+    FROM subscription_events FINAL
+    WHERE site_id = #{site_p}
+      AND snapshot_date = (SELECT max(snapshot_date) FROM subscription_events FINAL WHERE site_id = #{site_p})
+      AND status IN ('active', 'past_due', 'trialing')
+      AND current_period_end > now()
+      AND current_period_end > toDateTime(0)
+    GROUP BY renewal_month, plan_interval
+    ORDER BY renewal_month ASC
+    LIMIT 24
+    """
+
+    upcoming_renewals =
+      case ClickHouse.query(renewals_sql) do
+        {:ok, rows} -> rows
+        _ -> []
+      end
+
+    # Aggregate renewals by month (combine monthly + annual into one row per month)
+    renewals_by_month =
+      upcoming_renewals
+      |> Enum.group_by(& &1["renewal_month"])
+      |> Enum.map(fn {month, rows} ->
+        %{
+          "month" => month,
+          "sub_count" => rows |> Enum.map(&to_num(&1["sub_count"])) |> Enum.sum(),
+          "billing_amount" => rows |> Enum.map(&to_float(&1["billing_amount"])) |> Enum.sum(),
+          "mrr_at_risk" => rows |> Enum.map(&to_float(&1["mrr_contribution"])) |> Enum.sum(),
+          "has_annual" => Enum.any?(rows, &(&1["plan_interval"] == "year"))
+        }
+      end)
+      |> Enum.sort_by(& &1["month"])
+
     has_revenue = to_float(revenue_stats["gross_revenue"] || "0") > 0
     has_subs = to_num(mrr_stats["total_subs"] || "0") > 0
 
@@ -173,6 +213,7 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
     |> assign(:plans, plans)
     |> assign(:subscriptions, subscriptions)
     |> assign(:recent_churn, recent_churn)
+    |> assign(:renewals_by_month, renewals_by_month)
     |> assign(:has_data, has_revenue or has_subs)
     |> assign(:has_subs, has_subs)
   end
@@ -443,6 +484,56 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
                 <% end %>
               </div>
             </div>
+
+            <%!-- Upcoming Renewals --%>
+            <%= if @renewals_by_month != [] do %>
+              <div class="bg-white rounded-lg shadow p-6 mb-8">
+                <h2 class="text-lg font-semibold text-gray-900 mb-2">Upcoming Renewals</h2>
+                <p class="text-sm text-gray-500 mb-4">
+                  Expected billing by month based on current subscription renewal dates
+                </p>
+                <table class="w-full">
+                  <thead>
+                    <tr class="border-b-2 border-gray-200">
+                      <th class="text-left py-3 text-sm font-semibold text-gray-700">Month</th>
+                      <th class="text-right py-3 text-sm font-semibold text-gray-700">Renewals</th>
+                      <th class="text-right py-3 text-sm font-semibold text-gray-700">
+                        Expected Billing
+                      </th>
+                      <th class="text-right py-3 text-sm font-semibold text-gray-700">
+                        MRR at Stake
+                      </th>
+                      <th class="text-center py-3 text-sm font-semibold text-gray-700">
+                        Includes Annual
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <%= for r <- @renewals_by_month do %>
+                      <tr class="border-b border-gray-100 hover:bg-gray-50">
+                        <td class="py-3 text-sm font-medium">
+                          {String.slice(r["month"] || "", 0, 7)}
+                        </td>
+                        <td class="text-right py-3 text-sm">{r["sub_count"]}</td>
+                        <td class="text-right py-3 text-sm font-semibold text-gray-900">
+                          {Spectabas.Currency.format(r["billing_amount"], @site.currency)}
+                        </td>
+                        <td class="text-right py-3 text-sm text-amber-600">
+                          {Spectabas.Currency.format(r["mrr_at_risk"], @site.currency)}/mo
+                        </td>
+                        <td class="text-center py-3">
+                          <%= if r["has_annual"] do %>
+                            <span class="inline-block px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
+                              Annual
+                            </span>
+                          <% end %>
+                        </td>
+                      </tr>
+                    <% end %>
+                  </tbody>
+                </table>
+              </div>
+            <% end %>
 
             <%!-- All Subscriptions --%>
             <div class="bg-white rounded-lg shadow p-6">
