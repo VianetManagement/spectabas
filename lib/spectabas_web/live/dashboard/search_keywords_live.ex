@@ -5,7 +5,7 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers, except: [format_number: 1]
 
-  @allowed_sort_cols ~w(clicks impressions ctr position)
+  @allowed_sort_cols ~w(total_clicks total_impressions ctr avg_pos)
   @allowed_sort_dirs ~w(asc desc)
 
   @impl true
@@ -23,7 +23,7 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
        |> assign(:user, user)
        |> assign(:date_range, "30d")
        |> assign(:source_filter, "all")
-       |> assign(:sort_by, "clicks")
+       |> assign(:sort_by, "total_clicks")
        |> assign(:sort_dir, "desc")
        |> load_data()}
     end
@@ -116,10 +116,10 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     queries_sql = """
     SELECT
       query,
-      sum(clicks) AS clicks,
-      sum(impressions) AS impressions,
+      sum(clicks) AS total_clicks,
+      sum(impressions) AS total_impressions,
       if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
-      round(avg(position), 1) AS position
+      round(avg(position), 1) AS avg_pos
     FROM search_console FINAL
     WHERE site_id = #{site_p}
       AND date >= today() - #{days}
@@ -140,10 +140,10 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     pages_sql = """
     SELECT
       page,
-      sum(clicks) AS clicks,
-      sum(impressions) AS impressions,
+      sum(clicks) AS total_clicks,
+      sum(impressions) AS total_impressions,
       if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
-      round(avg(position), 1) AS position
+      round(avg(position), 1) AS avg_pos
     FROM search_console FINAL
     WHERE site_id = #{site_p}
       AND date >= today() - #{days}
@@ -267,16 +267,16 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                     <th
                       class="text-right py-3 text-sm font-semibold text-gray-700 cursor-pointer hover:text-indigo-600"
                       phx-click="sort"
-                      phx-value-col="clicks"
+                      phx-value-col="total_clicks"
                     >
-                      Clicks {sort_arrow("clicks", @sort_by, @sort_dir)}
+                      Clicks {sort_arrow("total_clicks", @sort_by, @sort_dir)}
                     </th>
                     <th
                       class="text-right py-3 text-sm font-semibold text-gray-700 cursor-pointer hover:text-indigo-600"
                       phx-click="sort"
-                      phx-value-col="impressions"
+                      phx-value-col="total_impressions"
                     >
-                      Impressions {sort_arrow("impressions", @sort_by, @sort_dir)}
+                      Impressions {sort_arrow("total_impressions", @sort_by, @sort_dir)}
                     </th>
                     <th
                       class="text-right py-3 text-sm font-semibold text-gray-700 cursor-pointer hover:text-indigo-600"
@@ -288,9 +288,9 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                     <th
                       class="text-right py-3 text-sm font-semibold text-gray-700 cursor-pointer hover:text-indigo-600"
                       phx-click="sort"
-                      phx-value-col="position"
+                      phx-value-col="avg_pos"
                     >
-                      Position {sort_arrow("position", @sort_by, @sort_dir)}
+                      Position {sort_arrow("avg_pos", @sort_by, @sort_dir)}
                     </th>
                   </tr>
                 </thead>
@@ -301,15 +301,15 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                         {q["query"]}
                       </td>
                       <td class="text-right py-3 text-sm font-semibold">
-                        {format_number(to_num(q["clicks"]))}
+                        {format_number(to_num(q["total_clicks"]))}
                       </td>
                       <td class="text-right py-3 text-sm text-gray-600">
-                        {format_number(to_num(q["impressions"]))}
+                        {format_number(to_num(q["total_impressions"]))}
                       </td>
                       <td class="text-right py-3 text-sm text-gray-600">{q["ctr"]}%</td>
                       <td class="text-right py-3 text-sm">
-                        <span class={"font-medium " <> position_color(to_float(q["position"]))}>
-                          {q["position"]}
+                        <span class={"font-medium " <> position_color(to_float(q["avg_pos"]))}>
+                          {q["avg_pos"]}
                         </span>
                       </td>
                     </tr>
@@ -340,15 +340,15 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                         {extract_path(p["page"])}
                       </td>
                       <td class="text-right py-3 text-sm font-semibold">
-                        {format_number(to_num(p["clicks"]))}
+                        {format_number(to_num(p["total_clicks"]))}
                       </td>
                       <td class="text-right py-3 text-sm text-gray-600">
-                        {format_number(to_num(p["impressions"]))}
+                        {format_number(to_num(p["total_impressions"]))}
                       </td>
                       <td class="text-right py-3 text-sm text-gray-600">{p["ctr"]}%</td>
                       <td class="text-right py-3 text-sm">
-                        <span class={"font-medium " <> position_color(to_float(p["position"]))}>
-                          {p["position"]}
+                        <span class={"font-medium " <> position_color(to_float(p["avg_pos"]))}>
+                          {p["avg_pos"]}
                         </span>
                       </td>
                     </tr>
