@@ -130,10 +130,10 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     LIMIT 100
     """
 
-    queries =
+    {queries, query_error} =
       case ClickHouse.query(queries_sql) do
-        {:ok, rows} -> rows
-        _ -> []
+        {:ok, rows} -> {rows, nil}
+        {:error, e} -> {[], inspect(e) |> String.slice(0, 200)}
       end
 
     # Top pages
@@ -165,6 +165,7 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     |> assign(:pages, pages)
     |> assign(:has_data, queries != [])
     |> assign(:debug, debug)
+    |> assign(:query_error, query_error)
   end
 
   @impl true
@@ -217,7 +218,10 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                 "max_date"
               ]}
               <%= if @debug["error"] do %>
-                error={@debug["error"]}
+                | CH error: {@debug["error"]}
+              <% end %>
+              <%= if @query_error do %>
+                | Query error: {@query_error}
               <% end %>
             </p>
           </div>
