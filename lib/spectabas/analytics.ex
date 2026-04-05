@@ -1186,6 +1186,7 @@ defmodule Spectabas.Analytics do
       toTimezone(min(timestamp), #{tz}) AS session_start,
       toTimezone(max(timestamp), #{tz}) AS last_activity,
       any(ip_country) AS country,
+      any(ip_region_name) AS region,
       any(ip_city) AS city,
       any(browser) AS browser,
       any(os) AS os,

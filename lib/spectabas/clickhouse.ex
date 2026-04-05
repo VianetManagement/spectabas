@@ -330,7 +330,7 @@ defmodule Spectabas.ClickHouse do
         synced_at DateTime DEFAULT now()
       ) ENGINE = ReplacingMergeTree(synced_at)
       PARTITION BY toYYYYMM(date)
-      ORDER BY (site_id, date, query, page, source)
+      ORDER BY (site_id, date, query, page, country, device, source)
       SETTINGS index_granularity = 8192
       """,
       # Schema migrations — add columns that may not exist on older tables

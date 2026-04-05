@@ -781,7 +781,9 @@ defmodule SpectabasWeb.HealthController do
            ORDER BY (site_id, date, platform, campaign_id)
            SETTINGS index_granularity = 8192
            """)},
-          {"search_console",
+          {"search_console_drop",
+           Spectabas.ClickHouse.execute_admin("DROP TABLE IF EXISTS #{db}.search_console")},
+          {"search_console_recreate",
            Spectabas.ClickHouse.execute_admin("""
            CREATE TABLE IF NOT EXISTS #{db}.search_console (
              site_id UInt64,
@@ -798,7 +800,7 @@ defmodule SpectabasWeb.HealthController do
              synced_at DateTime DEFAULT now()
            ) ENGINE = ReplacingMergeTree(synced_at)
            PARTITION BY toYYYYMM(date)
-           ORDER BY (site_id, date, query, page, source)
+           ORDER BY (site_id, date, query, page, country, device, source)
            SETTINGS index_granularity = 8192
            """)},
           {"subscription_events",

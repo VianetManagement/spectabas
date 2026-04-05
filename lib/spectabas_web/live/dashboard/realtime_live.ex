@@ -248,7 +248,7 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
                   {format_number(to_num(v["pageviews"]))}
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-500">
-                  {[v["city"], v["country"]]
+                  {[v["city"], v["region"], v["country"]]
                   |> Enum.reject(&(&1 == "" || is_nil(&1)))
                   |> Enum.join(", ")}
                 </td>
