@@ -441,30 +441,67 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
         </div>
 
         <main class="flex-1 overflow-y-auto bg-gray-50">
+          <%!-- Unified modal toast notification --%>
           <div
             :if={@flash["info"]}
             id="flash-info"
-            class="mx-4 mt-4 rounded-lg bg-green-50 border border-green-200 p-4 text-sm text-green-800 flex items-center justify-between transition-opacity duration-500"
-            phx-click={
-              Phoenix.LiveView.JS.push("lv:clear-flash", value: %{key: "info"})
-              |> Phoenix.LiveView.JS.hide(to: "#flash-info")
-            }
+            class="fixed top-4 right-4 z-50 max-w-sm w-full"
             phx-hook="AutoDismiss"
           >
-            <span>{@flash["info"]}</span>
-            <button type="button" class="text-green-600 hover:text-green-800 ml-4">&times;</button>
+            <div class="bg-white rounded-lg shadow-lg border border-green-200 overflow-hidden">
+              <div class="flex items-start gap-3 p-4">
+                <div class="shrink-0 mt-0.5">
+                  <svg class="h-5 w-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" />
+                  </svg>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-medium text-gray-900">{@flash["info"]}</p>
+                </div>
+                <button
+                  type="button"
+                  class="shrink-0 text-gray-400 hover:text-gray-600"
+                  phx-click={
+                    Phoenix.LiveView.JS.push("lv:clear-flash", value: %{key: "info"})
+                    |> Phoenix.LiveView.JS.hide(to: "#flash-info", transition: {"ease-out duration-200", "opacity-100 translate-y-0", "opacity-0 -translate-y-2"})
+                  }
+                >
+                  <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
           </div>
           <div
             :if={@flash["error"]}
             id="flash-error"
-            class="mx-4 mt-4 rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-800 flex items-center justify-between"
-            phx-click={
-              Phoenix.LiveView.JS.push("lv:clear-flash", value: %{key: "error"})
-              |> Phoenix.LiveView.JS.hide(to: "#flash-error")
-            }
+            class="fixed top-4 right-4 z-50 max-w-sm w-full"
           >
-            <span>{@flash["error"]}</span>
-            <button type="button" class="text-red-600 hover:text-red-800 ml-4">&times;</button>
+            <div class="bg-white rounded-lg shadow-lg border border-red-200 overflow-hidden">
+              <div class="flex items-start gap-3 p-4">
+                <div class="shrink-0 mt-0.5">
+                  <svg class="h-5 w-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clip-rule="evenodd" />
+                  </svg>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-medium text-gray-900">{@flash["error"]}</p>
+                </div>
+                <button
+                  type="button"
+                  class="shrink-0 text-gray-400 hover:text-gray-600"
+                  phx-click={
+                    Phoenix.LiveView.JS.push("lv:clear-flash", value: %{key: "error"})
+                    |> Phoenix.LiveView.JS.hide(to: "#flash-error", transition: {"ease-out duration-200", "opacity-100 translate-y-0", "opacity-0 -translate-y-2"})
+                  }
+                >
+                  <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
           </div>
           {render_slot(@inner_block)}
         </main>

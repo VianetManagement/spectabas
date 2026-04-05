@@ -600,19 +600,6 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
           <h1 class="text-2xl font-bold text-gray-900 mt-2">Site Settings</h1>
         </div>
 
-        <p
-          :if={msg = Phoenix.Flash.get(@flash, :info)}
-          class="rounded-lg bg-blue-50 p-3 text-sm text-blue-700 mb-6"
-        >
-          {msg}
-        </p>
-        <p
-          :if={msg = Phoenix.Flash.get(@flash, :error)}
-          class="rounded-lg bg-red-50 p-3 text-sm text-red-700 mb-6"
-        >
-          {msg}
-        </p>
-
         <%!-- Tracking Snippet --%>
         <div class="bg-white rounded-lg shadow p-6 mb-8">
           <h2 class="text-lg font-semibold text-gray-900 mb-4">Tracking Snippet</h2>
@@ -900,7 +887,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
             <div class="border-t border-gray-200 pt-6 flex justify-end">
               <button
                 type="submit"
-                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
+                class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm"
               >
                 Save Settings
               </button>
@@ -957,7 +944,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
             </div>
             <button
               type="submit"
-              class="px-4 py-2 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700"
+              class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm"
             >
               Save AI Configuration
             </button>
@@ -1063,7 +1050,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
               <div class="border border-gray-200 rounded-lg p-5">
                 <div class="flex items-center justify-between mb-3">
                   <div class="flex items-center gap-2">
-                    <span class={"inline-flex items-center px-2.5 py-1 rounded-md text-sm font-semibold #{icon_color}"}>
+                    <span class={"inline-flex items-center px-2.5 py-1 rounded-lg text-sm font-semibold #{icon_color}"}>
                       {label}
                     </span>
                     <%= if integration do %>
@@ -1116,7 +1103,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                     <button
                       phx-click="sync_ad_now"
                       phx-value-id={integration.id}
-                      class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200"
+                      class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200"
                     >
                       Sync Now
                     </button>
@@ -1126,7 +1113,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                         phx-value-id={integration.id}
                         phx-value-days="90"
                         data-confirm={"Backfill last 90 days of #{label} data? This runs in the background and may take a few minutes."}
-                        class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-green-700 bg-green-50 hover:bg-green-100 border border-green-200"
+                        class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg text-green-700 bg-green-50 hover:bg-green-100 border border-green-200"
                       >
                         Backfill 90d
                       </button>
@@ -1134,7 +1121,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                         phx-click="clear_payment_data"
                         phx-value-id={integration.id}
                         data-confirm={"Clear ALL imported #{label} data for this site? Only deletes data imported from #{label} — API transactions are NOT affected. This cannot be undone."}
-                        class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200"
+                        class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200"
                       >
                         Clear Data
                       </button>
@@ -1143,7 +1130,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                       phx-click="disconnect_ad"
                       phx-value-id={integration.id}
                       data-confirm={"Disconnect #{label}? Data sync will stop."}
-                      class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 border border-red-200"
+                      class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg text-red-700 bg-red-50 hover:bg-red-100 border border-red-200"
                     >
                       Disconnect
                     </button>
@@ -1153,7 +1140,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                     <%= if ad_platform_configured?(@site, platform) and platform != "stripe" do %>
                       <a
                         href={ad_authorize_url(platform, @site)}
-                        class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm"
+                        class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm"
                       >
                         Connect {label}
                       </a>
@@ -1161,7 +1148,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                     <button
                       phx-click="toggle_ad_config"
                       phx-value-platform={platform}
-                      class={"inline-flex items-center px-4 py-2 text-sm font-medium rounded-md border shadow-sm " <>
+                      class={"inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg border shadow-sm " <>
                         if(@configuring_platform == platform,
                           do: "text-gray-700 bg-gray-100 border-gray-300 hover:bg-gray-200",
                           else: "text-indigo-700 bg-white border-indigo-200 hover:bg-indigo-50"
