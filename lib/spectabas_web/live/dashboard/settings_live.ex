@@ -24,6 +24,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
        |> assign(:page_title, "Settings - #{site.name}")
        |> assign(:site, site)
        |> assign(:user, user)
+       |> assign(:user_tz, user.timezone || "America/New_York")
        |> assign(:form, to_form(changeset))
        |> assign(:snippet, Sites.snippet_code(site))
        |> assign(:render_domain_status, check_render_domain(site.domain))
@@ -941,7 +942,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                     <div :if={integration.last_synced_at}>
                       <span class="text-gray-500">Last sync:</span>
                       <span class="font-medium">
-                        {Calendar.strftime(integration.last_synced_at, "%Y-%m-%d %H:%M")} UTC
+                        {format_sync_ts(integration.last_synced_at, @user_tz)}
                       </span>
                     </div>
                     <div :if={!integration.last_synced_at && !integration.last_error}>
@@ -1506,4 +1507,15 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
 
   defp parse_threshold(val) when is_integer(val) and val >= 2, do: val
   defp parse_threshold(_), do: 2
+
+  defp format_sync_ts(nil, _tz), do: "Never"
+
+  defp format_sync_ts(%DateTime{} = dt, tz) do
+    case DateTime.shift_zone(dt, tz) do
+      {:ok, local} -> Calendar.strftime(local, "%Y-%m-%d %H:%M %Z")
+      _ -> Calendar.strftime(dt, "%Y-%m-%d %H:%M UTC")
+    end
+  end
+
+  defp format_sync_ts(dt, _tz), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M UTC")
 end

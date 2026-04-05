@@ -26,6 +26,7 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
      socket
      |> assign(:page_title, "Integration Status")
      |> assign(:integrations, integrations)
+     |> assign(:user_tz, user.timezone || "America/New_York")
      |> assign(:test_results, %{})}
   end
 
@@ -487,7 +488,7 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
                   </td>
                   <td class="text-right px-4 py-3 text-sm text-gray-500">
                     <%= if integration.last_synced_at do %>
-                      {Calendar.strftime(integration.last_synced_at, "%Y-%m-%d %H:%M")} UTC
+                      {format_sync_ts(integration.last_synced_at, @user_tz)}
                     <% else %>
                       <span class="text-amber-500">Never</span>
                     <% end %>
@@ -601,4 +602,15 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
   defp test_status_label(:ok), do: "OK"
   defp test_status_label(:warning), do: "Warning"
   defp test_status_label(:error), do: "Error"
+
+  defp format_sync_ts(nil, _tz), do: "Never"
+
+  defp format_sync_ts(%DateTime{} = dt, tz) do
+    case DateTime.shift_zone(dt, tz) do
+      {:ok, local} -> Calendar.strftime(local, "%Y-%m-%d %H:%M %Z")
+      _ -> Calendar.strftime(dt, "%Y-%m-%d %H:%M UTC")
+    end
+  end
+
+  defp format_sync_ts(dt, _tz), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M UTC")
 end

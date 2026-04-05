@@ -17,7 +17,12 @@ defmodule SpectabasWeb.Dashboard.IntegrationLogLive do
       all_integrations = AdIntegrations.list_for_site(site.id)
       integrations = Enum.filter(all_integrations, &(&1.status != "revoked"))
 
-      sync_logs = SyncLog.recent_for_site(site.id, 200)
+      sync_logs =
+        try do
+          SyncLog.recent_for_site(site.id, 200)
+        rescue
+          _ -> []
+        end
 
       # Also get audit log entries (connect/disconnect/credentials)
       audit_logs =
@@ -44,6 +49,7 @@ defmodule SpectabasWeb.Dashboard.IntegrationLogLive do
        |> assign(:integrations, integrations)
        |> assign(:sync_logs, sync_logs)
        |> assign(:audit_logs, audit_logs)
+       |> assign(:user_tz, user.timezone || "America/New_York")
        |> assign(:filter, "all")}
     end
   end
@@ -108,7 +114,7 @@ defmodule SpectabasWeb.Dashboard.IntegrationLogLive do
                     <span class="text-gray-500">Last sync:</span>
                     <%= if integration.last_synced_at do %>
                       <span class="font-medium">
-                        {Calendar.strftime(integration.last_synced_at, "%Y-%m-%d %H:%M")} UTC
+                        {format_ts(integration.last_synced_at, @user_tz)}
                       </span>
                       <span class="text-gray-400 text-xs">
                         ({time_ago(integration.last_synced_at)})
@@ -191,7 +197,7 @@ defmodule SpectabasWeb.Dashboard.IntegrationLogLive do
                         <% end %>
                       </div>
                       <div class="text-xs text-gray-400 shrink-0 whitespace-nowrap">
-                        {Calendar.strftime(entry.timestamp, "%Y-%m-%d %H:%M:%S")} UTC
+                        {format_naive_ts(entry.timestamp, @user_tz)}
                       </div>
                     </div>
                   </div>
@@ -242,7 +248,7 @@ defmodule SpectabasWeb.Dashboard.IntegrationLogLive do
         _ -> (sync_entries ++ audit_entries)
       end
 
-    Enum.sort_by(all, & &1.timestamp, {:desc, DateTime})
+    Enum.sort_by(all, & &1.timestamp, {:desc, NaiveDateTime})
   end
 
   defp sync_event_label("cron_sync"), do: "Scheduled Sync"
@@ -368,4 +374,32 @@ defmodule SpectabasWeb.Dashboard.IntegrationLogLive do
   defp status_badge("active"), do: "bg-green-100 text-green-700"
   defp status_badge("revoked"), do: "bg-red-100 text-red-700"
   defp status_badge(_), do: "bg-gray-100 text-gray-600"
+
+  defp format_ts(nil, _tz), do: "Never"
+
+  defp format_ts(%DateTime{} = dt, tz) do
+    case DateTime.shift_zone(dt, tz) do
+      {:ok, local} -> Calendar.strftime(local, "%Y-%m-%d %H:%M %Z")
+      _ -> Calendar.strftime(dt, "%Y-%m-%d %H:%M UTC")
+    end
+  end
+
+  defp format_ts(dt, _tz), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M UTC")
+
+  defp format_naive_ts(nil, _tz), do: ""
+
+  defp format_naive_ts(%NaiveDateTime{} = ndt, tz) do
+    case DateTime.from_naive(ndt, "Etc/UTC") do
+      {:ok, utc} ->
+        case DateTime.shift_zone(utc, tz) do
+          {:ok, local} -> Calendar.strftime(local, "%Y-%m-%d %H:%M:%S %Z")
+          _ -> Calendar.strftime(ndt, "%Y-%m-%d %H:%M:%S UTC")
+        end
+
+      _ ->
+        Calendar.strftime(ndt, "%Y-%m-%d %H:%M:%S UTC")
+    end
+  end
+
+  defp format_naive_ts(dt, _tz), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S UTC")
 end
