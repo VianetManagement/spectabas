@@ -27,6 +27,12 @@ defmodule Spectabas.AdIntegrations.Platforms.BingWebmaster do
       {:ok, %{status: 200, body: %{"d" => data}}} when is_list(data) ->
         date_str = Date.to_iso8601(date)
 
+        # Log sample for debugging
+        if length(data) > 0 do
+          sample = List.first(data)
+          Logger.info("[Bing] API returned #{length(data)} total rows. Sample date: #{inspect(sample["Date"])}, query: #{inspect(sample["Query"])}")
+        end
+
         # Filter to the requested date and parse
         rows =
           data
@@ -66,6 +72,81 @@ defmodule Spectabas.AdIntegrations.Platforms.BingWebmaster do
     end
   end
 
+  @doc "Bulk sync all Bing data into ClickHouse. Fetches once, buckets by date."
+  def sync_all_data(site, integration) do
+    site_url = (integration.extra || %{})["site_url"] || ""
+
+    if site_url == "" do
+      {:error, "No Bing site_url configured"}
+    else
+      api_key = AdIntegrations.decrypt_access_token(integration)
+      encoded_url = URI.encode(site_url, &URI.char_unreserved?/1)
+
+      url = "#{@api_url}/GetQueryPageStats?apikey=#{api_key}&siteUrl=#{encoded_url}&query=%27%27"
+
+      case Req.get(url) do
+        {:ok, %{status: 200, body: %{"d" => data}}} when is_list(data) ->
+          Logger.info("[Bing] Bulk sync: #{length(data)} total rows from API")
+
+          # Parse all rows and bucket by date
+          all_rows =
+            Enum.map(data, fn row ->
+              %{
+                date: extract_bing_date(row["Date"]),
+                query: row["Query"] || "",
+                page: row["Page"] || "",
+                clicks: row["Clicks"] || 0,
+                impressions: row["Impressions"] || 0,
+                ctr: if(row["Impressions"] > 0, do: Float.round(row["Clicks"] / row["Impressions"] * 100, 2), else: 0),
+                position: row["AvgClickPosition"] || row["AvgImpressionPosition"] || 0
+              }
+            end)
+            |> Enum.reject(fn r -> r.date == "" end)
+
+          if all_rows == [] do
+            Logger.warning("[Bing] No parseable rows after date extraction")
+            {:ok, 0}
+          else
+            ch_rows =
+              Enum.map(all_rows, fn r ->
+                %{
+                  "site_id" => site.id,
+                  "date" => r.date,
+                  "query" => r.query,
+                  "page" => r.page,
+                  "country" => "",
+                  "device" => "",
+                  "source" => "bing",
+                  "clicks" => r.clicks,
+                  "impressions" => r.impressions,
+                  "ctr" => r.ctr,
+                  "position" => r.position,
+                  "synced_at" => Calendar.strftime(DateTime.utc_now(), "%Y-%m-%d %H:%M:%S")
+                }
+              end)
+
+            case ClickHouse.insert("search_console", ch_rows) do
+              :ok ->
+                Logger.info("[Bing] Bulk inserted #{length(ch_rows)} rows")
+                AdIntegrations.mark_synced(integration)
+                {:ok, length(ch_rows)}
+
+              {:error, reason} ->
+                Logger.error("[Bing] CH insert failed: #{inspect(reason) |> String.slice(0, 200)}")
+                {:error, reason}
+            end
+          end
+
+        {:ok, %{status: status, body: body}} ->
+          msg = if is_map(body), do: inspect(body) |> String.slice(0, 200), else: "HTTP #{status}"
+          {:error, "Bing API HTTP #{status}: #{msg}"}
+
+        {:error, reason} ->
+          {:error, "Bing API error: #{inspect(reason)}"}
+      end
+    end
+  end
+
   @doc "Sync Bing search data for a date into ClickHouse."
   def sync_search_data(site, integration, date) do
     site_url = (integration.extra || %{})["site_url"] || ""
@@ -76,7 +157,6 @@ defmodule Spectabas.AdIntegrations.Platforms.BingWebmaster do
     else
       case fetch_search_data(integration, site_url, date) do
         {:ok, []} ->
-          Logger.info("[Bing] No search data for #{date}")
           :ok
 
         {:ok, rows} ->

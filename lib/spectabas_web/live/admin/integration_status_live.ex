@@ -217,7 +217,28 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
 
     Task.start(fn ->
       try do
-        Spectabas.Workers.SearchConsoleSync.sync_now(integration, force_backfill: true)
+        if integration.platform == "bing_webmaster" do
+          # Bing: single API call returns all data — use bulk sync
+          alias Spectabas.AdIntegrations.SyncLog
+
+          SyncLog.log(integration, "manual_sync_start", "ok", "Bing bulk sync started")
+          start = System.monotonic_time(:millisecond)
+
+          case Spectabas.AdIntegrations.Platforms.BingWebmaster.sync_all_data(
+                 integration.site,
+                 integration
+               ) do
+            {:ok, count} ->
+              ms = System.monotonic_time(:millisecond) - start
+              SyncLog.log(integration, "manual_sync", "ok", "Bing bulk sync: #{count} rows inserted", duration_ms: ms)
+
+            {:error, reason} ->
+              ms = System.monotonic_time(:millisecond) - start
+              SyncLog.log(integration, "manual_sync", "error", "Bing bulk sync failed: #{inspect(reason)}", duration_ms: ms)
+          end
+        else
+          Spectabas.Workers.SearchConsoleSync.sync_now(integration, force_backfill: true)
+        end
       rescue
         e ->
           require Logger
@@ -229,7 +250,7 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
      put_flash(
        socket,
        :info,
-       "GSC backfill started (16 months). Check Search Keywords page in a few minutes."
+       "Backfill started. Check Integration Log for progress."
      )}
   end
 

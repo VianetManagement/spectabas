@@ -260,7 +260,7 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     |> assign(:stats, stats)
     |> assign(:queries, queries)
     |> assign(:pages, pages)
-    |> assign(:has_data, queries != [])
+    |> assign(:has_data, to_num(stats["total_clicks"] || "0") > 0 or to_num(stats["total_impressions"] || "0") > 0 or queries != [])
     |> assign(:query_error, query_error)
     |> assign(:ranking_changes, ranking_changes)
     |> assign(:ctr_opportunities, ctr_opportunities)
