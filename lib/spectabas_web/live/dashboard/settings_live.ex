@@ -448,7 +448,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
      )}
   end
 
-  def handle_event("update_sync_frequency", %{"id" => id, "frequency" => freq}, socket) do
+  def handle_event("update_sync_frequency", %{"integration_id" => id, "frequency" => freq}, socket) do
     integration = authorize_integration!(id, socket)
     minutes = String.to_integer(freq)
 
@@ -953,7 +953,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                       Error: {String.slice(integration.last_error || "", 0, 80)}
                     </div>
                     <form phx-change="update_sync_frequency" class="flex items-center gap-2 mt-1">
-                      <input type="hidden" name="id" value={integration.id} />
+                      <input type="hidden" name="integration_id" value={integration.id} />
                       <span class="text-gray-500">Sync every</span>
                       <select
                         name="frequency"

@@ -2,7 +2,6 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
   use SpectabasWeb, :live_view
 
   alias Spectabas.{AdIntegrations, Repo}
-  import Ecto.Query
 
   @impl true
   def mount(_params, _session, socket) do
@@ -56,7 +55,7 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
               if AdIntegrations.token_expired?(integration) do
                 rt = AdIntegrations.decrypt_refresh_token(integration)
 
-                creds =
+                _creds =
                   Spectabas.AdIntegrations.Credentials.get_for_platform(
                     integration.site,
                     "google_search_console"

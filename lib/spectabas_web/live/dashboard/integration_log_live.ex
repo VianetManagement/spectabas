@@ -3,7 +3,6 @@ defmodule SpectabasWeb.Dashboard.IntegrationLogLive do
 
   alias Spectabas.{Accounts, Sites, AdIntegrations, Repo}
   import SpectabasWeb.Dashboard.SidebarComponent
-  import Spectabas.TypeHelpers
   import Ecto.Query
 
   @impl true

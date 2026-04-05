@@ -45,6 +45,32 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.6.0 — 2026-04-03 UTC",
+       [
+         %{
+           title: "Feature: Multi-tenant account system",
+           description:
+             "Account-based isolation for serving multiple customers. Each account has its own users, sites, " <>
+               "and data boundary. Platform admin role manages all accounts. Superadmin manages their account. " <>
+               "Per-account site limits. New /platform section for global management."
+         },
+         %{
+           title: "Fix: MRR sidebar highlight",
+           description:
+             "Revenue & Subscriptions page now correctly highlights in the sidebar navigation."
+         },
+         %{
+           title: "Fix: Removed debug output from Search Keywords page",
+           description:
+             "Removed ClickHouse row count debug line that was visible on the Search Keywords page."
+         },
+         %{
+           title: "Fix: Compilation warnings cleaned up",
+           description:
+             "Fixed duplicate @doc attributes, unused imports, unused variables, and input name=\"id\" " <>
+               "warnings across integration status, integration log, settings, sites, and ClickHouse modules."
+         }
+       ]},
       {"v5.5.0 — 2026-04-04 UTC",
        [
          %{

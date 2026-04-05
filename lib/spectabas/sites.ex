@@ -8,9 +8,6 @@ defmodule Spectabas.Sites do
   alias Spectabas.{Repo, Audit}
   alias Spectabas.Sites.{Site, DomainCache}
 
-  @doc """
-  List all sites, ordered by name.
-  """
   @doc "Extract parent domain from a site's analytics subdomain (e.g., b.example.com → example.com)."
   def parent_domain_for(%Site{domain: domain}) do
     parts = String.split(domain, ".")
@@ -22,6 +19,7 @@ defmodule Spectabas.Sites do
     end
   end
 
+  @doc "List all sites, ordered by name."
   def list_sites do
     Repo.all(from s in Site, order_by: [asc: s.name])
   end

@@ -95,17 +95,6 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
       #{source_filter}
     """
 
-    # Debug: raw row count for this site
-    debug =
-      case ClickHouse.query("""
-           SELECT count() AS cnt, min(date) AS min_date, max(date) AS max_date
-           FROM search_console FINAL
-           WHERE site_id = #{site_p}
-           """) do
-        {:ok, [row | _]} -> row
-        {:error, e} -> %{"error" => inspect(e)}
-      end
-
     stats =
       case ClickHouse.query(stats_sql) do
         {:ok, [row | _]} -> row
@@ -164,7 +153,6 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     |> assign(:queries, queries)
     |> assign(:pages, pages)
     |> assign(:has_data, queries != [])
-    |> assign(:debug, debug)
     |> assign(:query_error, query_error)
   end
 
@@ -213,17 +201,9 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
               >Site Settings</.link>.
               Data syncs daily with a 2-3 day delay.
             </p>
-            <p class="text-xs text-gray-400 mt-2">
-              Debug: site_id={@site.id}, CH rows={@debug["cnt"]}, dates={@debug["min_date"]}..{@debug[
-                "max_date"
-              ]}
-              <%= if @debug["error"] do %>
-                | CH error: {@debug["error"]}
-              <% end %>
-              <%= if @query_error do %>
-                | Query error: {@query_error}
-              <% end %>
-            </p>
+            <%= if @query_error do %>
+              <p class="text-xs text-red-400 mt-2">Error: {@query_error}</p>
+            <% end %>
           </div>
         <% else %>
           <%!-- Stats cards --%>

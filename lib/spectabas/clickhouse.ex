@@ -467,10 +467,6 @@ defmodule Spectabas.ClickHouse do
 
   def insert(_table, []), do: :ok
 
-  @doc """
-  Execute a SQL statement using the write credentials.
-  Use for ALTER TABLE, mutations, or any DDL that requires write access.
-  """
   @doc "Execute SQL as admin/default user (for DDL: CREATE TABLE, ALTER TABLE ADD COLUMN, etc.)"
   def execute_admin(sql) do
     cfg = Application.get_env(:spectabas, __MODULE__)
