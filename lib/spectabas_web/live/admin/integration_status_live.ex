@@ -234,16 +234,33 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
   end
 
   def handle_event("fix_gsc_url", %{"id" => id}, socket) do
-    integration = AdIntegrations.get!(id)
+    integration = AdIntegrations.get!(id) |> Repo.preload(:site)
     site_url = (integration.extra || %{})["site_url"] || ""
 
-    # Add sc-domain: prefix if missing for domain properties
+    # Fix URL based on platform
     fixed_url =
-      cond do
-        String.starts_with?(site_url, "sc-domain:") -> site_url
-        String.starts_with?(site_url, "http") -> site_url
-        site_url != "" -> "sc-domain:#{site_url}"
-        true -> site_url
+      case integration.platform do
+        "google_search_console" ->
+          cond do
+            String.starts_with?(site_url, "sc-domain:") -> site_url
+            String.starts_with?(site_url, "http") -> site_url
+            site_url != "" -> "sc-domain:#{site_url}"
+            true ->
+              # Derive from site domain
+              parent = Spectabas.Sites.parent_domain_for(integration.site)
+              "sc-domain:#{parent}"
+          end
+
+        "bing_webmaster" ->
+          if site_url == "" do
+            parent = Spectabas.Sites.parent_domain_for(integration.site)
+            "https://www.#{parent}/"
+          else
+            site_url
+          end
+
+        _ ->
+          site_url
       end
 
     if fixed_url != site_url do
@@ -529,7 +546,7 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
                         Backfill 16mo
                       </button>
                     <% end %>
-                    <%= if integration.platform == "google_search_console" do %>
+                    <%= if integration.platform in ["google_search_console", "bing_webmaster"] do %>
                       <button
                         phx-click="fix_gsc_url"
                         phx-value-id={integration.id}
