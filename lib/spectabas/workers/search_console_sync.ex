@@ -75,19 +75,20 @@ defmodule Spectabas.Workers.SearchConsoleSync do
   end
 
   @doc "Manual sync. First sync backfills 16 months, subsequent syncs do last 7 days."
-  def sync_now(integration) do
+  def sync_now(integration, opts \\ []) do
     require Logger
     integration = Spectabas.Repo.preload(integration, :site)
     today = Date.utc_today()
 
-    # First sync (never synced) = backfill 16 months (~480 days)
-    # Subsequent syncs = last 7 days (GSC has 2-3 day delay)
+    # Force backfill ignores last_synced_at — always does full 16 months
+    force_backfill = Keyword.get(opts, :force_backfill, false)
+
     max_offset =
-      if is_nil(integration.last_synced_at), do: 480, else: 7
+      if is_nil(integration.last_synced_at) or force_backfill, do: 480, else: 7
 
     start_date = Date.add(today, -max_offset)
 
-    Logger.info("[SearchConsoleSync] sync_now from #{start_date} (#{max_offset} days)")
+    Logger.info("[SearchConsoleSync] sync_now from #{start_date} (#{max_offset} days, force=#{force_backfill})")
 
     # Work forward from oldest date, skip already-synced days
     Enum.each(0..max_offset, fn offset ->

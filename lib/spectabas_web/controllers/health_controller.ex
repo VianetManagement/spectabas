@@ -851,6 +851,9 @@ defmodule SpectabasWeb.HealthController do
         "fix_dupes" ->
           ecom_diag_fix_dupes(conn, site_id)
 
+        "mrr_diag" ->
+          ecom_diag_mrr(conn, site_id)
+
         _ ->
           ecom_diag_today(conn, site_id)
       end
@@ -1174,6 +1177,59 @@ defmodule SpectabasWeb.HealthController do
       _ ->
         json(conn, %{action: "fix_dupes", duplicates_found: 0, message: "No duplicates found."})
     end
+  end
+
+  defp ecom_diag_mrr(conn, site_id) do
+    site_p = Spectabas.ClickHouse.param(site_id)
+
+    # MRR by status
+    by_status =
+      case Spectabas.ClickHouse.query("""
+           SELECT status, count() AS cnt, sum(mrr_amount) AS total_mrr
+           FROM subscription_events FINAL
+           WHERE site_id = #{site_p}
+             AND snapshot_date = (SELECT max(snapshot_date) FROM subscription_events FINAL WHERE site_id = #{site_p})
+           GROUP BY status
+           ORDER BY total_mrr DESC
+           """) do
+        {:ok, rows} -> rows
+        {:error, e} -> [%{"error" => inspect(e)}]
+      end
+
+    # Top 20 subscriptions by MRR
+    top_subs =
+      case Spectabas.ClickHouse.query("""
+           SELECT subscription_id, customer_email, plan_name, plan_interval, mrr_amount, status, currency
+           FROM subscription_events FINAL
+           WHERE site_id = #{site_p}
+             AND snapshot_date = (SELECT max(snapshot_date) FROM subscription_events FINAL WHERE site_id = #{site_p})
+           ORDER BY mrr_amount DESC
+           LIMIT 20
+           """) do
+        {:ok, rows} -> rows
+        {:error, e} -> [%{"error" => inspect(e)}]
+      end
+
+    # Snapshot dates available
+    snapshots =
+      case Spectabas.ClickHouse.query("""
+           SELECT snapshot_date, count() AS cnt, sum(mrr_amount) AS total_mrr
+           FROM subscription_events FINAL
+           WHERE site_id = #{site_p}
+           GROUP BY snapshot_date
+           ORDER BY snapshot_date DESC
+           LIMIT 10
+           """) do
+        {:ok, rows} -> rows
+        {:error, e} -> [%{"error" => inspect(e)}]
+      end
+
+    json(conn, %{
+      action: "mrr_diag",
+      mrr_by_status: by_status,
+      top_subscriptions: top_subs,
+      recent_snapshots: snapshots
+    })
   end
 
   defp test_sites do

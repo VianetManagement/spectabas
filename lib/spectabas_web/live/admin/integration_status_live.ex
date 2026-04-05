@@ -214,17 +214,9 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
   def handle_event("backfill_search", %{"id" => id}, socket) do
     integration = AdIntegrations.get!(id) |> Repo.preload(:site)
 
-    # Clear last_synced_at to trigger full backfill
-    integration
-    |> Spectabas.AdIntegrations.AdIntegration.changeset(%{last_synced_at: nil})
-    |> Repo.update()
-
-    # Reload and run sync_now (which will see nil last_synced_at and do 480 days)
-    integration = AdIntegrations.get!(id) |> Repo.preload(:site)
-
     Task.start(fn ->
       try do
-        Spectabas.Workers.SearchConsoleSync.sync_now(integration)
+        Spectabas.Workers.SearchConsoleSync.sync_now(integration, force_backfill: true)
       rescue
         e ->
           require Logger
