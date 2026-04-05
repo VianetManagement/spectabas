@@ -253,8 +253,8 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
 
         "bing_webmaster" ->
           if site_url == "" do
-            parent = Spectabas.Sites.parent_domain_for(integration.site)
-            "https://www.#{parent}/"
+            # Bing registers sites as bare domain (e.g., "roommates.com")
+            Spectabas.Sites.parent_domain_for(integration.site)
           else
             site_url
           end

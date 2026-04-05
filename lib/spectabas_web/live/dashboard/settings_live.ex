@@ -377,9 +377,8 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                     Spectabas.Repo.delete(existing)
                   end
 
-                  # Derive the site URL from the analytics subdomain (e.g., b.roommates.com → https://www.roommates.com)
-                  parent = Spectabas.Sites.parent_domain_for(site)
-                  bing_site_url = "https://www.#{parent}/"
+                  # Bing registers sites as bare domain (e.g., "roommates.com")
+                  bing_site_url = Spectabas.Sites.parent_domain_for(site)
 
                   case Spectabas.AdIntegrations.connect(site.id, "bing_webmaster", %{
                          access_token: creds["api_key"],
