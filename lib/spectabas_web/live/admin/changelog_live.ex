@@ -45,6 +45,50 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.7.0 — 2026-04-05 UTC",
+       [
+         %{
+           title: "Feature: SOC2 security controls",
+           description:
+             "Password complexity (12+ chars, letter + number). Account lockout after 5 failed logins (15 min). " <>
+               "Idle session timeout (30 min, opt-out available). Active session tracking (IP, user-agent). " <>
+               "Admin force-logout. Forgot password with honeypot anti-abuse. Sign-in/out audit logging."
+         },
+         %{
+           title: "Feature: Account-level MFA enforcement",
+           description:
+             "Platform admin can require 2FA for all users in an account. Users without 2FA are redirected " <>
+               "to the setup page on login. 2FA verification sets a 12-hour session flag."
+         },
+         %{
+           title: "Feature: Integration sync logging",
+           description:
+             "All sync operations (Stripe, Braintree, GSC, Bing, ad platforms) now log to the Integration " <>
+               "Log page with event type, status, duration, and error details. Filterable by type."
+         },
+         %{
+           title: "Feature: Yesterday toggle on dashboard",
+           description:
+             "New 'Yesterday' button in the date range selector shows previous full day's data."
+         },
+         %{
+           title: "Fix: Integration data isolation",
+           description:
+             "Clear Data now properly scoped per platform. Search data filtered by source (Google/Bing). " <>
+               "Ad spend filtered by platform. Bing Webmaster site URL configurable during setup."
+         },
+         %{
+           title: "Fix: Ad sync frequency",
+           description:
+             "Google Ads and Meta Ads now respect per-integration sync frequency (was hardcoded 6h). " <>
+               "Cron checks every 5 min, should_sync? gates based on configured interval."
+         },
+         %{
+           title: "Fix: Realtime page shows state/region",
+           description:
+             "Realtime visitors now display city, state/region, country instead of just city, country."
+         }
+       ]},
       {"v5.6.0 — 2026-04-03 UTC",
        [
          %{

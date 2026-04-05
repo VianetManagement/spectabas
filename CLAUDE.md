@@ -205,7 +205,17 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **WebAuthn/Passkeys** — FIDO2 hardware keys and platform authenticators via `wax_` library
 - Users can register multiple WebAuthn credentials from account settings
 - **Admin force 2FA** — admins can require 2FA for specific users from the admin panel
+- **Account-level MFA enforcement** — platform admin can toggle `require_mfa` on accounts. Users without 2FA are redirected to setup on login.
+- **2FA session gating** — `Require2FA` plug checks `totp_verified_at` session flag (12-hour validity). Verified via `/auth/2fa/verified` controller endpoint.
 - **Granular site access** — Analyst/Viewer roles require explicit per-site permissions (toggled from /admin/users). Superadmin/Admin have account-scoped site access.
+
+### SOC2 Security Controls
+- **Password complexity** — min 12 chars, must include at least 1 letter and 1 number
+- **Account lockout** — 5 failed login attempts per email = 15 min lockout (Hammer ETS). Audit logged.
+- **Idle session timeout** — 30 min idle timeout with JS activity tracking, warning toast at 28 min. Users can opt out via Account Settings toggle.
+- **Active session management** — session metadata (IP, user-agent, last_active_at) stored on `users_tokens`. Admin force-logout button.
+- **Login link (forgot password)** — self-service on login page with honeypot field, timing check (2s min), 3-attempt rate limit per session. Generic success message prevents email enumeration.
+- **Audit logging** — sign-in (with IP, method), sign-out, idle timeout, force logout, account lockout all recorded.
 
 ### wax_ Configuration
 - Requires `origin` setting in `config/config.exs` (production) and `config/test.exs` (test)
@@ -264,7 +274,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Mobile responsiveness** — scrollable tables, collapsible mobile nav bar
 - **Accessible top nav** — WCAG AA contrast compliance
 - **Documentation pages** — docs split into `/docs` (index), `/docs/getting-started`, `/docs/dashboard`, `/docs/conversions`, `/docs/api`, `/docs/admin` with cross-category search. Requires login (behind :require_authenticated_user). Public pages: `/privacy`, `/terms`, homepage.
-- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.6.0)
+- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.7.0)
 - **Legal** — Privacy Policy at `/privacy` and Terms of Service at `/terms` (public, no auth required). Entity: Spectabas, Kent County MI. Contact: howdy@spectabas.com. Arbitration clause (AAA, Kent County). 18+ age restriction.
 
 ## Important Patterns

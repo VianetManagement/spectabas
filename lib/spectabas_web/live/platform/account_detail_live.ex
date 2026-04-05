@@ -45,6 +45,22 @@ defmodule SpectabasWeb.Platform.AccountDetailLive do
     {:noreply, assign(socket, :editing, !socket.assigns.editing)}
   end
 
+  def handle_event("toggle_require_mfa", _params, socket) do
+    account = socket.assigns.account
+    new_val = !account.require_mfa
+
+    case Accounts.update_account(account, %{require_mfa: new_val}) do
+      {:ok, updated} ->
+        {:noreply,
+         socket
+         |> assign(:account, updated)
+         |> put_flash(:info, if(new_val, do: "MFA now required for all users", else: "MFA requirement removed"))}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to update MFA setting")}
+    end
+  end
+
   def handle_event("validate_account", %{"account" => params}, socket) do
     changeset =
       socket.assigns.account
@@ -184,7 +200,7 @@ defmodule SpectabasWeb.Platform.AccountDetailLive do
             </button>
           </.form>
         <% else %>
-          <div class="grid grid-cols-3 gap-4 text-sm">
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
             <div>
               <span class="text-gray-500">Site Limit:</span>
               <span class="font-medium ml-1">{@account.site_limit}</span>
@@ -196,6 +212,17 @@ defmodule SpectabasWeb.Platform.AccountDetailLive do
             <div>
               <span class="text-gray-500">Users:</span>
               <span class="font-medium ml-1">{length(@users)}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-gray-500">Require MFA:</span>
+              <button
+                phx-click="toggle_require_mfa"
+                class={"relative inline-flex h-5 w-9 items-center rounded-full transition-colors " <>
+                  if(@account.require_mfa, do: "bg-indigo-600", else: "bg-gray-300")}
+              >
+                <span class={"inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform " <>
+                  if(@account.require_mfa, do: "translate-x-4", else: "translate-x-0.5")} />
+              </button>
             </div>
           </div>
         <% end %>

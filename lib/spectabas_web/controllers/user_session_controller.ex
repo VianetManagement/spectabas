@@ -109,6 +109,16 @@ defmodule SpectabasWeb.UserSessionController do
     |> create(params, "Password updated successfully!")
   end
 
+  def totp_verified(conn, _params) do
+    return_to = get_session(conn, :user_return_to) || ~p"/dashboard"
+
+    conn
+    |> put_session(:totp_verified_at, System.system_time(:second))
+    |> delete_session(:user_return_to)
+    |> put_flash(:info, "Two-factor authentication verified.")
+    |> redirect(to: return_to)
+  end
+
   def delete(conn, _params) do
     conn
     |> put_flash(:info, "Logged out successfully.")

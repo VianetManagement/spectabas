@@ -32,10 +32,8 @@ defmodule SpectabasWeb.Auth.TOTPVerifyLive do
 
     case TOTP.verify(socket.assigns.user, code) do
       :ok ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Two-factor authentication verified.")
-         |> redirect(to: ~p"/dashboard")}
+        # Redirect through controller to set totp_verified_at session flag
+        {:noreply, redirect(socket, to: ~p"/auth/2fa/verified")}
 
       {:error, :invalid_code} ->
         {:noreply, assign(socket, :error, "Invalid code. Please try again.")}

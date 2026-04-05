@@ -138,9 +138,11 @@ defmodule SpectabasWeb.Router do
     delete "/users/log-out", UserSessionController, :delete
   end
 
-  # 2FA routes
+  # 2FA routes (exempt from Require2FA plug to avoid redirect loops)
   scope "/auth/2fa", SpectabasWeb do
     pipe_through [:browser, :require_authenticated_user]
+
+    get "/verified", UserSessionController, :totp_verified
 
     live_session :totp,
       on_mount: [{SpectabasWeb.UserAuth, :require_authenticated}] do

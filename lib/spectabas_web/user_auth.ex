@@ -330,7 +330,12 @@ defmodule SpectabasWeb.UserAuth do
   """
   def require_authenticated_user(conn, _opts) do
     if conn.assigns.current_scope && conn.assigns.current_scope.user do
-      conn
+      # Skip 2FA check for 2FA routes themselves (avoid redirect loop)
+      if String.starts_with?(conn.request_path, "/auth/2fa") do
+        conn
+      else
+        SpectabasWeb.Plugs.Require2FA.call(conn, [])
+      end
     else
       conn
       |> put_flash(:error, "You must log in to access this page.")
