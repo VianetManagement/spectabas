@@ -76,8 +76,7 @@ CREATE TABLE IF NOT EXISTS spectabas.events
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(timestamp)
 ORDER BY (site_id, timestamp, visitor_id)
-TTL timestamp + INTERVAL 365 DAY DELETE,
-    timestamp + INTERVAL 90 DAY SET ip_address = '' WHERE ip_gdpr_anonymized = 1
+TTL timestamp + INTERVAL 2 YEAR DELETE
 SETTINGS index_granularity = 8192;
 
 -- Ecommerce events table

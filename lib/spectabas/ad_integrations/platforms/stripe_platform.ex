@@ -368,6 +368,24 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
     fetch_subscriptions_page(api_key, nil, [])
   end
 
+  # Normalize a billing amount to its monthly equivalent (MRR).
+  # Matches Stripe's MRR calculation logic.
+  defp normalize_to_mrr(amount, interval, interval_count) do
+    case {interval, interval_count} do
+      {"month", n} -> amount / n
+      {"year", n} -> amount / (12.0 * n)
+      {"week", 1} -> amount * 52.0 / 12.0
+      {"week", n} -> amount * 52.0 / (12.0 * n)
+      {"day", 30} -> amount
+      {"day", 7} -> amount * 52.0 / 12.0
+      {"day", 14} -> amount * 26.0 / 12.0
+      {"day", 90} -> amount / 3.0
+      {"day", 365} -> amount / 12.0
+      {"day", n} -> amount * 365.0 / (12.0 * n)
+      _ -> amount
+    end
+  end
+
   defp fetch_subscriptions_page(api_key, starting_after, acc) do
     # Build query string manually to support multiple expand[] params
     base_params = [
@@ -400,26 +418,18 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
                 _ -> ""
               end
 
-            # Sum all line items (subscriptions can have multiple items)
+            # Calculate MRR per item, normalizing each item's billing interval independently.
+            # This handles subscriptions with mixed-interval items correctly.
             items = get_in(sub, ["items", "data"]) || []
             first_item = List.first(items) || %{}
-            price = first_item["price"] || %{}
+            first_price = first_item["price"] || %{}
 
-            plan_name = price["nickname"] || price["product"] || ""
-            interval = get_in(price, ["recurring", "interval"]) || "month"
-            interval_count = get_in(price, ["recurring", "interval_count"]) || 1
-            currency = String.upcase(price["currency"] || "usd")
+            plan_name = first_price["nickname"] || first_price["product"] || ""
+            interval = get_in(first_price, ["recurring", "interval"]) || "month"
+            _interval_count = get_in(first_price, ["recurring", "interval_count"]) || 1
+            currency = String.upcase(first_price["currency"] || "usd")
 
-            # Total amount across all items: unit_amount * quantity per item
-            total_amount =
-              Enum.reduce(items, 0.0, fn item, acc ->
-                item_price = item["price"] || %{}
-                unit = (item_price["unit_amount"] || 0) / 100.0
-                qty = item["quantity"] || 1
-                acc + unit * qty
-              end)
-
-            # Apply subscription-level discount if present
+            # Apply subscription-level discount
             discount_pct =
               case get_in(sub, ["discount", "coupon", "percent_off"]) do
                 pct when is_number(pct) -> pct
@@ -432,30 +442,37 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
                 _ -> 0
               end
 
-            discounted_amount =
-              cond do
-                discount_pct > 0 -> total_amount * (1 - discount_pct / 100.0)
-                amount_off > 0 -> max(total_amount - amount_off, 0)
-                true -> total_amount
-              end
+            # Total billing amount across all items
+            total_amount =
+              Enum.reduce(items, 0.0, fn item, acc ->
+                item_price = item["price"] || %{}
+                unit = (item_price["unit_amount"] || 0) / 100.0
+                qty = item["quantity"] || 1
+                acc + unit * qty
+              end)
 
-            # Calculate MRR: normalize billing interval to monthly equivalent.
-            # Stripe uses day/30 for "monthly", day/7 for "weekly", etc.
-            # Match Stripe's MRR definition by mapping common day intervals to months.
+            # Calculate MRR per item, then sum
+            items_mrr =
+              Enum.map(items, fn item ->
+                item_price = item["price"] || %{}
+                unit = (item_price["unit_amount"] || 0) / 100.0
+                qty = item["quantity"] || 1
+                item_amount = unit * qty
+
+                item_interval = get_in(item_price, ["recurring", "interval"]) || "month"
+                item_interval_count = get_in(item_price, ["recurring", "interval_count"]) || 1
+
+                normalize_to_mrr(item_amount, item_interval, item_interval_count)
+              end)
+
+            raw_mrr = Enum.sum(items_mrr)
+
+            # Apply discount to the MRR total
             mrr =
-              case {interval, interval_count} do
-                {"month", n} -> Float.round(discounted_amount / n, 2)
-                {"year", n} -> Float.round(discounted_amount / (12.0 * n), 2)
-                {"week", 1} -> Float.round(discounted_amount * 52.0 / 12.0, 2)
-                {"week", n} -> Float.round(discounted_amount * 52.0 / (12.0 * n), 2)
-                {"day", 1} -> Float.round(discounted_amount * 365.0 / 12.0, 2)
-                {"day", 7} -> Float.round(discounted_amount * 52.0 / 12.0, 2)
-                {"day", 14} -> Float.round(discounted_amount * 26.0 / 12.0, 2)
-                {"day", 30} -> discounted_amount
-                {"day", 90} -> Float.round(discounted_amount / 3.0, 2)
-                {"day", 365} -> Float.round(discounted_amount / 12.0, 2)
-                {"day", n} -> Float.round(discounted_amount * 365.0 / (12.0 * n), 2)
-                _ -> discounted_amount
+              cond do
+                discount_pct > 0 -> Float.round(raw_mrr * (1 - discount_pct / 100.0), 2)
+                amount_off > 0 -> Float.round(max(raw_mrr - amount_off, 0), 2)
+                true -> Float.round(raw_mrr, 2)
               end
 
             canceled_at_dt =
@@ -468,7 +485,7 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
               customer_email: customer_email,
               plan_name: plan_name,
               plan_interval: interval,
-              amount: discounted_amount,
+              amount: total_amount,
               mrr: mrr,
               currency: currency,
               status: sub["status"] || "unknown",

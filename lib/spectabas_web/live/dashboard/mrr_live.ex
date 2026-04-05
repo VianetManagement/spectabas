@@ -88,15 +88,16 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
       end
 
     # MRR from latest subscription snapshots
+    # Stripe only counts 'active' subscriptions in MRR — not trialing or past_due
     mrr_sql = """
     SELECT
-      sumIf(mrr_amount, status IN ('active', 'past_due', 'trialing')) AS total_mrr,
+      sumIf(mrr_amount, status = 'active') AS total_mrr,
       countIf(status = 'active') AS active_subs,
       countIf(status = 'canceled') AS canceled_subs,
       countIf(status = 'past_due') AS past_due_subs,
       countIf(status = 'trialing') AS trialing_subs,
-      if(countIf(status IN ('active', 'past_due', 'trialing')) > 0,
-        round(sumIf(mrr_amount, status IN ('active', 'past_due', 'trialing')) / countIf(status IN ('active', 'past_due', 'trialing')), 2),
+      if(countIf(status = 'active') > 0,
+        round(sumIf(mrr_amount, status = 'active') / countIf(status = 'active'), 2),
         0) AS avg_mrr_per_sub,
       count() AS total_subs
     FROM subscription_events FINAL
@@ -110,16 +111,16 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
         _ -> %{}
       end
 
-    # MRR trend
+    # MRR trend — only active subscriptions to match Stripe
     trend_sql = """
     SELECT
       snapshot_date AS date,
       sum(mrr_amount) AS mrr,
-      countIf(status IN ('active', 'past_due', 'trialing')) AS subs
+      count() AS subs
     FROM subscription_events FINAL
     WHERE site_id = #{site_p}
       AND snapshot_date >= today() - 30
-      AND status IN ('active', 'past_due', 'trialing')
+      AND status = 'active'
     GROUP BY snapshot_date
     ORDER BY snapshot_date ASC
     """
@@ -136,7 +137,7 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
     FROM subscription_events FINAL
     WHERE site_id = #{site_p}
       AND snapshot_date = (SELECT max(snapshot_date) FROM subscription_events FINAL WHERE site_id = #{site_p})
-      AND status IN ('active', 'past_due', 'trialing')
+      AND status = 'active'
     GROUP BY plan_name, plan_interval
     ORDER BY plan_mrr DESC
     """
