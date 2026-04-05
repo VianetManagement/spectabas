@@ -11,7 +11,12 @@ defmodule Spectabas.Workers.AdSpendSync do
 
   @impl Oban.Worker
   def perform(_job) do
-    integrations = AdIntegrations.list_active() |> Spectabas.Repo.preload(:site)
+    # Only process ad platforms — Stripe/Braintree/GSC/Bing have their own sync workers
+    integrations =
+      AdIntegrations.list_active()
+      |> Enum.filter(&(&1.platform in ["google_ads", "bing_ads", "meta_ads"]))
+      |> Spectabas.Repo.preload(:site)
+
     today = Date.utc_today()
     yesterday = Date.add(today, -1)
 

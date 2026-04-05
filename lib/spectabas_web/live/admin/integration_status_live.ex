@@ -199,6 +199,19 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
     {:noreply, assign(socket, :test_results, test_results)}
   end
 
+  def handle_event("clear_error", %{"id" => id}, socket) do
+    integration = AdIntegrations.get!(id)
+
+    integration
+    |> Spectabas.AdIntegrations.AdIntegration.changeset(%{last_error: nil})
+    |> Repo.update()
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "Error cleared.")
+     |> assign(:integrations, reload_integrations(socket))}
+  end
+
   def handle_event("backfill_search", %{"id" => id}, socket) do
     integration = AdIntegrations.get!(id) |> Repo.preload(:site)
 
@@ -492,6 +505,15 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
                         class="inline-flex items-center px-2 py-1 text-xs font-medium rounded text-green-700 bg-green-50 hover:bg-green-100 border border-green-200"
                       >
                         Fix URL
+                      </button>
+                    <% end %>
+                    <%= if integration.last_error do %>
+                      <button
+                        phx-click="clear_error"
+                        phx-value-id={integration.id}
+                        class="inline-flex items-center px-2 py-1 text-xs font-medium rounded text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200"
+                      >
+                        Clear Error
                       </button>
                     <% end %>
                   </td>
