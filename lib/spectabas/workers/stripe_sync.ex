@@ -66,18 +66,33 @@ defmodule Spectabas.Workers.StripeSync do
         StripePlatform.sync_charges(integration.site, integration, Date.add(today, -offset))
       end)
 
-      StripePlatform.sync_subscriptions(integration.site, integration)
+      sub_result = StripePlatform.sync_subscriptions(integration.site, integration)
       ms = System.monotonic_time(:millisecond) - start
 
+      sub_msg =
+        case sub_result do
+          :ok -> "subscriptions synced"
+          {:error, reason} -> "subscriptions failed: #{inspect(reason) |> String.slice(0, 100)}"
+          other -> "subscriptions: #{inspect(other) |> String.slice(0, 100)}"
+        end
+
       SyncLog.log(integration, "manual_sync", "ok",
-        "Synced charges (#{days + 1} days) and subscriptions",
+        "Charges (#{days + 1} days), #{sub_msg}",
         duration_ms: ms,
         details: %{"days" => days + 1}
       )
     rescue
       e ->
         ms = System.monotonic_time(:millisecond) - start
-        SyncLog.log(integration, "manual_sync", "error", Exception.message(e), duration_ms: ms)
+        SyncLog.log(integration, "manual_sync", "error",
+          "#{Exception.message(e)}\n#{Exception.format_stacktrace(__STACKTRACE__) |> String.slice(0, 300)}",
+          duration_ms: ms)
+    catch
+      kind, reason ->
+        ms = System.monotonic_time(:millisecond) - start
+        SyncLog.log(integration, "manual_sync", "error",
+          "#{kind}: #{inspect(reason) |> String.slice(0, 300)}",
+          duration_ms: ms)
     end
   end
 end

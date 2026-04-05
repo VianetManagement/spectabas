@@ -1182,10 +1182,11 @@ defmodule SpectabasWeb.HealthController do
   defp ecom_diag_mrr(conn, site_id) do
     site_p = Spectabas.ClickHouse.param(site_id)
 
-    # MRR by status
+    # MRR by status from ClickHouse
     by_status =
       case Spectabas.ClickHouse.query("""
-           SELECT status, count() AS cnt, sum(mrr_amount) AS total_mrr
+           SELECT status, count() AS cnt, sum(mrr_amount) AS total_mrr,
+             countIf(mrr_amount = 0) AS zero_mrr_count
            FROM subscription_events FINAL
            WHERE site_id = #{site_p}
              AND snapshot_date = (SELECT max(snapshot_date) FROM subscription_events FINAL WHERE site_id = #{site_p})
@@ -1196,13 +1197,14 @@ defmodule SpectabasWeb.HealthController do
         {:error, e} -> [%{"error" => inspect(e)}]
       end
 
-    # Top 20 subscriptions by MRR
+    # Top 20 active subscriptions by MRR
     top_subs =
       case Spectabas.ClickHouse.query("""
            SELECT subscription_id, customer_email, plan_name, plan_interval, mrr_amount, status, currency
            FROM subscription_events FINAL
            WHERE site_id = #{site_p}
              AND snapshot_date = (SELECT max(snapshot_date) FROM subscription_events FINAL WHERE site_id = #{site_p})
+             AND status = 'active'
            ORDER BY mrr_amount DESC
            LIMIT 20
            """) do
@@ -1224,12 +1226,72 @@ defmodule SpectabasWeb.HealthController do
         {:error, e} -> [%{"error" => inspect(e)}]
       end
 
+    # Call Stripe API directly to count cancel_at_period_end
+    stripe_diag = stripe_cancel_at_period_end_diag(site_id)
+
     json(conn, %{
       action: "mrr_diag",
       mrr_by_status: by_status,
       top_subscriptions: top_subs,
-      recent_snapshots: snapshots
+      recent_snapshots: snapshots,
+      stripe_cancel_at_period_end: stripe_diag
     })
+  end
+
+  defp stripe_cancel_at_period_end_diag(site_id) do
+    import Ecto.Query
+
+    case Spectabas.Repo.one(
+           from(a in Spectabas.AdIntegrations.AdIntegration,
+             where: a.site_id == ^site_id and a.platform == "stripe" and a.status == "active",
+             limit: 1
+           )
+         ) do
+      nil ->
+        %{error: "No active Stripe integration"}
+
+      integration ->
+        api_key = Spectabas.AdIntegrations.decrypt_access_token(integration)
+
+        # Fetch first page of active subscriptions to count cancel_at_period_end
+        case Req.get("https://api.stripe.com/v1/subscriptions?status=active&limit=100",
+               headers: [
+                 {"authorization", "Bearer #{api_key}"},
+                 {"stripe-version", "2024-12-18.acacia"}
+               ]
+             ) do
+          {:ok, %{status: 200, body: %{"data" => subs, "has_more" => has_more}}} ->
+            cancel_count = Enum.count(subs, & &1["cancel_at_period_end"])
+            non_cancel = Enum.count(subs, &(!&1["cancel_at_period_end"]))
+
+            sample_canceling =
+              subs
+              |> Enum.filter(& &1["cancel_at_period_end"])
+              |> Enum.take(3)
+              |> Enum.map(fn s ->
+                %{
+                  id: s["id"],
+                  cancel_at_period_end: s["cancel_at_period_end"],
+                  status: s["status"],
+                  items: length(get_in(s, ["items", "data"]) || [])
+                }
+              end)
+
+            %{
+              page_size: length(subs),
+              has_more: has_more,
+              cancel_at_period_end_count: cancel_count,
+              will_renew_count: non_cancel,
+              sample_canceling: sample_canceling
+            }
+
+          {:ok, %{status: s, body: b}} ->
+            %{error: "Stripe API HTTP #{s}: #{inspect(b) |> String.slice(0, 200)}"}
+
+          {:error, e} ->
+            %{error: inspect(e) |> String.slice(0, 200)}
+        end
+    end
   end
 
   defp test_sites do

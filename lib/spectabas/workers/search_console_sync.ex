@@ -110,6 +110,7 @@ defmodule Spectabas.Workers.SearchConsoleSync do
 
     start_date = Date.add(today, -max_offset)
 
+    # force_backfill also skips the "already synced" check — re-syncs all days
     SyncLog.log(integration, "manual_sync_start", "ok",
       "Backfill from #{start_date} (#{max_offset} days, force=#{force_backfill})")
 
@@ -119,13 +120,15 @@ defmodule Spectabas.Workers.SearchConsoleSync do
       date = Date.add(start_date, offset)
 
       if Date.diff(today, date) >= 2 do
-        if gsc_day_synced?(integration.site.id, date) do
-          acc
-        else
+        should_sync = force_backfill or not gsc_day_synced?(integration.site.id, date)
+
+        if should_sync do
           case sync_one(integration, date) do
             :ok -> acc + 1
             _ -> acc
           end
+        else
+          acc
         end
       else
         acc
