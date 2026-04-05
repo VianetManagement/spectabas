@@ -17,6 +17,9 @@ defmodule Spectabas.Accounts.UserToken do
     field :context, :string
     field :sent_to, :string
     field :authenticated_at, :utc_datetime
+    field :ip, :string
+    field :user_agent, :string
+    field :last_active_at, :utc_datetime
     belongs_to :user, Spectabas.Accounts.User
 
     timestamps(type: :utc_datetime, updated_at: false)
@@ -41,10 +44,20 @@ defmodule Spectabas.Accounts.UserToken do
   and devices in the UI and allow users to explicitly expire any
   session they deem invalid.
   """
-  def build_session_token(user) do
+  def build_session_token(user, metadata \\ %{}) do
     token = :crypto.strong_rand_bytes(@rand_size)
     dt = user.authenticated_at || DateTime.utc_now(:second)
-    {token, %UserToken{token: token, context: "session", user_id: user.id, authenticated_at: dt}}
+
+    {token,
+     %UserToken{
+       token: token,
+       context: "session",
+       user_id: user.id,
+       authenticated_at: dt,
+       ip: metadata[:ip],
+       user_agent: metadata[:user_agent],
+       last_active_at: DateTime.utc_now() |> DateTime.truncate(:second)
+     }}
   end
 
   @doc """

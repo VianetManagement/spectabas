@@ -102,6 +102,9 @@ defmodule SpectabasWeb.UserLive.Settings do
             <p :if={@password_form[:password].errors != []} class="mt-1 text-sm text-red-600">
               {SpectabasWeb.CoreComponents.translate_error(hd(@password_form[:password].errors))}
             </p>
+            <p class="mt-1 text-xs text-gray-400">
+              At least 12 characters, must include a letter and a number.
+            </p>
           </div>
           <div>
             <label
@@ -208,6 +211,30 @@ defmodule SpectabasWeb.UserLive.Settings do
             </button>
           </div>
         </div>
+      </div>
+
+      <%!-- Session Preferences --%>
+      <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Session Preferences</h2>
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm font-medium text-gray-700">Idle session timeout</p>
+            <p class="text-xs text-gray-500">
+              Automatically sign out after 30 minutes of inactivity.
+            </p>
+          </div>
+          <button
+            phx-click="toggle_idle_timeout"
+            class={"relative inline-flex h-6 w-11 items-center rounded-full transition-colors " <>
+              if(@current_scope.user.idle_timeout_disabled, do: "bg-gray-300", else: "bg-indigo-600")}
+          >
+            <span class={"inline-block h-4 w-4 transform rounded-full bg-white transition-transform " <>
+              if(@current_scope.user.idle_timeout_disabled, do: "translate-x-1", else: "translate-x-6")} />
+          </button>
+        </div>
+        <p :if={@current_scope.user.idle_timeout_disabled} class="text-xs text-amber-600 mt-2">
+          Idle timeout is disabled. Your session will not expire due to inactivity.
+        </p>
       </div>
 
       <%!-- API Keys --%>
@@ -528,6 +555,27 @@ defmodule SpectabasWeb.UserLive.Settings do
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Failed to create API key.")}
+    end
+  end
+
+  def handle_event("toggle_idle_timeout", _params, socket) do
+    user = socket.assigns.current_scope.user
+    new_val = !user.idle_timeout_disabled
+
+    case Spectabas.Accounts.update_user_profile(user, %{idle_timeout_disabled: new_val}) do
+      {:ok, updated} ->
+        scope = %{socket.assigns.current_scope | user: updated}
+
+        {:noreply,
+         socket
+         |> Phoenix.Component.assign(:current_scope, scope)
+         |> Phoenix.LiveView.put_flash(
+           :info,
+           if(new_val, do: "Idle timeout disabled", else: "Idle timeout enabled")
+         )}
+
+      {:error, _} ->
+        {:noreply, Phoenix.LiveView.put_flash(socket, :error, "Failed to update preference")}
     end
   end
 

@@ -239,6 +239,28 @@ defmodule SpectabasWeb.Admin.UsersLive do
     end
   end
 
+  def handle_event("force_logout", %{"id" => user_id}, socket) do
+    admin = socket.assigns.current_scope.user
+    user = Accounts.get_user!(user_id)
+
+    if admin.role != :platform_admin and user.account_id != admin.account_id do
+      {:noreply, put_flash(socket, :error, "Unauthorized")}
+    else
+      {count, tokens} = Accounts.delete_all_user_sessions(user)
+      SpectabasWeb.UserAuth.disconnect_sessions(tokens)
+
+      Spectabas.Audit.log("user.force_logout", %{
+        user_id: user.id,
+        email: user.email,
+        admin_id: admin.id,
+        admin_email: admin.email,
+        sessions_terminated: count
+      })
+
+      {:noreply, put_flash(socket, :info, "#{user.email} has been logged out of #{count} session(s).")}
+    end
+  end
+
   def handle_event("delete_user", %{"id" => user_id}, socket) do
     admin = socket.assigns.current_scope.user
     user = Accounts.get_user!(user_id)
@@ -546,6 +568,15 @@ defmodule SpectabasWeb.Admin.UsersLive do
                   class="text-amber-600 hover:text-amber-800 text-sm font-medium"
                 >
                   Send Login Link
+                </button>
+                <button
+                  :if={user.id != @current_scope.user.id}
+                  phx-click="force_logout"
+                  phx-value-id={user.id}
+                  data-confirm={"Force logout #{user.email} from all sessions?"}
+                  class="text-orange-600 hover:text-orange-800 text-sm font-medium"
+                >
+                  Force Logout
                 </button>
                 <button
                   :if={user.id != @current_scope.user.id}

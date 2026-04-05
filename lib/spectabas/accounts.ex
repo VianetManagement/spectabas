@@ -226,10 +226,56 @@ defmodule Spectabas.Accounts do
   @doc """
   Generates a session token.
   """
-  def generate_user_session_token(user) do
-    {token, user_token} = UserToken.build_session_token(user)
+  def generate_user_session_token(user, metadata \\ %{}) do
+    {token, user_token} = UserToken.build_session_token(user, metadata)
     Repo.insert!(user_token)
     token
+  end
+
+  @doc "List active sessions for a user."
+  def list_user_sessions(%User{} = user) do
+    cutoff = DateTime.add(DateTime.utc_now(), -14 * 86400, :second)
+
+    Repo.all(
+      from(t in UserToken,
+        where: t.user_id == ^user.id and t.context == "session" and t.inserted_at > ^cutoff,
+        order_by: [desc: t.last_active_at],
+        select: %{
+          id: t.id,
+          ip: t.ip,
+          user_agent: t.user_agent,
+          last_active_at: t.last_active_at,
+          inserted_at: t.inserted_at,
+          token: t.token
+        }
+      )
+    )
+  end
+
+  @doc "Delete all sessions for a user except the current one."
+  def delete_other_user_sessions(%User{} = user, current_token) do
+    {count, tokens} =
+      Repo.delete_all(
+        from(t in UserToken,
+          where: t.user_id == ^user.id and t.context == "session" and t.token != ^current_token,
+          select: t.token
+        )
+      )
+
+    {count, tokens}
+  end
+
+  @doc "Delete all sessions for a user (admin force-logout)."
+  def delete_all_user_sessions(%User{} = user) do
+    {count, tokens} =
+      Repo.delete_all(
+        from(t in UserToken,
+          where: t.user_id == ^user.id and t.context == "session",
+          select: t.token
+        )
+      )
+
+    {count, tokens}
   end
 
   @doc """
@@ -407,6 +453,12 @@ defmodule Spectabas.Accounts do
   @doc """
   Update a user's role. Only admins/superadmins should call this.
   """
+  def update_user_profile(%User{} = user, attrs) do
+    user
+    |> User.profile_changeset(attrs)
+    |> Repo.update()
+  end
+
   def update_user_timezone(%User{} = user, timezone) do
     user
     |> User.profile_changeset(%{timezone: timezone})

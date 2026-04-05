@@ -25,6 +25,7 @@ defmodule Spectabas.Accounts.User do
     field :last_sign_in_ip, :string
     field :force_2fa, :boolean, default: false
     field :timezone, :string, default: "America/New_York"
+    field :idle_timeout_disabled, :boolean, default: false
 
     has_many :site_permissions, Spectabas.Accounts.UserSitePermission
     has_many :webauthn_credentials, Spectabas.Accounts.WebauthnCredential
@@ -104,6 +105,8 @@ defmodule Spectabas.Accounts.User do
     changeset
     |> validate_required([:password])
     |> validate_length(:password, min: 12, max: 72)
+    |> validate_format(:password, ~r/[0-9]/, message: "must contain at least one number")
+    |> validate_format(:password, ~r/[a-zA-Z]/, message: "must contain at least one letter")
     |> maybe_hash_password(opts)
   end
 
@@ -136,7 +139,8 @@ defmodule Spectabas.Accounts.User do
       :last_sign_in_at,
       :last_sign_in_ip,
       :force_2fa,
-      :timezone
+      :timezone,
+      :idle_timeout_disabled
     ])
     |> validate_inclusion(:role, [:platform_admin, :superadmin, :admin, :analyst, :viewer])
     |> validate_length(:display_name, max: 255)

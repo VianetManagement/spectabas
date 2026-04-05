@@ -33,26 +33,53 @@ defmodule SpectabasWeb.UserSessionController do
   defp create(conn, %{"user" => user_params}, info) do
     %{"email" => email, "password" => password} = user_params
     ip = login_ip(conn)
+    normalized_email = String.downcase(String.trim(email))
 
     {limit, window} = Application.get_env(:spectabas, :rate_limits)[:login]
 
+    # Layer 1: IP-based rate limit
     case Hammer.check_rate("login:#{ip}", window, limit) do
-      {:allow, _} ->
-        if user = Accounts.get_user_by_email_and_password(email, password) do
-          conn
-          |> put_flash(:info, info)
-          |> UserAuth.log_in_user(user, user_params)
-        else
-          conn
-          |> put_flash(:error, "Invalid email or password")
-          |> put_flash(:email, String.slice(email, 0, 160))
-          |> redirect(to: ~p"/users/log-in")
-        end
-
       {:deny, _} ->
         conn
         |> put_flash(:error, "Too many login attempts. Please try again later.")
         |> redirect(to: ~p"/users/log-in")
+
+      {:allow, _} ->
+        # Layer 2: Per-email lockout (5 failures = 15 min lockout)
+        case Hammer.check_rate("lockout:#{normalized_email}", 900_000, 5) do
+          {:deny, _} ->
+            conn
+            |> put_flash(:error, "Account temporarily locked due to too many failed attempts. Try again in 15 minutes.")
+            |> redirect(to: ~p"/users/log-in")
+
+          {:allow, _} ->
+            if user = Accounts.get_user_by_email_and_password(email, password) do
+              # Reset lockout counter on successful login
+              Hammer.delete_buckets("lockout:#{normalized_email}")
+
+              conn
+              |> put_flash(:info, info)
+              |> UserAuth.log_in_user(user, user_params)
+            else
+              # Check if this failure triggers a lockout
+              case Hammer.check_rate("lockout:#{normalized_email}", 900_000, 5) do
+                {:deny, _} ->
+                  Spectabas.Audit.log("user.account_locked", %{
+                    email: normalized_email,
+                    ip: ip,
+                    reason: "5 failed login attempts"
+                  })
+
+                _ ->
+                  :ok
+              end
+
+              conn
+              |> put_flash(:error, "Invalid email or password")
+              |> put_flash(:email, String.slice(email, 0, 160))
+              |> redirect(to: ~p"/users/log-in")
+            end
+        end
     end
   end
 

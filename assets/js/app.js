@@ -157,6 +157,69 @@ const Sparkline = {
   }
 }
 
+const IdleTimeout = {
+  mounted() {
+    const timeoutMs = parseInt(this.el.dataset.timeout || "1800000") // 30 min default
+    const warnMs = timeoutMs - 120000 // warn 2 min before
+    const disabled = this.el.dataset.disabled === "true"
+
+    if (disabled) return
+
+    this._lastActivity = Date.now()
+    this._warned = false
+
+    // Track user activity (debounced)
+    const onActivity = () => {
+      this._lastActivity = Date.now()
+      if (this._warned) {
+        this._warned = false
+        this._dismissWarning()
+      }
+    }
+
+    ;["mousemove", "keydown", "click", "touchstart", "scroll"].forEach(evt => {
+      document.addEventListener(evt, onActivity, { passive: true })
+    })
+    this._onActivity = onActivity
+
+    // Check every 30 seconds
+    this._interval = setInterval(() => {
+      const idle = Date.now() - this._lastActivity
+      if (idle >= timeoutMs) {
+        this.pushEvent("idle_timeout", {})
+      } else if (idle >= warnMs && !this._warned) {
+        this._warned = true
+        this._showWarning()
+      }
+    }, 30000)
+  },
+
+  _showWarning() {
+    if (document.getElementById("idle-warning")) return
+    const div = document.createElement("div")
+    div.id = "idle-warning"
+    div.className = "fixed bottom-4 right-4 z-50 bg-amber-50 border border-amber-300 rounded-lg shadow-lg p-4 max-w-sm"
+    div.innerHTML = `
+      <p class="text-sm font-medium text-amber-800">Session expiring soon</p>
+      <p class="text-xs text-amber-600 mt-1">You'll be signed out in 2 minutes due to inactivity. Move your mouse to stay signed in.</p>
+    `
+    document.body.appendChild(div)
+  },
+
+  _dismissWarning() {
+    const el = document.getElementById("idle-warning")
+    if (el) el.remove()
+  },
+
+  destroyed() {
+    if (this._interval) clearInterval(this._interval)
+    ;["mousemove", "keydown", "click", "touchstart", "scroll"].forEach(evt => {
+      document.removeEventListener(evt, this._onActivity)
+    })
+    this._dismissWarning()
+  }
+}
+
 const Hooks = {
   TimeseriesChart,
   BarChart,
@@ -166,6 +229,7 @@ const Hooks = {
   AutoDismiss,
   Sparkline,
   PieChart,
+  IdleTimeout,
 }
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")

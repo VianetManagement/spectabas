@@ -120,7 +120,8 @@ defmodule Spectabas.Workers.SearchConsoleSync do
       date = Date.add(start_date, offset)
 
       if Date.diff(today, date) >= 2 do
-        should_sync = force_backfill or not gsc_day_synced?(integration.site.id, date)
+        source = if integration.platform == "bing_webmaster", do: "bing", else: "google"
+        should_sync = force_backfill or not gsc_day_synced?(integration.site.id, date, source)
 
         if should_sync do
           case sync_one(integration, date) do
@@ -144,11 +145,12 @@ defmodule Spectabas.Workers.SearchConsoleSync do
     )
   end
 
-  defp gsc_day_synced?(site_id, date) do
+  defp gsc_day_synced?(site_id, date, source) do
     sql = """
     SELECT count() AS cnt FROM search_console FINAL
     WHERE site_id = #{Spectabas.ClickHouse.param(site_id)}
       AND date = #{Spectabas.ClickHouse.param(Date.to_iso8601(date))}
+      AND source = #{Spectabas.ClickHouse.param(source)}
     """
 
     case Spectabas.ClickHouse.query(sql) do

@@ -10,7 +10,7 @@ defmodule Spectabas.AccountsFixtures do
   alias Spectabas.Accounts.{Account, Scope}
 
   def unique_user_email, do: "user#{System.unique_integer()}@example.com"
-  def valid_user_password, do: "hello world!"
+  def valid_user_password, do: "hello world1!"
 
   @doc "Get or create a shared test account for tests."
   def test_account do

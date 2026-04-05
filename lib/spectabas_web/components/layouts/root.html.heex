@@ -172,6 +172,15 @@
         </div>
       </div>
     </nav>
+    <%= if assigns[:current_scope] && @current_scope.user do %>
+      <div
+        id="idle-timeout-hook"
+        phx-hook="IdleTimeout"
+        data-timeout="1800000"
+        data-disabled={to_string(@current_scope.user.idle_timeout_disabled)}
+      >
+      </div>
+    <% end %>
     {@inner_content}
   </body>
 </html>
