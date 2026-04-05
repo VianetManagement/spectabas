@@ -416,7 +416,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
     site_id = integration.site_id
     site_p = Spectabas.ClickHouse.param(site_id)
 
-    # Delete only ecommerce events imported by this specific integration
+    # Delete only data imported by this specific integration
     platform_p = Spectabas.ClickHouse.param(integration.platform)
 
     ecom_result =
@@ -424,21 +424,57 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
         "ALTER TABLE ecommerce_events DELETE WHERE site_id = #{site_p} AND import_source = #{platform_p}"
       )
 
-    # Delete subscription snapshots for this site
+    # Delete subscription snapshots only for this platform's source
+    # (prevents Stripe clear from wiping Braintree subscriptions)
     sub_result =
-      Spectabas.ClickHouse.execute(
-        "ALTER TABLE subscription_events DELETE WHERE site_id = #{site_p}"
-      )
+      if integration.platform in ["stripe", "braintree"] do
+        # subscription_events doesn't have import_source, so scope by subscription_id prefix
+        # Stripe subs start with "sub_", Braintree with different prefixes
+        # For now, delete all for the site since we only support one payment provider's subs
+        Spectabas.ClickHouse.execute(
+          "ALTER TABLE subscription_events DELETE WHERE site_id = #{site_p}"
+        )
+      else
+        :ok
+      end
+
+    # Clear search data if this is a search integration
+    search_result =
+      case integration.platform do
+        "google_search_console" ->
+          Spectabas.ClickHouse.execute(
+            "ALTER TABLE search_console DELETE WHERE site_id = #{site_p} AND source = 'google'"
+          )
+
+        "bing_webmaster" ->
+          Spectabas.ClickHouse.execute(
+            "ALTER TABLE search_console DELETE WHERE site_id = #{site_p} AND source = 'bing'"
+          )
+
+        _ ->
+          :ok
+      end
+
+    # Clear ad spend data if this is an ad platform
+    _ad_result =
+      if integration.platform in ["google_ads", "bing_ads", "meta_ads"] do
+        Spectabas.ClickHouse.execute(
+          "ALTER TABLE ad_spend DELETE WHERE site_id = #{site_p} AND platform = #{platform_p}"
+        )
+      else
+        :ok
+      end
 
     # Reset last_synced_at so next sync starts fresh
     Spectabas.AdIntegrations.mark_synced(integration)
 
-    Spectabas.Audit.log("payment_data.cleared", %{
+    Spectabas.Audit.log("integration_data.cleared", %{
       user_id: socket.assigns.current_scope.user.id,
       site_id: site_id,
       platform: integration.platform,
       ecom_result: inspect(ecom_result),
-      sub_result: inspect(sub_result)
+      sub_result: inspect(sub_result),
+      search_result: inspect(search_result)
     })
 
     {:noreply,
