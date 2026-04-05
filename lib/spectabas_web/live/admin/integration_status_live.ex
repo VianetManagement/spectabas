@@ -230,7 +230,10 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
                ) do
             {:ok, count} ->
               ms = System.monotonic_time(:millisecond) - start
-              SyncLog.log(integration, "manual_sync", "ok", "Bing bulk sync: #{count} rows inserted", duration_ms: ms)
+              status = if count == 0, do: "error", else: "ok"
+              SyncLog.log(integration, "manual_sync", status,
+                "Bing bulk sync: #{count} rows inserted. Check Render logs for [Bing] debug output.",
+                duration_ms: ms)
 
             {:error, reason} ->
               ms = System.monotonic_time(:millisecond) - start

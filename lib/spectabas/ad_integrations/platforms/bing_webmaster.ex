@@ -86,7 +86,10 @@ defmodule Spectabas.AdIntegrations.Platforms.BingWebmaster do
 
       case Req.get(url) do
         {:ok, %{status: 200, body: %{"d" => data}}} when is_list(data) ->
-          Logger.info("[Bing] Bulk sync: #{length(data)} total rows from API")
+          sample = List.first(data)
+          sample_keys = if sample, do: Map.keys(sample), else: []
+          sample_date = if sample, do: sample["Date"], else: nil
+          Logger.info("[Bing] Bulk sync: #{length(data)} rows. Sample keys: #{inspect(sample_keys)}. Sample Date: #{inspect(sample_date)}")
 
           # Parse all rows and bucket by date
           all_rows =
@@ -102,6 +105,12 @@ defmodule Spectabas.AdIntegrations.Platforms.BingWebmaster do
               }
             end)
             |> Enum.reject(fn r -> r.date == "" end)
+
+          rejected = length(data) - length(all_rows)
+          if rejected > 0 do
+            sample_dates = data |> Enum.take(3) |> Enum.map(& &1["Date"]) |> inspect()
+            Logger.warning("[Bing] #{rejected}/#{length(data)} rows rejected (empty date). Sample raw dates: #{sample_dates}")
+          end
 
           if all_rows == [] do
             Logger.warning("[Bing] No parseable rows after date extraction")
@@ -136,6 +145,11 @@ defmodule Spectabas.AdIntegrations.Platforms.BingWebmaster do
                 {:error, reason}
             end
           end
+
+        {:ok, %{status: 200, body: body}} ->
+          # Unexpected response structure
+          Logger.warning("[Bing] Unexpected 200 body structure: #{inspect(body) |> String.slice(0, 500)}")
+          {:error, "Unexpected Bing API response format: #{inspect(body) |> String.slice(0, 200)}"}
 
         {:ok, %{status: status, body: body}} ->
           msg = if is_map(body), do: inspect(body) |> String.slice(0, 200), else: "HTTP #{status}"
