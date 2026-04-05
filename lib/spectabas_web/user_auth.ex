@@ -37,6 +37,11 @@ defmodule SpectabasWeb.UserAuth do
   def log_in_user(conn, user, params \\ %{}) do
     user_return_to = get_session(conn, :user_return_to)
 
+    # Track last sign-in time
+    user
+    |> Ecto.Changeset.change(%{last_sign_in_at: DateTime.utc_now() |> DateTime.truncate(:second)})
+    |> Spectabas.Repo.update()
+
     conn
     |> create_or_extend_session(user, params)
     |> redirect(to: user_return_to || signed_in_path(conn))

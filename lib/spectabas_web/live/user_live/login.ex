@@ -1,6 +1,8 @@
 defmodule SpectabasWeb.UserLive.Login do
   use SpectabasWeb, :live_view
 
+  alias Spectabas.Accounts
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -24,74 +26,133 @@ defmodule SpectabasWeb.UserLive.Login do
           {msg}
         </p>
 
-        <.form
-          for={@form}
-          id="login_form"
-          action={~p"/users/log-in"}
-          phx-submit="submit"
-          phx-trigger-action={@trigger_submit}
-          class="mt-8 space-y-6 bg-white shadow-lg rounded-xl p-8"
-        >
-          <div class="space-y-4">
-            <div>
-              <label for="user_email" class="block text-sm font-medium text-gray-700">
-                Email address
-              </label>
-              <input
-                id="user_email"
-                name={@form[:email].name}
-                type="email"
-                value={@form[:email].value}
-                autocomplete="username"
-                required
-                phx-mounted={JS.focus()}
-                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
-                placeholder="you@example.com"
-              />
-            </div>
+        <%= if @show_reset do %>
+          <%!-- Forgot password / Send login link form --%>
+          <div class="bg-white shadow-lg rounded-xl p-8">
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">Send login link</h3>
+            <p class="text-sm text-gray-500 mb-4">
+              Enter your email and we'll send you a magic link to sign in.
+            </p>
 
-            <div>
-              <label for="user_password" class="block text-sm font-medium text-gray-700">
-                Password
-              </label>
-              <input
-                id="user_password"
-                name={@form[:password].name}
-                type="password"
-                autocomplete="current-password"
-                required
-                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
-                placeholder="Enter your password"
-              />
-            </div>
+            <form phx-submit="send_reset" class="space-y-4">
+              <div>
+                <label for="reset_email" class="block text-sm font-medium text-gray-700">
+                  Email address
+                </label>
+                <input
+                  id="reset_email"
+                  name="email"
+                  type="email"
+                  required
+                  autocomplete="username"
+                  phx-mounted={JS.focus()}
+                  class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
+                  placeholder="you@example.com"
+                />
+              </div>
+
+              <%!-- Honeypot: hidden field that bots will fill in --%>
+              <div style="position:absolute;left:-9999px;top:-9999px;" aria-hidden="true" tabindex="-1">
+                <label for="reset_website">Website</label>
+                <input type="text" name="website" id="reset_website" autocomplete="off" tabindex="-1" />
+              </div>
+
+              <%!-- Timing honeypot: form must be open for at least 2 seconds --%>
+              <input type="hidden" name="ts" value={@reset_opened_at} />
+
+              <button
+                type="submit"
+                class="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition"
+              >
+                Send login link
+              </button>
+            </form>
+
+            <button
+              phx-click="toggle_reset"
+              class="mt-4 w-full text-center text-sm text-indigo-600 hover:text-indigo-800"
+            >
+              Back to sign in
+            </button>
           </div>
-
-          <div class="flex items-center justify-between">
-            <div class="flex items-center">
-              <input
-                id="remember_me"
-                name={@form[:remember_me].name}
-                type="checkbox"
-                value="true"
-                class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-              />
-              <label for="remember_me" class="ml-2 block text-sm text-gray-700">
-                Keep me signed in
-              </label>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            class="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition"
+        <% else %>
+          <%!-- Normal sign in form --%>
+          <.form
+            for={@form}
+            id="login_form"
+            action={~p"/users/log-in"}
+            phx-submit="submit"
+            phx-trigger-action={@trigger_submit}
+            class="mt-8 space-y-6 bg-white shadow-lg rounded-xl p-8"
           >
-            Sign in
-          </button>
-        </.form>
+            <div class="space-y-4">
+              <div>
+                <label for="user_email" class="block text-sm font-medium text-gray-700">
+                  Email address
+                </label>
+                <input
+                  id="user_email"
+                  name={@form[:email].name}
+                  type="email"
+                  value={@form[:email].value}
+                  autocomplete="username"
+                  required
+                  phx-mounted={JS.focus()}
+                  class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
+                  placeholder="you@example.com"
+                />
+              </div>
 
-        <p class="text-center text-sm text-gray-500">
-          Contact your administrator for account access.
-        </p>
+              <div>
+                <label for="user_password" class="block text-sm font-medium text-gray-700">
+                  Password
+                </label>
+                <input
+                  id="user_password"
+                  name={@form[:password].name}
+                  type="password"
+                  autocomplete="current-password"
+                  required
+                  class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
+                  placeholder="Enter your password"
+                />
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between">
+              <div class="flex items-center">
+                <input
+                  id="remember_me"
+                  name={@form[:remember_me].name}
+                  type="checkbox"
+                  value="true"
+                  class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <label for="remember_me" class="ml-2 block text-sm text-gray-700">
+                  Keep me signed in
+                </label>
+              </div>
+              <button
+                type="button"
+                phx-click="toggle_reset"
+                class="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+              >
+                Forgot password?
+              </button>
+            </div>
+
+            <button
+              type="submit"
+              class="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition"
+            >
+              Sign in
+            </button>
+          </.form>
+
+          <p class="text-center text-sm text-gray-500">
+            Contact your administrator for account access.
+          </p>
+        <% end %>
       </div>
     </div>
     """
@@ -101,11 +162,70 @@ defmodule SpectabasWeb.UserLive.Login do
   def mount(_params, _session, socket) do
     email = Phoenix.Flash.get(socket.assigns.flash, :email)
     form = to_form(%{"email" => email}, as: "user")
-    {:ok, assign(socket, form: form, trigger_submit: false)}
+
+    {:ok,
+     socket
+     |> assign(form: form, trigger_submit: false)
+     |> assign(show_reset: false, reset_opened_at: nil)}
   end
 
   @impl true
   def handle_event("submit", _params, socket) do
     {:noreply, assign(socket, :trigger_submit, true)}
+  end
+
+  def handle_event("toggle_reset", _params, socket) do
+    show = !socket.assigns.show_reset
+    ts = if show, do: System.system_time(:second), else: nil
+    {:noreply, assign(socket, show_reset: show, reset_opened_at: ts)}
+  end
+
+  def handle_event("send_reset", %{"email" => email} = params, socket) do
+    # Honeypot: if the hidden "website" field is filled, it's a bot
+    if params["website"] && params["website"] != "" do
+      # Pretend success to not reveal the honeypot
+      {:noreply,
+       socket
+       |> assign(:show_reset, false)
+       |> put_flash(:info, "If an account exists with that email, we sent a login link.")}
+    else
+      # Timing check: form must have been open for at least 2 seconds
+      too_fast =
+        case Integer.parse(params["ts"] || "") do
+          {ts, _} -> System.system_time(:second) - ts < 2
+          :error -> true
+        end
+
+      if too_fast do
+        {:noreply,
+         socket
+         |> assign(:show_reset, false)
+         |> put_flash(:info, "If an account exists with that email, we sent a login link.")}
+      else
+        # Rate limit: use process dictionary to track attempts per session
+        attempts = Process.get(:reset_attempts, 0)
+
+        if attempts >= 3 do
+          {:noreply,
+           socket
+           |> assign(:show_reset, false)
+           |> put_flash(:error, "Too many requests. Please try again later.")}
+        else
+          Process.put(:reset_attempts, attempts + 1)
+
+          # Always show success message to prevent email enumeration
+          case Accounts.get_user_by_email(email) do
+            nil -> :ok
+            user ->
+              Accounts.deliver_login_instructions(user, &url(~p"/users/log-in/#{&1}"))
+          end
+
+          {:noreply,
+           socket
+           |> assign(:show_reset, false)
+           |> put_flash(:info, "If an account exists with that email, we sent a login link.")}
+        end
+      end
+    end
   end
 end

@@ -69,8 +69,8 @@ config :spectabas, Oban,
        {"0 7 * * *", Spectabas.Workers.SpamDetector},
        # Daily at 3am UTC — delete API access logs older than 30 days
        {"0 3 * * *", Spectabas.Workers.ApiLogCleanup},
-       # Every 6 hours — sync ad spend data from connected platforms
-       {"0 */6 * * *", Spectabas.Workers.AdSpendSync},
+       # Every 5 minutes — check ad spend integrations (per-integration frequency in extra map)
+       {"*/5 * * * *", Spectabas.Workers.AdSpendSync},
        # Every 5 minutes — check payment integrations (per-integration frequency in extra map)
        {"*/5 * * * *", Spectabas.Workers.StripeSync},
        {"*/5 * * * *", Spectabas.Workers.BraintreeSync},

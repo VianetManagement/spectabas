@@ -22,11 +22,13 @@ defmodule Spectabas.Workers.AdSpendSync do
     yesterday = Date.add(today, -1)
 
     Enum.each(integrations, fn integration ->
-      # Always sync today (partial data updates throughout the day)
-      sync_integration(integration, today)
-      # Sync yesterday only if we haven't yet today (avoid duplicate inserts)
-      unless synced_date_today?(integration, yesterday) do
-        sync_integration(integration, yesterday)
+      if AdIntegrations.should_sync?(integration) do
+        # Always sync today (partial data updates throughout the day)
+        sync_integration(integration, today)
+        # Sync yesterday only if we haven't yet today (avoid duplicate inserts)
+        unless synced_date_today?(integration, yesterday) do
+          sync_integration(integration, yesterday)
+        end
       end
     end)
 

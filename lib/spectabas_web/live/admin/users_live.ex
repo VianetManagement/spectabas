@@ -227,6 +227,18 @@ defmodule SpectabasWeb.Admin.UsersLive do
     {:noreply, assign(socket, :edit_site_ids, new_ids)}
   end
 
+  def handle_event("send_login_link", %{"id" => user_id}, socket) do
+    admin = socket.assigns.current_scope.user
+    user = Accounts.get_user!(user_id)
+
+    if admin.role != :platform_admin and user.account_id != admin.account_id do
+      {:noreply, put_flash(socket, :error, "Unauthorized")}
+    else
+      Accounts.deliver_login_instructions(user, &url(~p"/users/log-in/#{&1}"))
+      {:noreply, put_flash(socket, :info, "Login link sent to #{user.email}")}
+    end
+  end
+
   def handle_event("delete_user", %{"id" => user_id}, socket) do
     admin = socket.assigns.current_scope.user
     user = Accounts.get_user!(user_id)
@@ -525,6 +537,15 @@ defmodule SpectabasWeb.Admin.UsersLive do
                   class="text-indigo-600 hover:text-indigo-800 text-sm font-medium"
                 >
                   Edit
+                </button>
+                <button
+                  :if={user.id != @current_scope.user.id}
+                  phx-click="send_login_link"
+                  phx-value-id={user.id}
+                  data-confirm={"Send a login link email to #{user.email}?"}
+                  class="text-amber-600 hover:text-amber-800 text-sm font-medium"
+                >
+                  Send Login Link
                 </button>
                 <button
                   :if={user.id != @current_scope.user.id}
