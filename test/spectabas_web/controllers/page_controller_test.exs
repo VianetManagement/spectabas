@@ -3,6 +3,6 @@ defmodule SpectabasWeb.PageControllerTest do
 
   test "GET /", %{conn: conn} do
     conn = get(conn, ~p"/")
-    assert html_response(conn, 200) =~ "ultimate analytics platform"
+    assert html_response(conn, 200) =~ "cognitive enterprise"
   end
 end
