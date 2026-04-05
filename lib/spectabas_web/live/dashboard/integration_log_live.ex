@@ -2,6 +2,7 @@ defmodule SpectabasWeb.Dashboard.IntegrationLogLive do
   use SpectabasWeb, :live_view
 
   alias Spectabas.{Accounts, Sites, AdIntegrations, Repo}
+  alias Spectabas.AdIntegrations.SyncLog
   import SpectabasWeb.Dashboard.SidebarComponent
   import Ecto.Query
 
@@ -16,28 +17,24 @@ defmodule SpectabasWeb.Dashboard.IntegrationLogLive do
       all_integrations = AdIntegrations.list_for_site(site.id)
       integrations = Enum.filter(all_integrations, &(&1.status != "revoked"))
 
-      # Get audit log entries for this site's integrations
-      integration_ids = Enum.map(integrations, & &1.id)
+      sync_logs = SyncLog.recent_for_site(site.id, 200)
 
-      logs =
-        if integration_ids != [] do
-          Repo.all(
-            from(a in Spectabas.Accounts.AuditLog,
-              where:
-                fragment("?->>'site_id' = ?", a.metadata, ^to_string(site.id)) and
-                  a.event in [
-                    "ad_integration.connected",
-                    "ad_integration.disconnected",
-                    "ad_credentials.saved",
-                    "payment_data.cleared"
-                  ],
-              order_by: [desc: a.occurred_at],
-              limit: 50
-            )
+      # Also get audit log entries (connect/disconnect/credentials)
+      audit_logs =
+        Repo.all(
+          from(a in Spectabas.Accounts.AuditLog,
+            where:
+              fragment("?->>'site_id' = ?", a.metadata, ^to_string(site.id)) and
+                a.event in [
+                  "ad_integration.connected",
+                  "ad_integration.disconnected",
+                  "ad_credentials.saved",
+                  "payment_data.cleared"
+                ],
+            order_by: [desc: a.occurred_at],
+            limit: 50
           )
-        else
-          []
-        end
+        )
 
       {:ok,
        socket
@@ -45,14 +42,21 @@ defmodule SpectabasWeb.Dashboard.IntegrationLogLive do
        |> assign(:site, site)
        |> assign(:user, user)
        |> assign(:integrations, integrations)
-       |> assign(:logs, logs)}
+       |> assign(:sync_logs, sync_logs)
+       |> assign(:audit_logs, audit_logs)
+       |> assign(:filter, "all")}
     end
+  end
+
+  @impl true
+  def handle_event("filter", %{"filter" => filter}, socket) do
+    {:noreply, assign(socket, :filter, filter)}
   end
 
   @impl true
   def render(assigns) do
     ~H"""
-    <.dashboard_layout flash={@flash} site={@site}>
+    <.dashboard_layout flash={@flash} site={@site} active="integration_log">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div class="flex items-center justify-between mb-6">
           <div>
@@ -129,25 +133,66 @@ defmodule SpectabasWeb.Dashboard.IntegrationLogLive do
             <% end %>
           </div>
 
-          <%!-- Activity log --%>
-          <div class="bg-white rounded-lg shadow p-6">
-            <h2 class="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h2>
-            <%= if @logs == [] do %>
-              <p class="text-sm text-gray-500">No integration activity recorded yet.</p>
+          <%!-- Filter tabs --%>
+          <div class="flex gap-2 mb-4">
+            <button
+              :for={{val, label} <- [{"all", "All Events"}, {"sync", "Syncs Only"}, {"errors", "Errors Only"}, {"config", "Config Changes"}]}
+              phx-click="filter"
+              phx-value-filter={val}
+              class={"px-3 py-1.5 text-sm rounded-full font-medium " <> if(@filter == val, do: "bg-indigo-100 text-indigo-700", else: "bg-gray-100 text-gray-600 hover:bg-gray-200")}
+            >
+              {label}
+              <%= if val == "errors" do %>
+                <% error_count = Enum.count(@sync_logs, &(&1.status == "error")) %>
+                <span :if={error_count > 0} class="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-red-100 text-red-600">
+                  {error_count}
+                </span>
+              <% end %>
+            </button>
+          </div>
+
+          <%!-- Sync event log --%>
+          <div class="bg-white rounded-lg shadow">
+            <div class="px-6 py-4 border-b border-gray-200">
+              <h2 class="text-lg font-semibold text-gray-900">Sync Events</h2>
+              <p class="text-xs text-gray-500 mt-0.5">Detailed log of all sync operations</p>
+            </div>
+
+            <% filtered_logs = filter_logs(@sync_logs, @audit_logs, @filter) %>
+
+            <%= if filtered_logs == [] do %>
+              <div class="p-8 text-center text-gray-500 text-sm">
+                No events recorded yet. Events will appear after the first sync runs.
+              </div>
             <% else %>
-              <div class="space-y-3">
-                <%= for log <- @logs do %>
-                  <div class="flex items-start gap-3 py-2 border-b border-gray-100 last:border-0">
-                    <div class={"w-2 h-2 mt-1.5 rounded-full shrink-0 " <> event_dot(log.event)}>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                      <div class="text-sm font-medium text-gray-900">{event_label(log.event)}</div>
-                      <div class="text-xs text-gray-500 mt-0.5">
-                        {format_metadata(log.metadata)}
+              <div class="divide-y divide-gray-100 max-h-[600px] overflow-y-auto">
+                <%= for entry <- filtered_logs do %>
+                  <div class="px-6 py-3 hover:bg-gray-50">
+                    <div class="flex items-start gap-3">
+                      <div class={"w-2 h-2 mt-2 rounded-full shrink-0 " <> entry_dot(entry)}>
                       </div>
-                    </div>
-                    <div class="text-xs text-gray-400 shrink-0">
-                      {Calendar.strftime(log.occurred_at, "%Y-%m-%d %H:%M")}
+                      <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2">
+                          <span class={"inline-block px-2 py-0.5 text-xs font-medium rounded " <> platform_color(entry.platform)}>
+                            {platform_label(entry.platform)}
+                          </span>
+                          <span class={"text-xs font-medium px-1.5 py-0.5 rounded " <> event_badge(entry.event)}>
+                            {entry.event_label}
+                          </span>
+                          <span :if={entry.duration_ms} class="text-xs text-gray-400">
+                            {format_duration(entry.duration_ms)}
+                          </span>
+                        </div>
+                        <div class="text-sm text-gray-700 mt-1">{entry.message}</div>
+                        <%= if entry.details != %{} and entry.details != nil do %>
+                          <div class="text-xs text-gray-400 mt-0.5 font-mono">
+                            {format_details(entry.details)}
+                          </div>
+                        <% end %>
+                      </div>
+                      <div class="text-xs text-gray-400 shrink-0 whitespace-nowrap">
+                        {Calendar.strftime(entry.timestamp, "%Y-%m-%d %H:%M:%S")} UTC
+                      </div>
                     </div>
                   </div>
                 <% end %>
@@ -160,6 +205,106 @@ defmodule SpectabasWeb.Dashboard.IntegrationLogLive do
     """
   end
 
+  defp filter_logs(sync_logs, audit_logs, filter) do
+    sync_entries =
+      Enum.map(sync_logs, fn log ->
+        %{
+          platform: log.platform,
+          event: log.event,
+          event_label: sync_event_label(log.event),
+          status: log.status,
+          message: log.message || "",
+          details: log.details || %{},
+          duration_ms: log.duration_ms,
+          timestamp: log.inserted_at
+        }
+      end)
+
+    audit_entries =
+      Enum.map(audit_logs, fn log ->
+        %{
+          platform: (log.metadata || %{})["platform"] || "unknown",
+          event: log.event,
+          event_label: audit_event_label(log.event),
+          status: "info",
+          message: format_audit_metadata(log.metadata),
+          details: %{},
+          duration_ms: nil,
+          timestamp: log.occurred_at
+        }
+      end)
+
+    all =
+      case filter do
+        "sync" -> sync_entries |> Enum.filter(&(&1.event not in ["manual_sync_start"]))
+        "errors" -> sync_entries |> Enum.filter(&(&1.status == "error"))
+        "config" -> audit_entries
+        _ -> (sync_entries ++ audit_entries)
+      end
+
+    Enum.sort_by(all, & &1.timestamp, {:desc, DateTime})
+  end
+
+  defp sync_event_label("cron_sync"), do: "Scheduled Sync"
+  defp sync_event_label("manual_sync"), do: "Manual Sync"
+  defp sync_event_label("manual_sync_start"), do: "Sync Started"
+  defp sync_event_label("ad_sync"), do: "Ad Spend Sync"
+  defp sync_event_label("day_sync"), do: "Day Sync"
+  defp sync_event_label("token_refresh"), do: "Token Refresh"
+  defp sync_event_label(e), do: e
+
+  defp audit_event_label("ad_integration.connected"), do: "Connected"
+  defp audit_event_label("ad_integration.disconnected"), do: "Disconnected"
+  defp audit_event_label("ad_credentials.saved"), do: "Credentials Updated"
+  defp audit_event_label("payment_data.cleared"), do: "Data Cleared"
+  defp audit_event_label(e), do: e
+
+  defp entry_dot(%{status: "error"}), do: "bg-red-500"
+  defp entry_dot(%{status: "info"}), do: "bg-blue-500"
+  defp entry_dot(%{event: "manual_sync_start"}), do: "bg-amber-500"
+  defp entry_dot(%{event: "ad_integration.connected"}), do: "bg-green-500"
+  defp entry_dot(%{event: "ad_integration.disconnected"}), do: "bg-red-500"
+  defp entry_dot(_), do: "bg-green-500"
+
+  defp event_badge("cron_sync"), do: "bg-gray-100 text-gray-600"
+  defp event_badge("manual_sync"), do: "bg-indigo-100 text-indigo-600"
+  defp event_badge("manual_sync_start"), do: "bg-amber-100 text-amber-600"
+  defp event_badge("ad_sync"), do: "bg-blue-100 text-blue-600"
+  defp event_badge("token_refresh"), do: "bg-yellow-100 text-yellow-700"
+  defp event_badge("day_sync"), do: "bg-gray-100 text-gray-600"
+  defp event_badge("ad_integration.connected"), do: "bg-green-100 text-green-600"
+  defp event_badge("ad_integration.disconnected"), do: "bg-red-100 text-red-600"
+  defp event_badge("ad_credentials.saved"), do: "bg-blue-100 text-blue-600"
+  defp event_badge("payment_data.cleared"), do: "bg-amber-100 text-amber-600"
+  defp event_badge(_), do: "bg-gray-100 text-gray-600"
+
+  defp format_details(details) when is_map(details) do
+    details
+    |> Enum.reject(fn {_k, v} -> v == nil or v == "" end)
+    |> Enum.map(fn {k, v} -> "#{k}: #{v}" end)
+    |> Enum.join(" · ")
+  end
+
+  defp format_details(_), do: ""
+
+  defp format_duration(nil), do: ""
+  defp format_duration(ms) when ms < 1000, do: "#{ms}ms"
+  defp format_duration(ms) when ms < 60_000, do: "#{Float.round(ms / 1000, 1)}s"
+  defp format_duration(ms), do: "#{div(ms, 60_000)}m #{rem(div(ms, 1000), 60)}s"
+
+  defp format_audit_metadata(nil), do: ""
+
+  defp format_audit_metadata(meta) when is_map(meta) do
+    parts =
+      [
+        if(meta["platform"], do: "Platform: #{meta["platform"]}"),
+        if(meta["account_id"] && meta["account_id"] != "", do: "Account: #{meta["account_id"]}")
+      ]
+      |> Enum.reject(&is_nil/1)
+
+    Enum.join(parts, " · ")
+  end
+
   defp health_border(integration) do
     cond do
       integration.last_error != nil ->
@@ -168,7 +313,7 @@ defmodule SpectabasWeb.Dashboard.IntegrationLogLive do
       integration.last_synced_at == nil ->
         "border-amber-400"
 
-      time_since_sync(integration) > integration_expected_interval(integration) * 2 ->
+      time_since_sync(integration) > AdIntegrations.sync_frequency(integration) * 2 ->
         "border-amber-400"
 
       true ->
@@ -180,10 +325,6 @@ defmodule SpectabasWeb.Dashboard.IntegrationLogLive do
 
   defp time_since_sync(%{last_synced_at: ts}) do
     DateTime.diff(DateTime.utc_now(), ts, :minute)
-  end
-
-  defp integration_expected_interval(integration) do
-    AdIntegrations.sync_frequency(integration)
   end
 
   defp time_ago(dt) do
@@ -227,29 +368,4 @@ defmodule SpectabasWeb.Dashboard.IntegrationLogLive do
   defp status_badge("active"), do: "bg-green-100 text-green-700"
   defp status_badge("revoked"), do: "bg-red-100 text-red-700"
   defp status_badge(_), do: "bg-gray-100 text-gray-600"
-
-  defp event_dot("ad_integration.connected"), do: "bg-green-500"
-  defp event_dot("ad_integration.disconnected"), do: "bg-red-500"
-  defp event_dot("ad_credentials.saved"), do: "bg-blue-500"
-  defp event_dot("payment_data.cleared"), do: "bg-amber-500"
-  defp event_dot(_), do: "bg-gray-400"
-
-  defp event_label("ad_integration.connected"), do: "Integration connected"
-  defp event_label("ad_integration.disconnected"), do: "Integration disconnected"
-  defp event_label("ad_credentials.saved"), do: "Credentials updated"
-  defp event_label("payment_data.cleared"), do: "Data cleared"
-  defp event_label(e), do: e
-
-  defp format_metadata(nil), do: ""
-
-  defp format_metadata(meta) when is_map(meta) do
-    parts =
-      [
-        if(meta["platform"], do: "Platform: #{meta["platform"]}"),
-        if(meta["account_id"] && meta["account_id"] != "", do: "Account: #{meta["account_id"]}")
-      ]
-      |> Enum.reject(&is_nil/1)
-
-    Enum.join(parts, " · ")
-  end
 end

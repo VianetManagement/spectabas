@@ -10,6 +10,7 @@ defmodule Spectabas.Workers.BraintreeSync do
 
   alias Spectabas.AdIntegrations
   alias Spectabas.AdIntegrations.Platforms.BraintreePlatform
+  alias Spectabas.AdIntegrations.SyncLog
 
   @impl Oban.Worker
   def perform(_job) do
@@ -23,11 +24,22 @@ defmodule Spectabas.Workers.BraintreeSync do
 
     Enum.each(integrations, fn integration ->
       if AdIntegrations.should_sync?(integration) do
-        BraintreePlatform.sync_transactions(integration.site, integration, today)
-        BraintreePlatform.sync_transactions(integration.site, integration, yesterday)
-        BraintreePlatform.sync_refunds(integration.site, integration, today)
-        BraintreePlatform.sync_refunds(integration.site, integration, yesterday)
-        BraintreePlatform.sync_subscriptions(integration.site, integration)
+        start = System.monotonic_time(:millisecond)
+
+        try do
+          BraintreePlatform.sync_transactions(integration.site, integration, today)
+          BraintreePlatform.sync_transactions(integration.site, integration, yesterday)
+          BraintreePlatform.sync_refunds(integration.site, integration, today)
+          BraintreePlatform.sync_refunds(integration.site, integration, yesterday)
+          BraintreePlatform.sync_subscriptions(integration.site, integration)
+
+          ms = System.monotonic_time(:millisecond) - start
+          SyncLog.log(integration, "cron_sync", "ok", "Synced transactions, refunds, subscriptions", duration_ms: ms)
+        rescue
+          e ->
+            ms = System.monotonic_time(:millisecond) - start
+            SyncLog.log(integration, "cron_sync", "error", Exception.message(e), duration_ms: ms)
+        end
       end
     end)
 
@@ -39,11 +51,23 @@ defmodule Spectabas.Workers.BraintreeSync do
     integration = Spectabas.Repo.preload(integration, :site)
     today = Date.utc_today()
     yesterday = Date.add(today, -1)
+    start = System.monotonic_time(:millisecond)
 
-    BraintreePlatform.sync_transactions(integration.site, integration, yesterday)
-    BraintreePlatform.sync_transactions(integration.site, integration, today)
-    BraintreePlatform.sync_refunds(integration.site, integration, yesterday)
-    BraintreePlatform.sync_refunds(integration.site, integration, today)
-    BraintreePlatform.sync_subscriptions(integration.site, integration)
+    SyncLog.log(integration, "manual_sync_start", "ok", "Sync Now triggered")
+
+    try do
+      BraintreePlatform.sync_transactions(integration.site, integration, yesterday)
+      BraintreePlatform.sync_transactions(integration.site, integration, today)
+      BraintreePlatform.sync_refunds(integration.site, integration, yesterday)
+      BraintreePlatform.sync_refunds(integration.site, integration, today)
+      BraintreePlatform.sync_subscriptions(integration.site, integration)
+
+      ms = System.monotonic_time(:millisecond) - start
+      SyncLog.log(integration, "manual_sync", "ok", "Synced transactions, refunds, subscriptions", duration_ms: ms)
+    rescue
+      e ->
+        ms = System.monotonic_time(:millisecond) - start
+        SyncLog.log(integration, "manual_sync", "error", Exception.message(e), duration_ms: ms)
+    end
   end
 end

@@ -10,6 +10,7 @@ defmodule Spectabas.Workers.SearchConsoleSync do
 
   alias Spectabas.AdIntegrations
   alias Spectabas.AdIntegrations.Platforms.{GoogleSearchConsole, BingWebmaster}
+  alias Spectabas.AdIntegrations.SyncLog
 
   @impl Oban.Worker
   def perform(_job) do
@@ -22,11 +23,16 @@ defmodule Spectabas.Workers.SearchConsoleSync do
 
     Enum.each(integrations, fn integration ->
       if AdIntegrations.should_sync?(integration) do
-        # GSC data has a 2-3 day delay; sync days 2, 3, and 4 ago
-        Enum.each(2..4, fn offset ->
-          date = Date.add(today, -offset)
-          sync_one(integration, date)
-        end)
+        start = System.monotonic_time(:millisecond)
+        dates = Enum.map(2..4, &Date.add(today, -&1))
+        synced = Enum.count(dates, fn date -> sync_one(integration, date) == :ok end)
+        ms = System.monotonic_time(:millisecond) - start
+
+        SyncLog.log(integration, "cron_sync", "ok",
+          "Synced #{synced}/#{length(dates)} days (#{Enum.map(dates, &to_string/1) |> Enum.join(", ")})",
+          duration_ms: ms,
+          details: %{"dates_synced" => synced, "dates_total" => length(dates)}
+        )
       end
     end)
 
@@ -39,19 +45,34 @@ defmodule Spectabas.Workers.SearchConsoleSync do
       if AdIntegrations.token_expired?(integration) do
         case refresh_gsc_token(integration) do
           {:ok, updated} -> updated
-          {:error, _} -> nil
+
+          {:error, reason} ->
+            SyncLog.log(integration, "token_refresh", "error", "Token refresh failed: #{inspect(reason)}")
+            nil
         end
       else
         integration
       end
 
     if integration do
-      GoogleSearchConsole.sync_search_data(integration.site, integration, date)
+      case GoogleSearchConsole.sync_search_data(integration.site, integration, date) do
+        :ok -> :ok
+        {:error, reason} ->
+          SyncLog.log(integration, "day_sync", "error", "#{date}: #{inspect(reason)}")
+          {:error, reason}
+      end
+    else
+      {:error, :token_refresh_failed}
     end
   end
 
   defp sync_one(%{platform: "bing_webmaster"} = integration, date) do
-    BingWebmaster.sync_search_data(integration.site, integration, date)
+    case BingWebmaster.sync_search_data(integration.site, integration, date) do
+      :ok -> :ok
+      {:error, reason} ->
+        SyncLog.log(integration, "day_sync", "error", "#{date}: #{inspect(reason)}")
+        {:error, reason}
+    end
   end
 
   defp sync_one(_, _), do: :ok
@@ -79,6 +100,7 @@ defmodule Spectabas.Workers.SearchConsoleSync do
     require Logger
     integration = Spectabas.Repo.preload(integration, :site)
     today = Date.utc_today()
+    start_time = System.monotonic_time(:millisecond)
 
     # Force backfill ignores last_synced_at — always does full 16 months
     force_backfill = Keyword.get(opts, :force_backfill, false)
@@ -88,19 +110,35 @@ defmodule Spectabas.Workers.SearchConsoleSync do
 
     start_date = Date.add(today, -max_offset)
 
+    SyncLog.log(integration, "manual_sync_start", "ok",
+      "Backfill from #{start_date} (#{max_offset} days, force=#{force_backfill})")
+
     Logger.info("[SearchConsoleSync] sync_now from #{start_date} (#{max_offset} days, force=#{force_backfill})")
 
-    # Work forward from oldest date, skip already-synced days
-    Enum.each(0..max_offset, fn offset ->
+    synced = Enum.reduce(0..max_offset, 0, fn offset, acc ->
       date = Date.add(start_date, offset)
 
-      # GSC data has 2-day delay — skip recent dates
       if Date.diff(today, date) >= 2 do
-        unless gsc_day_synced?(integration.site.id, date) do
-          sync_one(integration, date)
+        if gsc_day_synced?(integration.site.id, date) do
+          acc
+        else
+          case sync_one(integration, date) do
+            :ok -> acc + 1
+            _ -> acc
+          end
         end
+      else
+        acc
       end
     end)
+
+    ms = System.monotonic_time(:millisecond) - start_time
+
+    SyncLog.log(integration, "manual_sync", "ok",
+      "Backfill complete: #{synced} days synced from #{start_date}",
+      duration_ms: ms,
+      details: %{"days_synced" => synced, "total_days" => max_offset, "start_date" => to_string(start_date)}
+    )
   end
 
   defp gsc_day_synced?(site_id, date) do
