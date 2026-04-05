@@ -549,6 +549,28 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
         now = DateTime.utc_now()
         today = Date.utc_today()
 
+        # Delete stale snapshot data for today before inserting fresh data.
+        # Without this, subscriptions that churned since the last full sync
+        # retain their old "active" status rows and inflate MRR.
+        del_sql = """
+        ALTER TABLE subscription_events DELETE
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND snapshot_date = #{ClickHouse.param(Date.to_string(today))}
+        """
+
+        case ClickHouse.execute(del_sql) do
+          :ok ->
+            Logger.info("[StripSync] Cleared today's snapshot for site #{site.id}")
+
+          {:error, reason} ->
+            Logger.warning(
+              "[StripSync] Snapshot cleanup failed (continuing): #{inspect(reason) |> String.slice(0, 200)}"
+            )
+        end
+
+        # Small delay to let the async DELETE propagate
+        Process.sleep(2000)
+
         # Batch-resolve all emails to avoid N+1 queries
         emails =
           subscriptions
