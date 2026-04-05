@@ -468,12 +468,19 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
             raw_mrr = Enum.sum(items_mrr)
 
             # Apply discount to the MRR total
-            mrr =
+            discounted_mrr =
               cond do
                 discount_pct > 0 -> Float.round(raw_mrr * (1 - discount_pct / 100.0), 2)
                 amount_off > 0 -> Float.round(max(raw_mrr - amount_off, 0), 2)
                 true -> Float.round(raw_mrr, 2)
               end
+
+            # Stripe excludes subscriptions set to cancel at period end from MRR —
+            # they're still status:"active" but won't renew, so not recurring revenue
+            mrr =
+              if sub["cancel_at_period_end"] == true,
+                do: 0.0,
+                else: discounted_mrr
 
             canceled_at_dt =
               if sub["canceled_at"],
