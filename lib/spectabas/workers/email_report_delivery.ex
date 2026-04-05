@@ -33,6 +33,15 @@ defmodule Spectabas.Workers.EmailReportDelivery do
     top_countries =
       fetch_list(fn -> Analytics.top_countries_summary(site, user, current_range) end, 5)
 
+    # GSC top keywords (last 7 days)
+    top_keywords = fetch_gsc_keywords(site)
+
+    # Revenue summary
+    revenue = fetch_revenue_summary(site, current_range)
+
+    # Ad spend summary
+    ad_spend = fetch_ad_spend_summary(site)
+
     # Generate unsubscribe token
     unsubscribe_token =
       Phoenix.Token.sign(SpectabasWeb.Endpoint, "email_report_unsub", sub.id)
@@ -49,6 +58,9 @@ defmodule Spectabas.Workers.EmailReportDelivery do
       top_pages: top_pages,
       top_sources: top_sources,
       top_countries: top_countries,
+      top_keywords: top_keywords,
+      revenue: revenue,
+      ad_spend: ad_spend,
       unsubscribe_token: unsubscribe_token
     }
 
@@ -136,6 +148,63 @@ defmodule Spectabas.Workers.EmailReportDelivery do
   defp fetch_list(fun, limit) do
     case fun.() do
       {:ok, rows} when is_list(rows) -> Enum.take(rows, limit)
+      _ -> []
+    end
+  end
+
+  alias Spectabas.ClickHouse
+
+  defp fetch_gsc_keywords(site) do
+    site_p = ClickHouse.param(site.id)
+
+    case ClickHouse.query("""
+         SELECT query, sum(clicks) AS clicks, sum(impressions) AS impressions,
+           round(avg(position), 1) AS avg_pos
+         FROM search_console FINAL
+         WHERE site_id = #{site_p} AND date >= today() - 7
+         GROUP BY query
+         ORDER BY clicks DESC
+         LIMIT 10
+         """) do
+      {:ok, rows} when rows != [] -> rows
+      _ -> []
+    end
+  end
+
+  defp fetch_revenue_summary(site, range) do
+    site_p = ClickHouse.param(site.id)
+    from_s = Calendar.strftime(range.from, "%Y-%m-%d %H:%M:%S")
+    to_s = Calendar.strftime(range.to, "%Y-%m-%d %H:%M:%S")
+
+    case ClickHouse.query("""
+         SELECT sum(revenue) AS revenue, count() AS orders,
+           sum(refund_amount) AS refunds
+         FROM ecommerce_events
+         WHERE site_id = #{site_p}
+           AND timestamp >= #{ClickHouse.param(from_s)}
+           AND timestamp <= #{ClickHouse.param(to_s)}
+         """) do
+      {:ok, [row | _]} ->
+        rev = Spectabas.TypeHelpers.to_float(row["revenue"])
+        if rev > 0, do: row, else: nil
+
+      _ ->
+        nil
+    end
+  end
+
+  defp fetch_ad_spend_summary(site) do
+    site_p = ClickHouse.param(site.id)
+
+    case ClickHouse.query("""
+         SELECT platform, sum(spend) AS spend, sum(clicks) AS clicks,
+           sum(impressions) AS impressions
+         FROM ad_spend FINAL
+         WHERE site_id = #{site_p} AND date >= today() - 7
+         GROUP BY platform
+         HAVING spend > 0
+         """) do
+      {:ok, rows} when rows != [] -> rows
       _ -> []
     end
   end

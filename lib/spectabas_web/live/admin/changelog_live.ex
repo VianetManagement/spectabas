@@ -45,6 +45,33 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.8.0 — 2026-04-05 UTC",
+       [
+         %{
+           title: "Feature: AI-powered insights",
+           description:
+             "Configure an AI provider (Anthropic Claude, OpenAI, Google Gemini) per site in Settings. " <>
+               "Generate AI Analysis button on Insights page sends aggregated metrics to AI for prioritized " <>
+               "weekly action items. Results cached 24 hours. Weekly AI email sent Monday mornings."
+         },
+         %{
+           title: "Feature: Enhanced email reports",
+           description:
+             "Periodic email digest now includes top search keywords, revenue/orders summary, " <>
+               "and ad spend breakdown by platform alongside existing traffic stats."
+         },
+         %{
+           title: "Feature: GSC actionable data",
+           description:
+             "Search Keywords page now shows position distribution, ranking changes (7d vs prior 7d), " <>
+               "CTR opportunities, and new/lost keywords. Anomaly detector checks SEO rankings and CTR."
+         },
+         %{
+           title: "Fix: Dashboard chart performance",
+           description:
+             "90-day and 12-month views now use pre-aggregated daily_stats table instead of scanning raw events."
+         }
+       ]},
       {"v5.7.0 — 2026-04-05 UTC",
        [
          %{

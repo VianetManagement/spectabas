@@ -195,4 +195,16 @@ defmodule Spectabas.Reports do
   end
 
   def period_key(_, _), do: nil
+
+  @doc "Get users subscribed to weekly (or any frequency) email for a site."
+  def weekly_subscribers(site_id) do
+    Repo.all(
+      from(s in EmailReportSubscription,
+        where: s.site_id == ^site_id and s.frequency != :off,
+        preload: [:user]
+      )
+    )
+    |> Enum.map(& &1.user)
+    |> Enum.uniq_by(& &1.id)
+  end
 end

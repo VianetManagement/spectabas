@@ -60,6 +60,12 @@ defmodule Spectabas.Reports.EmailReportHTML do
     <!-- Top Countries -->
     #{section_table("Top Countries", ["Country", "Visitors"], Enum.map(data.top_countries, fn c -> [esc(c["ip_country"] || "Unknown"), c["unique_visitors"]] end))}
 
+    #{keywords_section(data)}
+
+    #{revenue_section(data)}
+
+    #{ad_spend_section(data)}
+
     <!-- Footer -->
     <tr><td style="padding:24px 32px;border-top:1px solid #e5e7eb;">
       <a href="https://www.spectabas.com/dashboard/sites/#{data.site.id}" style="color:#4f46e5;font-size:13px;text-decoration:none;font-weight:600;">View Full Dashboard &rarr;</a>
@@ -172,7 +178,7 @@ defmodule Spectabas.Reports.EmailReportHTML do
     Top Sources:
     #{Enum.map_join(data.top_sources, "\n", fn s -> "  #{s["referrer_domain"] || "Direct"} — #{s["pageviews"]} views" end)}
 
-    View dashboard: https://www.spectabas.com/dashboard/sites/#{data.site.id}
+    #{text_keywords(data)}#{text_revenue(data)}#{text_ad_spend(data)}View dashboard: https://www.spectabas.com/dashboard/sites/#{data.site.id}
     Unsubscribe: https://www.spectabas.com/email-reports/unsubscribe/#{data.unsubscribe_token}
     """
   end
@@ -181,6 +187,28 @@ defmodule Spectabas.Reports.EmailReportHTML do
   defp frequency_label(:weekly), do: "Weekly"
   defp frequency_label(:monthly), do: "Monthly"
   defp frequency_label(_), do: "Analytics"
+
+  defp text_keywords(%{top_keywords: kw}) when kw != [] do
+    "Top Keywords:\n" <>
+      Enum.map_join(kw, "\n", fn k -> "  #{k["query"]} — #{k["clicks"]} clicks (pos #{k["avg_pos"]})" end) <>
+      "\n\n"
+  end
+
+  defp text_keywords(_), do: ""
+
+  defp text_revenue(%{revenue: rev}) when not is_nil(rev) do
+    "Revenue: $#{rev["revenue"]} (#{rev["orders"]} orders, $#{rev["refunds"]} refunds)\n\n"
+  end
+
+  defp text_revenue(_), do: ""
+
+  defp text_ad_spend(%{ad_spend: ads}) when ads != [] do
+    "Ad Spend:\n" <>
+      Enum.map_join(ads, "\n", fn a -> "  #{a["platform"]}: $#{a["spend"]} (#{a["clicks"]} clicks)" end) <>
+      "\n\n"
+  end
+
+  defp text_ad_spend(_), do: ""
 
   defp format_date_range(%{from: from, to: to}) do
     "#{Calendar.strftime(from, "%b %d, %Y")} — #{Calendar.strftime(to, "%b %d, %Y")}"
@@ -195,4 +223,46 @@ defmodule Spectabas.Reports.EmailReportHTML do
 
   defp esc(nil), do: ""
   defp esc(other), do: to_string(other)
+
+  defp keywords_section(%{top_keywords: kw}) when kw != [] do
+    rows = Enum.map(kw, fn k ->
+      [esc(k["query"]), k["clicks"], k["impressions"], k["avg_pos"]]
+    end)
+    section_table("Top Search Keywords", ["Query", "Clicks", "Impressions", "Pos"], rows)
+  end
+
+  defp keywords_section(_), do: ""
+
+  defp revenue_section(%{revenue: rev}) when not is_nil(rev) do
+    """
+    <tr><td style="padding:16px 32px;">
+      <h3 style="color:#1f2937;font-size:15px;margin:0 0 8px;">Revenue</h3>
+      <table style="width:100%;font-size:13px;">
+        <tr>
+          <td style="padding:4px 0;color:#6b7280;">Revenue</td>
+          <td style="padding:4px 0;text-align:right;font-weight:600;">$#{rev["revenue"]}</td>
+        </tr>
+        <tr>
+          <td style="padding:4px 0;color:#6b7280;">Orders</td>
+          <td style="padding:4px 0;text-align:right;">#{ rev["orders"]}</td>
+        </tr>
+        <tr>
+          <td style="padding:4px 0;color:#6b7280;">Refunds</td>
+          <td style="padding:4px 0;text-align:right;">$#{rev["refunds"]}</td>
+        </tr>
+      </table>
+    </td></tr>
+    """
+  end
+
+  defp revenue_section(_), do: ""
+
+  defp ad_spend_section(%{ad_spend: ads}) when ads != [] do
+    rows = Enum.map(ads, fn a ->
+      [esc(a["platform"]), "$#{a["spend"]}", a["clicks"], a["impressions"]]
+    end)
+    section_table("Ad Spend (7 days)", ["Platform", "Spend", "Clicks", "Impressions"], rows)
+  end
+
+  defp ad_spend_section(_), do: ""
 end

@@ -161,7 +161,9 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Configurable Sync Frequency** — Each integration has a per-integration sync frequency (5min to 24h) stored in `extra["sync_frequency_minutes"]`. Default: 15 min for payment providers (Stripe/Braintree), 6h for ad platforms. Oban cron runs every 5 min; `should_sync?/1` checks if enough time has elapsed since last sync.
 - **Google Search Console** — OAuth2 integration syncing search queries, impressions, clicks, CTR, and position per page per day. Daily sync with 2-3 day delay. ClickHouse `search_console` table with ReplacingMergeTree.
 - **Bing Webmaster** — API key integration syncing the same search metrics from Bing/Yahoo. Same ClickHouse table with `source` column distinguishing Google vs Bing.
-- **Search Keywords Page** — Dashboard page under Acquisition showing top queries, top pages, sortable columns, source filter (Google/Bing/All), date range selector, position color-coding (green <=3, blue <=10, amber <=20, red >20).
+- **Search Keywords Page** — Dashboard page under Acquisition showing top queries, top pages, sortable columns, source filter (Google/Bing/All), date range selector, position color-coding (green <=3, blue <=10, amber <=20, red >20). Includes position distribution, ranking changes (7d vs prior 7d), CTR opportunities, new/lost keywords.
+- **AI-Powered Insights** — Weekly Insights page with AI analysis. Configure AI provider (Anthropic/OpenAI/Google) per site in Settings. "Generate Analysis" button sends aggregated metrics to AI for prioritized action items. Cached 24h. Weekly AI email sent Monday 9am UTC to email report subscribers.
+- **Email Reports Enhanced** — Periodic email digest now includes top search keywords, revenue summary, and ad spend breakdown alongside traffic stats.
 - **ROAS on Revenue Attribution** — Ad Spend Overview card (total spend, ad-attributed revenue, ROAS, clicks, impressions, per-platform breakdown). Campaign tab shows inline Spend/ROAS/CPC columns. Standalone Ad Spend by Campaign table on other tabs. ROAS color-coded.
 - **Click ID Attribution** — Tracker captures gclid (Google), msclkid (Bing), fbclid (Meta) from landing URLs. Stored in ClickHouse `click_id`/`click_id_type` columns. Revenue from visitors with click IDs attributed to the platform for ROAS calculation.
 - **Ad Effectiveness Suite** — 5 pages under new sidebar section: Visitor Quality (engagement scoring 0-100), Time to Convert (days/sessions to purchase), Ad Visitor Paths (page sequences by outcome), Ad-to-Churn (campaign churn correlation), Organic Lift (ad spend vs organic traffic correlation)
@@ -274,7 +276,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Mobile responsiveness** — scrollable tables, collapsible mobile nav bar
 - **Accessible top nav** — WCAG AA contrast compliance
 - **Documentation pages** — docs split into `/docs` (index), `/docs/getting-started`, `/docs/dashboard`, `/docs/conversions`, `/docs/api`, `/docs/admin` with cross-category search. Requires login (behind :require_authenticated_user). Public pages: `/privacy`, `/terms`, homepage.
-- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.7.0)
+- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.8.0)
 - **Legal** — Privacy Policy at `/privacy` and Terms of Service at `/terms` (public, no auth required). Entity: Spectabas, Kent County MI. Contact: howdy@spectabas.com. Arbitration clause (AAA, Kent County). 18+ age restriction.
 
 ## Important Patterns

@@ -75,7 +75,9 @@ config :spectabas, Oban,
        {"*/5 * * * *", Spectabas.Workers.StripeSync},
        {"*/5 * * * *", Spectabas.Workers.BraintreeSync},
        # Daily at 8am UTC — sync search console data (2-3 day delay for GSC)
-       {"0 8 * * *", Spectabas.Workers.SearchConsoleSync}
+       {"0 8 * * *", Spectabas.Workers.SearchConsoleSync},
+       # Monday at 9am UTC — send weekly AI insights email
+       {"0 9 * * 1", Spectabas.Workers.AIWeeklyEmail}
      ]}
   ]
 
