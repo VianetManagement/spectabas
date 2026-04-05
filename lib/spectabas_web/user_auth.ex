@@ -42,6 +42,23 @@ defmodule SpectabasWeb.UserAuth do
     |> Ecto.Changeset.change(%{last_sign_in_at: DateTime.utc_now() |> DateTime.truncate(:second)})
     |> Spectabas.Repo.update()
 
+    # Audit log
+    ip = conn.remote_ip |> :inet.ntoa() |> to_string()
+
+    method =
+      cond do
+        params["token"] -> "magic_link"
+        params["remember_me"] -> "password+remember"
+        true -> "password"
+      end
+
+    Spectabas.Audit.log("user.sign_in", %{
+      user_id: user.id,
+      email: user.email,
+      ip: ip,
+      method: method
+    })
+
     conn
     |> create_or_extend_session(user, params)
     |> redirect(to: user_return_to || signed_in_path(conn))
@@ -54,6 +71,15 @@ defmodule SpectabasWeb.UserAuth do
   """
   def log_out_user(conn) do
     user_token = get_session(conn, :user_token)
+
+    # Audit log before clearing session
+    if scope = conn.assigns[:current_scope] do
+      Spectabas.Audit.log("user.sign_out", %{
+        user_id: scope.user.id,
+        email: scope.user.email
+      })
+    end
+
     user_token && Accounts.delete_user_session_token(user_token)
 
     if live_socket_id = get_session(conn, :live_socket_id) do
