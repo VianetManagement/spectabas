@@ -91,6 +91,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     {from, to} =
       case range do
         "today" -> {today, today}
+        "yesterday" -> {Date.add(today, -1), Date.add(today, -1)}
         "7d" -> {Date.add(today, -7), today}
         "30d" -> {Date.add(today, -30), today}
         "90d" -> {Date.add(today, -90), today}
@@ -477,6 +478,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   end
 
   defp preset_to_period("today", _, _), do: :day
+  defp preset_to_period("yesterday", _, _), do: :day
   defp preset_to_period("24h", _, _), do: :day
   defp preset_to_period("7d", _, _), do: :week
   defp preset_to_period("30d", _, _), do: :month
@@ -528,6 +530,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   end
 
   defp preset_label("today"), do: "Today"
+  defp preset_label("yesterday"), do: "Yesterday"
   defp preset_label("24h"), do: "24h"
   defp preset_label("7d"), do: "7 days"
   defp preset_label("30d"), do: "30 days"
@@ -563,6 +566,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
               :for={
                 {id, label} <- [
                   {"today", "Today"},
+                  {"yesterday", "Yesterday"},
                   {"24h", "24h"},
                   {"7d", "7d"},
                   {"30d", "30d"},
