@@ -280,15 +280,16 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
             <p class="text-sm text-gray-500 mt-1">Organic search queries from Google and Bing</p>
           </div>
           <div class="flex items-center gap-3">
-            <select
-              phx-change="change_source"
-              name="source"
-              class="text-sm rounded border-gray-300 py-1.5 pr-8"
-            >
-              <option value="all" selected={@source_filter == "all"}>All Sources</option>
-              <option value="google" selected={@source_filter == "google"}>Google</option>
-              <option value="bing" selected={@source_filter == "bing"}>Bing</option>
-            </select>
+            <form phx-change="change_source">
+              <select
+                name="source"
+                class="text-sm rounded border-gray-300 py-1.5 pr-8"
+              >
+                <option value="all" selected={@source_filter == "all"}>All Sources</option>
+                <option value="google" selected={@source_filter == "google"}>Google</option>
+                <option value="bing" selected={@source_filter == "bing"}>Bing</option>
+              </select>
+            </form>
             <div class="flex rounded-lg border border-gray-300 overflow-hidden">
               <%= for {val, label} <- [{"7d", "7d"}, {"30d", "30d"}, {"90d", "90d"}] do %>
                 <button

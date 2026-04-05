@@ -183,11 +183,15 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
       end
     end)
 
+    Process.send_after(self(), :refresh_integrations, 10_000)
+    Process.send_after(self(), :refresh_integrations, 30_000)
+    Process.send_after(self(), :refresh_integrations, 60_000)
+
     {:noreply,
      put_flash(
        socket,
        :info,
-       "Backfill started for last #{num_days} days. This runs in the background — check back in a few minutes."
+       "Backfill started for last #{num_days} days. Panels will update automatically."
      )}
   end
 
@@ -232,12 +236,14 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
         Oban.insert(Spectabas.Workers.AdSpendSyncOne.new(%{"integration_id" => integration.id}))
     end
 
+    # Schedule panel refresh after sync completes
+    Process.send_after(self(), :refresh_integrations, 5_000)
+    Process.send_after(self(), :refresh_integrations, 15_000)
+    Process.send_after(self(), :refresh_integrations, 30_000)
+
     {:noreply,
      socket
-     |> put_flash(
-       :info,
-       "#{platform_label(integration.platform)} sync queued. Refresh in a minute to see results."
-     )}
+     |> put_flash(:info, "#{platform_label(integration.platform)} sync started. Panels will update automatically.")}
   end
 
   def handle_event("save_ad_credentials", %{"platform" => platform} = params, socket) do
@@ -570,6 +576,12 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "DNS check failed: #{inspect(reason)}")}
     end
+  end
+
+  @impl true
+  def handle_info(:refresh_integrations, socket) do
+    integrations = Spectabas.AdIntegrations.list_for_site(socket.assigns.site.id)
+    {:noreply, assign(socket, :ad_integrations, integrations)}
   end
 
   @impl true
