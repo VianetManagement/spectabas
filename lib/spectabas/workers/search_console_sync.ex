@@ -74,14 +74,51 @@ defmodule Spectabas.Workers.SearchConsoleSync do
     end
   end
 
-  @doc "Manual sync for a specific integration."
+  @doc "Manual sync. First sync backfills 16 months, subsequent syncs do last 7 days."
   def sync_now(integration) do
+    require Logger
     integration = Spectabas.Repo.preload(integration, :site)
     today = Date.utc_today()
 
-    # Sync last 7 days (GSC has 2-3 day delay)
-    Enum.each(2..7, fn offset ->
-      sync_one(integration, Date.add(today, -offset))
+    # First sync (never synced) = backfill 16 months (~480 days)
+    # Subsequent syncs = last 7 days (GSC has 2-3 day delay)
+    max_offset =
+      if is_nil(integration.last_synced_at), do: 480, else: 7
+
+    start_date = Date.add(today, -max_offset)
+
+    Logger.info("[SearchConsoleSync] sync_now from #{start_date} (#{max_offset} days)")
+
+    # Work forward from oldest date, skip already-synced days
+    Enum.each(0..max_offset, fn offset ->
+      date = Date.add(start_date, offset)
+
+      # GSC data has 2-day delay — skip recent dates
+      if Date.diff(today, date) >= 2 do
+        unless gsc_day_synced?(integration.site.id, date) do
+          sync_one(integration, date)
+        end
+      end
     end)
+  end
+
+  defp gsc_day_synced?(site_id, date) do
+    sql = """
+    SELECT count() AS cnt FROM search_console FINAL
+    WHERE site_id = #{Spectabas.ClickHouse.param(site_id)}
+      AND date = #{Spectabas.ClickHouse.param(Date.to_iso8601(date))}
+    """
+
+    case Spectabas.ClickHouse.query(sql) do
+      {:ok, [%{"cnt" => cnt}]} ->
+        case cnt do
+          n when is_integer(n) -> n > 0
+          n when is_binary(n) -> String.to_integer(n) > 0
+          _ -> false
+        end
+
+      _ ->
+        false
+    end
   end
 end
