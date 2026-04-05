@@ -199,6 +199,35 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
     {:noreply, assign(socket, :test_results, test_results)}
   end
 
+  def handle_event("backfill_search", %{"id" => id}, socket) do
+    integration = AdIntegrations.get!(id) |> Repo.preload(:site)
+
+    # Clear last_synced_at to trigger full backfill
+    integration
+    |> Spectabas.AdIntegrations.AdIntegration.changeset(%{last_synced_at: nil})
+    |> Repo.update()
+
+    # Reload and run sync_now (which will see nil last_synced_at and do 480 days)
+    integration = AdIntegrations.get!(id) |> Repo.preload(:site)
+
+    Task.start(fn ->
+      try do
+        Spectabas.Workers.SearchConsoleSync.sync_now(integration)
+      rescue
+        e ->
+          require Logger
+          Logger.error("[SearchConsole:backfill] Crash: #{Exception.message(e)}")
+      end
+    end)
+
+    {:noreply,
+     put_flash(
+       socket,
+       :info,
+       "GSC backfill started (16 months). Check Search Keywords page in a few minutes."
+     )}
+  end
+
   def handle_event("fix_gsc_url", %{"id" => id}, socket) do
     integration = AdIntegrations.get!(id)
     site_url = (integration.extra || %{})["site_url"] || ""
@@ -444,6 +473,16 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
                         class="inline-flex items-center px-2 py-1 text-xs font-medium rounded text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200"
                       >
                         Sync Test
+                      </button>
+                    <% end %>
+                    <%= if integration.platform in ["google_search_console", "bing_webmaster"] do %>
+                      <button
+                        phx-click="backfill_search"
+                        phx-value-id={integration.id}
+                        data-confirm="Backfill 16 months of search data? This runs in the background."
+                        class="inline-flex items-center px-2 py-1 text-xs font-medium rounded text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200"
+                      >
+                        Backfill 16mo
                       </button>
                     <% end %>
                     <%= if integration.platform == "google_search_console" do %>
