@@ -124,6 +124,9 @@ defmodule Spectabas.Workers.SearchConsoleSync do
         should_sync = force_backfill or not gsc_day_synced?(integration.site.id, date, source)
 
         if should_sync do
+          # Throttle Bing API calls — their rate limit is strict
+          if integration.platform == "bing_webmaster" and acc > 0, do: Process.sleep(1500)
+
           case sync_one(integration, date) do
             :ok -> acc + 1
             _ -> acc
