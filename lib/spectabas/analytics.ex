@@ -213,6 +213,89 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  @doc """
+  Fast timeseries using pre-aggregated daily_stats (SummingMergeTree).
+  Used for date ranges >= 30 days where hourly granularity is not needed.
+  Returns the same format as timeseries/4.
+  """
+  def timeseries_fast(%Site{} = site, %User{} = user, %{from: _, to: _} = date_range, period) do
+    with :ok <- authorize(site, user) do
+      tz = site.timezone || "UTC"
+      {native_range, import_range} = split_date_range(site, date_range)
+
+      # Query pre-aggregated daily_stats (SummingMergeTree — must SUM columns)
+      native_rows =
+        if native_range do
+          from_date = native_range.from |> to_local(tz) |> DateTime.to_date() |> Date.to_iso8601()
+          to_date = native_range.to |> to_local(tz) |> DateTime.to_date() |> Date.to_iso8601()
+
+          sql = """
+          SELECT
+            toString(date) AS bucket,
+            sum(pageviews) AS pageviews,
+            sum(visitors) AS visitors
+          FROM daily_stats
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND date >= #{ClickHouse.param(from_date)}
+            AND date <= #{ClickHouse.param(to_date)}
+          GROUP BY date
+          ORDER BY date ASC
+          """
+
+          case ClickHouse.query(sql) do
+            {:ok, rows} -> rows
+            _ -> []
+          end
+        else
+          []
+        end
+
+      # Imported timeseries (same as regular timeseries)
+      imported_rows =
+        if import_range do
+          sql = """
+          SELECT
+            date AS bucket,
+            pageviews,
+            visitors
+          FROM imported_daily_stats
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND date >= #{ClickHouse.param(Date.to_iso8601(import_range.from))}
+            AND date <= #{ClickHouse.param(Date.to_iso8601(import_range.to))}
+          ORDER BY date ASC
+          """
+
+          case ClickHouse.query(sql) do
+            {:ok, rows} -> rows
+            _ -> []
+          end
+        else
+          []
+        end
+
+      # Merge into a unified data map
+      data_map =
+        (native_rows ++ imported_rows)
+        |> Enum.reduce(%{}, fn row, acc ->
+          key = row["bucket"] || ""
+          pv = to_int(row["pageviews"])
+          v = to_int(row["visitors"])
+          {existing_pv, existing_v} = Map.get(acc, key, {0, 0})
+          Map.put(acc, key, {existing_pv + pv, existing_v + v})
+        end)
+
+      all_buckets = generate_buckets(date_range.from, date_range.to, period, tz)
+
+      filled =
+        Enum.map(all_buckets, fn {bucket_key, label} ->
+          {pv, v} = Map.get(data_map, bucket_key, {0, 0})
+          %{"bucket" => bucket_key, "label" => label, "pageviews" => pv, "visitors" => v}
+        end)
+
+      {:ok, filled}
+    end
+  end
+
   defp generate_buckets(from, to, :day, tz) do
     # Hourly buckets in the site's timezone
     # Convert UTC boundaries to local time for bucket generation

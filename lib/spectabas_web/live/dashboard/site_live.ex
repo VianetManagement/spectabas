@@ -292,9 +292,19 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     # Launch all queries in parallel
     stats_task = Task.async(fn -> fetch_overview(site, user, date_range, seg_opts) end)
 
+    # Use pre-aggregated daily_stats for 30d+ ranges (much faster on large tables)
+    days_in_range = Date.diff(to, from)
+
     timeseries_task =
       Task.async(fn ->
-        case Analytics.timeseries(site, user, date_range, period) do
+        result =
+          if days_in_range >= 30 do
+            Analytics.timeseries_fast(site, user, date_range, period)
+          else
+            Analytics.timeseries(site, user, date_range, period)
+          end
+
+        case result do
           {:ok, rows} -> rows
           _ -> []
         end

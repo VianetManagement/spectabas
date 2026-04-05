@@ -57,8 +57,9 @@ defmodule Spectabas.AdIntegrations.Platforms.BingWebmaster do
       {:ok, %{status: 401}} ->
         {:error, "Invalid Bing Webmaster API key"}
 
-      {:ok, %{status: status}} ->
-        {:error, "Bing API HTTP #{status}"}
+      {:ok, %{status: status, body: body}} ->
+        msg = if is_map(body), do: inspect(body) |> String.slice(0, 200), else: "HTTP #{status}"
+        {:error, "Bing API HTTP #{status}: #{msg}"}
 
       {:error, reason} ->
         {:error, "Bing API error: #{inspect(reason)}"}

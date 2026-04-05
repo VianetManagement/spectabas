@@ -41,6 +41,9 @@ defmodule Spectabas.Analytics.AnomalyDetector do
         |> check_revenue(site, current_from, now, prev_from, prev_to)
         |> check_ad_traffic(site, current_from, now, prev_from, prev_to)
         |> check_churn_risk(site)
+        |> check_seo_rankings(site)
+        |> check_seo_ctr_opportunities(site)
+        |> check_ad_spend_roas(site)
         |> Enum.sort_by(& &1.severity_rank)
 
       {:ok, anomalies}
@@ -659,4 +662,144 @@ defmodule Spectabas.Analytics.AnomalyDetector do
   end
 
   defp fmt(%DateTime{} = dt), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M:%S")
+
+  # --- SEO ranking changes (from search_console) ---
+
+  defp check_seo_rankings(anomalies, site) do
+    site_p = ClickHouse.param(site.id)
+
+    # Keywords that improved into top 10 (were >10, now <=10)
+    case ClickHouse.query("""
+         SELECT cur.query, cur.pos AS current_pos, prev.pos AS previous_pos,
+           cur.clicks AS clicks
+         FROM (
+           SELECT query, round(avg(position), 1) AS pos, sum(clicks) AS clicks
+           FROM search_console FINAL
+           WHERE site_id = #{site_p} AND date >= today() - 7
+           GROUP BY query HAVING sum(impressions) >= 5
+         ) cur
+         JOIN (
+           SELECT query, round(avg(position), 1) AS pos
+           FROM search_console FINAL
+           WHERE site_id = #{site_p} AND date >= today() - 14 AND date < today() - 7
+           GROUP BY query HAVING sum(impressions) >= 5
+         ) prev ON cur.query = prev.query
+         WHERE prev.pos > 10 AND cur.pos <= 10
+         ORDER BY cur.clicks DESC
+         LIMIT 5
+         """) do
+      {:ok, rows} when rows != [] ->
+        Enum.reduce(rows, anomalies, fn row, acc ->
+          [
+            %{
+              severity: :info,
+              severity_rank: 4,
+              category: "seo",
+              metric: "ranking_improvement",
+              current: to_float(row["current_pos"]),
+              previous: to_float(row["previous_pos"]),
+              change_pct: nil,
+              message: "\"#{row["query"]}\" moved into top 10 (#{row["previous_pos"]} → #{row["current_pos"]})",
+              action: "This keyword is now on page 1. Optimize the landing page to capture more clicks."
+            }
+            | acc
+          ]
+        end)
+
+      _ ->
+        anomalies
+    end
+  end
+
+  # --- SEO CTR opportunities ---
+
+  defp check_seo_ctr_opportunities(anomalies, site) do
+    site_p = ClickHouse.param(site.id)
+
+    case ClickHouse.query("""
+         SELECT query, sum(impressions) AS impr, sum(clicks) AS clicks,
+           if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
+           round(avg(position), 1) AS pos
+         FROM search_console FINAL
+         WHERE site_id = #{site_p} AND date >= today() - 7
+         GROUP BY query
+         HAVING impr >= 100 AND ctr < 2 AND pos <= 10
+         ORDER BY impr DESC
+         LIMIT 3
+         """) do
+      {:ok, rows} when rows != [] ->
+        Enum.reduce(rows, anomalies, fn row, acc ->
+          [
+            %{
+              severity: :medium,
+              severity_rank: 2,
+              category: "seo",
+              metric: "ctr_opportunity",
+              current: to_float(row["ctr"]),
+              previous: nil,
+              change_pct: nil,
+              message:
+                "\"#{row["query"]}\" has #{format_num(to_int(row["impr"]))} impressions but only #{row["ctr"]}% CTR (position #{row["pos"]})",
+              action: "Improve the page title and meta description for this keyword to increase click-through rate."
+            }
+            | acc
+          ]
+        end)
+
+      _ ->
+        anomalies
+    end
+  end
+
+  # --- Ad spend ROAS changes ---
+
+  defp check_ad_spend_roas(anomalies, site) do
+    site_p = ClickHouse.param(site.id)
+
+    # Check if site has ad spend data
+    case ClickHouse.query("""
+         SELECT
+           sum(if(date >= today() - 7, spend, 0)) AS current_spend,
+           sum(if(date < today() - 7, spend, 0)) AS prev_spend
+         FROM ad_spend FINAL
+         WHERE site_id = #{site_p} AND date >= today() - 14
+         """) do
+      {:ok, [%{"current_spend" => cs, "prev_spend" => ps}]}
+      when is_number(cs) and cs > 0 and is_number(ps) and ps > 0 ->
+        change = Float.round((cs - ps) / ps * 100, 1)
+
+        if abs(change) >= 30 do
+          [
+            %{
+              severity: if(change > 0, do: :info, else: :medium),
+              severity_rank: if(change > 0, do: 4, else: 2),
+              category: "advertising",
+              metric: "ad_spend_change",
+              current: cs,
+              previous: ps,
+              change_pct: change,
+              message:
+                "Ad spend #{if change > 0, do: "increased", else: "decreased"} by #{abs(change)}% this week ($#{Float.round(cs, 0)} vs $#{Float.round(ps, 0)})",
+              action:
+                if(change > 0,
+                  do: "Review campaign performance to ensure increased spend is generating proportional returns.",
+                  else: "Check if campaigns were paused or budgets reduced — this may impact traffic."
+                )
+            }
+            | anomalies
+          ]
+        else
+          anomalies
+        end
+
+      _ ->
+        anomalies
+    end
+  end
+
+  defp format_num(n) when is_integer(n) and n >= 1000 do
+    "#{div(n, 1000)}k"
+  end
+
+  defp format_num(n), do: to_string(n)
 end
