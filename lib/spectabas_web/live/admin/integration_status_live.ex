@@ -294,14 +294,53 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
   defp test_integration(%{platform: "stripe"} = integration) do
     api_key = AdIntegrations.decrypt_access_token(integration)
 
-    case Req.get("https://api.stripe.com/v1/charges?limit=1",
+    # Fetch 10 active subs and show MRR calculation per sub
+    case Req.get(
+           "https://api.stripe.com/v1/subscriptions?status=active&limit=10&expand[]=data.discount.coupon",
            headers: [
              {"authorization", "Bearer #{api_key}"},
              {"stripe-version", "2024-12-18.acacia"}
            ]
          ) do
-      {:ok, %{status: 200}} ->
-        %{status: :ok, message: "API key valid, connected"}
+      {:ok, %{status: 200, body: %{"data" => subs}}} ->
+        samples =
+          Enum.map(subs, fn sub ->
+            items = get_in(sub, ["items", "data"]) || []
+
+            stripe_amount =
+              Enum.reduce(items, 0, fn i, acc ->
+                acc + (i["quantity"] || 1) * (get_in(i, ["price", "unit_amount"]) || 0)
+              end) / 100.0
+
+            interval = get_in(items, [Access.at(0), "price", "recurring", "interval"]) || "month"
+
+            interval_count =
+              get_in(items, [Access.at(0), "price", "recurring", "interval_count"]) || 1
+
+            discount_pct = get_in(sub, ["discount", "coupon", "percent_off"]) || 0
+            amount_off = (get_in(sub, ["discount", "coupon", "amount_off"]) || 0) / 100.0
+
+            discounted =
+              cond do
+                discount_pct > 0 -> stripe_amount * (1 - discount_pct / 100.0)
+                amount_off > 0 -> max(stripe_amount - amount_off, 0)
+                true -> stripe_amount
+              end
+
+            our_mrr =
+              case interval do
+                "year" -> discounted / (12.0 * interval_count)
+                "month" -> discounted / interval_count
+                _ -> discounted
+              end
+
+            "$#{Float.round(our_mrr, 2)} (#{interval}/#{interval_count}, amt=$#{stripe_amount}, disc=#{discount_pct}%/$#{amount_off})"
+          end)
+
+        total = subs |> length()
+        sample_mrr = samples |> Enum.join(", ")
+
+        %{status: :ok, message: "API valid. #{total} active subs sampled: #{sample_mrr}"}
 
       {:ok, %{status: s, body: b}} ->
         msg = if is_map(b), do: get_in(b, ["error", "message"]) || "HTTP #{s}", else: "HTTP #{s}"
