@@ -20,37 +20,45 @@ Privacy-first web analytics platform built with Elixir/Phoenix and ClickHouse.
 ### Conversions & Ecommerce
 - **Goals & funnels** — pageview and custom event goals, multi-step funnel visualization with drop-off export
 - **Ecommerce tracking** — revenue, orders, AOV, top products with categories, visitor-order linking
-- **Revenue Attribution** — sortable table with paid/organic split, three attribution models (first/last/any touch), ad platform pills
+- **Revenue Attribution** — sortable table with paid/organic split, three attribution models (first/last/any touch)
 - **Revenue Cohorts** — LTV by first-purchase week heatmap
 - **Buyer Patterns** — buyer vs non-buyer engagement comparison, page lift analysis
+- **MRR & Subscriptions** — current MRR, plan breakdown, trend chart, cancellations, at-risk subscribers
 
-### Ad Effectiveness (unique to Spectabas)
+### Ad Effectiveness
 - **Visitor Quality Score** — engagement scoring (0-100) for ad traffic by platform/campaign
-- **Time to Convert** — days/sessions between ad click and purchase with histogram
+- **Time to Convert** — days/sessions between ad click and purchase
 - **Ad Visitor Paths** — page sequences for ad visitors, conversion rate per path
 - **Ad-to-Churn** — campaign-level churn correlation vs organic baseline
 - **Organic Lift** — ad spend vs organic traffic correlation measurement
 
-### Ad Platform Integrations
-- **Google Ads, Bing Ads, Meta Ads** — OAuth2 connection with encrypted token storage (AES-256-GCM)
-- **Click ID attribution** — automatic gclid/msclkid/fbclid capture for platform-level ROAS
-- **Daily spend sync** — campaign spend, clicks, impressions every 6 hours
-- **Google Ads account picker** — MCC/multi-account support
-- **Sync Now button** — manual trigger from settings page
+### Search & SEO
+- **Search Keywords** — top queries, pages, position distribution, ranking changes
+- **CTR Opportunities** — high-impression queries with below-average click-through rates
+- **New & Lost Keywords** — keywords appearing or disappearing week-over-week
+- **Position Distribution** — keyword count by ranking bracket (top 3, 4-10, 11-20, 20+)
+
+### AI-Powered Insights
+- **Weekly AI Analysis** — AI-generated prioritized action items from all data sources
+- **On-demand insights** — "Generate Analysis" button on the Insights page
+- **Multi-provider** — supports Anthropic (Claude), OpenAI, Google (Gemini)
+- **Weekly AI email** — automated Monday morning digest with recommendations
+
+### Integrations
+- **Ad platforms** — connect via OAuth2 for ROAS tracking and click ID attribution
+- **Payment providers** — import charges, refunds, subscriptions for revenue analytics
+- **Search consoles** — import keyword rankings, clicks, impressions for SEO insights
+- **Configurable sync frequency** — per-integration, from 5 minutes to 24 hours
+- **Integration sync logging** — full event log with status, duration, and error details
 
 ### Platform
-- **Automated Insights** — anomaly detection for traffic, sources, revenue, ad traffic, and churn risk
-- **Category landing pages** — hub pages with descriptions for all 38 dashboard pages
-- **Breadcrumbs** — color-coded navigation trail on every page
-- **Email reports** — daily/weekly/monthly digests with period comparison
-- **Segmentation** — filter any report by any dimension with saved presets
-- **Reverse proxy (data-proxy)** — serve tracker from main domain for ad blocker evasion
-- **Browser fingerprinting** — canvas, WebGL, AudioContext, font probing for cookieless tracking
-- **Cohort retention** — weekly retention grid
-- **Visitor profiles** — session history, IP cross-referencing, fingerprint matching, click ID + UTM data
-- **Bot detection** — UA-based, navigator.webdriver, datacenter IP, headless browser
+- **Multi-tenant** — account-based isolation with role hierarchy (platform_admin, superadmin, admin, analyst, viewer)
+- **Automated Insights** — anomaly detection across traffic, SEO, revenue, ad spend, and churn
+- **Email reports** — daily/weekly/monthly digests with traffic, keywords, revenue, and ad spend
+- **SOC2 security** — password complexity, account lockout, idle session timeout, MFA enforcement, session management, audit logging
+- **Two-factor auth** — TOTP and WebAuthn/passkeys with account-level enforcement
 - **API keys** — granular scopes, site restrictions, optional expiry, access logging
-- **Two-factor auth** — TOTP and WebAuthn/passkeys, admin force 2FA
+- **Segmentation** — filter any report by any dimension with saved presets
 - **Spam filtering** — auto-detection + manual blocklist
 
 ## Tech Stack
@@ -77,7 +85,7 @@ Visit [localhost:4000](http://localhost:4000).
 ## Tests
 
 ```bash
-mix test          # 560 tests, no ClickHouse needed
+mix test          # 609 tests, no ClickHouse needed
 mix format        # code formatting
 mix compile --warnings-as-errors  # strict compilation
 ```
@@ -105,6 +113,7 @@ Push to `main` auto-deploys on Render via Docker.
 | `MAXMIND_LICENSE_KEY` | GeoLite2 timezone/EU enrichment |
 | `RESEND_API_KEY` | Email delivery via Resend |
 | `RENDER_API_KEY` | Auto-register custom domains |
+| `UTILITY_TOKEN` | Health/diagnostic endpoint auth |
 
 ## Adding a Tracked Site
 
@@ -133,9 +142,13 @@ Browser -> /assets/v1.js (tracker)
         -> ClickHouse events table
         -> Dashboard LiveViews (real-time queries)
 
-Ad Platforms -> OAuth2 connect -> AdSpendSync (Oban, every 6h)
-            -> ClickHouse ad_spend table
-            -> Revenue Attribution (ROAS, per-platform breakdown)
+Integrations -> OAuth2/API key connect -> Oban sync workers (per-integration frequency)
+             -> ClickHouse ad_spend / search_console / ecommerce_events tables
+             -> Revenue Attribution, Search Keywords, MRR pages
+
+AI Analysis -> Anomaly detector + data aggregation
+            -> Configured AI provider (Anthropic/OpenAI/Google)
+            -> Insights page + weekly email
 ```
 
 ## License

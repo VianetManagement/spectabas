@@ -276,7 +276,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Mobile responsiveness** — scrollable tables, collapsible mobile nav bar
 - **Accessible top nav** — WCAG AA contrast compliance
 - **Documentation pages** — docs split into `/docs` (index), `/docs/getting-started`, `/docs/dashboard`, `/docs/conversions`, `/docs/api`, `/docs/admin` with cross-category search. Requires login (behind :require_authenticated_user). Public pages: `/privacy`, `/terms`, homepage.
-- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.8.0)
+- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.9.0)
 - **Legal** — Privacy Policy at `/privacy` and Terms of Service at `/terms` (public, no auth required). Entity: Spectabas, Kent County MI. Contact: howdy@spectabas.com. Arbitration clause (AAA, Kent County). 18+ age restriction.
 
 ## Important Patterns
@@ -298,8 +298,12 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **IP extraction**: Priority: `X-Spectabas-Real-IP` (trusted proxy header) > `X-Forwarded-For` (Render LB) > `CF-Connecting-IP` (Cloudflare fallback) > `conn.remote_ip`. The custom header is set by our reverse proxy plug and survives Render's XFF overwrite on the second hop. Both `ingest.ex` and `collect_rate_limit.ex` use the same priority.
 - **Category landing pages**: `/sites/:id/c/:category` renders hub page with descriptions for each page in the category. Single reusable LiveView (`CategoryLive`) with all 38 page descriptions. Sidebar section labels link to these.
 - **Sidebar layout**: All dashboard pages use `<.dashboard_layout>` from SidebarComponent
+- **Flash messages**: Unified modal toast in top-right corner (defined in SidebarComponent). Info auto-dismisses via AutoDismiss hook; errors persist until closed. Do NOT add inline flash rendering in individual pages — the layout handles it.
+- **Button styling**: All buttons use `rounded-lg`. Primary: `inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm`. Secondary: `px-3 py-1.5` with colored text/bg/border and `rounded-lg`.
 - **Async dashboard**: Mount loads critical stats only; deferred stats load via `handle_info(:load_deferred)`
 - **Chart updates**: Use `push_event` to push data to Chart.js hooks (not data attributes)
+- **Fast timeseries**: For date ranges >= 30 days, use `Analytics.timeseries_fast/4` which queries `daily_stats` SummingMergeTree instead of raw events. Short ranges use `Analytics.timeseries/4` for hourly granularity.
+- **AI integration**: Per-site AI config in `ai_config_encrypted` (same pattern as ad credentials). `Spectabas.AI.Completion.generate/3` abstracts Anthropic/OpenAI/Google. `InsightsCache` caches AI analysis for 24h. Weekly AI email via `AIWeeklyEmail` Oban worker (Monday 9am UTC).
 - **Visitor dedup**: In GDPR-off (cookie) mode, new cookie = new visitor. No fingerprint merging. Fingerprint-based dedup only applies in GDPR-on (cookieless) mode via `Visitors.find_by_fingerprint/2`
 - **Timezone handling**: Requires `tzdata` library — without it, `DateTime.shift_zone` silently fails to UTC. All dashboard date boundaries use site timezone via `dates_to_utc_range/3`. Rolling periods (24h, 7d, 30d) are UTC-relative and timezone-independent. Only "Today" and date-picker ranges need timezone conversion. All ClickHouse queries that return displayed timestamps use `toTimezone(timestamp, site.timezone)` via the `tz_sql/1` helper. Admin pages use user's personal timezone preference for Postgres timestamps.
 - **Query consistency**: ALL analytics queries showing visitor/pageview/session counts MUST include `ip_is_bot = 0` and filter to pageview events. Exceptions: network_stats (shows bot %), realtime (all live activity), visitor detail pages, RUM queries. This ensures numbers match across dashboard, channels, sources, geography, etc.

@@ -1955,6 +1955,13 @@ defmodule SpectabasWeb.DocsLive do
             - **Top 5 pages** — ranked by pageviews
             - **Top 5 sources** — referrer domains ranked by pageviews
             - **Top 5 countries** — ranked by unique visitors
+            - **Top 10 search keywords** — from Google Search Console / Bing Webmaster (if connected), with clicks, impressions, and position
+            - **Revenue summary** — total revenue, orders, and refunds (if ecommerce is enabled)
+            - **Ad spend breakdown** — spend, clicks, and impressions by platform (if ad platforms are connected)
+
+            ### AI Weekly Insights Email
+
+            If you've configured an AI provider in Site Settings, you'll also receive a separate **Weekly AI Insights** email every Monday morning. This uses AI to analyze all your data (traffic, SEO, revenue, ad spend) and generate prioritized action items. Configure your AI provider under Settings > AI Analysis.
 
             Daily reports compare today vs yesterday. Weekly reports compare the last 7 days vs the prior 7 days. Monthly reports compare this month vs last month.
 
@@ -2892,7 +2899,11 @@ defmodule SpectabasWeb.DocsLive do
 
             ### Where It Appears
 
-            **Acquisition > Search Keywords** — top queries, top pages, sortable by any column, filterable by source and date range.
+            **Acquisition > Search Keywords** — top queries, top pages, sortable by any column, filterable by source (Google/Bing/All) and date range. Also shows:
+            - **Position Distribution** — how many keywords rank in top 3, 4-10, 11-20, 20+
+            - **Ranking Changes** — keywords with significant position changes (7d vs prior 7d)
+            - **CTR Opportunities** — high-impression queries with below-average click-through rates
+            - **New & Lost Keywords** — keywords that appeared or disappeared in the last 7 days
 
             ### Troubleshooting
 

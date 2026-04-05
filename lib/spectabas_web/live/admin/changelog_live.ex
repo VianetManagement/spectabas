@@ -45,6 +45,28 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.9.0 — 2026-04-05 UTC",
+       [
+         %{
+           title: "UX: Unified toast notifications",
+           description:
+             "Flash messages consolidated into a single modal toast in the top-right corner. " <>
+               "Green checkmark for success (auto-dismiss), red X for errors (manual dismiss). " <>
+               "Removed duplicate inline flash rendering from settings page."
+         },
+         %{
+           title: "UX: Standardized button styling",
+           description:
+             "All buttons across the settings page now use consistent rounded-lg styling. " <>
+               "Primary, secondary, and platform badge buttons all standardized."
+         },
+         %{
+           title: "UX: Integration panel auto-refresh",
+           description:
+             "After Sync Now or Backfill, integration panels automatically refresh to show " <>
+               "updated sync times and status without requiring a page reload."
+         }
+       ]},
       {"v5.8.0 — 2026-04-05 UTC",
        [
          %{
