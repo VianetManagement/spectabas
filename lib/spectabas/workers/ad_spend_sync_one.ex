@@ -8,11 +8,18 @@ defmodule Spectabas.Workers.AdSpendSyncOne do
   alias Spectabas.{AdIntegrations, Repo}
 
   @impl Oban.Worker
+  @ad_platforms ~w(google_ads bing_ads meta_ads)
+
   def perform(%Oban.Job{args: %{"integration_id" => id}}) do
     integration = AdIntegrations.get!(id) |> Repo.preload(:site)
-    yesterday = Date.add(Date.utc_today(), -1)
 
-    Spectabas.Workers.AdSpendSync.sync_one(integration, yesterday)
-    :ok
+    if integration.platform in @ad_platforms do
+      yesterday = Date.add(Date.utc_today(), -1)
+      Spectabas.Workers.AdSpendSync.sync_one(integration, yesterday)
+      :ok
+    else
+      Logger.warning("[AdSpendSyncOne] Skipping non-ad platform: #{integration.platform}")
+      :ok
+    end
   end
 end

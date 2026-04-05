@@ -3552,9 +3552,9 @@ defmodule Spectabas.Analytics do
 
     case Process.get(cache_key) do
       nil ->
-        # If the site has ANY Stripe integration record (active or revoked), filter to pi_* only.
-        # This is more resilient than checking only "active" — integration records can temporarily
-        # disappear during reconnection but the pi_* data is still there.
+        # If the site has any payment provider integration, filter to only that provider's data.
+        # Stripe uses pi_* order IDs, Braintree uses its own transaction IDs.
+        # This prevents double-counting when both API and provider data exist.
         has_stripe =
           Spectabas.Repo.exists?(
             from(a in Spectabas.AdIntegrations.AdIntegration,
@@ -3562,7 +3562,28 @@ defmodule Spectabas.Analytics do
             )
           )
 
-        result = if has_stripe, do: "AND order_id LIKE 'pi_%'", else: ""
+        has_braintree =
+          Spectabas.Repo.exists?(
+            from(a in Spectabas.AdIntegrations.AdIntegration,
+              where: a.site_id == ^site_id and a.platform == "braintree"
+            )
+          )
+
+        result =
+          cond do
+            has_stripe and has_braintree ->
+              "AND (order_id LIKE 'pi_%' OR import_source = 'braintree')"
+
+            has_stripe ->
+              "AND order_id LIKE 'pi_%'"
+
+            has_braintree ->
+              "AND import_source = 'braintree'"
+
+            true ->
+              ""
+          end
+
         Process.put(cache_key, result)
         result
 
