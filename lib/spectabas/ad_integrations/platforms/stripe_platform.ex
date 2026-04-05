@@ -439,13 +439,22 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
                 true -> total_amount
               end
 
-            # Calculate MRR: normalize billing interval to monthly equivalent
+            # Calculate MRR: normalize billing interval to monthly equivalent.
+            # Stripe uses day/30 for "monthly", day/7 for "weekly", etc.
+            # Match Stripe's MRR definition by mapping common day intervals to months.
             mrr =
-              case interval do
-                "year" -> Float.round(discounted_amount / (12.0 * interval_count), 2)
-                "month" -> Float.round(discounted_amount / interval_count, 2)
-                "week" -> Float.round(discounted_amount * 52.0 / (12.0 * interval_count), 2)
-                "day" -> Float.round(discounted_amount * 365.0 / (12.0 * interval_count), 2)
+              case {interval, interval_count} do
+                {"month", n} -> Float.round(discounted_amount / n, 2)
+                {"year", n} -> Float.round(discounted_amount / (12.0 * n), 2)
+                {"week", 1} -> Float.round(discounted_amount * 52.0 / 12.0, 2)
+                {"week", n} -> Float.round(discounted_amount * 52.0 / (12.0 * n), 2)
+                {"day", 1} -> Float.round(discounted_amount * 365.0 / 12.0, 2)
+                {"day", 7} -> Float.round(discounted_amount * 52.0 / 12.0, 2)
+                {"day", 14} -> Float.round(discounted_amount * 26.0 / 12.0, 2)
+                {"day", 30} -> discounted_amount
+                {"day", 90} -> Float.round(discounted_amount / 3.0, 2)
+                {"day", 365} -> Float.round(discounted_amount / 12.0, 2)
+                {"day", n} -> Float.round(discounted_amount * 365.0 / (12.0 * n), 2)
                 _ -> discounted_amount
               end
 
