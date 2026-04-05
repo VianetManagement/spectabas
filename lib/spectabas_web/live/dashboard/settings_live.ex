@@ -61,6 +61,35 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
     end
   end
 
+  def handle_event("save_ai_config", params, socket) do
+    site = socket.assigns.site
+    existing = Spectabas.AI.Config.get(site)
+
+    # Only update api_key if a new one was provided (not the masked placeholder)
+    api_key =
+      case String.trim(params["api_key"] || "") do
+        "" -> existing["api_key"] || ""
+        new_key -> new_key
+      end
+
+    config = %{
+      "provider" => params["provider"] || "none",
+      "api_key" => api_key,
+      "model" => params["model"]
+    }
+
+    case Spectabas.AI.Config.save(site, config) do
+      {:ok, updated_site} ->
+        {:noreply,
+         socket
+         |> assign(:site, updated_site)
+         |> put_flash(:info, "AI configuration saved.")}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to save AI configuration.")}
+    end
+  end
+
   def handle_event("save_intent_config", params, socket) do
     config = %{
       "buying_paths" => text_to_paths(params["buying_paths"]),
@@ -865,6 +894,62 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
               </button>
             </div>
           </.form>
+        </div>
+
+        <%!-- AI Provider Configuration --%>
+        <div class="bg-white rounded-lg shadow p-6 mt-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-1">AI Analysis</h2>
+          <p class="text-sm text-gray-500 mb-4">
+            Configure an AI provider for automated insights and weekly analysis emails.
+          </p>
+          <% ai_config = Spectabas.AI.Config.get(@site) %>
+          <form phx-submit="save_ai_config" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Provider</label>
+                <select
+                  name="provider"
+                  class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                >
+                  <option value="none" selected={ai_config["provider"] in [nil, "none"]}>None</option>
+                  <%= for {key, %{label: label}} <- Spectabas.AI.Config.providers() do %>
+                    <option value={key} selected={ai_config["provider"] == key}>{label}</option>
+                  <% end %>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">API Key</label>
+                <input
+                  type="password"
+                  name="api_key"
+                  value=""
+                  placeholder={if ai_config["api_key"], do: mask_credential(ai_config["api_key"]), else: "API Key"}
+                  class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Model</label>
+                <select
+                  name="model"
+                  class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                >
+                  <%= for {key, %{models: models}} <- Spectabas.AI.Config.providers() do %>
+                    <%= for {model_id, model_label} <- models do %>
+                      <option value={model_id} selected={ai_config["model"] == model_id}>
+                        {model_label}
+                      </option>
+                    <% end %>
+                  <% end %>
+                </select>
+              </div>
+            </div>
+            <button
+              type="submit"
+              class="px-4 py-2 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700"
+            >
+              Save AI Configuration
+            </button>
+          </form>
         </div>
 
         <%!-- Visitor Intent Configuration --%>
