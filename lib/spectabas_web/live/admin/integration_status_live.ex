@@ -115,6 +115,78 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
                   "insert=#{inspect(insert_result)}"
             }
 
+          "stripe" ->
+            # MRR diagnostic — compare our calculation vs raw Stripe data
+            api_key = AdIntegrations.decrypt_access_token(integration)
+
+            case Req.get(
+                   "https://api.stripe.com/v1/subscriptions?status=active&limit=10&expand[]=data.discount.coupon",
+                   headers: [
+                     {"authorization", "Bearer #{api_key}"},
+                     {"stripe-version", "2024-12-18.acacia"}
+                   ]
+                 ) do
+              {:ok, %{status: 200, body: %{"data" => subs}}} ->
+                samples =
+                  Enum.map(subs, fn sub ->
+                    items = get_in(sub, ["items", "data"]) || []
+
+                    stripe_amount =
+                      Enum.reduce(items, 0, fn i, acc ->
+                        acc + (i["quantity"] || 1) * (get_in(i, ["price", "unit_amount"]) || 0)
+                      end) / 100.0
+
+                    interval =
+                      get_in(items, [Access.at(0), "price", "recurring", "interval"]) || "month"
+
+                    interval_count =
+                      get_in(items, [Access.at(0), "price", "recurring", "interval_count"]) || 1
+
+                    discount_pct = get_in(sub, ["discount", "coupon", "percent_off"]) || 0
+                    amount_off = (get_in(sub, ["discount", "coupon", "amount_off"]) || 0) / 100.0
+
+                    discounted =
+                      cond do
+                        discount_pct > 0 -> stripe_amount * (1 - discount_pct / 100.0)
+                        amount_off > 0 -> max(stripe_amount - amount_off, 0)
+                        true -> stripe_amount
+                      end
+
+                    our_mrr =
+                      case interval do
+                        "year" -> discounted / (12.0 * interval_count)
+                        "month" -> discounted / interval_count
+                        _ -> discounted
+                      end
+
+                    %{
+                      id: String.slice(sub["id"], 0, 20),
+                      status: sub["status"],
+                      amount: stripe_amount,
+                      discount: "#{discount_pct}% / $#{amount_off}",
+                      interval: "#{interval}/#{interval_count}",
+                      our_mrr: Float.round(our_mrr, 2)
+                    }
+                  end)
+
+                total_our_mrr = samples |> Enum.map(& &1.our_mrr) |> Enum.sum() |> Float.round(2)
+
+                %{
+                  status: :ok,
+                  message:
+                    "#{length(subs)} active subs sampled. Our MRR for sample: $#{total_our_mrr}. Details: #{inspect(samples, limit: :infinity)}"
+                }
+
+              {:ok, %{status: s, body: b}} ->
+                %{
+                  status: :error,
+                  message: "Stripe API #{s}: #{inspect(b) |> String.slice(0, 200)}"
+                }
+
+              {:error, reason} ->
+                %{status: :error, message: inspect(reason)}
+            end
+
           _ ->
             %{status: :ok, message: "Sync test not implemented for #{integration.platform}"}
         end
