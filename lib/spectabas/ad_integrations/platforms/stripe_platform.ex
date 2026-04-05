@@ -360,12 +360,22 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
   end
 
   @doc """
-  Fetch all subscriptions from Stripe (active, past_due, canceled).
+  Fetch subscriptions from Stripe for MRR snapshot.
+  Only fetches active, past_due, and trialing — skips canceled/incomplete (54K+).
   Returns {:ok, [subscription_map]} or {:error, reason}.
   """
   def fetch_subscriptions(integration) do
     api_key = AdIntegrations.decrypt_access_token(integration)
-    fetch_subscriptions_page(api_key, nil, [])
+
+    # Fetch each MRR-relevant status separately (Stripe API only allows one status per call)
+    statuses = ["active", "past_due", "trialing"]
+
+    Enum.reduce_while(statuses, {:ok, []}, fn status, {:ok, acc} ->
+      case fetch_subscriptions_page(api_key, status, nil, []) do
+        {:ok, subs} -> {:cont, {:ok, acc ++ subs}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
   end
 
   # Normalize a billing amount to its monthly equivalent (MRR).
@@ -386,10 +396,9 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
     end
   end
 
-  defp fetch_subscriptions_page(api_key, starting_after, acc) do
-    # Build query string manually to support multiple expand[] params
+  defp fetch_subscriptions_page(api_key, status, starting_after, acc) do
     base_params = [
-      {"status", "all"},
+      {"status", status},
       {"limit", "100"},
       {"expand[]", "data.customer"},
       {"expand[]", "data.discount.coupon"},
@@ -506,7 +515,7 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
 
         if has_more and length(subs) > 0 do
           last_id = List.last(subs)["id"]
-          fetch_subscriptions_page(api_key, last_id, new_acc)
+          fetch_subscriptions_page(api_key, status, last_id, new_acc)
         else
           {:ok, new_acc}
         end

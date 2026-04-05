@@ -1253,8 +1253,14 @@ defmodule SpectabasWeb.HealthController do
       integration ->
         api_key = Spectabas.AdIntegrations.decrypt_access_token(integration)
 
-        # Fetch first page of active subscriptions to count cancel_at_period_end
-        case Req.get("https://api.stripe.com/v1/subscriptions?status=active&limit=100",
+        # Fetch first page of active subs WITH item expansion to calculate MRR
+        qs = URI.encode_query([
+          {"status", "active"},
+          {"limit", "100"},
+          {"expand[]", "data.items.data.price"}
+        ])
+
+        case Req.get("https://api.stripe.com/v1/subscriptions?#{qs}",
                headers: [
                  {"authorization", "Bearer #{api_key}"},
                  {"stripe-version", "2024-12-18.acacia"}
@@ -1262,27 +1268,59 @@ defmodule SpectabasWeb.HealthController do
              ) do
           {:ok, %{status: 200, body: %{"data" => subs, "has_more" => has_more}}} ->
             cancel_count = Enum.count(subs, & &1["cancel_at_period_end"])
-            non_cancel = Enum.count(subs, &(!&1["cancel_at_period_end"]))
 
-            sample_canceling =
+            # Calculate MRR for these 100 subs using our logic
+            our_mrr =
+              Enum.reduce(subs, 0.0, fn sub, acc ->
+                items = get_in(sub, ["items", "data"]) || []
+                item_mrr = Enum.reduce(items, 0.0, fn item, iacc ->
+                  price = item["price"] || %{}
+                  unit = (price["unit_amount"] || 0) / 100.0
+                  qty = item["quantity"] || 1
+                  interval = get_in(price, ["recurring", "interval"]) || "month"
+                  ic = get_in(price, ["recurring", "interval_count"]) || 1
+                  amount = unit * qty
+                  mrr = case {interval, ic} do
+                    {"month", n} -> amount / n
+                    {"year", n} -> amount / (12.0 * n)
+                    {"week", n} -> amount * 52.0 / (12.0 * n)
+                    {"day", 30} -> amount
+                    {"day", 7} -> amount * 52.0 / 12.0
+                    {"day", n} -> amount * 365.0 / (12.0 * n)
+                    _ -> amount
+                  end
+                  iacc + mrr
+                end)
+                acc + item_mrr
+              end)
+
+            # Show raw Stripe data for first 5 subs to compare
+            sample =
               subs
-              |> Enum.filter(& &1["cancel_at_period_end"])
-              |> Enum.take(3)
+              |> Enum.take(5)
               |> Enum.map(fn s ->
+                items = get_in(s, ["items", "data"]) || []
+                first_price = get_in(items, [Access.at(0), "price"]) || %{}
                 %{
                   id: s["id"],
-                  cancel_at_period_end: s["cancel_at_period_end"],
                   status: s["status"],
-                  items: length(get_in(s, ["items", "data"]) || [])
+                  cancel_at_period_end: s["cancel_at_period_end"],
+                  unit_amount: first_price["unit_amount"],
+                  interval: get_in(first_price, ["recurring", "interval"]),
+                  interval_count: get_in(first_price, ["recurring", "interval_count"]),
+                  quantity: get_in(items, [Access.at(0), "quantity"]),
+                  item_count: length(items)
                 }
               end)
 
             %{
               page_size: length(subs),
               has_more: has_more,
+              total_active_on_page: length(subs),
               cancel_at_period_end_count: cancel_count,
-              will_renew_count: non_cancel,
-              sample_canceling: sample_canceling
+              our_mrr_for_page: Float.round(our_mrr, 2),
+              avg_mrr_per_sub: Float.round(our_mrr / max(length(subs), 1), 2),
+              sample_subs: sample
             }
 
           {:ok, %{status: s, body: b}} ->
