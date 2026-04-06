@@ -613,7 +613,13 @@ defmodule SpectabasWeb.DocsLive do
 
             **Step 1: Create the Worker**
 
-            In your Cloudflare dashboard: **Workers & Pages > Create > Create Worker**. Name it `analytics-proxy` and paste:
+            1. In your Cloudflare dashboard, go to **Workers & Pages** in the left sidebar
+            2. Click **Create** (blue button, top right)
+            3. Click **Create Worker**
+            4. Name it something like `analytics-proxy`
+            5. Click **Deploy** to create it with the default "Hello World" code
+            6. After deploy, click **Edit Code** (top right)
+            7. Replace the entire contents with the code below and click **Deploy**
 
             ```javascript
             export default {
@@ -631,7 +637,7 @@ defmodule SpectabasWeb.DocsLive do
                   });
                 }
 
-                // Proxy beacon endpoints
+                // Proxy beacon endpoints (/t/c/e, /t/c/p, /t/c/i, etc.)
                 if (url.pathname.startsWith('/t/c/')) {
                   const target = 'https://www.spectabas.com'
                     + url.pathname.replace('/t', '') + url.search;
@@ -648,19 +654,32 @@ defmodule SpectabasWeb.DocsLive do
                   return new Response(resp.body, { status: resp.status });
                 }
 
-                // Everything else passes through to origin
+                // Everything else passes through to your origin server
                 return fetch(request);
               }
             }
             ```
 
-            **Step 2: Add a Route**
+            **Step 2: Add a Route to Your Domain**
 
-            In your Worker settings: **Settings > Routes > Add Route**:
-            - Route: `www.yourdomain.com/t/*`
-            - Worker: `analytics-proxy`
+            The Worker needs to know which URLs to intercept. You do this by adding a route:
 
-            **Step 3: Update your tracking snippet**
+            1. Go to your Worker's page (click on the worker name in Workers & Pages)
+            2. Click the **Settings** tab at the top
+            3. Scroll down to **Domains & Routes**
+            4. Click the **Add** button (blue "+" button)
+            5. Choose **Route** (not Custom Domain)
+            6. Enter:
+               - **Route:** `www.yourdomain.com/t/*`
+               - **Zone:** select your domain from the dropdown
+               - **Failure mode:** leave as "Fail open" (if the worker errors, requests pass through normally)
+            7. Click **Add Route**
+
+            > **Important:** The route must match your main website domain exactly — e.g., `www.roommates.com/t/*` or `roommates.com/t/*` depending on which version your site uses. If your site uses both `www` and non-www, add a route for each.
+
+            **Step 3: Update Your Tracking Snippet**
+
+            Replace your existing tracking snippet with the proxy version. You can find the ready-to-copy proxy snippet in **Site Settings > Tracking Snippet > Proxy mode (Cloudflare)**.
 
             ```html
             <script defer data-id="YOUR_KEY"
@@ -668,11 +687,29 @@ defmodule SpectabasWeb.DocsLive do
               src="https://www.yourdomain.com/t/v1.js"></script>
             ```
 
-            That's it. No application code changes, no server config, no WAF rules needed.
+            The `data-proxy` attribute tells the tracker to send beacons to `/t/c/e` instead of the analytics subdomain. The `src` loads the script from `/t/v1.js` which the Worker proxies from Spectabas.
+
+            **Step 4: Verify It's Working**
+
+            1. Open your website in a browser
+            2. Open the Network tab in DevTools (F12)
+            3. Filter for `v1.js` — it should load from `www.yourdomain.com/t/v1.js` (not `b.yourdomain.com`)
+            4. Navigate to a page — you should see a POST to `www.yourdomain.com/t/c/e`
+            5. Check your Spectabas dashboard — pageviews should appear within seconds
+
+            > **Tip:** After enabling the proxy, you can keep both snippets (direct and proxy) during a transition period. Once you've verified the proxy is working, remove the direct snippet.
+
+            ### Troubleshooting
+
+            - **403 errors on `/t/c/e`:** If you have Cloudflare **Bot Fight Mode** enabled (Security > Bots), it will block `sendBeacon` POST requests because they can't solve JS challenges. Fix: go to **Security > WAF > Custom Rules**, create a new rule with expression `(http.request.uri.path matches "^/t/")` and action **Skip** (skip all remaining rules). This lets tracking beacons through while keeping bot protection on all other paths.
+
+            - **Worker not triggering:** Make sure the route zone matches your domain and the route pattern includes the `/*` wildcard. Test by visiting `www.yourdomain.com/t/v1.js` directly in your browser — you should see JavaScript code.
+
+            - **No data in dashboard:** Check that `data-id` matches your site's public key (found in Site Settings). Also verify the Worker is deployed (not still showing "Hello World").
+
+            - **IP geolocation wrong:** The Worker forwards `cf-connecting-ip` as `x-spectabas-real-ip`. If geo data shows Cloudflare's IP location instead of the visitor's, check that the header forwarding code in the Worker matches exactly as shown above.
 
             > **Why Cloudflare Worker?** Server-to-server proxies (e.g., a Phoenix plug or Nginx upstream) can be blocked by Render's built-in Cloudflare DDoS protection, which returns 403 "error code: 1000" for non-browser POST requests. Cloudflare Worker requests come from Cloudflare's own IP range, which is trusted by Render's edge.
-
-            > **Cloudflare Bot Fight Mode:** If you have Bot Fight Mode enabled (Security > Bots), add a WAF skip rule for `/t/*` paths. Bot Fight Mode serves JS challenges that `sendBeacon` cannot solve, which would block tracking beacons before they reach the Worker.
 
             ---
 
