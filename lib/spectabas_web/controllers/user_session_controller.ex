@@ -52,7 +52,7 @@ defmodule SpectabasWeb.UserSessionController do
             |> put_flash(:error, "Account temporarily locked due to too many failed attempts. Try again in 15 minutes.")
             |> redirect(to: ~p"/users/log-in")
 
-          {:allow, _} ->
+          {:allow, count} ->
             if user = Accounts.get_user_by_email_and_password(email, password) do
               # Reset lockout counter on successful login
               Hammer.delete_buckets("lockout:#{normalized_email}")
@@ -61,17 +61,13 @@ defmodule SpectabasWeb.UserSessionController do
               |> put_flash(:info, info)
               |> UserAuth.log_in_user(user, user_params)
             else
-              # Check if this failure triggers a lockout
-              case Hammer.check_rate("lockout:#{normalized_email}", 900_000, 5) do
-                {:deny, _} ->
-                  Spectabas.Audit.log("user.account_locked", %{
-                    email: normalized_email,
-                    ip: ip,
-                    reason: "5 failed login attempts"
-                  })
-
-                _ ->
-                  :ok
+              # Log lockout event when this was the 5th failure
+              if count >= 5 do
+                Spectabas.Audit.log("user.account_locked", %{
+                  email: normalized_email,
+                  ip: ip,
+                  reason: "5 failed login attempts"
+                })
               end
 
               conn

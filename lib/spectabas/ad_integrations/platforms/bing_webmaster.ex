@@ -209,6 +209,10 @@ defmodule Spectabas.AdIntegrations.Platforms.BingWebmaster do
     end
   end
 
+  @doc false
+  # Public wrapper for testing. Parses Bing's "/Date(ms)/" format into "YYYY-MM-DD".
+  def parse_bing_date(val), do: extract_bing_date(val)
+
   # Bing returns dates as "/Date(1734681600000-0800)/" — ms since epoch with optional tz offset
   defp extract_bing_date(nil), do: ""
 

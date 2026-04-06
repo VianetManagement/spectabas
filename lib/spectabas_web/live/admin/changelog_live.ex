@@ -45,6 +45,36 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.10.0 — 2026-04-06 UTC",
+       [
+         %{
+           title: "Test coverage: 67 new tests (609 → 676)",
+           description:
+             "Added tests for: account lockout (threshold, below threshold), password complexity " <>
+               "(numbers, letters, valid), Require2FA plug (redirect, expiry, pass-through), " <>
+               "2FA verification endpoint, AI config (encrypt/decrypt, configured?, credentials), " <>
+               "AI insights cache (put/get, TTL), sync log (create, query, cleanup), " <>
+               "Bing date parser (timezone offsets), anomaly detector structure."
+         },
+         %{
+           title: "Fix: account lockout double-counting",
+           description:
+             "Hammer.check_rate was called twice per login attempt (check + re-check on failure), " <>
+               "causing lockout after 3 attempts instead of 5. Fixed to single check_rate call."
+         },
+         %{
+           title: "Fix: exit rate insight accuracy",
+           description:
+             "Was using bounce rate (is_bounce) instead of actual exit rate. Now calculates " <>
+               "true exit rate using last page per session via argMax. Skips homepages and terminal pages."
+         },
+         %{
+           title: "Fix: Bing Webmaster data import",
+           description:
+             "Switched from GetQueryPageStats (0 rows) to GetQueryStats (5,872 rows). " <>
+               "Fixed date parser for /Date(ms-offset)/ format. Added bulk sync (single API call)."
+         }
+       ]},
       {"v5.9.0 — 2026-04-05 UTC",
        [
          %{

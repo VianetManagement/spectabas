@@ -2,6 +2,7 @@ defmodule SpectabasWeb.UserSessionControllerTest do
   use SpectabasWeb.ConnCase, async: true
 
   import Spectabas.AccountsFixtures
+  import Spectabas.DataCase, only: [errors_on: 1]
   alias Spectabas.Accounts
 
   setup do
@@ -142,6 +143,104 @@ defmodule SpectabasWeb.UserSessionControllerTest do
       assert redirected_to(conn) == ~p"/"
       refute get_session(conn, :user_token)
       assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "Logged out successfully"
+    end
+  end
+
+  describe "account lockout" do
+    test "locks account after 5 failed login attempts", %{conn: conn, user: user} do
+      user = set_password(user)
+      email = user.email
+
+      # Clear any existing lockout
+      Hammer.delete_buckets("lockout:#{String.downcase(String.trim(email))}")
+
+      # 5 failed attempts
+      for _ <- 1..5 do
+        post(conn, ~p"/users/log-in", %{
+          "user" => %{"email" => email, "password" => "wrong_password1"}
+        })
+      end
+
+      # 6th attempt should be locked
+      conn =
+        post(conn, ~p"/users/log-in", %{
+          "user" => %{"email" => email, "password" => valid_user_password()}
+        })
+
+      assert Phoenix.Flash.get(conn.assigns.flash, :error) =~ "temporarily locked"
+      assert redirected_to(conn) == ~p"/users/log-in"
+    end
+
+    test "allows login after failed attempts below threshold", %{conn: conn} do
+      user = user_fixture() |> set_password()
+      email = user.email
+
+      # 3 failed attempts (below 5 threshold)
+      for _ <- 1..3 do
+        post(conn, ~p"/users/log-in", %{
+          "user" => %{"email" => email, "password" => "wrong_password1"}
+        })
+      end
+
+      # Should still be able to log in
+      conn =
+        post(conn, ~p"/users/log-in", %{
+          "user" => %{"email" => email, "password" => valid_user_password()}
+        })
+
+      assert get_session(conn, :user_token)
+    end
+  end
+
+  describe "password complexity" do
+    test "changeset rejects password without numbers" do
+      user = user_fixture()
+
+      changeset =
+        Spectabas.Accounts.User.password_changeset(user, %{
+          password: "no_numbers_here",
+          password_confirmation: "no_numbers_here"
+        })
+
+      assert %{password: errors} = errors_on(changeset)
+      assert "must contain at least one number" in errors
+    end
+
+    test "changeset rejects password without letters" do
+      user = user_fixture()
+
+      changeset =
+        Spectabas.Accounts.User.password_changeset(user, %{
+          password: "123456789012",
+          password_confirmation: "123456789012"
+        })
+
+      assert %{password: errors} = errors_on(changeset)
+      assert "must contain at least one letter" in errors
+    end
+
+    test "changeset accepts valid password" do
+      user = user_fixture()
+
+      changeset =
+        Spectabas.Accounts.User.password_changeset(user, %{
+          password: "valid_password1",
+          password_confirmation: "valid_password1"
+        })
+
+      assert changeset.valid?
+    end
+  end
+
+  describe "2FA verification endpoint" do
+    test "GET /auth/2fa/verified sets session flag and redirects", %{conn: conn, user: user} do
+      conn =
+        conn
+        |> log_in_user(user)
+        |> get(~p"/auth/2fa/verified")
+
+      assert get_session(conn, :totp_verified_at)
+      assert redirected_to(conn) == ~p"/dashboard"
     end
   end
 end

@@ -32,6 +32,13 @@ config :wax_,
   origin: "https://localhost",
   rp_id: "localhost"
 
+# Higher rate limits for tests to avoid cross-test interference
+config :spectabas, :rate_limits,
+  collect: {300, 60_000},
+  login: {100, 60_000},
+  password_reset: {50, 60_000},
+  invite: {50, 60_000}
+
 config :logger, level: :warning
 
 config :phoenix, :plug_init_mode, :runtime
