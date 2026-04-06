@@ -27,8 +27,8 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
        |> assign(:user_tz, user.timezone || "America/New_York")
        |> assign(:form, to_form(changeset))
        |> assign(:snippet, Sites.snippet_code(site))
+       |> assign(:proxy_snippet, Sites.proxy_snippet_code(site))
        |> assign(:render_domain_status, check_render_domain(site.domain))
-       |> assign(:example_html, example_html(site))
        |> assign(:ad_integrations, ensure_integrations(site))
        |> assign(:configuring_platform, nil)}
     end
@@ -54,7 +54,8 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
          |> put_flash(:info, "Settings updated.")
          |> assign(:site, site)
          |> assign(:form, to_form(changeset))
-         |> assign(:snippet, Sites.snippet_code(site))}
+         |> assign(:snippet, Sites.snippet_code(site))
+         |> assign(:proxy_snippet, Sites.proxy_snippet_code(site))}
 
       {:error, changeset} ->
         {:noreply, assign(socket, :form, to_form(changeset))}
@@ -625,33 +626,58 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
         <%!-- Tracking Snippet --%>
         <div class="bg-white rounded-lg shadow p-6 mb-8">
           <h2 class="text-lg font-semibold text-gray-900 mb-4">Tracking Snippet</h2>
-          <p class="text-sm text-gray-600 mb-2">
-            Copy and paste this snippet into the
-            <code class="bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">&lt;head&gt;</code>
-            section of every page you want to track. It should go before the closing
-            <code class="bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">&lt;/head&gt;</code>
-            tag.
-          </p>
-          <div class="relative mt-4">
-            <pre class="bg-gray-900 text-gray-100 rounded-lg p-4 text-sm overflow-x-auto"><code><%= @snippet %></code></pre>
-            <button
-              id="copy-snippet-btn"
-              data-text={@snippet}
-              phx-click={
-                JS.dispatch("spectabas:clipcopy", to: "#copy-snippet-btn")
-                |> JS.set_attribute({"data-copied", "true"}, to: "#copy-snippet-btn")
-              }
-              class="absolute top-2 right-2 px-3 py-1 bg-gray-700 text-white rounded text-xs hover:bg-gray-600"
-            >
-              Copy
-            </button>
+
+          <div class="mb-5">
+            <h3 class="text-sm font-medium text-gray-700 mb-2">Standard (direct)</h3>
+            <p class="text-xs text-gray-500 mb-2">
+              Uses the analytics subdomain directly. Add to your site's <code class="bg-gray-100 px-1 rounded text-xs">&lt;head&gt;</code> tag.
+            </p>
+            <div class="relative">
+              <pre class="bg-gray-900 text-gray-100 rounded-lg p-4 text-sm overflow-x-auto"><code><%= @snippet %></code></pre>
+              <button
+                id="copy-snippet-btn"
+                data-text={@snippet}
+                phx-click={
+                  JS.dispatch("spectabas:clipcopy", to: "#copy-snippet-btn")
+                  |> JS.set_attribute({"data-copied", "true"}, to: "#copy-snippet-btn")
+                }
+                class="absolute top-2 right-2 px-3 py-1 bg-gray-700 text-white rounded text-xs hover:bg-gray-600"
+              >
+                Copy
+              </button>
+            </div>
           </div>
-          <div class="mt-4 bg-gray-50 rounded-lg p-4 text-sm text-gray-600">
-            <p class="font-medium text-gray-700 mb-2">Example placement:</p>
-            <pre class="text-xs font-mono text-gray-500 overflow-x-auto"><code>{@example_html}</code></pre>
-            <p class="mt-3 text-xs text-gray-500">
-              The script loads asynchronously and won't slow down your page.
-              If you use a CMS or site builder, look for a "Custom HTML" or "Header Scripts" setting.
+
+          <div>
+            <h3 class="text-sm font-medium text-gray-700 mb-2">
+              Proxy mode (Cloudflare)
+              <span class="ml-1 text-xs font-normal text-gray-400">— recommended for ad blocker evasion</span>
+            </h3>
+            <p class="text-xs text-gray-500 mb-2">
+              Routes tracking through your main domain via a Cloudflare Worker. Bypasses most ad blockers.
+            </p>
+            <div class="relative">
+              <pre class="bg-gray-900 text-gray-100 rounded-lg p-4 text-sm overflow-x-auto"><code><%= @proxy_snippet %></code></pre>
+              <button
+                id="copy-proxy-btn"
+                data-text={@proxy_snippet}
+                phx-click={
+                  JS.dispatch("spectabas:clipcopy", to: "#copy-proxy-btn")
+                  |> JS.set_attribute({"data-copied", "true"}, to: "#copy-proxy-btn")
+                }
+                class="absolute top-2 right-2 px-3 py-1 bg-gray-700 text-white rounded text-xs hover:bg-gray-600"
+              >
+                Copy
+              </button>
+            </div>
+            <p class="mt-2 text-xs text-gray-500">
+              Requires a Cloudflare Worker on your domain.
+              <.link
+                navigate={~p"/docs/getting-started#ad-blocker-evasion"}
+                class="text-indigo-600 hover:text-indigo-800 font-medium"
+              >
+                Cloudflare Worker setup guide &rarr;
+              </.link>
             </p>
           </div>
         </div>
@@ -1658,26 +1684,6 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
 
   defp ad_platform_configured?(site, platform) do
     Spectabas.AdIntegrations.Credentials.configured?(site, platform)
-  end
-
-  defp example_html(site) do
-    snippet = Sites.snippet_code(site)
-
-    """
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="utf-8">
-        <title>Your Website</title>
-
-        <!-- Spectabas Analytics -->
-        #{snippet}
-      </head>
-      <body>
-        ...
-      </body>
-    </html>\
-    """
   end
 
   defp check_render_domain(domain) do

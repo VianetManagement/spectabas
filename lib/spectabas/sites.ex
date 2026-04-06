@@ -271,6 +271,23 @@ defmodule Spectabas.Sites do
     |> String.trim()
   end
 
+  @doc "Proxy snippet for Cloudflare Workers."
+  def proxy_snippet_code(%Site{} = site) do
+    parent = parent_domain_for(site)
+    gdpr_attr = if site.gdpr_mode == "on", do: ~s( data-gdpr="on"), else: ""
+
+    xd_attr =
+      if site.cross_domain_sites not in [nil, []],
+        do: ~s( data-xd="#{Enum.join(site.cross_domain_sites, ",")}"),
+        else: ""
+
+    """
+    <script defer data-id="#{site.public_key}"#{gdpr_attr}#{xd_attr} data-proxy="https://www.#{parent}/t" src="https://www.#{parent}/t/v1.js"></script>
+    <noscript><img src="https://www.#{parent}/t/c/p?s=#{site.public_key}" alt="" style="position:absolute;width:0;height:0" /></noscript>\
+    """
+    |> String.trim()
+  end
+
   @doc """
   Returns an `%Ecto.Changeset{}` for tracking site changes.
   """

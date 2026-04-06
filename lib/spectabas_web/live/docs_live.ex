@@ -491,9 +491,30 @@ defmodule SpectabasWeb.DocsLive do
             <script defer data-id="YOUR_PUBLIC_KEY" src="https://b.example.com/assets/v1.js"></script>
             ```
 
+            ### Example Placement
+
+            ```html
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <meta charset="utf-8">
+                <title>Your Website</title>
+
+                <!-- Spectabas Analytics -->
+                <script defer data-id="YOUR_PUBLIC_KEY"
+                  src="https://b.example.com/assets/v1.js"></script>
+              </head>
+              <body>
+                ...
+              </body>
+            </html>
+            ```
+
+            The script loads asynchronously and won't slow down your page. If you use a CMS or site builder, look for a "Custom HTML" or "Header Scripts" setting.
+
             That's it! Pageviews will start appearing in your dashboard within seconds.
 
-            > **Tip:** The tracker is only 8KB, loads asynchronously, and is designed to avoid ad blockers.
+            > **Tip:** The tracker is only 8KB, loads asynchronously, and is designed to avoid ad blockers. For maximum evasion, use the [Cloudflare Worker proxy](#ad-blocker-evasion).
             """
           },
           %{
