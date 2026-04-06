@@ -164,6 +164,40 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
         _ -> 0
       end
 
+    # Oban queue depth
+    oban_pending =
+      try do
+        import Ecto.Query
+        Spectabas.ObanRepo.aggregate(
+          from(j in "oban_jobs", where: j.state in ["available", "scheduled", "retryable"]),
+          :count
+        )
+      rescue
+        _ -> 0
+      end
+
+    oban_executing =
+      try do
+        import Ecto.Query
+        Spectabas.ObanRepo.aggregate(
+          from(j in "oban_jobs", where: j.state == "executing"),
+          :count
+        )
+      rescue
+        _ -> 0
+      end
+
+    # DB pool stats
+    web_pool = db_pool_stats(Spectabas.Repo)
+    oban_pool = db_pool_stats(Spectabas.ObanRepo)
+
+    # Crash recovery file
+    crash_file_size =
+      case File.stat("/tmp/spectabas_ingest_buffer.bin") do
+        {:ok, %{size: size}} -> size
+        _ -> 0
+      end
+
     tz = socket.assigns[:timezone] || "America/New_York"
 
     events_per_min =
@@ -190,6 +224,11 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
     |> assign(:events_per_min, events_per_min)
     |> assign(:failed_count, failed_count)
     |> assign(:flush_tasks, flush_tasks)
+    |> assign(:oban_pending, oban_pending)
+    |> assign(:oban_executing, oban_executing)
+    |> assign(:web_pool, web_pool)
+    |> assign(:oban_pool, oban_pool)
+    |> assign(:crash_file_kb, div(crash_file_size, 1024))
     |> assign(:click_id_stats, click_id_stats)
     |> assign(:click_id_today, click_id_today)
   end
@@ -250,6 +289,48 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
           value={format_number(@failed_count)}
           color={if @failed_count > 0, do: "red", else: "green"}
           sublabel="pending retry"
+        />
+      </div>
+
+      <%!-- Background Jobs & DB Pools --%>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <.metric_card
+          label="Oban Pending"
+          value={format_number(@oban_pending)}
+          color={cond do
+            @oban_pending >= 500_000 -> "red"
+            @oban_pending >= 10_000 -> "yellow"
+            true -> "green"
+          end}
+          sublabel="queued jobs"
+        />
+        <.metric_card
+          label="Oban Executing"
+          value={@oban_executing}
+          color="blue"
+          sublabel="active workers"
+        />
+        <.metric_card
+          label="Web DB Pool"
+          value={"#{@web_pool.pool_size}"}
+          color="gray"
+          sublabel="connections (Repo)"
+        />
+        <.metric_card
+          label="Oban DB Pool"
+          value={"#{@oban_pool.pool_size}"}
+          color="gray"
+          sublabel="connections (ObanRepo)"
+        />
+      </div>
+
+      <%!-- Crash Recovery --%>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <.metric_card
+          label="Crash Recovery File"
+          value={if @crash_file_kb > 0, do: "#{@crash_file_kb} KB", else: "None"}
+          color={if @crash_file_kb > 0, do: "yellow", else: "green"}
+          sublabel={if @crash_file_kb > 0, do: "buffered events on disk", else: "buffer clean"}
         />
       </div>
 
@@ -426,5 +507,16 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
       <p :if={@sublabel != ""} class="text-xs text-gray-400 mt-0.5">{@sublabel}</p>
     </div>
     """
+  end
+
+  defp db_pool_stats(repo) do
+    try do
+      %{
+        pool_size: repo.config()[:pool_size] || 0,
+        checked_out: length(DBConnection.get_connection_metrics(repo, :all) || [])
+      }
+    rescue
+      _ -> %{pool_size: repo.config()[:pool_size] || 0, checked_out: 0}
+    end
   end
 end
