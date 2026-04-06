@@ -856,6 +856,38 @@ defmodule SpectabasWeb.HealthController do
         "mrr_diag" ->
           ecom_diag_mrr(conn, site_id)
 
+        "geo_diag" ->
+          site_p = Spectabas.ClickHouse.param(site_id)
+
+          regions = case Spectabas.ClickHouse.query("""
+            SELECT ip_region_name, ip_country, count() AS cnt, uniq(ip_address) AS unique_ips
+            FROM events
+            WHERE site_id = #{site_p} AND timestamp >= now() - INTERVAL 7 DAY
+              AND ip_is_bot = 0 AND event_type = 'pageview' AND ip_region_name != ''
+            GROUP BY ip_region_name, ip_country
+            ORDER BY cnt DESC
+            LIMIT 20
+          """) do
+            {:ok, rows} -> rows
+            {:error, e} -> [%{"error" => inspect(e)}]
+          end
+
+          # Check for duplicate IPs
+          top_ips = case Spectabas.ClickHouse.query("""
+            SELECT ip_address, ip_region_name, ip_country, count() AS cnt
+            FROM events
+            WHERE site_id = #{site_p} AND timestamp >= now() - INTERVAL 7 DAY
+              AND ip_is_bot = 0 AND event_type = 'pageview'
+            GROUP BY ip_address, ip_region_name, ip_country
+            ORDER BY cnt DESC
+            LIMIT 10
+          """) do
+            {:ok, rows} -> rows
+            {:error, e} -> [%{"error" => inspect(e)}]
+          end
+
+          json(conn, %{action: "geo_diag", top_regions: regions, top_ips: top_ips})
+
         "bing_diag" ->
           ecom_diag_bing(conn, site_id)
 
