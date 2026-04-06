@@ -463,9 +463,9 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
                 </td>
               </tr>
               <tr :for={row <- @rows} class="hover:bg-gray-50">
-                <td class="px-6 py-4 text-sm font-medium text-gray-900">
-                  <span class="flex items-center gap-2">
-                    {row["source"] || "Direct"}
+                <td class="px-6 py-4 text-sm font-medium text-gray-900 max-w-xs">
+                  <span class="flex items-center gap-2" title={row["source"] || "Direct"}>
+                    <span class="truncate max-w-[250px]">{row["source"] || "Direct"}</span>
                     <span
                       :if={row["ad_platform"] && row["ad_platform"] != ""}
                       class={[
