@@ -19,9 +19,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BingWebmaster do
     api_key = AdIntegrations.decrypt_access_token(integration)
     encoded_url = URI.encode(site_url, &URI.char_unreserved?/1)
 
-    url =
-      "#{@api_url}/GetQueryPageStats?apikey=#{api_key}&siteUrl=#{encoded_url}" <>
-        "&query=%27%27"
+    url = "#{@api_url}/GetQueryStats?apikey=#{api_key}&siteUrl=#{encoded_url}"
 
     case Req.get(url) do
       {:ok, %{status: 200, body: %{"d" => data}}} when is_list(data) ->
@@ -82,7 +80,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BingWebmaster do
       api_key = AdIntegrations.decrypt_access_token(integration)
       encoded_url = URI.encode(site_url, &URI.char_unreserved?/1)
 
-      url = "#{@api_url}/GetQueryPageStats?apikey=#{api_key}&siteUrl=#{encoded_url}&query=%27%27"
+      url = "#{@api_url}/GetQueryStats?apikey=#{api_key}&siteUrl=#{encoded_url}"
 
       case Req.get(url) do
         {:ok, %{status: 200, body: %{"d" => data}}} when is_list(data) ->
@@ -211,12 +209,12 @@ defmodule Spectabas.AdIntegrations.Platforms.BingWebmaster do
     end
   end
 
-  # Bing returns dates as "/Date(1234567890000)/" format
+  # Bing returns dates as "/Date(1734681600000-0800)/" — ms since epoch with optional tz offset
   defp extract_bing_date(nil), do: ""
 
   defp extract_bing_date(date_str) when is_binary(date_str) do
-    case Regex.run(~r/\/Date\((\d+)\)\//, date_str) do
-      [_, ms] ->
+    case Regex.run(~r/\/Date\((\d+)([+-]\d+)?\)\//, date_str) do
+      [_, ms | _] ->
         ms
         |> String.to_integer()
         |> div(1000)
