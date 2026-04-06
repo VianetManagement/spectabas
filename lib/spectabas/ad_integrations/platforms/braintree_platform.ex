@@ -52,6 +52,9 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
         total_items = parse_total_items(resp_body)
         page_size = parse_page_size(resp_body)
 
+        Logger.info("[BraintreeSync] Page 1: #{length(first_page)} txns parsed, total_items=#{total_items}, page_size=#{page_size}")
+        Logger.info("[BraintreeSync] Response snippet: #{String.slice(to_string(resp_body), 0, 500)}")
+
         if total_items > page_size and page_size > 0 do
           # Braintree search results include IDs — fetch remaining pages
           total_pages = ceil(total_items / page_size)
