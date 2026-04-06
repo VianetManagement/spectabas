@@ -856,6 +856,9 @@ defmodule SpectabasWeb.HealthController do
         "mrr_diag" ->
           ecom_diag_mrr(conn, site_id)
 
+        "bing_diag" ->
+          ecom_diag_bing(conn, site_id)
+
         _ ->
           ecom_diag_today(conn, site_id)
       end
@@ -1330,6 +1333,59 @@ defmodule SpectabasWeb.HealthController do
 
           {:error, e} ->
             %{error: inspect(e) |> String.slice(0, 200)}
+        end
+    end
+  end
+
+  defp ecom_diag_bing(conn, site_id) do
+    import Ecto.Query
+
+    case Spectabas.Repo.one(
+           from(a in Spectabas.AdIntegrations.AdIntegration,
+             where: a.site_id == ^site_id and a.platform == "bing_webmaster" and a.status == "active",
+             limit: 1
+           )
+         ) do
+      nil ->
+        json(conn, %{error: "No active Bing Webmaster integration"})
+
+      integration ->
+        api_key = Spectabas.AdIntegrations.decrypt_access_token(integration)
+        site_url = (integration.extra || %{})["site_url"] || ""
+        encoded_url = URI.encode(site_url, &URI.char_unreserved?/1)
+
+        url = "https://ssl.bing.com/webmaster/api.svc/json/GetQueryPageStats?apikey=#{api_key}&siteUrl=#{encoded_url}&query=%27%27"
+
+        case Req.get(url) do
+          {:ok, %{status: status, body: body}} ->
+            # Extract sample data without exposing full response
+            sample =
+              case body do
+                %{"d" => data} when is_list(data) ->
+                  %{
+                    format: "d is list",
+                    total_rows: length(data),
+                    sample_row: List.first(data) |> inspect() |> String.slice(0, 500),
+                    sample_keys: if(List.first(data), do: Map.keys(List.first(data)), else: [])
+                  }
+
+                %{"d" => d} when is_map(d) ->
+                  %{format: "d is map", keys: Map.keys(d), sample: inspect(d) |> String.slice(0, 500)}
+
+                _ ->
+                  %{format: "unexpected", keys: if(is_map(body), do: Map.keys(body), else: []), sample: inspect(body) |> String.slice(0, 500)}
+              end
+
+            json(conn, %{
+              action: "bing_diag",
+              site_url: site_url,
+              encoded_url: encoded_url,
+              http_status: status,
+              response_structure: sample
+            })
+
+          {:error, reason} ->
+            json(conn, %{error: inspect(reason) |> String.slice(0, 300)})
         end
     end
   end
