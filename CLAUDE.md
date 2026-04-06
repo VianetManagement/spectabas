@@ -276,7 +276,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Mobile responsiveness** — scrollable tables, collapsible mobile nav bar
 - **Accessible top nav** — WCAG AA contrast compliance
 - **Documentation pages** — docs split into `/docs` (index), `/docs/getting-started`, `/docs/dashboard`, `/docs/conversions`, `/docs/api`, `/docs/admin` with cross-category search. Requires login (behind :require_authenticated_user). Public pages: `/privacy`, `/terms`, homepage.
-- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.11.0)
+- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.12.0)
 - **Legal** — Privacy Policy at `/privacy` and Terms of Service at `/terms` (public, no auth required). Entity: Spectabas, Kent County MI. Contact: howdy@spectabas.com. Arbitration clause (AAA, Kent County). 18+ age restriction.
 
 ## Important Patterns
@@ -321,6 +321,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Ad platform credentials**: Stored per-site as encrypted JSON blob in `sites.ad_credentials_encrypted`. No environment variables needed. Managed via `Spectabas.AdIntegrations.Credentials` module. Each site configures its own OAuth app credentials from the Settings page.
 - **ClickHouse argMinIf/argMaxIf empty string**: These functions return `''` (empty string, not NULL) when no rows match the condition. Always wrap with `nullIf(..., '')` before `ifNull` fallback, e.g. `ifNull(nullIf(argMinIf(expr, ts, cond), ''), 'Direct')`.
 - **RUM collection**: Tracker sends `_rum` (nav timing) and `_cwv` (Core Web Vitals) custom events. Uses `performance.getEntriesByType("navigation")` with `performance.timing` fallback. IMPORTANT: PerformanceNavigationTiming uses `nav.startTime` (always 0) for the navigation baseline — NOT `nav.navigationStart` which only exists on the deprecated `performance.timing`. Queries use `quantileIf` to exclude zeros. ClickHouse `quantileIf` returns `nan` when no rows match — `parse_rows` sanitizes `nan`→`null` before JSON parsing.
+- **Braintree pagination**: Braintree search API returns max 50 results per page. `fetch_all_pages/4` handles pagination by reading `total-items`, `page-size`, and `search-result-id` from the response. All fetch functions (transactions, refunds) use this. High-volume sites (thousands of txns/day) require pagination.
 - **Stripe PaymentIntents vs Charges**: Always use `/v1/payment_intents` (pi_* IDs), NOT `/v1/charges` (ch_* IDs). Charges can have multiples per payment (e.g. auth + capture), causing overcounting. PaymentIntents represent a single logical payment.
 - **Ecommerce source filtering**: When ANY Stripe integration record exists (active or not), revenue dashboards filter to `import_source = 'stripe'` only (pi_* orders). Prevents double-counting with API-submitted transactions.
 - **import_source column**: `ecommerce_events` has `import_source` LowCardinality(String) — values: `"stripe"`, `"braintree"`, `""` (API). Clear Data only deletes rows matching that integration's source. This prevents one integration's Clear Data from wiping another's data.

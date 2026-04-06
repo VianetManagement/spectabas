@@ -3,6 +3,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
 
   @moduledoc "Site settings — domain, timezone, GDPR, tracking, ecommerce config."
 
+  require Logger
   alias Spectabas.{Accounts, Sites}
   import SpectabasWeb.Dashboard.SidebarComponent
 
@@ -173,36 +174,66 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
         _ -> 30
       end
 
+    alias Spectabas.AdIntegrations.SyncLog
+
+    SyncLog.log(integration, "backfill_start", "ok", "Backfill started for last #{num_days} days")
+
     Task.start(fn ->
+      start = System.monotonic_time(:millisecond)
+
       try do
         today = Date.utc_today()
 
-        Enum.each(0..num_days, fn offset ->
-          date = Date.add(today, -offset)
+        result =
+          Enum.reduce_while(0..num_days, 0, fn offset, synced_days ->
+            date = Date.add(today, -offset)
 
-          case integration.platform do
-            "stripe" ->
-              Spectabas.AdIntegrations.Platforms.StripePlatform.sync_charges(
-                integration.site,
-                integration,
-                date
-              )
+            day_result =
+              case integration.platform do
+                "stripe" ->
+                  Spectabas.AdIntegrations.Platforms.StripePlatform.sync_charges(
+                    integration.site,
+                    integration,
+                    date
+                  )
 
-            "braintree" ->
-              Spectabas.AdIntegrations.Platforms.BraintreePlatform.sync_transactions(
-                integration.site,
-                integration,
-                date
-              )
+                "braintree" ->
+                  Spectabas.AdIntegrations.Platforms.BraintreePlatform.sync_transactions(
+                    integration.site,
+                    integration,
+                    date
+                  )
 
-            _ ->
-              :noop
-          end
-        end)
+                _ ->
+                  :noop
+              end
+
+            case day_result do
+              {:error, reason} when reason in [
+                "Braintree credentials not configured",
+                "Invalid Braintree credentials"
+              ] ->
+                Logger.warning("[Backfill] Aborting — #{reason}")
+                ms = System.monotonic_time(:millisecond) - start
+                SyncLog.log(integration, "backfill", "error", reason, duration_ms: ms)
+                {:halt, {:error, reason}}
+
+              _ ->
+                {:cont, synced_days + 1}
+            end
+          end)
+
+        case result do
+          {:error, _} -> :ok
+          days_done ->
+            ms = System.monotonic_time(:millisecond) - start
+            SyncLog.log(integration, "backfill", "ok", "Backfill completed: #{days_done} days synced", duration_ms: ms)
+        end
       rescue
         e ->
-          require Logger
+          ms = System.monotonic_time(:millisecond) - start
           Logger.error("[Backfill] Payment backfill failed: #{Exception.message(e)}")
+          SyncLog.log(integration, "backfill", "error", Exception.message(e), duration_ms: ms)
       end
     end)
 

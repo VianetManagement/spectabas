@@ -15,8 +15,16 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
   Returns {:ok, [transaction_map]} or {:error, reason}.
   """
   def fetch_transactions(integration, date) do
-    {merchant_id, auth_header} = auth(integration)
+    case auth(integration) do
+      {:error, :no_credentials} ->
+        {:error, "Braintree credentials not configured"}
 
+      {:ok, merchant_id, auth_header} ->
+        fetch_transactions_with_auth(merchant_id, auth_header, date)
+    end
+  end
+
+  defp fetch_transactions_with_auth(merchant_id, auth_header, date) do
     day_start = Date.to_iso8601(date) <> "T00:00:00Z"
     day_end = Date.to_iso8601(Date.add(date, 1)) <> "T00:00:00Z"
 
@@ -32,10 +40,46 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
 
     url = "#{base_url(merchant_id)}/transactions/advanced_search"
 
-    case Req.post(url, body: body, headers: xml_headers(auth_header)) do
+    # Braintree search returns paginated results. First request returns page 1
+    # with search_results containing page-size and ids. Fetch all pages.
+    fetch_all_pages(url, body, auth_header, merchant_id)
+  end
+
+  defp fetch_all_pages(search_url, search_body, auth_header, merchant_id) do
+    case Req.post(search_url, body: search_body, headers: xml_headers(auth_header)) do
       {:ok, %{status: 200, body: resp_body}} ->
-        transactions = parse_transactions(resp_body)
-        {:ok, transactions}
+        first_page = parse_transactions(resp_body)
+        total_items = parse_total_items(resp_body)
+        page_size = parse_page_size(resp_body)
+
+        if total_items > page_size and page_size > 0 do
+          # Braintree search results include IDs — fetch remaining pages
+          total_pages = ceil(total_items / page_size)
+          search_id = parse_search_id(resp_body)
+
+          remaining =
+            if search_id != "" do
+              2..total_pages
+              |> Enum.flat_map(fn page ->
+                page_url = "#{base_url(merchant_id)}/transactions/advanced_search_ids/#{search_id}/#{page}"
+
+                case Req.post(page_url, body: search_body, headers: xml_headers(auth_header)) do
+                  {:ok, %{status: 200, body: page_body}} ->
+                    parse_transactions(page_body)
+
+                  _ ->
+                    Logger.warning("[BraintreeSync] Failed to fetch page #{page}")
+                    []
+                end
+              end)
+            else
+              []
+            end
+
+          {:ok, first_page ++ remaining}
+        else
+          {:ok, first_page}
+        end
 
       {:ok, %{status: 401}} ->
         {:error, "Invalid Braintree credentials"}
@@ -48,67 +92,114 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
     end
   end
 
+  defp parse_total_items(body) do
+    case Regex.run(~r/<total-items[^>]*>(\d+)<\/total-items>/, body) do
+      [_, count] -> String.to_integer(count)
+      _ -> 0
+    end
+  end
+
+  defp parse_page_size(body) do
+    case Regex.run(~r/<page-size[^>]*>(\d+)<\/page-size>/, body) do
+      [_, size] -> String.to_integer(size)
+      _ -> 50
+    end
+  end
+
+  defp parse_search_id(body) do
+    case Regex.run(~r/<search-results>.*?<ids[^>]*search-result-id="([^"]+)".*?<\/search-results>/s, body) do
+      [_, id] -> id
+      _ ->
+        # Try alternative format
+        case Regex.run(~r/search-result-id="([^"]+)"/, body) do
+          [_, id] -> id
+          _ -> ""
+        end
+    end
+  end
+
   @doc """
   Fetch refunded transactions from Braintree for a given date.
   """
   def fetch_refunds(integration, date) do
-    {merchant_id, auth_header} = auth(integration)
+    case auth(integration) do
+      {:error, :no_credentials} ->
+        {:error, "Braintree credentials not configured"}
 
-    day_start = Date.to_iso8601(date) <> "T00:00:00Z"
-    day_end = Date.to_iso8601(Date.add(date, 1)) <> "T00:00:00Z"
+      {:ok, merchant_id, auth_header} ->
+        day_start = Date.to_iso8601(date) <> "T00:00:00Z"
+        day_end = Date.to_iso8601(Date.add(date, 1)) <> "T00:00:00Z"
 
-    body = """
-    <search>
-      <created-at>
-        <min type="datetime">#{day_start}</min>
-        <max type="datetime">#{day_end}</max>
-      </created-at>
-      <type><is>credit</is></type>
-    </search>
-    """
+        body = """
+        <search>
+          <created-at>
+            <min type="datetime">#{day_start}</min>
+            <max type="datetime">#{day_end}</max>
+          </created-at>
+          <type><is>credit</is></type>
+        </search>
+        """
 
-    url = "#{base_url(merchant_id)}/transactions/advanced_search"
+        url = "#{base_url(merchant_id)}/transactions/advanced_search"
 
-    case Req.post(url, body: body, headers: xml_headers(auth_header)) do
-      {:ok, %{status: 200, body: resp_body}} ->
-        refunds = parse_refunds(resp_body)
-        {:ok, refunds}
+        case fetch_all_pages(url, body, auth_header, merchant_id) do
+          {:ok, transactions} ->
+            refunds =
+              transactions
+              |> Enum.map(fn t ->
+                %{
+                  id: t.id,
+                  amount: t.amount,
+                  refunded_transaction_id: extract_refunded_id_from_txn(t)
+                }
+              end)
+              |> Enum.reject(fn r -> r.refunded_transaction_id == "" end)
 
-      _ ->
-        {:ok, []}
+            {:ok, refunds}
+
+          error ->
+            error
+        end
     end
   end
+
+  defp extract_refunded_id_from_txn(%{refunded_transaction_id: id}) when is_binary(id) and id != "", do: id
+  defp extract_refunded_id_from_txn(_), do: ""
 
   @doc """
   Fetch all subscriptions from Braintree.
   """
   def fetch_subscriptions(integration) do
-    {merchant_id, auth_header} = auth(integration)
+    case auth(integration) do
+      {:error, :no_credentials} ->
+        {:error, "Braintree credentials not configured"}
 
-    # Search for active + past_due + canceled subscriptions
-    body = """
-    <search>
-      <status type="array">
-        <item>Active</item>
-        <item>Past Due</item>
-        <item>Canceled</item>
-        <item>Expired</item>
-      </status>
-    </search>
-    """
+      {:ok, merchant_id, auth_header} ->
+        # Search for active + past_due + canceled subscriptions
+        body = """
+        <search>
+          <status type="array">
+            <item>Active</item>
+            <item>Past Due</item>
+            <item>Canceled</item>
+            <item>Expired</item>
+          </status>
+        </search>
+        """
 
-    url = "#{base_url(merchant_id)}/subscriptions/advanced_search"
+        url = "#{base_url(merchant_id)}/subscriptions/advanced_search"
 
-    case Req.post(url, body: body, headers: xml_headers(auth_header)) do
-      {:ok, %{status: 200, body: resp_body}} ->
-        subs = parse_subscriptions(resp_body)
-        {:ok, subs}
+        case Req.post(url, body: body, headers: xml_headers(auth_header)) do
+          {:ok, %{status: 200, body: resp_body}} ->
+            subs = parse_subscriptions(resp_body)
+            {:ok, subs}
 
-      {:ok, %{status: status}} ->
-        {:error, "Braintree subscriptions HTTP #{status}"}
+          {:ok, %{status: status}} ->
+            {:error, "Braintree subscriptions HTTP #{status}"}
 
-      {:error, reason} ->
-        {:error, "Braintree API error: #{inspect(reason)}"}
+          {:error, reason} ->
+            {:error, "Braintree API error: #{inspect(reason)}"}
+        end
     end
   end
 
@@ -223,8 +314,9 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
         Logger.info("[BraintreeSync] Processed #{length(refunds)} refunds for #{date}")
         :ok
 
-      _ ->
-        :ok
+      {:error, reason} ->
+        Logger.warning("[BraintreeSync] Refund fetch failed: #{inspect(reason)}")
+        {:error, reason}
     end
   end
 
@@ -310,9 +402,13 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
     merchant_id = creds["merchant_id"] || ""
     public_key = creds["public_key"] || ""
     private_key = creds["private_key"] || ""
-    auth = Base.encode64("#{public_key}:#{private_key}")
 
-    {merchant_id, "Basic #{auth}"}
+    if merchant_id == "" or public_key == "" or private_key == "" do
+      {:error, :no_credentials}
+    else
+      auth = Base.encode64("#{public_key}:#{private_key}")
+      {:ok, merchant_id, "Basic #{auth}"}
+    end
   end
 
   defp base_url(merchant_id) do
@@ -342,28 +438,14 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
         currency: extract_xml(block, "currency-iso-code") |> String.upcase(),
         email: extract_xml(block, "email"),
         created_at: extract_xml(block, "created-at") |> format_bt_datetime(),
-        status: extract_xml(block, "status")
+        status: extract_xml(block, "status"),
+        refunded_transaction_id: extract_xml(block, "refunded-transaction-id")
       }
     end)
     |> Enum.reject(fn t -> t.id == "" end)
   end
 
   defp parse_transactions(_), do: []
-
-  defp parse_refunds(body) when is_binary(body) do
-    ~r/<transaction>.*?<\/transaction>/s
-    |> Regex.scan(body)
-    |> Enum.map(fn [block] ->
-      %{
-        id: extract_xml(block, "id"),
-        amount: parse_amount(extract_xml(block, "amount")),
-        refunded_transaction_id: extract_xml(block, "refunded-transaction-id")
-      }
-    end)
-    |> Enum.reject(fn r -> r.refunded_transaction_id == "" end)
-  end
-
-  defp parse_refunds(_), do: []
 
   defp parse_subscriptions(body) when is_binary(body) do
     ~r/<subscription>.*?<\/subscription>/s
