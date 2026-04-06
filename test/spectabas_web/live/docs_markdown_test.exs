@@ -78,8 +78,9 @@ defmodule SpectabasWeb.DocsMarkdownTest do
       md = "```javascript\nconsole.log('hello');\n```"
       html = DocsLive.render_markdown_public(md)
       assert html =~ "<pre"
-      assert html =~ "<code>"
+      assert html =~ "<code"
       assert html =~ "console.log"
+      assert html =~ "Copy"
     end
 
     test "preserves code blocks with blank lines" do

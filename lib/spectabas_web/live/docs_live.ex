@@ -340,8 +340,14 @@ defmodule SpectabasWeb.DocsLive do
         inner = lines |> Enum.drop(1) |> Enum.drop(-1)
         # Strip common leading whitespace (heredoc indentation)
         code = dedent(inner)
+        code_id = "code-#{:erlang.phash2(code)}"
 
-        "<pre class=\"bg-gray-900 text-gray-100 rounded-lg p-4 text-xs overflow-x-auto my-3\"><code>#{escape(code)}</code></pre>"
+        """
+        <div class="relative my-3">
+          <pre class="bg-gray-900 text-gray-100 rounded-lg p-4 pr-16 text-xs overflow-x-auto"><code id="#{code_id}">#{escape(code)}</code></pre>
+          <button onclick="navigator.clipboard.writeText(document.getElementById('#{code_id}').textContent);this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)" class="absolute top-2 right-2 px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs hover:bg-gray-600 hover:text-white">Copy</button>
+        </div>
+        """
 
       String.starts_with?(block, "- ") ->
         items =
@@ -355,6 +361,20 @@ defmodule SpectabasWeb.DocsLive do
           |> Enum.join()
 
         "<ul class=\"list-disc space-y-1 my-2 text-gray-700\">#{items}</ul>"
+
+      Regex.match?(~r/^\d+\.\s/, block) ->
+        items =
+          block
+          |> String.split("\n")
+          |> Enum.map(&String.trim/1)
+          |> Enum.reject(&(&1 == ""))
+          |> Enum.map(fn line ->
+            text = Regex.replace(~r/^\d+\.\s+/, line, "")
+            "<li class=\"ml-4\">#{render_inline(escape(text))}</li>"
+          end)
+          |> Enum.join()
+
+        "<ol class=\"list-decimal space-y-1 my-2 text-gray-700 pl-4\">#{items}</ol>"
 
       String.starts_with?(block, "| ") ->
         render_table(block)
