@@ -48,7 +48,7 @@ defmodule Spectabas.AI.Config do
       <<>> -> %{}
       encrypted ->
         case Vault.decrypt(encrypted) do
-          {:ok, json} -> Jason.decode!(json)
+          json when is_binary(json) -> Jason.decode!(json)
           _ -> %{}
         end
     end
