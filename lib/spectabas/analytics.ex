@@ -824,7 +824,7 @@ defmodule Spectabas.Analytics do
           GROUP BY ip_country, ip_country_name ORDER BY unique_visitors DESC LIMIT 100
           """
         end,
-        fn row -> row["ip_country"] end,
+        fn row -> {row["ip_country"], row["ip_region_name"]} end,
         fn rows ->
           %{
             "ip_region_name" => List.first(rows)["ip_region_name"],
