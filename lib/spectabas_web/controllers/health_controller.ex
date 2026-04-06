@@ -1352,41 +1352,51 @@ defmodule SpectabasWeb.HealthController do
       integration ->
         api_key = Spectabas.AdIntegrations.decrypt_access_token(integration)
         site_url = (integration.extra || %{})["site_url"] || ""
-        encoded_url = URI.encode(site_url, &URI.char_unreserved?/1)
 
-        url = "https://ssl.bing.com/webmaster/api.svc/json/GetQueryPageStats?apikey=#{api_key}&siteUrl=#{encoded_url}&query=%27%27"
+        # Try multiple URL formats and endpoints
+        variants = [
+          {"GetQueryStats (bare)", "https://ssl.bing.com/webmaster/api.svc/json/GetQueryStats?apikey=#{api_key}&siteUrl=#{URI.encode(site_url, &URI.char_unreserved?/1)}"},
+          {"GetQueryStats (https://)", "https://ssl.bing.com/webmaster/api.svc/json/GetQueryStats?apikey=#{api_key}&siteUrl=#{URI.encode("https://#{site_url}/", &URI.char_unreserved?/1)}"},
+          {"GetQueryStats (http://)", "https://ssl.bing.com/webmaster/api.svc/json/GetQueryStats?apikey=#{api_key}&siteUrl=#{URI.encode("http://#{site_url}/", &URI.char_unreserved?/1)}"},
+          {"GetQueryPageStats (bare)", "https://ssl.bing.com/webmaster/api.svc/json/GetQueryPageStats?apikey=#{api_key}&siteUrl=#{URI.encode(site_url, &URI.char_unreserved?/1)}"},
+          {"GetQueryPageStats (bare+query)", "https://ssl.bing.com/webmaster/api.svc/json/GetQueryPageStats?apikey=#{api_key}&siteUrl=#{URI.encode(site_url, &URI.char_unreserved?/1)}&query=%27%27"}
+        ]
 
-        case Req.get(url) do
-          {:ok, %{status: status, body: body}} ->
-            # Extract sample data without exposing full response
-            sample =
-              case body do
-                %{"d" => data} when is_list(data) ->
-                  %{
-                    format: "d is list",
-                    total_rows: length(data),
-                    sample_row: List.first(data) |> inspect() |> String.slice(0, 500),
-                    sample_keys: if(List.first(data), do: Map.keys(List.first(data)), else: [])
-                  }
+        results =
+          Enum.map(variants, fn {label, url} ->
+            case Req.get(url, receive_timeout: 15_000) do
+              {:ok, %{status: status, body: body}} ->
+                row_count =
+                  case body do
+                    %{"d" => data} when is_list(data) -> length(data)
+                    _ -> 0
+                  end
 
-                %{"d" => d} when is_map(d) ->
-                  %{format: "d is map", keys: Map.keys(d), sample: inspect(d) |> String.slice(0, 500)}
+                sample =
+                  case body do
+                    %{"d" => [first | _]} ->
+                      %{keys: Map.keys(first), date: first["Date"], query: first["Query"]}
 
-                _ ->
-                  %{format: "unexpected", keys: if(is_map(body), do: Map.keys(body), else: []), sample: inspect(body) |> String.slice(0, 500)}
-              end
+                    %{"d" => []} ->
+                      %{empty_list: true}
 
-            json(conn, %{
-              action: "bing_diag",
-              site_url: site_url,
-              encoded_url: encoded_url,
-              http_status: status,
-              response_structure: sample
-            })
+                    _ ->
+                      %{body_keys: if(is_map(body), do: Map.keys(body), else: "not_map"),
+                        snippet: inspect(body) |> String.slice(0, 200)}
+                  end
 
-          {:error, reason} ->
-            json(conn, %{error: inspect(reason) |> String.slice(0, 300)})
-        end
+                %{label: label, status: status, rows: row_count, sample: sample}
+
+              {:error, reason} ->
+                %{label: label, error: inspect(reason) |> String.slice(0, 100)}
+            end
+          end)
+
+        json(conn, %{
+          action: "bing_diag",
+          configured_site_url: site_url,
+          results: results
+        })
     end
   end
 
