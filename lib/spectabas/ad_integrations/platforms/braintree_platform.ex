@@ -267,19 +267,33 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
               }
             end)
 
-          case ClickHouse.insert("ecommerce_events", rows) do
-            :ok ->
-              Logger.info("[BraintreeSync] Synced #{length(rows)} transactions for #{date}")
-              AdIntegrations.mark_synced(integration)
-              :ok
+          # Insert in chunks to avoid oversized HTTP payloads
+          chunk_size = 200
+          results =
+            rows
+            |> Enum.chunk_every(chunk_size)
+            |> Enum.with_index(1)
+            |> Enum.map(fn {chunk, batch_num} ->
+              case ClickHouse.insert("ecommerce_events", chunk) do
+                :ok ->
+                  Logger.info("[BraintreeSync] Batch #{batch_num}: inserted #{length(chunk)} rows for #{date}")
+                  :ok
 
-            {:error, reason} ->
-              Logger.error(
-                "[BraintreeSync] CH insert failed: #{inspect(reason) |> String.slice(0, 200)}"
-              )
+                {:error, reason} ->
+                  Logger.error(
+                    "[BraintreeSync] CH insert batch #{batch_num} failed for #{date}: #{inspect(reason) |> String.slice(0, 500)}"
+                  )
+                  {:error, reason}
+              end
+            end)
 
-              AdIntegrations.mark_error(integration, "ClickHouse insert failed")
-              {:error, reason}
+          if Enum.all?(results, &(&1 == :ok)) do
+            Logger.info("[BraintreeSync] Synced #{length(rows)} transactions for #{date}")
+            AdIntegrations.mark_synced(integration)
+            :ok
+          else
+            AdIntegrations.mark_error(integration, "ClickHouse insert failed (partial)")
+            {:error, "ClickHouse insert failed"}
           end
         end
 
