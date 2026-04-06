@@ -39,20 +39,30 @@ defmodule SpectabasWeb.Admin.SitesLive do
   def handle_event("create_site", %{"site" => params}, socket) do
     user = socket.assigns.current_scope.user
 
+    # For platform_admin, use the first account (or let them specify)
+    account_id =
+      if user.account_id do
+        user.account_id
+      else
+        # Platform admin — use the first account
+        case Spectabas.Repo.one(
+               Spectabas.Accounts.Account
+               |> Ecto.Query.first(:id)
+             ) do
+          %{id: id} -> id
+          nil -> nil
+        end
+      end
+
     cond do
-      is_nil(user.account_id) ->
-        {:noreply,
-         put_flash(
-           socket,
-           :error,
-           "Platform admins must create sites from the Platform > Account Detail page."
-         )}
+      is_nil(account_id) ->
+        {:noreply, put_flash(socket, :error, "No account found. Create an account first.")}
 
       not Spectabas.Accounts.can_create_site?(user) ->
         {:noreply, put_flash(socket, :error, "Site limit reached for this account.")}
 
       true ->
-        params = Map.put(params, "account_id", user.account_id)
+        params = Map.put(params, "account_id", account_id)
 
         case Sites.create_site(params) do
           {:ok, site} ->
