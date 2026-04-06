@@ -45,78 +45,48 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
     fetch_all_pages(url, body, auth_header, merchant_id)
   end
 
-  defp fetch_all_pages(search_url, search_body, auth_header, merchant_id) do
-    case Req.post(search_url, body: search_body, headers: xml_headers(auth_header)) do
+  defp fetch_all_pages(search_url, search_body, auth_header, _merchant_id) do
+    # Braintree pagination: add <page>N</page> to search body, keep fetching
+    # until we get fewer results than a full page (no reliable total_items).
+    fetch_page(search_url, search_body, auth_header, 1, [])
+  end
+
+  defp fetch_page(url, search_body, auth_header, page, acc) do
+    # Inject <page> element into search XML
+    paged_body =
+      String.replace(search_body, "</search>", "<page>#{page}</page></search>")
+
+    case Req.post(url, body: paged_body, headers: xml_headers(auth_header)) do
       {:ok, %{status: 200, body: resp_body}} ->
-        first_page = parse_transactions(resp_body)
-        total_items = parse_total_items(resp_body)
-        page_size = parse_page_size(resp_body)
+        txns = parse_transactions(resp_body)
+        all = acc ++ txns
+        Logger.info("[BraintreeSync] Page #{page}: #{length(txns)} txns (#{length(all)} total)")
 
-        Logger.info("[BraintreeSync] Page 1: #{length(first_page)} txns parsed, total_items=#{total_items}, page_size=#{page_size}")
-        Logger.info("[BraintreeSync] Response snippet: #{String.slice(to_string(resp_body), 0, 500)}")
-
-        if total_items > page_size and page_size > 0 do
-          # Braintree search results include IDs — fetch remaining pages
-          total_pages = ceil(total_items / page_size)
-          search_id = parse_search_id(resp_body)
-
-          remaining =
-            if search_id != "" do
-              2..total_pages
-              |> Enum.flat_map(fn page ->
-                page_url = "#{base_url(merchant_id)}/transactions/advanced_search_ids/#{search_id}/#{page}"
-
-                case Req.post(page_url, body: search_body, headers: xml_headers(auth_header)) do
-                  {:ok, %{status: 200, body: page_body}} ->
-                    parse_transactions(page_body)
-
-                  _ ->
-                    Logger.warning("[BraintreeSync] Failed to fetch page #{page}")
-                    []
-                end
-              end)
-            else
-              []
-            end
-
-          {:ok, first_page ++ remaining}
+        if length(txns) >= 50 and page < 200 do
+          # Full page — likely more results
+          fetch_page(url, search_body, auth_header, page + 1, all)
         else
-          {:ok, first_page}
+          {:ok, all}
         end
 
       {:ok, %{status: 401}} ->
         {:error, "Invalid Braintree credentials"}
 
       {:ok, %{status: status, body: resp_body}} ->
-        {:error, "Braintree HTTP #{status}: #{String.slice(to_string(resp_body), 0, 200)}"}
+        if acc != [] do
+          # Got some pages already, return what we have
+          Logger.warning("[BraintreeSync] Page #{page} returned HTTP #{status}, returning #{length(acc)} txns from prior pages")
+          {:ok, acc}
+        else
+          {:error, "Braintree HTTP #{status}: #{String.slice(to_string(resp_body), 0, 200)}"}
+        end
 
       {:error, reason} ->
-        {:error, "Braintree API error: #{inspect(reason)}"}
-    end
-  end
-
-  defp parse_total_items(body) do
-    case Regex.run(~r/<total-items[^>]*>(\d+)<\/total-items>/, body) do
-      [_, count] -> String.to_integer(count)
-      _ -> 0
-    end
-  end
-
-  defp parse_page_size(body) do
-    case Regex.run(~r/<page-size[^>]*>(\d+)<\/page-size>/, body) do
-      [_, size] -> String.to_integer(size)
-      _ -> 50
-    end
-  end
-
-  defp parse_search_id(body) do
-    case Regex.run(~r/<search-results>.*?<ids[^>]*search-result-id="([^"]+)".*?<\/search-results>/s, body) do
-      [_, id] -> id
-      _ ->
-        # Try alternative format
-        case Regex.run(~r/search-result-id="([^"]+)"/, body) do
-          [_, id] -> id
-          _ -> ""
+        if acc != [] do
+          Logger.warning("[BraintreeSync] Page #{page} failed: #{inspect(reason)}, returning #{length(acc)} txns from prior pages")
+          {:ok, acc}
+        else
+          {:error, "Braintree API error: #{inspect(reason)}"}
         end
     end
   end
