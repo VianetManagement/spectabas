@@ -220,6 +220,26 @@ const IdleTimeout = {
   }
 }
 
+const LocalTime = {
+  mounted() {
+    this._format()
+  },
+  updated() {
+    this._format()
+  },
+  _format() {
+    const utc = this.el.dataset.utc
+    if (!utc) return
+    try {
+      const d = new Date(utc)
+      this.el.textContent = d.toLocaleString(undefined, {
+        year: "numeric", month: "short", day: "numeric",
+        hour: "numeric", minute: "2-digit", timeZoneName: "short"
+      })
+    } catch(_) {}
+  }
+}
+
 const Hooks = {
   TimeseriesChart,
   BarChart,
@@ -230,6 +250,7 @@ const Hooks = {
   Sparkline,
   PieChart,
   IdleTimeout,
+  LocalTime,
 }
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")

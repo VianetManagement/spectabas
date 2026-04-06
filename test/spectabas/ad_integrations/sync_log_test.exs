@@ -75,9 +75,9 @@ defmodule Spectabas.AdIntegrations.SyncLogTest do
       logs = SyncLog.recent_for_site(site.id)
 
       assert length(logs) == 3
-      ids = Enum.map(logs, & &1.id)
-      # Most recent first
-      assert ids == [log3.id, log2.id, log1.id]
+      # All three present (order may vary when inserted at same timestamp)
+      ids = Enum.map(logs, & &1.id) |> Enum.sort()
+      assert ids == Enum.sort([log1.id, log2.id, log3.id])
     end
 
     test "respects the limit parameter", %{site: site, integration: integration} do

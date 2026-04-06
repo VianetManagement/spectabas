@@ -22,9 +22,12 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
       </div>
 
       <div class="space-y-10">
-        <div :for={{date, items} <- @entries}>
+        <div :for={{version, utc_iso, items} <- @entries}>
           <h2 class="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2 mb-4">
-            {date}
+            {version} —
+            <span phx-hook="LocalTime" id={"ts-#{version}"} data-utc={utc_iso} class="font-normal text-gray-600">
+              {utc_iso}
+            </span>
           </h2>
           <ul class="space-y-3">
             <li :for={item <- items} class="flex gap-3">
@@ -45,7 +48,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
-      {"v5.10.0 — 2026-04-06 UTC",
+      {"v5.10.0", "2026-04-06T12:00:00Z",
        [
          %{
            title: "Test coverage: 67 new tests (609 → 676)",
@@ -75,7 +78,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
                "Fixed date parser for /Date(ms-offset)/ format. Added bulk sync (single API call)."
          }
        ]},
-      {"v5.9.0 — 2026-04-05 UTC",
+      {"v5.9.0", "2026-04-05T12:00:00Z",
        [
          %{
            title: "UX: Unified toast notifications",
@@ -97,7 +100,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
                "updated sync times and status without requiring a page reload."
          }
        ]},
-      {"v5.8.0 — 2026-04-05 UTC",
+      {"v5.8.0", "2026-04-05T12:00:00Z",
        [
          %{
            title: "Feature: AI-powered insights",
@@ -124,7 +127,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "90-day and 12-month views now use pre-aggregated daily_stats table instead of scanning raw events."
          }
        ]},
-      {"v5.7.0 — 2026-04-05 UTC",
+      {"v5.7.0", "2026-04-05T12:00:00Z",
        [
          %{
            title: "Feature: SOC2 security controls",
@@ -168,7 +171,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Realtime visitors now display city, state/region, country instead of just city, country."
          }
        ]},
-      {"v5.6.0 — 2026-04-03 UTC",
+      {"v5.6.0", "2026-04-03T12:00:00Z",
        [
          %{
            title: "Feature: Multi-tenant account system",
@@ -194,7 +197,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
                "warnings across integration status, integration log, settings, sites, and ClickHouse modules."
          }
        ]},
-      {"v5.5.0 — 2026-04-04 UTC",
+      {"v5.5.0", "2026-04-04T12:00:00Z",
        [
          %{
            title: "Feature: Google Search Console & Bing Webmaster integration",
@@ -211,7 +214,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
                "API transactions are still collected but not displayed — prevents double-counting."
          }
        ]},
-      {"v5.4.0 — 2026-04-03 UTC",
+      {"v5.4.0", "2026-04-03T12:00:00Z",
        [
          %{
            title: "Feature: Braintree payment integration",
@@ -229,7 +232,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
                "Stored per-integration in the extra config map."
          }
        ]},
-      {"v5.3.0 — 2026-04-03 UTC",
+      {"v5.3.0", "2026-04-03T12:00:00Z",
        [
          %{
            title: "Feature: MRR & Subscription tracking from Stripe",
@@ -259,7 +262,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
                "currency codes. Format: $100.00 instead of 100.00 USD."
          }
        ]},
-      {"v5.2.0 — 2026-04-03 UTC",
+      {"v5.2.0", "2026-04-03T12:00:00Z",
        [
          %{
            title: "Feature: Stripe charge import",
@@ -270,7 +273,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
                "and ROAS dashboards work automatically — zero additional instrumentation needed."
          }
        ]},
-      {"v5.1.0 — 2026-04-03 UTC",
+      {"v5.1.0", "2026-04-03T12:00:00Z",
        [
          %{
            title: "UX: Dashboard defaults to Today view",
@@ -286,7 +289,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
                "Options are populated from actual site data (last 90 days). Free-text input remains for other fields."
          }
        ]},
-      {"v5.0.0 — 2026-04-03 UTC",
+      {"v5.0.0", "2026-04-03T12:00:00Z",
        [
          %{
            title: "Feature: Multi-tenant account system",
@@ -305,7 +308,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
                "Superadmins can now invite other superadmins to co-manage their account."
          }
        ]},
-      {"v4.10.0 — 2026-04-03 UTC",
+      {"v4.10.0", "2026-04-03T12:00:00Z",
        [
          %{
            title: "Fix: First/last touch attribution returning zero",
@@ -331,7 +334,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
                "serves JS challenges that sendBeacon cannot solve, blocking all tracking beacons."
          }
        ]},
-      {"v4.9.0 — 2026-04-02 UTC",
+      {"v4.9.0", "2026-04-02T12:00:00Z",
        [
          %{
            title: "Security: Audit v4 — 5 findings fixed",
@@ -342,7 +345,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
                "Segment LIKE wildcard injection escaped. Click ID format validation (5-256 chars, alphanumeric)."
          }
        ]},
-      {"v4.8.0 — 2026-04-02 UTC",
+      {"v4.8.0", "2026-04-02T12:00:00Z",
        [
          %{
            title: "Feature: Site-configurable visitor intent classification",
@@ -358,7 +361,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
                "Paths matched as fragments (e.g. '/listings' matches '/listings/123')."
          }
        ]},
-      {"v4.7.0 — 2026-04-02 UTC",
+      {"v4.7.0", "2026-04-02T12:00:00Z",
        [
          %{
            title: "Feature: Enhanced dashboard pages with richer metrics",
@@ -368,7 +371,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
                "Campaigns shows 30-day traffic stats (visitors, sessions, bounce rate) per campaign."
          }
        ]},
-      {"v4.6.0 — 2026-04-02 UTC",
+      {"v4.6.0", "2026-04-02T12:00:00Z",
        [
          %{
            title: "Feature: Consolidated Acquisition page",
@@ -411,7 +414,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
            description: "Added explanation of how cohort rows and columns work."
          }
        ]},
-      {"v4.5.0 — 2026-04-02 UTC",
+      {"v4.5.0", "2026-04-02T12:00:00Z",
        [
          %{
            title:
@@ -439,7 +442,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
                "matching the existing Google Ads guard."
          }
        ]},
-      {"v4.4.0 — 2026-04-02 UTC",
+      {"v4.4.0", "2026-04-02T12:00:00Z",
        [
          %{
            title: "Feature: Enhanced Insights with revenue, ad traffic, and churn detection",
@@ -484,7 +487,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
                "Setup guide email with Phoenix plug code, Cloudflare notes, and simplified snippet."
          }
        ]},
-      {"v4.3.1 — 2026-04-01 UTC",
+      {"v4.3.1", "2026-04-01T12:00:00Z",
        [
          %{
            title: "Feature: Ad platform integrations — Sync Now, account picker, API fixes",
@@ -534,7 +537,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
                "Meta Ads: show real API error messages on settings page. All adapters now surface detailed errors."
          }
        ]},
-      {"v4.3.0 — 2026-04-01 UTC",
+      {"v4.3.0", "2026-04-01T12:00:00Z",
        [
          %{
            title: "Feature: Ad platform integrations (Google Ads, Bing, Meta)",
@@ -542,7 +545,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Connect Google Ads, Microsoft/Bing Ads, and Meta/Facebook Ads accounts via OAuth2. Daily ad spend data (spend, clicks, impressions by campaign) synced every 6 hours. Encrypted token storage. ROAS calculation on Revenue Attribution page. Env vars: GOOGLE_ADS_CLIENT_ID/SECRET/DEVELOPER_TOKEN, BING_ADS_CLIENT_ID/SECRET/DEVELOPER_TOKEN, META_ADS_APP_ID/SECRET."
          }
        ]},
-      {"v4.2.0 — 2026-04-01 UTC",
+      {"v4.2.0", "2026-04-01T12:00:00Z",
        [
          %{
            title: "Enhancement: Revenue Attribution overhaul",
@@ -550,7 +553,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "All 5 UTM dimensions (Source, Medium, Campaign, Term, Content). First-touch vs last-touch attribution toggle. Channel summary cards (Direct, Organic, Paid, Social, Referral, Email). Revenue share bars per source. 90-day date range option."
          }
        ]},
-      {"v4.1.0 — 2026-04-01 UTC",
+      {"v4.1.0", "2026-04-01T12:00:00Z",
        [
          %{
            title: "Feature: granular site access for Analyst/Viewer roles",
@@ -558,7 +561,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Admins can now control which sites each Analyst and Viewer can access from the Users admin page. Click 'Configure' next to any non-admin user to toggle site access with one click. Superadmin and Admin roles retain access to all sites."
          }
        ]},
-      {"v4.0.0 — 2026-04-01 UTC",
+      {"v4.0.0", "2026-04-01T12:00:00Z",
        [
          %{
            title: "Feature: Revenue Attribution",
@@ -586,7 +589,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Funnels now show revenue from visitors who reached each step (for ecommerce-enabled sites). Each step has an 'Export drop-off' button that downloads a CSV of visitor IDs and emails who abandoned at that step."
          }
        ]},
-      {"v3.7.0 — 2026-04-01 UTC",
+      {"v3.7.0", "2026-04-01T12:00:00Z",
        [
          %{
            title: "Feature: Matomo historical data import",
@@ -594,7 +597,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Imported ~5.3M historical events from Matomo covering April 2025 through March 2026 for roommates.com. Admin endpoint with import, status, and rollback actions. All imported data identifiable by 'imported_' visitor ID prefix for safe rollback."
          }
        ]},
-      {"v3.6.0 — 2026-03-31 UTC",
+      {"v3.6.0", "2026-03-31T12:00:00Z",
        [
          %{
            title: "Feature: ecommerce product categories",
@@ -602,7 +605,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Items in ecommerce transactions now support an optional `category` field (e.g. \"new_subscription\" vs \"renewal\"). Top Products table groups by name + category with category badges. Item summaries on orders show category in parentheses."
          }
        ]},
-      {"v3.5.0 — 2026-03-31 UTC",
+      {"v3.5.0", "2026-03-31T12:00:00Z",
        [
          %{
            title: "Fix: bounce rate calculation",
@@ -610,7 +613,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Bounce rate now uses the industry-standard definition: sessions with exactly 1 pageview. Previously, duration events and custom events incorrectly disqualified sessions from being bounces, resulting in artificially low bounce rates (~11% vs the expected ~45%)."
          }
        ]},
-      {"v3.4.0 — 2026-03-31 UTC",
+      {"v3.4.0", "2026-03-31T12:00:00Z",
        [
          %{
            title: "Feature: API key scopes/restrictions UI",
@@ -618,7 +621,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "API key creation form now includes scope checkboxes (read:stats, read:visitors, write:events, write:identify, admin:sites), site restriction checkboxes, and optional expiry date. Key list displays scopes, site restrictions, and expiry status with color-coded badges."
          }
        ]},
-      {"v3.3.0 — 2026-03-31 UTC",
+      {"v3.3.0", "2026-03-31T12:00:00Z",
        [
          %{
            title: "Feature: user timezone preference",
@@ -636,7 +639,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Concurrent event ingestion no longer crashes on duplicate visitor inserts. Added unique_constraint declarations, insert-conflict retry, and best-effort fingerprint updates."
          }
        ]},
-      {"v3.2.0 — 2026-03-31 UTC",
+      {"v3.2.0", "2026-03-31T12:00:00Z",
        [
          %{
            title: "Feature: email on ecommerce transactions",
@@ -644,7 +647,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "The ecommerce transaction API now accepts an optional `email` field. When provided, it identifies the visitor and links the transaction to their Spectabas profile. Orders table shows email instead of truncated visitor ID."
          }
        ]},
-      {"v3.1.0 — 2026-03-31 UTC",
+      {"v3.1.0", "2026-03-31T12:00:00Z",
        [
          %{
            title: "Feature: ecommerce stats on main dashboard",
@@ -662,7 +665,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Ecommerce page now includes a combined bar/line chart showing daily revenue (bars) and order count (line) over the selected period."
          }
        ]},
-      {"v3.0.1 — 2026-03-31 UTC",
+      {"v3.0.1", "2026-03-31T12:00:00Z",
        [
          %{
            title: "Fix: visitor dedup in cookie mode",
@@ -670,7 +673,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "In GDPR-off (cookie) mode, new cookies no longer merge visitors by fingerprint. New cookie = new visitor. Fingerprint-based dedup is now only used in GDPR-on (cookieless) mode."
          }
        ]},
-      {"v3.0.0 — 2026-03-31 UTC",
+      {"v3.0.0", "2026-03-31T12:00:00Z",
        [
          %{
            title: "Feature: API token scopes",
@@ -688,7 +691,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "New /admin/ingest page shows live BEAM memory, buffer size, ETS visitor cache stats, and ClickHouse connection pool metrics."
          }
        ]},
-      {"v2.9.0 — 2026-03-31 UTC",
+      {"v2.9.0", "2026-03-31T12:00:00Z",
        [
          %{
            title: "Performance: high-throughput ingest pipeline",
@@ -696,7 +699,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Async flush, 1000 batch size (up from default), ETS-based visitor cache, dedicated ClickHouse connection pool (100 connections), and per-site rate limiting at 1000 events/sec."
          }
        ]},
-      {"v2.8.0 — 2026-03-31 UTC",
+      {"v2.8.0", "2026-03-31T12:00:00Z",
        [
          %{
            title: "Feature: occurred_at timestamp on all events",
@@ -709,7 +712,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "IngestBuffer flush now wraps ClickHouse inserts in try/rescue so connection failures are logged and dead-lettered instead of crashing the process."
          }
        ]},
-      {"v2.7.1 — 2026-03-31 UTC",
+      {"v2.7.1", "2026-03-31T12:00:00Z",
        [
          %{
            title: "Fix: ecommerce dashboard crash",
@@ -727,7 +730,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "IngestBuffer now extracts ecommerce_order events from the batch and writes them to the ecommerce_events ClickHouse table alongside the main events table."
          }
        ]},
-      {"v2.7.0 — 2026-03-31 UTC",
+      {"v2.7.0", "2026-03-31T12:00:00Z",
        [
          %{
            title: "API: server-side visitor identification",
@@ -740,7 +743,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "The /c/i endpoint was passing site_id as the visitor lookup key instead of using cookie_id + site_id. Now correctly looks up visitors by cookie_id scoped to the site."
          }
        ]},
-      {"v2.6.1 — 2026-03-31 UTC",
+      {"v2.6.1", "2026-03-31T12:00:00Z",
        [
          %{
            title: "Fix: funnel_stats now scoped to date range",
@@ -787,7 +790,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "empty_overview now returns atom keys matching fetch_overview, preventing crashes when queries time out."
          }
        ]},
-      {"v2.6.0 — 2026-03-31 UTC",
+      {"v2.6.0", "2026-03-31T12:00:00Z",
        [
          %{
            title: "Security: SQL injection fix in visitor log pagination",
@@ -814,7 +817,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Dashboard deferred stats (9 queries) now run in parallel via Task.async instead of sequentially, reducing load time by ~5x."
          }
        ]},
-      {"v2.5.5 — 2026-03-31 UTC",
+      {"v2.5.5", "2026-03-31T12:00:00Z",
        [
          %{
            title: "Fix: datacenter IPs no longer auto-flagged as bots",
@@ -842,7 +845,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Realtime visitor grouped view was capped at 30 results, missing active visitors. Increased to 100."
          }
        ]},
-      {"v2.5.4 — 2026-03-31 UTC",
+      {"v2.5.4", "2026-03-31T12:00:00Z",
        [
          %{
            title: "Fix: SPA pageview overcounting",
@@ -855,7 +858,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "New GET /api/v1/sites/:id/realtime/visitors returns grouped visitor details (browser, OS, country, current page) for the last 5 minutes."
          }
        ]},
-      {"v2.5.3 — 2026-03-31 UTC",
+      {"v2.5.3", "2026-03-31T12:00:00Z",
        [
          %{
            title: "Fix: snippet now includes data-gdpr and data-xd attributes",
@@ -868,7 +871,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "The /health endpoint now returns 200 as long as Postgres is reachable. ClickHouse starting asynchronously no longer causes deploy failures."
          }
        ]},
-      {"v2.5.2 — 2026-03-28 UTC",
+      {"v2.5.2", "2026-03-28T12:00:00Z",
        [
          %{
            title: "Fix: page load times on Top Pages",
@@ -876,7 +879,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "RUM vitals query now caps page_load at 60s (filtering corrupt data from old NaN bug) and returns data for the most-visited pages instead of the slowest, so load times actually appear next to top pages."
          }
        ]},
-      {"v2.5.1 — 2026-03-28 UTC",
+      {"v2.5.1", "2026-03-28T12:00:00Z",
        [
          %{
            title: "Performance: parallel realtime queries",
@@ -909,7 +912,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "collection endpoint now returns 503 when the ingest buffer exceeds 5,000 events, preventing memory exhaustion under extreme load. Tracker handles 503 gracefully."
          }
        ]},
-      {"v2.5.0 — 2026-03-30 UTC",
+      {"v2.5.0", "2026-03-30T12:00:00Z",
        [
          %{
            title: "IP Profile page",
@@ -922,7 +925,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "visitor map now has region preset buttons — World, N. America, S. America, Europe, Asia, Africa, Oceania, USA. Click to zoom the map to that region. Also made the map responsive (250px mobile, 350px tablet, 450px desktop)."
          }
        ]},
-      {"v2.4.5 — 2026-03-30 23:59 UTC",
+      {"v2.4.5", "2026-03-30T23:59:00Z",
        [
          %{
            title: "Fingerprint uniqueness fix",
@@ -930,7 +933,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "restored full User-Agent string in fingerprint signals. Removing it (for stability) caused massive false merges — all users with the same device model, browser major version, screen size, and timezone shared one fingerprint. One 'visitor' was showing 50+ IP addresses. The full UA adds OS build, minor version, and patch info that differentiates otherwise-identical devices."
          }
        ]},
-      {"v2.4.4 — 2026-03-30 23:55 UTC",
+      {"v2.4.4", "2026-03-30T23:55:00Z",
        [
          %{
            title: "Device pie charts and percentages",
@@ -938,7 +941,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Devices page now shows a doughnut pie chart alongside the table. Each row includes a percentage column. Chart updates when switching tabs (Device Type, Browser, OS) or date range. Top 8 items shown in chart, all items in table."
          }
        ]},
-      {"v2.4.3 — 2026-03-30 23:45 UTC",
+      {"v2.4.3", "2026-03-30T23:45:00Z",
        [
          %{
            title: "Pageview rate limiting",
@@ -946,7 +949,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "prevents overcounting from rapid page refreshes, auto-refresh, or iframe reloads. Uses sessionStorage to enforce a 5-second minimum interval between pageviews for the same URL. Fixes cases where a single visitor showed hundreds of views for one page in minutes."
          }
        ]},
-      {"v2.4.2 — 2026-03-30 23:30 UTC",
+      {"v2.4.2", "2026-03-30T23:30:00Z",
        [
          %{
            title: "IP Address Investigation Tools",
@@ -954,7 +957,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "IP search results now show full geo info (city, country, org) with datacenter/VPN/bot badges. Visitor profiles show all IP addresses the visitor has used with location, org, event count, and last seen. Each IP links back to search. Clicking from IP search to a visitor profile preserves the searched IP context."
          }
        ]},
-      {"v2.4.1 — 2026-03-30 23:00 UTC",
+      {"v2.4.1", "2026-03-30T23:00:00Z",
        [
          %{
            title: "IP Address Search",
@@ -967,7 +970,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "added System Diagnostics card to the admin dashboard, linking to /health/diag for ClickHouse, Postgres, GeoIP, RUM, and visitor breakdown diagnostics."
          }
        ]},
-      {"v2.4.0 — 2026-03-30 22:00 UTC",
+      {"v2.4.0", "2026-03-30T22:00:00Z",
        [
          %{
            title: "Saved Segments",
@@ -980,7 +983,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Click any row in the Pages table to expand an inline sparkline chart showing the pageview trend for that specific page over the selected time period. Uses Chart.js for rendering."
          }
        ]},
-      {"v2.3.1 — 2026-03-30 18:00 UTC",
+      {"v2.3.1", "2026-03-30T18:00:00Z",
        [
          %{
            title: "Spam Filter Admin Page",
@@ -988,7 +991,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "admin page at /admin/spam-filter for managing referrer spam blocklist. Custom domains can be added/removed via DB. Auto-detection queries ClickHouse for suspicious referrer domains (high bot %, multi-site hits) and presents candidates for review. Daily Oban worker runs detection at 7am UTC. Builtin domains remain hardcoded."
          }
        ]},
-      {"v2.3.0 — 2026-03-30 15:00 UTC",
+      {"v2.3.0", "2026-03-30T15:00:00Z",
        [
          %{
            title: "Outbound Link Tracking",
@@ -1011,7 +1014,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "known spam domains (semalt.com, darodar.com, etc.) are automatically excluded from Sources and Channels analytics."
          }
        ]},
-      {"v2.2.3 — 2026-03-30 14:00 UTC",
+      {"v2.2.3", "2026-03-30T14:00:00Z",
        [
          %{
            title: "Bot Traffic page",
@@ -1019,7 +1022,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "dedicated bot analysis under Audience: bot vs human event/visitor counts, bot percentage, breakdown by type (datacenter/VPN/Tor), most targeted pages by bots, and top bot user agent strings."
          }
        ]},
-      {"v2.2.2 — 2026-03-30 13:00 UTC",
+      {"v2.2.2", "2026-03-30T13:00:00Z",
        [
          %{
            title: "Consistent visitor/pageview counting across all pages",
@@ -1027,7 +1030,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "added ip_is_bot=0 filter to 11 queries that were missing it: entry_pages, exit_pages, top_pages, visitor_locations, timezone_distribution, visitor_log, page_transitions totals, site_searches, overview_stats_public, intent_breakdown. Bot traffic excluded from all standard analytics views. Network page intentionally keeps bot stats for traffic quality analysis."
          }
        ]},
-      {"v2.2.1 — 2026-03-30 12:00 UTC",
+      {"v2.2.1", "2026-03-30T12:00:00Z",
        [
          %{
            title: "Channel drill-down + visitor count fix",
@@ -1035,7 +1038,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "clicking a channel now shows its individual sources (e.g., Search Engines → google.com, bing.com). Fixed visitor overcounting — channel breakdown now uses SQL-level classification with uniq(visitor_id) per channel instead of summing across groups. Shared ClickHouse CASE expression for channel classification."
          }
        ]},
-      {"v2.2.0 — 2026-03-30 11:00 UTC",
+      {"v2.2.0", "2026-03-30T11:00:00Z",
        [
          %{
            title: "All Channels page",
@@ -1053,7 +1056,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "top_sources query now uses uniq(session_id) from raw events instead of sum(sessions) from the SummingMergeTree MV, fixing overcounting across multi-day ranges."
          }
        ]},
-      {"v2.1.1 — 2026-03-29 19:00 UTC",
+      {"v2.1.1", "2026-03-29T19:00:00Z",
        [
          %{
            title: "Email Reports moved to own page",
@@ -1061,7 +1064,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "email reports now have a dedicated page under Tools in the sidebar (was embedded in Settings). Shows schedule info — 'Sent every Monday' for weekly, '1st of each month' for monthly. Fixed save not persisting. Live preview updates schedule as you change frequency."
          }
        ]},
-      {"v2.1.0 — 2026-03-29 18:00 UTC",
+      {"v2.1.0", "2026-03-29T18:00:00Z",
        [
          %{
            title: "Email Reports",
@@ -1074,7 +1077,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "internal strategy reference at /admin/competitive — feature gap matrix, unique advantages, positioning vs 7 competitors, 6-month roadmap, and market trends."
          }
        ]},
-      {"v2.0.0 — 2026-03-29 16:00 UTC",
+      {"v2.0.0", "2026-03-29T16:00:00Z",
        [
          %{
            title: "Resilience improvements — 10 fixes",
@@ -1082,7 +1085,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "DeadLetterRetry now scheduled (events no longer lost on ClickHouse outages). IngestBuffer flushes on shutdown (no data loss on deploys), catches per-event errors (single bad event can't crash batch), dead-letters overflows instead of dropping. Pixel endpoint has try/rescue. Dashboard uses Task.yield (no more LiveView crashes on timeout). Unique constraints on visitors table (prevents race condition duplicates). ClickHouse errors now include query SQL. Dead letter queue monitoring alerts when queue grows."
          }
        ]},
-      {"v1.9.3 — 2026-03-29 15:00 UTC",
+      {"v1.9.3", "2026-03-29T15:00:00Z",
        [
          %{
            title: "Fix RUM page_load/dom_complete always NaN — wrong API property",
@@ -1090,7 +1093,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Root cause: the tracker used nav.navigationStart which doesn't exist on PerformanceNavigationTiming (the modern API). It only exists on the deprecated performance.timing. So nav.loadEventEnd - undefined = NaN for page_load, dom_complete, and dom_interactive. Fixed by using nav.startTime (which is 0 for navigation entries) instead of nav.navigationStart. TTFB/FCP/DNS worked because they subtract from other PerformanceNavigationTiming properties, not navigationStart."
          }
        ]},
-      {"v1.9.2 — 2026-03-29 14:00 UTC",
+      {"v1.9.2", "2026-03-29T14:00:00Z",
        [
          %{
            title: "Fix RUM dashboard showing 0 — ClickHouse nan crashes JSON parser",
@@ -1098,7 +1101,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Root cause: ClickHouse quantileIf returns 'nan' in JSONEachRow when no rows match the condition. 'nan' is not valid JSON, causing Jason.decode! to crash. The crash was caught by safe_query's rescue clause, which returned an empty map — so the dashboard showed 0 samples. Fixed by sanitizing ClickHouse responses: nan→null and inf→null before JSON parsing. Also filters NaN values in tracker's mapToStrings to avoid storing 'NaN' strings."
          }
        ]},
-      {"v1.9.1 — 2026-03-28 02:05 UTC",
+      {"v1.9.1", "2026-03-28T02:05:00Z",
        [
          %{
            title: "Fix RUM page load metrics always showing 0",
@@ -1106,7 +1109,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Root cause: the tracker's polling-based RUM scheduling (500ms to 8s polls + 10s force-send) created a race condition on heavy pages. When loadEventEnd was still 0 at the 10s force timeout, the tracker sent TTFB/FCP without page_load and set rumSent=true, blocking the load event handler (which fires at 12-20s on WordPress sites) from ever sending complete data. Fixed by replacing polling with event-driven triggers: load event as primary trigger (with 500ms delay for loadEventEnd to populate), visibilitychange as safety net for early departures, and a 30s final fallback. DOM Ready, Full Load, Median Load, and P75 Load now correctly appear on the Performance dashboard."
          }
        ]},
-      {"v1.9.0 — 2026-03-29 08:00 UTC",
+      {"v1.9.0", "2026-03-29T08:00:00Z",
        [
          %{
            title: "Code quality refactoring",
@@ -1114,7 +1117,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "extracted shared TypeHelpers (to_num, to_float, format_ms, format_duration, format_number) and DateHelpers (range_to_period) modules — eliminated 200+ lines of duplication across 20 files. Fixed attribution crash on 90d range (was returning {:custom, 90} tuple). Added bot filtering to 5 more queries (transitions, attribution, cohort, map, search). Added @moduledoc to all 27 dashboard LiveViews."
          }
        ]},
-      {"v1.8.1 — 2026-03-29 07:00 UTC",
+      {"v1.8.1", "2026-03-29T07:00:00Z",
        [
          %{
            title: "Fingerprint accuracy improvements",
@@ -1132,7 +1135,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Revenue queries now filter to the site's configured currency, preventing different currencies from being summed together. Orders with mismatched currency are excluded from totals."
          }
        ]},
-      {"v1.8.0 — 2026-03-29 06:00 UTC",
+      {"v1.8.0", "2026-03-29T06:00:00Z",
        [
          %{
            title: "Data accuracy fixes — 8 issues",
@@ -1140,7 +1143,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Site Search fixed (was querying external referrer URLs instead of internal page URLs). Bot traffic now filtered from all analytics queries (ip_is_bot=0). Unique visitor counts reverted from materialized views to raw events (MVs were overcounting across multi-day ranges). Bounce rate now considers custom events (active visitors with 1 pageview no longer counted as bounces). UTMs extracted before GDPR URL stripping (were being lost in GDPR-on mode). Duration tracks foreground time instead of wall-clock (no more background-tab inflation). URL paths normalized (lowercase, trailing slash stripped). SPA duplicate pageviews prevented (URL-change check before sending)."
          }
        ]},
-      {"v1.7.1 — 2026-03-29 05:00 UTC",
+      {"v1.7.1", "2026-03-29T05:00:00Z",
        [
          %{
            title: "Materialized views for analytics queries",
@@ -1148,7 +1151,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "7 analytics queries now use pre-aggregated ClickHouse materialized views instead of scanning raw events: top_sources → source_stats, top_countries/top_regions/top_countries_summary → country_stats, top_devices/top_browsers/top_os/top_device_types → device_stats. These views are SummingMergeTree tables that aggregate on INSERT, making queries 10-100x faster for large datasets. Network stats stays on raw events (needs EU flag not in materialized view)."
          }
        ]},
-      {"v1.7.0 — 2026-03-29 04:00 UTC",
+      {"v1.7.0", "2026-03-29T04:00:00Z",
        [
          %{
            title: "Performance optimizations",
@@ -1156,7 +1159,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "site lookup cache now covers public_key (eliminates 1 Postgres query per event). UA parsed once instead of 2-3x. Session extend uses single UPDATE instead of SELECT+UPDATE. Dashboard mount queries run in parallel (2-3x faster). Your Sites page uses single batched ClickHouse query instead of N+1. PubSub events no longer trigger ClickHouse queries. Dead letter uses bulk insert. Session cleanup uses batch UPDATE. ClickHouse gets bloom filter indexes on event_type, event_name, url_path. Req structs stored in persistent_term instead of Agent."
          }
        ]},
-      {"v1.6.3 — 2026-03-29 03:00 UTC",
+      {"v1.6.3", "2026-03-29T03:00:00Z",
        [
          %{
            title: "RUM: collect all metrics reliably",
@@ -1164,7 +1167,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "fixed bug where sending TTFB early set rumSent=true, preventing page_load/dom_complete from ever being captured. Now polls for loadEventEnd at 0.5s, 1.5s, 3s, 5s, 8s intervals — only sends once page_load is ready. Force-sends on visibilitychange (visitor leaving) or 10s timeout with whatever metrics are available. One event per page load, complete data."
          }
        ]},
-      {"v1.6.2 — 2026-03-29 02:00 UTC",
+      {"v1.6.2", "2026-03-29T02:00:00Z",
        [
          %{
            title: "Mobile UI improvements",
@@ -1172,7 +1175,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "44px touch targets on mobile nav icons and dashboard nav items. Scroll indicator gradient on horizontally scrollable nav bar. Visitor Log hides Device and Entry columns on mobile (6→4 visible columns). Segment filter form stacks vertically on phones. Docs page gets mobile jump-to-section dropdown. Text contrast upgraded from gray-400 to gray-500 across all 14 dashboard pages for WCAG AA compliance. Log out link hidden on mobile (accessible via Account page)."
          }
        ]},
-      {"v1.6.1 — 2026-03-29 01:00 UTC",
+      {"v1.6.1", "2026-03-29T01:00:00Z",
        [
          %{
            title: "RUM collection reliability fix",
@@ -1180,7 +1183,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "RUM data no longer requires the load event to fire — sends immediately when TTFB is available (100ms after script load). Fixes RUM not collecting on heavy WordPress/Elementor sites where visitors leave before the load event fires. Missing metrics (page_load, dom_complete) are excluded server-side via quantileIf. Script cache reduced from 24h to 1h for faster tracker updates."
          }
        ]},
-      {"v1.6.0 — 2026-03-29 00:00 UTC",
+      {"v1.6.0", "2026-03-29T00:00:00Z",
        [
          %{
            title: "Security audit v2 — 10 findings fixed",
@@ -1188,7 +1191,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "WebAuthn binary_to_term now uses :safe option (prevents code execution). Passkey deletion requires user ownership. Pixel endpoint respects opt-out cookie (GDPR regression fixed). Origin validation no longer bypassed when Origin header is empty. API custom date ranges capped at 12 months. Default ClickHouse passwords removed from config. CSP adds object-src 'none'. Remember-me cookie gets secure + http_only flags. Health endpoint no longer leaks internal architecture. Backfill-geo uses param/1 for all interpolated values."
          }
        ]},
-      {"v1.5.2 — 2026-03-28 18:00 UTC",
+      {"v1.5.2", "2026-03-28T18:00:00Z",
        [
          %{
            title: "Timezone-aware dashboard",
@@ -1206,7 +1209,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "replaced requestIdleCallback with load event listener for reliable RUM collection. Added performance.timing fallback for broader browser support. CWV now sent via three triggers (5s delay, visibilitychange, 10s fallback) to ensure data isn't lost."
          }
        ]},
-      {"v1.5.1 — 2026-03-28 12:00 UTC",
+      {"v1.5.1", "2026-03-28T12:00:00Z",
        [
          %{
            title: "RUM accuracy fixes",
@@ -1219,7 +1222,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Pages table now shows a color-coded load time pill (green/amber/red) for each page. Transitions page shows Load, LCP, and FCP stats for the analyzed page. Quick reference without leaving the page you're on."
          }
        ]},
-      {"v1.5.0 — 2026-03-27 12:00 UTC",
+      {"v1.5.0", "2026-03-27T12:00:00Z",
        [
          %{
            title: "Real User Monitoring (RUM)",
@@ -1227,7 +1230,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "measures actual page load times and Core Web Vitals (LCP, CLS, FID) from real visitor browsers. Zero performance impact — uses requestIdleCallback and PerformanceObserver APIs. New Performance dashboard page shows: Core Web Vitals with Good/Needs Work/Poor scoring per Google thresholds, page load timing breakdown (TTFB, FCP, DOM Ready, Full Load), performance by device type, and slowest pages ranked by median load time."
          }
        ]},
-      {"v1.4.0 — 2026-03-29 12:00 UTC",
+      {"v1.4.0", "2026-03-29T12:00:00Z",
        [
          %{
            title: "Insights & Anomaly Alerts",
@@ -1240,7 +1243,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "shows the most common multi-step paths visitors take through the site. Each journey is a sequence of page pills with arrows. Conversion pages highlighted in green. Stats: total sessions, multi-page sessions, avg pages/session, converting sessions."
          }
        ]},
-      {"v1.3.3 — 2026-03-29 11:00 UTC",
+      {"v1.3.3", "2026-03-29T11:00:00Z",
        [
          %{
            title: "Time period controls moved back to main content",
@@ -1253,7 +1256,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "responsive stat cards (smaller text/padding on mobile), shorter chart height (192px mobile, 280px desktop), smaller intent icons, responsive map height, tighter spacing"
          }
        ]},
-      {"v1.3.2 — 2026-03-29 10:00 UTC",
+      {"v1.3.2", "2026-03-29T10:00:00Z",
        [
          %{
            title: "Fix: complete visitor deduplication rewrite",
@@ -1261,7 +1264,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "server now checks cookie THEN fingerprint before creating visitors. Cookie-lost visitors matched by fingerprint and existing record updated with new cookie. Cookies-blocked visitors fall back to fingerprint as ID. Single-phase fingerprint eliminates split IDs."
          }
        ]},
-      {"v1.3.1 — 2026-03-29 09:00 UTC",
+      {"v1.3.1", "2026-03-29T09:00:00Z",
        [
          %{
            title: "Fix: visitor deduplication — cookie + fingerprint",
@@ -1269,7 +1272,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "eliminated two-phase fingerprint (was creating split visitor IDs). Fixed cookie SameSite=None→Lax (None silently fails on HTTP). Single consistent fingerprint computed once on page load. Cookie now persists correctly on both HTTP and HTTPS sites."
          }
        ]},
-      {"v1.3.0 — 2026-03-29 08:00 UTC",
+      {"v1.3.0", "2026-03-29T08:00:00Z",
        [
          %{
            title: "Mobile navigation overhaul",
@@ -1277,7 +1280,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "top navbar: text links hidden on mobile, replaced with icon buttons (dashboard, docs, account). Dashboard sidebar: two-row mobile nav — quick access to top 5 pages + scrollable full navigation bar with all 19 pages. Active page highlighted in both rows."
          }
        ]},
-      {"v1.2.3 — 2026-03-29 07:00 UTC",
+      {"v1.2.3", "2026-03-29T07:00:00Z",
        [
          %{
            title: "Fix: invited users can now log in with password",
@@ -1295,7 +1298,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "end-to-end test that invitation acceptance creates a user who can authenticate with their password. Also tests email mismatch rejection."
          }
        ]},
-      {"v1.2.2 — 2026-03-29 06:00 UTC",
+      {"v1.2.2", "2026-03-29T06:00:00Z",
        [
          %{
            title: "Fix visitor dedup: use client browser fingerprint",
@@ -1303,7 +1306,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "tracker now sends _fp (canvas/WebGL fingerprint) in every beacon. Server uses client fingerprint for dedup instead of server-generated UA+IP+date which rotated daily. GDPR-on mode also prefers client fingerprint. Both modes now store the stable fingerprint for future matching."
          }
        ]},
-      {"v1.2.1 — 2026-03-29 05:00 UTC",
+      {"v1.2.1", "2026-03-29T05:00:00Z",
        [
          %{
            title: "Visitor deduplication via fingerprint",
@@ -1311,7 +1314,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "GDPR-off visitors who lose their cookie are now matched by browser fingerprint to their existing visitor record. Prevents duplicate visitor counts. Also stores fingerprint on first cookie-based visit for future dedup."
          }
        ]},
-      {"v1.2.0 — 2026-03-29 04:00 UTC",
+      {"v1.2.0", "2026-03-29T04:00:00Z",
        [
          %{
            title: "Grouped realtime visitors",
@@ -1324,7 +1327,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "fingerprint hash displayed in Identity & Device card with count of other visitors sharing the same fingerprint"
          }
        ]},
-      {"v1.1.1 — 2026-03-29 03:00 UTC",
+      {"v1.1.1", "2026-03-29T03:00:00Z",
        [
          %{
            title: "Tracker performance optimization",
@@ -1332,7 +1335,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "zero-blocking fingerprint: quick sync fingerprint (~0.1ms) fires with first beacon, enhanced fingerprint (canvas+WebGL) runs async 50ms later. Canvas hashes raw pixels instead of base64 toDataURL. Removed broken AudioContext (was async but result never captured). Form abuse listeners deferred 100ms. URL parsing skipped when no xd token. UTM parsing skipped when no utm_ in query string. ~9KB minified, ~3KB gzipped."
          }
        ]},
-      {"v1.1.0 — 2026-03-29 02:00 UTC",
+      {"v1.1.0", "2026-03-29T02:00:00Z",
        [
          %{
            title: "Enhanced browser fingerprinting",
@@ -1350,7 +1353,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "visitor profiles show other visitors with the same browser fingerprint — detects alt accounts, ban evasion, shared devices."
          }
        ]},
-      {"v1.0.1 — 2026-03-29 01:00 UTC",
+      {"v1.0.1", "2026-03-29T01:00:00Z",
        [
          %{
            title: "205 automated tests",
@@ -1358,7 +1361,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "added WebAuthn, intent classifier (14 cases), security (SQL injection, null bytes, segment validation), and updated docs"
          }
        ]},
-      {"v1.0.0 — 2026-03-29 00:00 UTC",
+      {"v1.0.0", "2026-03-29T00:00:00Z",
        [
          %{
            title: "WebAuthn/Passkey 2FA support",
@@ -1375,7 +1378,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
            description: "generate, view, revoke API keys. 2FA status and setup link."
          }
        ]},
-      {"v0.9.1 — 2026-03-28 23:30 UTC",
+      {"v0.9.1", "2026-03-28T23:30:00Z",
        [
          %{
            title: "API key management in Account Settings",
@@ -1388,7 +1391,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "shows 2FA status (enabled/disabled) and link to set up TOTP authenticator"
          }
        ]},
-      {"v0.9.0 — 2026-03-28 23:00 UTC",
+      {"v0.9.0", "2026-03-28T23:00:00Z",
        [
          %{
            title: "Raw user-agent string storage",
@@ -1401,7 +1404,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "all tables horizontally scrollable on mobile, mobile nav bar with back button and quick links, page header hidden on mobile (shown in nav bar instead)"
          }
        ]},
-      {"v0.8.0 — 2026-03-28 22:00 UTC",
+      {"v0.8.0", "2026-03-28T22:00:00Z",
        [
          %{
            title: "Security audit: 10 findings fixed",
@@ -1409,7 +1412,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Critical: diagnostic endpoints now require admin auth. High: opt-out cookie now respected. Medium: login rate limiting, invitation email verification, TOTP rate limits, buffer overflow protection, visitor_id validation, ClickHouse 2-year TTL, MMDB integrity checks, null byte sanitization."
          }
        ]},
-      {"v0.7.0 — 2026-03-28 21:00 UTC",
+      {"v0.7.0", "2026-03-28T21:00:00Z",
        [
          %{
            title: "Visitor intent icons and cross-linking",
@@ -1431,7 +1434,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
            description: "clicking a topic in the sidebar now scrolls to that section"
          }
        ]},
-      {"v0.6.1 — 2026-03-28 20:30 UTC",
+      {"v0.6.1", "2026-03-28T20:30:00Z",
        [
          %{
            title: "Accessible top navigation bar",
@@ -1439,7 +1442,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "light background, larger text (text-sm), higher contrast (gray-600 on white), ARIA roles and labels, taller bar (h-14), focus ring on sign-in button"
          }
        ]},
-      {"v0.6.0 — 2026-03-28 20:00 UTC",
+      {"v0.6.0", "2026-03-28T20:00:00Z",
        [
          %{
            title: "Documentation page",
@@ -1451,7 +1454,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
            description: "resend deletes prior pending invitations, added revoke button"
          }
        ]},
-      {"v0.5.1 — 2026-03-28 19:15 UTC",
+      {"v0.5.1", "2026-03-28T19:15:00Z",
        [
          %{
            title: "Invitation workflow improvements",
@@ -1459,7 +1462,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
              "Resending an invite now deletes prior pending invitations for the same email. Added Revoke button with confirmation to delete pending invitations."
          }
        ]},
-      {"v0.5.0 — 2026-03-28 18:30 UTC",
+      {"v0.5.0", "2026-03-28T18:30:00Z",
        [
          %{
            title: "Timezone-aware charts",
@@ -1479,7 +1482,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
            description: "comprehensive developer guide and project documentation"
          }
        ]},
-      {"v0.4.0 — 2026-03-28 15:00 UTC",
+      {"v0.4.0", "2026-03-28T15:00:00Z",
        [
          %{
            title: "Visitor Intent Detection",
@@ -1516,7 +1519,7 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
            description: nil
          }
        ]},
-      {"v0.1.0 — 2026-03-27",
+      {"v0.1.0", "2026-03-27T12:00:00Z",
        [
          %{
            title: "Initial launch of Spectabas analytics platform",
