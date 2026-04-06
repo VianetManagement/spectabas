@@ -28,7 +28,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
     day_start = Date.to_iso8601(date) <> "T00:00:00Z"
     day_end = Date.to_iso8601(Date.add(date, 1)) <> "T00:00:00Z"
 
-    body = """
+    search_body = """
     <search>
       <created-at>
         <min type="datetime">#{day_start}</min>
@@ -38,56 +38,88 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
     </search>
     """
 
-    url = "#{base_url(merchant_id)}/transactions/advanced_search"
-
-    # Braintree search returns paginated results. First request returns page 1
-    # with search_results containing page-size and ids. Fetch all pages.
-    fetch_all_pages(url, body, auth_header, merchant_id)
+    # Braintree two-step search:
+    # 1. POST advanced_search_ids → get ALL matching transaction IDs
+    # 2. POST advanced_search with batches of IDs → get full transaction data
+    fetch_all_by_ids(merchant_id, auth_header, search_body)
   end
 
-  defp fetch_all_pages(search_url, search_body, auth_header, _merchant_id) do
-    # Braintree pagination: add <page>N</page> to search body, keep fetching
-    # until we get fewer results than a full page (no reliable total_items).
-    fetch_page(search_url, search_body, auth_header, 1, [])
-  end
+  defp fetch_all_by_ids(merchant_id, auth_header, search_body) do
+    ids_url = "#{base_url(merchant_id)}/transactions/advanced_search_ids"
 
-  defp fetch_page(url, search_body, auth_header, page, acc) do
-    # Inject <page> element into search XML
-    paged_body =
-      String.replace(search_body, "</search>", "<page>#{page}</page></search>")
-
-    case Req.post(url, body: paged_body, headers: xml_headers(auth_header)) do
+    case Req.post(ids_url, body: search_body, headers: xml_headers(auth_header)) do
       {:ok, %{status: 200, body: resp_body}} ->
-        txns = parse_transactions(resp_body)
-        all = acc ++ txns
-        Logger.info("[BraintreeSync] Page #{page}: #{length(txns)} txns (#{length(all)} total)")
+        ids = parse_ids(resp_body)
+        page_size = parse_page_size(resp_body)
+        Logger.info("[BraintreeSync] Got #{length(ids)} transaction IDs, page_size=#{page_size}")
 
-        if length(txns) >= 50 and page < 200 do
-          # Full page — likely more results
-          fetch_page(url, search_body, auth_header, page + 1, all)
+        if ids == [] do
+          {:ok, []}
         else
-          {:ok, all}
+          # Fetch full transaction data in batches
+          batch_size = max(page_size, 50)
+          search_url = "#{base_url(merchant_id)}/transactions/advanced_search"
+
+          txns =
+            ids
+            |> Enum.chunk_every(batch_size)
+            |> Enum.with_index(1)
+            |> Enum.flat_map(fn {batch_ids, batch_num} ->
+              ids_xml = Enum.map_join(batch_ids, "", fn id -> "<item>#{id}</item>" end)
+
+              batch_body =
+                String.replace(search_body, "</search>",
+                  "<ids type=\"array\">#{ids_xml}</ids></search>")
+
+              case Req.post(search_url, body: batch_body, headers: xml_headers(auth_header)) do
+                {:ok, %{status: 200, body: batch_resp}} ->
+                  batch_txns = parse_transactions(batch_resp)
+                  Logger.info("[BraintreeSync] Batch #{batch_num}: #{length(batch_txns)} txns fetched")
+                  batch_txns
+
+                {:ok, %{status: status}} ->
+                  Logger.warning("[BraintreeSync] Batch #{batch_num} returned HTTP #{status}")
+                  []
+
+                {:error, reason} ->
+                  Logger.warning("[BraintreeSync] Batch #{batch_num} failed: #{inspect(reason)}")
+                  []
+              end
+            end)
+
+          Logger.info("[BraintreeSync] Total: #{length(txns)} transactions fetched")
+          {:ok, txns}
         end
 
       {:ok, %{status: 401}} ->
         {:error, "Invalid Braintree credentials"}
 
       {:ok, %{status: status, body: resp_body}} ->
-        if acc != [] do
-          # Got some pages already, return what we have
-          Logger.warning("[BraintreeSync] Page #{page} returned HTTP #{status}, returning #{length(acc)} txns from prior pages")
-          {:ok, acc}
-        else
-          {:error, "Braintree HTTP #{status}: #{String.slice(to_string(resp_body), 0, 200)}"}
-        end
+        {:error, "Braintree HTTP #{status}: #{String.slice(to_string(resp_body), 0, 200)}"}
 
       {:error, reason} ->
-        if acc != [] do
-          Logger.warning("[BraintreeSync] Page #{page} failed: #{inspect(reason)}, returning #{length(acc)} txns from prior pages")
-          {:ok, acc}
-        else
-          {:error, "Braintree API error: #{inspect(reason)}"}
-        end
+        {:error, "Braintree API error: #{inspect(reason)}"}
+    end
+  end
+
+  defp parse_ids(body) do
+    ~r/<ids[^>]*>(.*?)<\/ids>/s
+    |> Regex.run(body)
+    |> case do
+      [_, ids_block] ->
+        ~r/<item>(.*?)<\/item>/
+        |> Regex.scan(ids_block)
+        |> Enum.map(fn [_, id] -> String.trim(id) end)
+        |> Enum.reject(&(&1 == ""))
+
+      _ -> []
+    end
+  end
+
+  defp parse_page_size(body) do
+    case Regex.run(~r/<page-size[^>]*>(\d+)<\/page-size>/, body) do
+      [_, size] -> String.to_integer(size)
+      _ -> 50
     end
   end
 
@@ -113,9 +145,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
         </search>
         """
 
-        url = "#{base_url(merchant_id)}/transactions/advanced_search"
-
-        case fetch_all_pages(url, body, auth_header, merchant_id) do
+        case fetch_all_by_ids(merchant_id, auth_header, body) do
           {:ok, transactions} ->
             refunds =
               transactions
