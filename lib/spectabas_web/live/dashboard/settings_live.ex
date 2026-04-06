@@ -78,15 +78,37 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
       "model" => params["model"]
     }
 
-    case Spectabas.AI.Config.save(site, config) do
-      {:ok, updated_site} ->
-        {:noreply,
-         socket
-         |> assign(:site, updated_site)
-         |> put_flash(:info, "AI configuration saved.")}
+    if config["provider"] == "none" or config["api_key"] == "" do
+      case Spectabas.AI.Config.save(site, config) do
+        {:ok, updated_site} ->
+          {:noreply,
+           socket
+           |> assign(:site, updated_site)
+           |> put_flash(:info, "AI provider disabled.")}
 
-      {:error, _} ->
-        {:noreply, put_flash(socket, :error, "Failed to save AI configuration.")}
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, "Failed to save.")}
+      end
+    else
+      # Validate the API key with a lightweight test call
+      test_result = validate_ai_key(config["provider"], config["api_key"], config["model"])
+
+      case test_result do
+        :ok ->
+          case Spectabas.AI.Config.save(site, config) do
+            {:ok, updated_site} ->
+              {:noreply,
+               socket
+               |> assign(:site, updated_site)
+               |> put_flash(:info, "AI configuration saved and verified.")}
+
+            {:error, _} ->
+              {:noreply, put_flash(socket, :error, "Failed to save AI configuration.")}
+          end
+
+        {:error, reason} ->
+          {:noreply, put_flash(socket, :error, "API key validation failed: #{reason}")}
+      end
     end
   end
 
@@ -1490,6 +1512,44 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
         {:error, "Could not reach Stripe: #{inspect(reason)}"}
     end
   end
+
+  defp validate_ai_key("anthropic", key, _model) do
+    case Req.post("https://api.anthropic.com/v1/messages",
+           body: Jason.encode!(%{model: "claude-haiku-4-5-20251001", max_tokens: 1, messages: [%{role: "user", content: "hi"}]}),
+           headers: [{"x-api-key", key}, {"anthropic-version", "2023-06-01"}, {"content-type", "application/json"}],
+           receive_timeout: 10_000
+         ) do
+      {:ok, %{status: 200}} -> :ok
+      {:ok, %{status: 401}} -> {:error, "Invalid API key"}
+      {:ok, %{status: s, body: b}} -> {:error, get_in(b, ["error", "message"]) || "HTTP #{s}"}
+      {:error, reason} -> {:error, "Connection failed: #{inspect(reason) |> String.slice(0, 100)}"}
+    end
+  end
+
+  defp validate_ai_key("openai", key, _model) do
+    case Req.get("https://api.openai.com/v1/models",
+           headers: [{"authorization", "Bearer #{key}"}],
+           receive_timeout: 10_000
+         ) do
+      {:ok, %{status: 200}} -> :ok
+      {:ok, %{status: 401}} -> {:error, "Invalid API key"}
+      {:ok, %{status: s, body: b}} -> {:error, get_in(b, ["error", "message"]) || "HTTP #{s}"}
+      {:error, reason} -> {:error, "Connection failed: #{inspect(reason) |> String.slice(0, 100)}"}
+    end
+  end
+
+  defp validate_ai_key("google", key, _model) do
+    case Req.get("https://generativelanguage.googleapis.com/v1beta/models?key=#{key}",
+           receive_timeout: 10_000
+         ) do
+      {:ok, %{status: 200}} -> :ok
+      {:ok, %{status: 400}} -> {:error, "Invalid API key"}
+      {:ok, %{status: s, body: b}} -> {:error, if(is_map(b), do: get_in(b, ["error", "message"]) || "HTTP #{s}", else: "HTTP #{s}")}
+      {:error, reason} -> {:error, "Connection failed: #{inspect(reason) |> String.slice(0, 100)}"}
+    end
+  end
+
+  defp validate_ai_key(_, _, _), do: {:error, "Unknown provider"}
 
   defp platform_label("google_ads"), do: "Google Ads"
   defp platform_label("bing_ads"), do: "Microsoft Ads"

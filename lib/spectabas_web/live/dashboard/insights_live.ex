@@ -35,6 +35,12 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
 
       # Check for cached AI analysis
       ai_configured = Config.configured?(site)
+
+      # Debug: log AI config state
+      require Logger
+      ai_config = Config.get(site)
+      Logger.info("[Insights] AI configured=#{ai_configured}, provider=#{ai_config["provider"]}, has_key=#{ai_config["api_key"] != nil and ai_config["api_key"] != ""}, encrypted_field=#{site.ai_config_encrypted != nil}")
+
       cached_ai = if ai_configured, do: InsightsCache.get(site.id), else: nil
 
       {:ok,
