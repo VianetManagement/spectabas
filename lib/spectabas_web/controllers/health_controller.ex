@@ -859,6 +859,80 @@ defmodule SpectabasWeb.HealthController do
         "bing_diag" ->
           ecom_diag_bing(conn, site_id)
 
+        "attribution_diag" ->
+          site_p = Spectabas.ClickHouse.param(site_id)
+          ecom_filter = Spectabas.Analytics.ecommerce_source_filter(Spectabas.Sites.get_site!(site_id))
+
+          # How many ecom events have valid visitor_ids?
+          coverage = case Spectabas.ClickHouse.query("""
+            SELECT
+              count() AS total_orders,
+              countIf(visitor_id != '') AS with_visitor_id,
+              countIf(visitor_id = '') AS without_visitor_id,
+              round(countIf(visitor_id != '') / greatest(count(), 1) * 100, 1) AS match_pct
+            FROM ecommerce_events
+            WHERE site_id = #{site_p} #{ecom_filter}
+              AND timestamp >= now() - INTERVAL 30 DAY
+          """) do
+            {:ok, [row | _]} -> row
+            {:error, e} -> %{"error" => inspect(e)}
+          end
+
+          # How many purchaser visitor_ids exist in events table?
+          cross_match = case Spectabas.ClickHouse.query("""
+            SELECT count() AS purchasers_with_events
+            FROM (
+              SELECT DISTINCT visitor_id FROM ecommerce_events
+              WHERE site_id = #{site_p} #{ecom_filter}
+                AND timestamp >= now() - INTERVAL 30 DAY
+                AND visitor_id != ''
+            ) AS buyers
+            WHERE buyer.visitor_id IN (
+              SELECT DISTINCT visitor_id FROM events
+              WHERE site_id = #{site_p}
+                AND event_type = 'pageview'
+                AND timestamp >= now() - INTERVAL 30 DAY
+            )
+          """) do
+            {:ok, [row | _]} -> row
+            {:error, e} -> %{"error" => inspect(e) |> String.slice(0, 200)}
+          end
+
+          # Test first-touch revenue query directly (simplified)
+          first_touch_test = case Spectabas.ClickHouse.query("""
+            SELECT count() AS attributed_purchasers
+            FROM (
+              SELECT visitor_id,
+                ifNull(nullIf(argMinIf(
+                  if(referrer_domain != '', referrer_domain, if(utm_source != '', utm_source, 'Direct')),
+                  timestamp,
+                  referrer_domain != '' OR utm_source != '' OR click_id != ''
+                ), ''), 'Direct') AS source
+              FROM events
+              WHERE site_id = #{site_p}
+                AND event_type = 'pageview' AND ip_is_bot = 0
+                AND timestamp >= now() - INTERVAL 30 DAY
+                AND visitor_id IN (
+                  SELECT DISTINCT visitor_id FROM ecommerce_events
+                  WHERE site_id = #{site_p} #{ecom_filter}
+                    AND timestamp >= now() - INTERVAL 30 DAY
+                    AND visitor_id != ''
+                )
+              GROUP BY visitor_id
+            )
+          """) do
+            {:ok, [row | _]} -> row
+            {:error, e} -> %{"error" => inspect(e) |> String.slice(0, 200)}
+          end
+
+          json(conn, %{
+            action: "attribution_diag",
+            ecom_visitor_coverage: coverage,
+            cross_match: cross_match,
+            first_touch_test: first_touch_test,
+            ecom_filter: ecom_filter
+          })
+
         "ai_diag" ->
           site = Spectabas.Sites.get_site!(site_id)
           config = Spectabas.AI.Config.get(site)
