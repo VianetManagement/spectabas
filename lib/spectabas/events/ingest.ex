@@ -287,8 +287,6 @@ defmodule Spectabas.Events.Ingest do
             cached_id
 
           nil ->
-            fp = if payload._fp && payload._fp != "", do: payload._fp, else: nil
-
             # Step 1: Try to find visitor by this cookie_id
             existing_by_cookie =
               Spectabas.Repo.one(
@@ -300,24 +298,15 @@ defmodule Spectabas.Events.Ingest do
 
             if existing_by_cookie do
               # Cookie matches an existing visitor — return visit
-              if fp &&
-                   (existing_by_cookie.fingerprint_id == nil or
-                      existing_by_cookie.fingerprint_id == "") do
-                try_update_fingerprint(existing_by_cookie, fp)
-              end
-
               Visitors.get_or_create(site.id, payload.vid, :off, client_ip)
               Cache.put(site.id, payload.vid, existing_by_cookie.id)
               existing_by_cookie.id
             else
-              # New cookie — check fingerprint for dedup
               # New cookie = new visitor. Do NOT merge by fingerprint in cookie mode —
               # fingerprint dedup causes false merges when different people on the same
               # device model/browser share a fingerprint (e.g. two iPhone 15 users).
               case Visitors.get_or_create(site.id, payload.vid, :off, client_ip) do
                 {:ok, visitor} ->
-                  if fp, do: try_update_fingerprint(visitor, fp)
-
                   Cache.put(site.id, payload.vid, visitor.id)
                   visitor.id
 
