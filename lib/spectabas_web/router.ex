@@ -217,7 +217,6 @@ defmodule SpectabasWeb.Router do
       live "/", Platform.DashboardLive, :index
       live "/accounts", Platform.AccountsLive, :index
       live "/accounts/:id", Platform.AccountDetailLive, :show
-      live "/ingest", Admin.IngestDiagnosticsLive, :index
       live "/spam-filter", Admin.SpamFilterLive, :index
       live "/api-logs", Admin.ApiLogsLive, :index
       live "/competitive", Admin.CompetitiveLive, :index
@@ -236,6 +235,7 @@ defmodule SpectabasWeb.Router do
       live "/audit", Admin.AuditLive, :index
       live "/integrations", Admin.IntegrationStatusLive, :index
       live "/changelog", Admin.ChangelogLive, :index
+      live "/ingest", Admin.IngestDiagnosticsLive, :index
     end
   end
 

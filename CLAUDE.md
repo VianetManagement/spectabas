@@ -98,7 +98,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - `/health/dashboard-test` — tests all analytics queries
 - `/health/audit-test` — tests audit logging
 - `/health/backfill-geo` — re-enriches events with empty geo data
-- `/admin/ingest` — live ingest diagnostics (BEAM memory, buffer size, ETS cache stats, ClickHouse pool)
+- `/admin/ingest` — live ingest diagnostics (BEAM memory, buffer size, ETS cache stats, ClickHouse pool) — superadmin + platform_admin
 - `/admin/api-logs` — API access logs with request/response detail modal (30-day retention)
 - `/health/ecom-diag` — ecommerce diagnostics, supports `action=sync&start=YYYY-MM-DD&bg=1` for backfill
 - `/health/fix-ch-schema` — adds missing ClickHouse columns (uses admin/default user for DDL)

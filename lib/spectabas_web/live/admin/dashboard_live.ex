@@ -128,7 +128,7 @@ defmodule SpectabasWeb.Admin.DashboardLive do
             <p class="text-sm text-gray-500">Manage referrer spam blocklist and auto-detection</p>
           </.link>
           <.link
-            navigate="/platform/ingest"
+            navigate="/admin/ingest"
             class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
           >
             <h3 class="font-semibold text-gray-900 mb-1">Ingest Diagnostics</h3>
