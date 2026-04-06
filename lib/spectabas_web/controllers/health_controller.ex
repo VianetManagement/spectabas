@@ -859,6 +859,21 @@ defmodule SpectabasWeb.HealthController do
         "bing_diag" ->
           ecom_diag_bing(conn, site_id)
 
+        "ai_diag" ->
+          site = Spectabas.Sites.get_site!(site_id)
+          config = Spectabas.AI.Config.get(site)
+          configured = Spectabas.AI.Config.configured?(site)
+
+          json(conn, %{
+            action: "ai_diag",
+            configured: configured,
+            provider: config["provider"],
+            has_key: config["api_key"] != nil and config["api_key"] != "",
+            model: config["model"],
+            encrypted_field_nil: site.ai_config_encrypted == nil,
+            encrypted_field_size: if(site.ai_config_encrypted, do: byte_size(site.ai_config_encrypted), else: 0)
+          })
+
         _ ->
           ecom_diag_today(conn, site_id)
       end
