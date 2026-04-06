@@ -280,32 +280,53 @@ defmodule Spectabas.Analytics.AnomalyDetector do
   # --- High exit rate pages ---
 
   defp check_exit_pages(anomalies, site, cf, ct) do
+    # True exit rate: % of sessions where this was the LAST page viewed
     sql = """
     SELECT
-      url_path,
-      count() AS views,
-      countIf(is_bounce = 1) AS bounces,
-      round(countIf(is_bounce = 1) / greatest(count(), 1) * 100, 1) AS exit_rate
-    FROM events
-    WHERE site_id = #{ClickHouse.param(site.id)}
-      AND event_type = 'pageview'
-      AND timestamp >= #{ClickHouse.param(fmt(cf))}
-      AND timestamp <= #{ClickHouse.param(fmt(ct))}
-    GROUP BY url_path
-    HAVING views >= 20 AND exit_rate >= 85
-    ORDER BY views DESC
-    LIMIT 3
+      last_page AS url_path,
+      count() AS sessions,
+      round(count() * 100.0 / greatest(total.total_sessions, 1), 1) AS exit_pct
+    FROM (
+      SELECT session_id, argMax(url_path, timestamp) AS last_page
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND event_type = 'pageview'
+        AND ip_is_bot = 0
+        AND timestamp >= #{ClickHouse.param(fmt(cf))}
+        AND timestamp <= #{ClickHouse.param(fmt(ct))}
+      GROUP BY session_id
+    )
+    CROSS JOIN (
+      SELECT uniqExact(session_id) AS total_sessions
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND event_type = 'pageview'
+        AND ip_is_bot = 0
+        AND timestamp >= #{ClickHouse.param(fmt(cf))}
+        AND timestamp <= #{ClickHouse.param(fmt(ct))}
+    ) AS total
+    GROUP BY last_page, total.total_sessions
+    HAVING sessions >= 10
+    ORDER BY sessions DESC
+    LIMIT 5
     """
 
     case ClickHouse.query(sql) do
       {:ok, rows} ->
+        # Only flag pages that are disproportionately high exit points
+        # Skip homepages and known terminal pages
+        skip_paths = ["/", "/dashboard", "/search"]
+
         Enum.reduce(rows, anomalies, fn row, acc ->
           path = row["url_path"]
-          rate = to_float(row["exit_rate"])
+          pct = to_float(row["exit_pct"])
 
-          # Skip known terminal pages
-          if String.contains?(path, "thank") or String.contains?(path, "confirm") or
-               String.contains?(path, "success") do
+          if path in skip_paths or
+               String.contains?(path, "thank") or
+               String.contains?(path, "confirm") or
+               String.contains?(path, "success") or
+               String.contains?(path, "logout") or
+               pct < 5.0 do
             acc
           else
             [
@@ -314,11 +335,11 @@ defmodule Spectabas.Analytics.AnomalyDetector do
                 severity_rank: 4,
                 category: "engagement",
                 metric: "exit_rate",
-                current: rate,
+                current: pct,
                 previous: nil,
                 change_pct: nil,
-                message: "#{path} has a #{rate}% exit rate (#{row["views"]} views)",
-                action: "Visitors leave from this page — add internal links or a call to action"
+                message: "#{path} is a top exit page (#{pct}% of sessions end here, #{row["sessions"]} sessions)",
+                action: "Consider adding CTAs, related content, or reducing friction on this page"
               }
               | acc
             ]
