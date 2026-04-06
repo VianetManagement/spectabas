@@ -10,6 +10,14 @@ config :spectabas, Spectabas.Repo,
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: System.schedulers_online() * 2
 
+config :spectabas, Spectabas.ObanRepo,
+  username: "postgres",
+  password: "postgres",
+  hostname: "localhost",
+  database: "spectabas_test#{System.get_env("MIX_TEST_PARTITION")}",
+  pool: Ecto.Adapters.SQL.Sandbox,
+  pool_size: System.schedulers_online() * 2
+
 config :spectabas, SpectabasWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4002],
   secret_key_base: "9w/31jhW5mfSIJ/dg2GvRD3cepzmNhf7AUxWvJpy8bFHWssLrR83C6hHiAx/wSAU",

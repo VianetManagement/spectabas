@@ -12,6 +12,7 @@ defmodule Spectabas.Application do
       [
         SpectabasWeb.Telemetry,
         Spectabas.Repo,
+        Spectabas.ObanRepo,
         {DNSCluster, query: Application.get_env(:spectabas, :dns_cluster_query) || :ignore},
         {Phoenix.PubSub, name: Spectabas.PubSub},
         {Finch, name: Spectabas.Finch},

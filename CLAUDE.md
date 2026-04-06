@@ -276,7 +276,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Mobile responsiveness** — scrollable tables, collapsible mobile nav bar
 - **Accessible top nav** — WCAG AA contrast compliance
 - **Documentation pages** — docs split into `/docs` (index), `/docs/getting-started`, `/docs/dashboard`, `/docs/conversions`, `/docs/api`, `/docs/admin` with cross-category search. Requires login (behind :require_authenticated_user). Public pages: `/privacy`, `/terms`, homepage.
-- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.10.0)
+- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.11.0)
 - **Legal** — Privacy Policy at `/privacy` and Terms of Service at `/terms` (public, no auth required). Entity: Spectabas, Kent County MI. Contact: howdy@spectabas.com. Arbitration clause (AAA, Kent County). 18+ age restriction.
 
 ## Important Patterns
@@ -312,7 +312,9 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Origin validation**: Allows any subdomain of the parent domain (e.g., `app.example.com` is allowed when analytics domain is `b.example.com`). Cross-domain sites list is for entirely separate domains.
 - **API token scopes**: Enforce scope checks in API controllers. `read:stats` for GET stats/pages/sources, `read:visitors` for visitor log, `write:events` for event collection, `write:identify` for server-side identify, `admin:sites` for site management. Tokens can be restricted to specific site IDs.
 - **API access logging**: Every API call is logged (endpoint, method, request body, response status, response body). Stored in PostgreSQL with 30-day retention via Oban cleanup worker. Admin UI at `/admin/api-logs` with detail modal.
-- **High-throughput ingest**: Async flush, 500 batch size, ETS visitor cache, dedicated ClickHouse connection pool (100 connections), per-site rate limiting (1000 events/sec).
+- **High-throughput ingest**: Async flush, 500 batch size, ETS visitor cache, dedicated ClickHouse connection pool (100 connections), per-site rate limiting (1000 events/sec). Crash recovery: buffer persisted to `/tmp` every 10s, recovered on restart.
+- **ObanRepo**: Dedicated Postgres connection pool (25 connections) for Oban background jobs, isolated from the web pool (10 connections). Same database, separate pools. Prevents sync workers from starving web requests.
+- **Backpressure**: IngestBuffer returns 503 when buffer exceeds soft limit (5,000). Health endpoint returns "overloaded" when buffer >= 8,000 or Oban queue >= 500,000 pending jobs.
 - **occurred_at backdating**: All events support optional `occurred_at` field (Unix UTC seconds) to backdate events up to 7 days.
 - **Ecommerce email association**: Transaction API accepts optional `email` field. If `visitor_id` + `email` both provided, identifies the visitor. If only `email`, looks up by email. Orders appear on visitor profile pages.
 - **Ad integrations**: OAuth2 tokens stored encrypted via `Spectabas.AdIntegrations.Vault` (AES-256-GCM from SECRET_KEY_BASE). Platform adapters in `lib/spectabas/ad_integrations/platforms/`. Sync worker `AdSpendSync` runs every 6h via Oban `:ad_sync` queue. ClickHouse `ad_spend` table uses `ReplacingMergeTree(synced_at)` for dedup — **all queries MUST use `FROM ad_spend FINAL`** to deduplicate rows from repeated syncs. ROAS = revenue / spend, matched by campaign_name = utm_campaign.

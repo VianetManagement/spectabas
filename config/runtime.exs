@@ -14,6 +14,10 @@ if config_env() == :prod do
     url: database_url,
     pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10")
 
+  config :spectabas, Spectabas.ObanRepo,
+    url: database_url,
+    pool_size: String.to_integer(System.get_env("OBAN_POOL_SIZE") || "25")
+
   # ClickHouse — optional, app starts without it but analytics won't work
   if clickhouse_url = System.get_env("CLICKHOUSE_URL") do
     config :spectabas, Spectabas.ClickHouse,

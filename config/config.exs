@@ -49,7 +49,7 @@ config :spectabas, :rate_limits,
   api: {1000, 60_000}
 
 config :spectabas, Oban,
-  repo: Spectabas.Repo,
+  repo: Spectabas.ObanRepo,
   queues: [default: 10, mailer: 5, reports: 3, exports: 2, maintenance: 2, ad_sync: 3],
   plugins: [
     Oban.Plugins.Pruner,

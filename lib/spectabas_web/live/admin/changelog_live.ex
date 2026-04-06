@@ -48,6 +48,33 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.11.0", "2026-04-06T18:00:00Z",
+       [
+         %{
+           title: "Infrastructure: ObanRepo separate connection pool",
+           description:
+             "Oban background jobs now use a dedicated 25-connection Postgres pool (ObanRepo), " <>
+               "isolated from the web request pool (10 connections). Prevents sync workers from starving web requests."
+         },
+         %{
+           title: "Infrastructure: Crash recovery for IngestBuffer",
+           description:
+             "Buffer persisted to disk every 10 seconds. On restart, recovered events are flushed " <>
+               "to ClickHouse. Protects against data loss from OOM kills or hard crashes."
+         },
+         %{
+           title: "Infrastructure: Enhanced health monitoring",
+           description:
+             "Health endpoint now reports buffer size, Oban queue depth, and returns 'overloaded' " <>
+               "status when buffer >= 8,000 or pending jobs >= 500,000."
+         },
+         %{
+           title: "Fix: Geography page showing single state",
+           description:
+             "Import-aware merge key was grouping all regions by country, collapsing 50 states " <>
+               "into one California row. Fixed to merge by {country, region}."
+         }
+       ]},
       {"v5.10.0", "2026-04-06T12:00:00Z",
        [
          %{

@@ -9,6 +9,15 @@ config :spectabas, Spectabas.Repo,
   show_sensitive_data_on_connection_error: true,
   pool_size: 10
 
+config :spectabas, Spectabas.ObanRepo,
+  username: "postgres",
+  password: "postgres",
+  hostname: "localhost",
+  database: "spectabas_dev",
+  stacktrace: true,
+  show_sensitive_data_on_connection_error: true,
+  pool_size: 25
+
 config :spectabas, SpectabasWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4000],
   check_origin: false,

@@ -24,6 +24,7 @@ defmodule Spectabas.Events.IngestBuffer do
   @max_buffer_size 10_000
   @soft_limit 5_000
   @ets_table :ingest_buffer_counter
+  @crash_recovery_path "/tmp/spectabas_ingest_buffer.bin"
 
   # --- Public API ---
 
@@ -72,7 +73,17 @@ defmodule Spectabas.Events.IngestBuffer do
     flush_interval = cfg[:flush_interval_ms] || @default_flush_interval_ms
     max_batch = cfg[:max_batch_size] || @default_max_batch_size
 
+    # Recover any events persisted from a previous crash
+    recovered = recover_from_crash()
+
+    if recovered > 0 do
+      Logger.info("[IngestBuffer] Recovered #{recovered} events from crash file")
+    end
+
     schedule_flush(flush_interval)
+
+    # Periodically persist buffer to disk for crash recovery
+    schedule_persist()
 
     {:ok,
      %{
@@ -126,12 +137,23 @@ defmodule Spectabas.Events.IngestBuffer do
     if state.size > 0 do
       async_flush(state.buffer)
       update_ets_size(0)
+      clear_crash_file()
       schedule_flush(state.flush_interval)
       {:noreply, %{state | buffer: [], size: 0}}
     else
       schedule_flush(state.flush_interval)
       {:noreply, state}
     end
+  end
+
+  # Periodically persist buffer to disk for crash recovery
+  def handle_info(:persist_buffer, state) do
+    if state.size > 0 do
+      persist_to_disk(state.buffer)
+    end
+
+    schedule_persist()
+    {:noreply, state}
   end
 
   # Ignore Task.Supervisor DOWN messages from completed flush tasks
@@ -180,6 +202,10 @@ defmodule Spectabas.Events.IngestBuffer do
 
   defp schedule_flush(interval) do
     Process.send_after(self(), :tick, interval)
+  end
+
+  defp schedule_persist do
+    Process.send_after(self(), :persist_buffer, 10_000)
   end
 
   defp update_ets_size(size) do
@@ -313,5 +339,51 @@ defmodule Spectabas.Events.IngestBuffer do
         {:new_events, site_events}
       )
     end)
+  end
+
+  # --- Crash Recovery ---
+
+  defp persist_to_disk(events) do
+    try do
+      binary = :erlang.term_to_binary(events, [:compressed])
+      File.write(@crash_recovery_path, binary)
+    rescue
+      e -> Logger.warning("[IngestBuffer] Failed to persist buffer: #{Exception.message(e)}")
+    end
+  end
+
+  defp clear_crash_file do
+    File.rm(@crash_recovery_path)
+  end
+
+  defp recover_from_crash do
+    case File.read(@crash_recovery_path) do
+      {:ok, binary} ->
+        try do
+          events = :erlang.binary_to_term(binary, [:safe])
+
+          if is_list(events) and length(events) > 0 do
+            Logger.info("[IngestBuffer] Crash recovery: flushing #{length(events)} persisted events")
+            do_flush(events)
+            clear_crash_file()
+            length(events)
+          else
+            clear_crash_file()
+            0
+          end
+        rescue
+          _ ->
+            Logger.warning("[IngestBuffer] Crash file corrupted, discarding")
+            clear_crash_file()
+            0
+        end
+
+      {:error, :enoent} ->
+        0
+
+      {:error, reason} ->
+        Logger.warning("[IngestBuffer] Could not read crash file: #{reason}")
+        0
+    end
   end
 end
