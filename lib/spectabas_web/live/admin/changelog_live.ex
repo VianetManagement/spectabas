@@ -48,17 +48,17 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
-      {"v5.12.0", "2026-04-06T20:00:00Z",
+      {"v5.12.0", "2026-04-06T21:00:00Z",
        [
          %{
            title: "Fix: Braintree sync pagination",
            description:
-             "Braintree search API returns paginated results (50/page). Previously only the first page was fetched, missing most transactions on high-volume sites. Now fetches all pages."
+             "Braintree search API returns max 50 results per request. Previously only the first page was fetched, missing most transactions on high-volume sites. Now uses Braintree's two-step search: (1) fetch all matching IDs via advanced_search_ids, (2) batch-fetch full transaction data in chunks of 50."
          },
          %{
            title: "Fix: Braintree backfill sync logging",
            description:
-             "Backfill operations now write to the integration sync log (backfill_start, backfill ok/error with duration). Previously backfills produced no log entries."
+             "Backfill operations now write to the integration sync log (backfill_start, backfill ok/error with duration and day count). Previously backfills produced no log entries."
          },
          %{
            title: "Fix: Braintree credential validation",
@@ -69,6 +69,11 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
            title: "Fix: Braintree refund error handling",
            description:
              "Refund fetch errors (401, 500, network failures) are now logged instead of being silently swallowed as empty results."
+         },
+         %{
+           title: "Ingest diagnostics access",
+           description:
+             "Ingest diagnostics page moved from /platform/ingest to /admin/ingest — now accessible to superadmins, not just platform admins."
          }
        ]},
       {"v5.11.0", "2026-04-06T18:00:00Z",

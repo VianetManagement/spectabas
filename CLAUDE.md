@@ -188,7 +188,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 | viewer | Account+Site | set | Read-only on permitted sites within account. |
 
 ### Route Tiers
-- `/platform/*` — platform_admin only (accounts management, ingest diagnostics, spam filter, API logs, competitive)
+- `/platform/*` — platform_admin only (accounts management, spam filter, API logs, competitive)
 - `/admin/*` — superadmin + platform_admin (account-scoped user/site management, audit, changelog)
 - `/dashboard/*` — all authenticated users (analytics, scoped by `can_access_site?`)
 
@@ -321,7 +321,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Ad platform credentials**: Stored per-site as encrypted JSON blob in `sites.ad_credentials_encrypted`. No environment variables needed. Managed via `Spectabas.AdIntegrations.Credentials` module. Each site configures its own OAuth app credentials from the Settings page.
 - **ClickHouse argMinIf/argMaxIf empty string**: These functions return `''` (empty string, not NULL) when no rows match the condition. Always wrap with `nullIf(..., '')` before `ifNull` fallback, e.g. `ifNull(nullIf(argMinIf(expr, ts, cond), ''), 'Direct')`.
 - **RUM collection**: Tracker sends `_rum` (nav timing) and `_cwv` (Core Web Vitals) custom events. Uses `performance.getEntriesByType("navigation")` with `performance.timing` fallback. IMPORTANT: PerformanceNavigationTiming uses `nav.startTime` (always 0) for the navigation baseline — NOT `nav.navigationStart` which only exists on the deprecated `performance.timing`. Queries use `quantileIf` to exclude zeros. ClickHouse `quantileIf` returns `nan` when no rows match — `parse_rows` sanitizes `nan`→`null` before JSON parsing.
-- **Braintree pagination**: Braintree search API returns max 50 results per page. `fetch_all_pages/4` handles pagination by reading `total-items`, `page-size`, and `search-result-id` from the response. All fetch functions (transactions, refunds) use this. High-volume sites (thousands of txns/day) require pagination.
+- **Braintree pagination**: Braintree search API returns max 50 results per request. Uses two-step search: (1) POST to `advanced_search_ids` to get ALL matching transaction IDs, (2) batch-fetch full data via `advanced_search` with `<ids>` element in chunks of 50. The `advanced_search` endpoint alone only returns 50 results with no reliable pagination — `total-items` just reflects the current page count, not the true total. `fetch_all_by_ids/3` handles this for both transactions and refunds.
 - **Stripe PaymentIntents vs Charges**: Always use `/v1/payment_intents` (pi_* IDs), NOT `/v1/charges` (ch_* IDs). Charges can have multiples per payment (e.g. auth + capture), causing overcounting. PaymentIntents represent a single logical payment.
 - **Ecommerce source filtering**: When ANY Stripe integration record exists (active or not), revenue dashboards filter to `import_source = 'stripe'` only (pi_* orders). Prevents double-counting with API-submitted transactions.
 - **import_source column**: `ecommerce_events` has `import_source` LowCardinality(String) — values: `"stripe"`, `"braintree"`, `""` (API). Clear Data only deletes rows matching that integration's source. This prevents one integration's Clear Data from wiping another's data.

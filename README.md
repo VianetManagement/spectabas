@@ -46,7 +46,7 @@ Privacy-first web analytics platform built with Elixir/Phoenix and ClickHouse.
 
 ### Integrations
 - **Ad platforms** — connect via OAuth2 for ROAS tracking and click ID attribution
-- **Payment providers** — import charges, refunds, subscriptions for revenue analytics
+- **Payment providers** — import charges, refunds, subscriptions for revenue analytics (Stripe, Braintree with full pagination for high-volume sites)
 - **Search consoles** — import keyword rankings, clicks, impressions for SEO insights
 - **Configurable sync frequency** — per-integration, from 5 minutes to 24 hours
 - **Integration sync logging** — full event log with status, duration, and error details
