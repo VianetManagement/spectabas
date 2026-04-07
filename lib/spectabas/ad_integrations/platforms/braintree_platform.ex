@@ -47,7 +47,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
   defp fetch_all_by_ids(merchant_id, auth_header, search_body) do
     ids_url = "#{base_url(merchant_id)}/transactions/advanced_search_ids"
 
-    case Req.post(ids_url, body: search_body, headers: xml_headers(auth_header)) do
+    case Req.post(ids_url, body: search_body, headers: xml_headers(auth_header), receive_timeout: 60_000, connect_options: [timeout: 15_000]) do
       {:ok, %{status: 200, body: resp_body}} ->
         ids = parse_ids(resp_body)
         page_size = parse_page_size(resp_body)
@@ -71,20 +71,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
                 String.replace(search_body, "</search>",
                   "<ids type=\"array\">#{ids_xml}</ids></search>")
 
-              case Req.post(search_url, body: batch_body, headers: xml_headers(auth_header)) do
-                {:ok, %{status: 200, body: batch_resp}} ->
-                  batch_txns = parse_transactions(batch_resp)
-                  Logger.info("[BraintreeSync] Batch #{batch_num}: #{length(batch_txns)} txns fetched")
-                  batch_txns
-
-                {:ok, %{status: status}} ->
-                  Logger.warning("[BraintreeSync] Batch #{batch_num} returned HTTP #{status}")
-                  []
-
-                {:error, reason} ->
-                  Logger.warning("[BraintreeSync] Batch #{batch_num} failed: #{inspect(reason)}")
-                  []
-              end
+              fetch_batch_with_retry(search_url, batch_body, auth_header, batch_num)
             end)
 
           Logger.info("[BraintreeSync] Total: #{length(txns)} transactions fetched")
@@ -99,6 +86,28 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
 
       {:error, reason} ->
         {:error, "Braintree API error: #{inspect(reason)}"}
+    end
+  end
+
+  defp fetch_batch_with_retry(url, body, auth_header, batch_num, attempt \\ 1) do
+    case Req.post(url, body: body, headers: xml_headers(auth_header), receive_timeout: 60_000, connect_options: [timeout: 15_000]) do
+      {:ok, %{status: 200, body: resp}} ->
+        txns = parse_transactions(resp)
+        Logger.info("[BraintreeSync] Batch #{batch_num}: #{length(txns)} txns fetched")
+        txns
+
+      {:ok, %{status: status}} ->
+        Logger.warning("[BraintreeSync] Batch #{batch_num} returned HTTP #{status}")
+        []
+
+      {:error, %Req.TransportError{reason: reason}} when attempt < 3 ->
+        Logger.warning("[BraintreeSync] Batch #{batch_num} transport error: #{inspect(reason)}, retrying (#{attempt}/3)...")
+        Process.sleep(1_000 * attempt)
+        fetch_batch_with_retry(url, body, auth_header, batch_num, attempt + 1)
+
+      {:error, reason} ->
+        Logger.warning("[BraintreeSync] Batch #{batch_num} failed: #{inspect(reason)}")
+        []
     end
   end
 

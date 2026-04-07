@@ -188,6 +188,9 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
           Enum.reduce_while(0..num_days, 0, fn offset, synced_days ->
             date = Date.add(today, -offset)
 
+            # Brief pause between days to avoid connection exhaustion on long backfills
+            if offset > 0, do: Process.sleep(500)
+
             day_result =
               case integration.platform do
                 "stripe" ->
