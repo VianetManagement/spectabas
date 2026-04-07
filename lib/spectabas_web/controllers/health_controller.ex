@@ -1525,4 +1525,65 @@ defmodule SpectabasWeb.HealthController do
     Spectabas.Repo.all(Spectabas.Sites.Site)
     |> Enum.map(fn s -> %{id: s.id, domain: s.domain, public_key: s.public_key} end)
   end
+
+  def oban_admin(conn, %{"token" => token, "action" => action} = params) do
+    unless valid_token?(token) do
+      conn |> put_status(403) |> json(%{error: "forbidden"})
+    else
+      import Ecto.Query
+
+      case action do
+        "status" ->
+          executing =
+            Spectabas.ObanRepo.all(
+              from(j in "oban_jobs",
+                where: j.state == "executing",
+                group_by: [j.worker],
+                select: %{worker: j.worker, count: count(j.id)}
+              )
+            )
+
+          pending =
+            Spectabas.ObanRepo.aggregate(
+              from(j in "oban_jobs", where: j.state in ["available", "scheduled"]),
+              :count
+            )
+
+          json(conn, %{executing: executing, pending: pending})
+
+        "cancel_worker" ->
+          worker = params["worker"] || ""
+
+          if worker == "" do
+            conn |> put_status(400) |> json(%{error: "worker param required"})
+          else
+            {count, _} =
+              Spectabas.ObanRepo.update_all(
+                from(j in "oban_jobs",
+                  where: j.state == "executing" and j.worker == ^worker
+                ),
+                set: [state: "cancelled", cancelled_at: DateTime.utc_now()]
+              )
+
+            json(conn, %{ok: true, cancelled: count, worker: worker})
+          end
+
+        "cancel_all_executing" ->
+          {count, _} =
+            Spectabas.ObanRepo.update_all(
+              from(j in "oban_jobs", where: j.state == "executing"),
+              set: [state: "cancelled", cancelled_at: DateTime.utc_now()]
+            )
+
+          json(conn, %{ok: true, cancelled: count})
+
+        _ ->
+          conn |> put_status(400) |> json(%{error: "unknown action. use: status, cancel_worker, cancel_all_executing"})
+      end
+    end
+  end
+
+  def oban_admin(conn, _params) do
+    conn |> put_status(403) |> json(%{error: "forbidden"})
+  end
 end

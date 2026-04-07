@@ -43,6 +43,7 @@ defmodule SpectabasWeb.Router do
     get "/fix-ch-schema", HealthController, :fix_ch_schema
     get "/ecom-diag", HealthController, :ecom_diag
     get "/click-id-diag", HealthController, :click_id_diag
+    get "/oban-admin", HealthController, :oban_admin
   end
 
   # Diagnostic endpoints — admin only
