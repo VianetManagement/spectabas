@@ -354,7 +354,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     |> assign(:prev_stats, prev_stats)
     |> assign(:timeseries, timeseries)
     |> assign(:live_visitors, live_visitors)
-    |> assign_new(:chart_metric, fn -> "pageviews" end)
+    |> assign_new(:chart_metric, fn -> "visitors" end)
     |> push_chart_data(
       timeseries,
       socket.assigns[:locations] || [],
@@ -479,7 +479,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         labels: Enum.map(timeseries, & &1["label"]),
         pageviews: Enum.map(timeseries, &to_num(&1["pageviews"])),
         visitors: Enum.map(timeseries, &to_num(&1["visitors"])),
-        metric: socket.assigns[:chart_metric] || "pageviews"
+        metric: socket.assigns[:chart_metric] || "visitors"
       })
       |> push_event("map-data", %{
         points:

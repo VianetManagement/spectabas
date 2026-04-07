@@ -18,7 +18,7 @@ export const TimeseriesChart = {
     const canvas = this.el.querySelector("canvas")
     if (!canvas) return
 
-    const metric = data.metric || "pageviews"
+    const metric = data.metric || "visitors"
     const isPageviews = metric === "pageviews"
     const values = isPageviews ? data.pageviews : data.visitors
     const label = isPageviews ? "Pageviews" : "Visitors"
