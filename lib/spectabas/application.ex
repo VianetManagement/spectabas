@@ -6,10 +6,9 @@ defmodule Spectabas.Application do
 
   @impl true
   def start(_type, _args) do
-    Spectabas.Visitors.Cache.init()
-
     children =
       [
+        Spectabas.Visitors.Cache,
         SpectabasWeb.Telemetry,
         Spectabas.Repo,
         Spectabas.ObanRepo,
