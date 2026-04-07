@@ -36,8 +36,7 @@ defmodule SpectabasWeb.Dashboard.FindLive do
        |> assign(:search_types, @search_types)
        |> assign(:search_type, "email")
        |> assign(:query, "")
-       |> assign(:results, nil)
-       |> assign(:searching, false)}
+       |> assign(:results, nil)}
     end
   end
 
@@ -62,6 +61,10 @@ defmodule SpectabasWeb.Dashboard.FindLive do
     {:noreply, assign(socket, :search_type, type)}
   end
 
+  # --- Search functions ---
+
+  # Email: deduplicate by email — pick the most recently seen visitor,
+  # merge all known IPs across duplicates
   defp do_search(site, "email", q) do
     q = String.downcase(q)
 
@@ -70,13 +73,26 @@ defmodule SpectabasWeb.Dashboard.FindLive do
         from(v in Spectabas.Visitors.Visitor,
           where: v.site_id == ^site.id and like(v.email, ^"%#{escape_like(q)}%"),
           order_by: [desc: v.last_seen_at],
-          limit: 50
+          limit: 200
         )
       )
 
-    %{type: :visitors, rows: visitors}
+    # Group by email, keep most recent, merge IPs
+    deduped =
+      visitors
+      |> Enum.group_by(& &1.email)
+      |> Enum.map(fn {_email, dupes} ->
+        primary = hd(dupes)
+        all_ips = dupes |> Enum.flat_map(&(&1.known_ips || [])) |> Enum.uniq()
+        first_seen = dupes |> Enum.map(& &1.first_seen_at) |> Enum.reject(&is_nil/1) |> Enum.min(DateTime, fn -> nil end)
+        %{primary | known_ips: all_ips, first_seen_at: first_seen || primary.first_seen_at}
+      end)
+      |> Enum.sort_by(& &1.last_seen_at, {:desc, DateTime})
+
+    %{type: :visitors, rows: deduped}
   end
 
+  # IP: multiple visitors at same IP is expected (household, office) — keep separate
   defp do_search(site, "ip", q) do
     visitors =
       Spectabas.Repo.all(
@@ -94,9 +110,7 @@ defmodule SpectabasWeb.Dashboard.FindLive do
     visitors =
       Spectabas.Repo.all(
         from(v in Spectabas.Visitors.Visitor,
-          where:
-            v.site_id == ^site.id and
-              (v.cookie_id == ^q or v.id == ^q),
+          where: v.site_id == ^site.id and (v.cookie_id == ^q or v.id == ^q),
           limit: 10
         )
       )
@@ -104,17 +118,28 @@ defmodule SpectabasWeb.Dashboard.FindLive do
     %{type: :visitors, rows: visitors}
   end
 
+  # User ID: deduplicate by user_id (same logic as email)
   defp do_search(site, "user_id", q) do
     visitors =
       Spectabas.Repo.all(
         from(v in Spectabas.Visitors.Visitor,
           where: v.site_id == ^site.id and v.user_id == ^q,
           order_by: [desc: v.last_seen_at],
-          limit: 50
+          limit: 100
         )
       )
 
-    %{type: :visitors, rows: visitors}
+    deduped =
+      visitors
+      |> Enum.group_by(& &1.user_id)
+      |> Enum.map(fn {_uid, dupes} ->
+        primary = hd(dupes)
+        all_ips = dupes |> Enum.flat_map(&(&1.known_ips || [])) |> Enum.uniq()
+        first_seen = dupes |> Enum.map(& &1.first_seen_at) |> Enum.reject(&is_nil/1) |> Enum.min(DateTime, fn -> nil end)
+        %{primary | known_ips: all_ips, first_seen_at: first_seen || primary.first_seen_at}
+      end)
+
+    %{type: :visitors, rows: deduped}
   end
 
   defp do_search(site, "order_id", q) do
@@ -239,6 +264,8 @@ defmodule SpectabasWeb.Dashboard.FindLive do
 
   defp escape_like(s), do: s |> String.replace("%", "\\%") |> String.replace("_", "\\_")
 
+  # --- Template ---
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -305,31 +332,20 @@ defmodule SpectabasWeb.Dashboard.FindLive do
                 <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Last IP</th>
                 <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">First Seen</th>
                 <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Last Seen</th>
-                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">GDPR</th>
-                <th class="px-4 py-2"></th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
-              <tr :for={v <- @results.rows} class="hover:bg-gray-50">
-                <td class="px-4 py-2 text-sm text-gray-900">{v.email || "—"}</td>
-                <td class="px-4 py-2 text-sm text-gray-600 font-mono text-xs">{v.user_id || "—"}</td>
-                <td class="px-4 py-2 text-sm text-gray-600 font-mono text-xs">{v.last_ip || "—"}</td>
-                <td class="px-4 py-2 text-sm text-gray-500">{format_dt(v.first_seen_at)}</td>
-                <td class="px-4 py-2 text-sm text-gray-500">{format_dt(v.last_seen_at)}</td>
-                <td class="px-4 py-2 text-xs">
-                  <span class={if v.gdpr_mode == "on", do: "text-green-600", else: "text-gray-400"}>
-                    {v.gdpr_mode}
-                  </span>
-                </td>
-                <td class="px-4 py-2 text-right">
-                  <.link
-                    navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{v.id}"}
-                    class="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
-                  >
-                    View
-                  </.link>
-                </td>
-              </tr>
+              <.link
+                :for={v <- @results.rows}
+                navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{v.id}"}
+                class="table-row hover:bg-indigo-50 cursor-pointer transition-colors"
+              >
+                <td class="px-4 py-3 text-sm text-gray-900">{v.email || "—"}</td>
+                <td class="px-4 py-3 text-sm text-gray-600 font-mono text-xs">{v.user_id || "—"}</td>
+                <td class="px-4 py-3 text-sm text-gray-600 font-mono text-xs">{v.last_ip || "—"}</td>
+                <td class="px-4 py-3 text-sm text-gray-500">{format_dt(v.first_seen_at)}</td>
+                <td class="px-4 py-3 text-sm text-gray-500">{format_dt(v.last_seen_at)}</td>
+              </.link>
             </tbody>
           </table>
         </div>
@@ -346,25 +362,27 @@ defmodule SpectabasWeb.Dashboard.FindLive do
                 <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Revenue</th>
                 <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Currency</th>
                 <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Timestamp</th>
-                <th class="px-4 py-2"></th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
-              <tr :for={o <- @results.rows} class="hover:bg-gray-50">
-                <td class="px-4 py-2 text-sm font-mono text-gray-900">{o["order_id"]}</td>
-                <td class="px-4 py-2 text-sm text-gray-900 text-right tabular-nums">{o["revenue"]}</td>
-                <td class="px-4 py-2 text-sm text-gray-600">{o["currency"]}</td>
-                <td class="px-4 py-2 text-sm text-gray-500">{o["timestamp"]}</td>
-                <td class="px-4 py-2 text-right">
-                  <.link
-                    :if={o["visitor_id"] != ""}
-                    navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{o["visitor_id"]}"}
-                    class="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
-                  >
-                    Visitor
-                  </.link>
-                </td>
-              </tr>
+              <%= for o <- @results.rows do %>
+                <.link
+                  :if={o["visitor_id"] != ""}
+                  navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{o["visitor_id"]}"}
+                  class="table-row hover:bg-indigo-50 cursor-pointer transition-colors"
+                >
+                  <td class="px-4 py-3 text-sm font-mono text-gray-900">{o["order_id"]}</td>
+                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{o["revenue"]}</td>
+                  <td class="px-4 py-3 text-sm text-gray-600">{o["currency"]}</td>
+                  <td class="px-4 py-3 text-sm text-gray-500">{o["timestamp"]}</td>
+                </.link>
+                <tr :if={o["visitor_id"] == ""} class="hover:bg-gray-50">
+                  <td class="px-4 py-3 text-sm font-mono text-gray-900">{o["order_id"]}</td>
+                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{o["revenue"]}</td>
+                  <td class="px-4 py-3 text-sm text-gray-600">{o["currency"]}</td>
+                  <td class="px-4 py-3 text-sm text-gray-500">{o["timestamp"]}</td>
+                </tr>
+              <% end %>
             </tbody>
           </table>
         </div>
@@ -383,11 +401,15 @@ defmodule SpectabasWeb.Dashboard.FindLive do
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
-              <tr :for={p <- @results.rows} class="hover:bg-gray-50">
-                <td class="px-4 py-2 text-sm font-mono text-gray-900 truncate max-w-md" title={p["url_path"]}>{p["url_path"]}</td>
-                <td class="px-4 py-2 text-sm text-gray-900 text-right tabular-nums">{format_number(p["pageviews"])}</td>
-                <td class="px-4 py-2 text-sm text-gray-900 text-right tabular-nums">{format_number(p["visitors"])}</td>
-              </tr>
+              <.link
+                :for={p <- @results.rows}
+                navigate={~p"/dashboard/sites/#{@site.id}/pages?filter=#{p["url_path"]}"}
+                class="table-row hover:bg-indigo-50 cursor-pointer transition-colors"
+              >
+                <td class="px-4 py-3 text-sm font-mono text-gray-900 truncate max-w-md" title={p["url_path"]}>{p["url_path"]}</td>
+                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{format_number(p["pageviews"])}</td>
+                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{format_number(p["visitors"])}</td>
+              </.link>
             </tbody>
           </table>
         </div>
@@ -406,11 +428,15 @@ defmodule SpectabasWeb.Dashboard.FindLive do
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
-              <tr :for={r <- @results.rows} class="hover:bg-gray-50">
-                <td class="px-4 py-2 text-sm text-gray-900">{r["referrer_domain"]}</td>
-                <td class="px-4 py-2 text-sm text-gray-900 text-right tabular-nums">{format_number(r["pageviews"])}</td>
-                <td class="px-4 py-2 text-sm text-gray-900 text-right tabular-nums">{format_number(r["visitors"])}</td>
-              </tr>
+              <.link
+                :for={r <- @results.rows}
+                navigate={~p"/dashboard/sites/#{@site.id}/sources?filter=#{r["referrer_domain"]}"}
+                class="table-row hover:bg-indigo-50 cursor-pointer transition-colors"
+              >
+                <td class="px-4 py-3 text-sm text-gray-900">{r["referrer_domain"]}</td>
+                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{format_number(r["pageviews"])}</td>
+                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{format_number(r["visitors"])}</td>
+              </.link>
             </tbody>
           </table>
         </div>
@@ -430,12 +456,16 @@ defmodule SpectabasWeb.Dashboard.FindLive do
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
-              <tr :for={c <- @results.rows} class="hover:bg-gray-50">
-                <td class="px-4 py-2 text-sm text-gray-900">{c["campaign"]}</td>
-                <td class="px-4 py-2 text-sm text-gray-900 text-right tabular-nums">{format_number(c["pageviews"])}</td>
-                <td class="px-4 py-2 text-sm text-gray-900 text-right tabular-nums">{format_number(c["visitors"])}</td>
-                <td class="px-4 py-2 text-sm text-gray-900 text-right tabular-nums">{format_number(c["sessions"])}</td>
-              </tr>
+              <.link
+                :for={c <- @results.rows}
+                navigate={~p"/dashboard/sites/#{@site.id}/campaigns?filter=#{c["campaign"]}"}
+                class="table-row hover:bg-indigo-50 cursor-pointer transition-colors"
+              >
+                <td class="px-4 py-3 text-sm text-gray-900">{c["campaign"]}</td>
+                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{format_number(c["pageviews"])}</td>
+                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{format_number(c["visitors"])}</td>
+                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{format_number(c["sessions"])}</td>
+              </.link>
             </tbody>
           </table>
         </div>
@@ -455,12 +485,16 @@ defmodule SpectabasWeb.Dashboard.FindLive do
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
-              <tr :for={o <- @results.rows} class="hover:bg-gray-50">
-                <td class="px-4 py-2 text-sm text-gray-900">{o["ip_org"]}</td>
-                <td class="px-4 py-2 text-sm text-gray-600 font-mono">{o["ip_asn"]}</td>
-                <td class="px-4 py-2 text-sm text-gray-900 text-right tabular-nums">{format_number(o["visitors"])}</td>
-                <td class="px-4 py-2 text-sm text-gray-900 text-right tabular-nums">{format_number(o["pageviews"])}</td>
-              </tr>
+              <.link
+                :for={o <- @results.rows}
+                navigate={~p"/dashboard/sites/#{@site.id}/network?filter=#{o["ip_org"]}"}
+                class="table-row hover:bg-indigo-50 cursor-pointer transition-colors"
+              >
+                <td class="px-4 py-3 text-sm text-gray-900">{o["ip_org"]}</td>
+                <td class="px-4 py-3 text-sm text-gray-600 font-mono">{o["ip_asn"]}</td>
+                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{format_number(o["visitors"])}</td>
+                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{format_number(o["pageviews"])}</td>
+              </.link>
             </tbody>
           </table>
         </div>
