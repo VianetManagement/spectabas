@@ -102,19 +102,25 @@ defmodule SpectabasWeb.API.StatsController do
         traits = Map.take(params, ["email", "user_id"])
         ip = params["ip"]
 
-        case Visitors.identify(site.id, visitor_id, traits, ip) do
-          {:ok, visitor} ->
-            json(conn, %{
-              ok: true,
-              visitor_id: visitor.id,
-              email_hash: visitor.email_hash
-            })
+        try do
+          case Visitors.identify(site.id, visitor_id, traits, ip) do
+            {:ok, visitor} ->
+              json(conn, %{
+                ok: true,
+                visitor_id: visitor.id,
+                email_hash: visitor.email_hash
+              })
 
-          {:error, :not_found} ->
-            conn |> put_status(404) |> json(%{error: "visitor not found"})
+            {:error, :not_found} ->
+              conn |> put_status(404) |> json(%{error: "visitor not found"})
 
-          {:error, reason} ->
-            conn |> put_status(422) |> json(%{error: inspect(reason)})
+            {:error, reason} ->
+              conn |> put_status(422) |> json(%{error: inspect(reason)})
+          end
+        rescue
+          e ->
+            Logger.error("[API] Identify crashed: #{Exception.message(e)}")
+            conn |> put_status(503) |> json(%{error: "service temporarily unavailable"})
         end
       end
     else
