@@ -46,17 +46,22 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
        |> assign(:show_save_input, false)
        |> assign(:override_date_range, nil)
        |> assign(:live_visitors, 0)
-       |> assign(:top_pages, [])
-       |> assign(:top_sources, [])
-       |> assign(:top_regions, [])
-       |> assign(:top_browsers, [])
-       |> assign(:top_os, [])
-       |> assign(:entry_pages, [])
+       |> assign(:stats, empty_overview())
+       |> assign(:prev_stats, nil)
+       |> assign(:timeseries, [])
+       |> assign(:top_pages, nil)
+       |> assign(:top_sources, nil)
+       |> assign(:top_regions, nil)
+       |> assign(:top_browsers, nil)
+       |> assign(:top_os, nil)
+       |> assign(:entry_pages, nil)
        |> assign(:locations, [])
        |> assign(:timezones, [])
-       |> assign(:intents, [])
+       |> assign(:intents, nil)
        |> assign(:ecommerce, nil)
        |> assign(:identified_users, 0)
+       |> assign(:stats_cache, %{})
+       |> assign(:deferred_loaded, false)
        |> load_critical_stats()
        |> then(fn s ->
          if connected?(s), do: send(self(), :load_deferred)
@@ -68,11 +73,17 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   @impl true
   def handle_info(:refresh, socket) do
     schedule_refresh()
+    # Invalidate current range cache entry so refresh fetches fresh data
+    key = stats_cache_key(socket)
+    socket = update(socket, :stats_cache, &Map.delete(&1, key))
     {:noreply, load_stats(socket)}
   end
 
   def handle_info(:load_deferred, socket) do
-    {:noreply, load_deferred_stats(socket)}
+    socket = load_deferred_stats(socket)
+    # Cache the now-complete stats for this range
+    key = stats_cache_key(socket)
+    {:noreply, cache_stats(socket, key)}
   end
 
   def handle_info({:new_event, _event}, socket) do
@@ -285,11 +296,48 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     end
   end
 
-  # Full reload — used on period/segment change and refresh
+  @cached_assigns ~w(stats prev_stats timeseries live_visitors top_pages top_sources
+                     top_regions top_browsers top_os entry_pages locations timezones
+                     intents ecommerce identified_users)a
+
+  # Full reload — checks cache first, falls back to queries
   defp load_stats(socket) do
+    key = stats_cache_key(socket)
+
+    case Map.get(socket.assigns.stats_cache, key) do
+      nil ->
+        # Cache miss — query and cache
+        socket
+        |> load_critical_stats()
+        |> load_deferred_stats()
+        |> cache_stats(key)
+
+      cached ->
+        # Cache hit — restore assigns and push chart events
+        socket
+        |> restore_from_cache(cached)
+    end
+  end
+
+  defp stats_cache_key(socket) do
+    {socket.assigns.preset, socket.assigns.date_from, socket.assigns.date_to,
+     socket.assigns.segment, socket.assigns.compare}
+  end
+
+  defp cache_stats(socket, key) do
+    cached = Map.take(socket.assigns, @cached_assigns)
+    update(socket, :stats_cache, &Map.put(&1, key, cached))
+  end
+
+  defp restore_from_cache(socket, cached) do
     socket
-    |> load_critical_stats()
-    |> load_deferred_stats()
+    |> assign(cached)
+    |> assign(:deferred_loaded, true)
+    |> push_chart_data(
+      cached.timeseries,
+      cached[:locations] || [],
+      cached[:timezones] || []
+    )
   end
 
   # Fast path: overview stats + timeseries (renders above the fold)
@@ -301,11 +349,10 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     {date_range, seg_opts} = date_range_and_opts(socket)
     period = preset_to_period(preset, from, to)
 
-    # Launch all queries in parallel
-    stats_task = Task.async(fn -> fetch_overview(site, user, date_range, seg_opts) end)
-
-    # Use pre-aggregated daily_stats for 30d+ ranges (much faster on large tables)
+    # Use pre-aggregated daily_stats for 7d+ ranges (much faster on large tables)
     days_in_range = Date.diff(to, from)
+
+    stats_task = Task.async(fn -> fetch_overview(site, user, date_range, seg_opts, days_in_range) end)
 
     timeseries_task =
       Task.async(fn ->
@@ -453,11 +500,19 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     |> assign(:intents, intents)
     |> assign(:ecommerce, ecommerce)
     |> assign(:identified_users, identified_users)
+    |> assign(:deferred_loaded, true)
     |> push_chart_data(socket.assigns.timeseries, locations, timezones)
   end
 
-  defp fetch_overview(site, user, date_range, opts) do
-    case Analytics.overview_stats(site, user, date_range, opts) do
+  defp fetch_overview(site, user, date_range, opts, days_in_range \\ 0) do
+    result =
+      if days_in_range >= 7 do
+        Analytics.overview_stats_fast(site, user, date_range, opts)
+      else
+        Analytics.overview_stats(site, user, date_range, opts)
+      end
+
+    case result do
       {:ok, s} ->
         %{
           pageviews: to_num(s["pageviews"]),
@@ -767,9 +822,10 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           <.data_card
             title="Top Pages"
             link={~p"/dashboard/sites/#{@site.id}/pages"}
+            loading={is_nil(@top_pages)}
             empty={@top_pages == []}
           >
-            <div :for={row <- @top_pages} class="flex items-center justify-between py-2">
+            <div :for={row <- @top_pages || []} class="flex items-center justify-between py-2">
               <span class="text-sm text-gray-800 truncate mr-4" title={row["url_path"]}>
                 {row["url_path"]}
               </span>
@@ -782,9 +838,10 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           <.data_card
             title="Top Sources"
             link={~p"/dashboard/sites/#{@site.id}/sources"}
+            loading={is_nil(@top_sources)}
             empty={@top_sources == []}
           >
-            <div :for={row <- @top_sources} class="flex items-center justify-between py-2">
+            <div :for={row <- @top_sources || []} class="flex items-center justify-between py-2">
               <span class="text-sm text-gray-800 truncate mr-4">
                 {row["referrer_domain"] || "Direct"}
               </span>
@@ -797,9 +854,10 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           <.data_card
             title="Top States"
             link={~p"/dashboard/sites/#{@site.id}/geo"}
+            loading={is_nil(@top_regions)}
             empty={@top_regions == []}
           >
-            <div :for={row <- @top_regions} class="flex items-center justify-between py-2">
+            <div :for={row <- @top_regions || []} class="flex items-center justify-between py-2">
               <span class="text-sm text-gray-800 truncate mr-4">
                 {region_display(row)}
               </span>
@@ -812,9 +870,10 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           <.data_card
             title="Top Browsers"
             link={~p"/dashboard/sites/#{@site.id}/devices"}
+            loading={is_nil(@top_browsers)}
             empty={@top_browsers == []}
           >
-            <div :for={row <- @top_browsers} class="flex items-center justify-between py-2">
+            <div :for={row <- @top_browsers || []} class="flex items-center justify-between py-2">
               <span class="text-sm text-gray-800 truncate mr-4">
                 {row["name"] || "Unknown"}
               </span>
@@ -827,9 +886,10 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           <.data_card
             title="Top OS"
             link={~p"/dashboard/sites/#{@site.id}/devices"}
+            loading={is_nil(@top_os)}
             empty={@top_os == []}
           >
-            <div :for={row <- @top_os} class="flex items-center justify-between py-2">
+            <div :for={row <- @top_os || []} class="flex items-center justify-between py-2">
               <span class="text-sm text-gray-800 truncate mr-4">
                 {row["name"] || "Unknown"}
               </span>
@@ -842,9 +902,10 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           <.data_card
             title="Entry Pages"
             link={~p"/dashboard/sites/#{@site.id}/entry-exit"}
+            loading={is_nil(@entry_pages)}
             empty={@entry_pages == []}
           >
-            <div :for={row <- @entry_pages} class="flex items-center justify-between py-2">
+            <div :for={row <- @entry_pages || []} class="flex items-center justify-between py-2">
               <span class="text-sm text-gray-800 truncate mr-4 font-mono" title={row["url_path"]}>
                 {row["url_path"]}
               </span>
@@ -867,7 +928,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         </div>
 
         <%!-- Visitor Intent --%>
-        <div :if={@intents != []} class="bg-white rounded-lg shadow overflow-hidden mt-6">
+        <div :if={@intents && @intents != []} class="bg-white rounded-lg shadow overflow-hidden mt-6">
           <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
             <h3 class="font-semibold text-gray-900">Visitor Intent</h3>
             <.link
@@ -985,6 +1046,8 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   end
 
   defp data_card(assigns) do
+    assigns = assign_new(assigns, :loading, fn -> false end)
+
     ~H"""
     <div class="bg-white rounded-lg shadow overflow-x-auto">
       <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -994,10 +1057,13 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         </.link>
       </div>
       <div class="px-5 py-2 divide-y divide-gray-50">
-        <div :if={@empty} class="py-6 text-center text-sm text-gray-500">
+        <div :if={@loading} class="py-6 text-center">
+          <div class="inline-block h-5 w-5 animate-spin rounded-full border-2 border-indigo-600 border-r-transparent"></div>
+        </div>
+        <div :if={!@loading && @empty} class="py-6 text-center text-sm text-gray-500">
           No data yet
         </div>
-        {render_slot(@inner_block)}
+        <div :if={!@loading}>{render_slot(@inner_block)}</div>
       </div>
     </div>
     """

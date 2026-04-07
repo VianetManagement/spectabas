@@ -86,6 +86,72 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  @doc """
+  Fast overview stats using daily_stats SummingMergeTree.
+  Visitors/sessions are summed per-day (approximate for multi-day ranges).
+  Falls back to regular overview_stats if segments are active.
+  """
+  def overview_stats_fast(%Site{} = site, %User{} = user, date_range, opts \\ []) do
+    seg = segment_sql(opts)
+
+    # Segments require raw events — can't use daily_stats MV
+    if seg != "" do
+      overview_stats(site, user, date_range, opts)
+    else
+      with :ok <- authorize(site, user),
+           :ok <- check_clickhouse() do
+        {native_range, import_range} = split_date_range(site, date_range)
+
+        native_result =
+          if native_range do
+            from_date = DateTime.to_date(native_range.from) |> Date.to_iso8601()
+            to_date = DateTime.to_date(native_range.to) |> Date.to_iso8601()
+
+            sql = """
+            SELECT
+              sum(pageviews) AS pageviews,
+              sum(visitors) AS unique_visitors,
+              sum(sessions) AS total_sessions,
+              round(sum(bounces) / greatest(sum(sessions), 1) * 100, 1) AS bounce_rate,
+              round(sum(total_duration) / greatest(sum(sessions) - sum(bounces), 1), 0) AS avg_duration
+            FROM daily_stats
+            WHERE site_id = #{ClickHouse.param(site.id)}
+              AND date >= #{ClickHouse.param(from_date)}
+              AND date <= #{ClickHouse.param(to_date)}
+            """
+
+            case ClickHouse.query(sql) do
+              {:ok, [row]} -> row
+              _ -> nil
+            end
+          end
+
+        imported_result =
+          if import_range do
+            sql = """
+            SELECT
+              sum(pageviews) AS pageviews,
+              sum(visitors) AS unique_visitors,
+              sum(sessions) AS total_sessions,
+              round(sum(bounces) / greatest(sum(sessions), 1) * 100, 1) AS bounce_rate,
+              round(sum(total_duration) / greatest(sum(sessions) - sum(bounces), 1), 0) AS avg_duration
+            FROM imported_daily_stats
+            WHERE site_id = #{ClickHouse.param(site.id)}
+              AND date >= #{ClickHouse.param(Date.to_iso8601(import_range.from))}
+              AND date <= #{ClickHouse.param(Date.to_iso8601(import_range.to))}
+            """
+
+            case ClickHouse.query(sql) do
+              {:ok, [row]} -> row
+              _ -> nil
+            end
+          end
+
+        {:ok, merge_overview(native_result, imported_result)}
+      end
+    end
+  end
+
   defp merge_overview(nil, nil), do: empty_overview()
   defp merge_overview(native, nil), do: native
   defp merge_overview(nil, imported), do: imported
