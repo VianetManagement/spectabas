@@ -104,20 +104,21 @@ defmodule Spectabas.Analytics do
 
         native_result =
           if native_range do
-            from_date = DateTime.to_date(native_range.from) |> Date.to_iso8601()
-            to_date = DateTime.to_date(native_range.to) |> Date.to_iso8601()
-
+            # Lighter query than full overview_stats: uses uniq() (HyperLogLog) instead of
+            # uniqExact + session subquery. Avoids daily_stats SummingMergeTree which
+            # incorrectly sums per-batch uniqExact values.
             sql = """
             SELECT
-              sum(pageviews) AS pageviews,
-              sum(visitors) AS unique_visitors,
-              sum(sessions) AS total_sessions,
-              round(sum(bounces) / greatest(sum(sessions), 1) * 100, 1) AS bounce_rate,
-              round(sum(total_duration) / greatest(sum(sessions) - sum(bounces), 1), 0) AS avg_duration
-            FROM daily_stats
+              countIf(event_type = 'pageview') AS pageviews,
+              uniq(visitor_id) AS unique_visitors,
+              uniq(session_id) AS total_sessions,
+              round(sum(is_bounce) / greatest(uniq(session_id), 1) * 100, 1) AS bounce_rate,
+              round(avgIf(duration_s, event_type = 'duration' AND duration_s > 0), 0) AS avg_duration
+            FROM events
             WHERE site_id = #{ClickHouse.param(site.id)}
-              AND date >= #{ClickHouse.param(from_date)}
-              AND date <= #{ClickHouse.param(to_date)}
+              AND timestamp >= #{ClickHouse.param(format_datetime(native_range.from))}
+              AND timestamp <= #{ClickHouse.param(format_datetime(native_range.to))}
+              AND ip_is_bot = 0
             """
 
             case ClickHouse.query(sql) do
@@ -295,17 +296,20 @@ defmodule Spectabas.Analytics do
           from_date = native_range.from |> to_local(tz) |> DateTime.to_date() |> Date.to_iso8601()
           to_date = native_range.to |> to_local(tz) |> DateTime.to_date() |> Date.to_iso8601()
 
+          # Query raw events with uniq() (HyperLogLog) for accurate daily visitor counts.
+          # daily_stats SummingMergeTree incorrectly sums per-batch uniqExact values.
           sql = """
           SELECT
-            toString(date) AS bucket,
-            sum(pageviews) AS pageviews,
-            sum(visitors) AS visitors
-          FROM daily_stats
+            toString(toDate(timestamp)) AS bucket,
+            countIf(event_type = 'pageview' AND ip_is_bot = 0) AS pageviews,
+            uniqIf(visitor_id, event_type = 'pageview' AND ip_is_bot = 0) AS visitors
+          FROM events
           WHERE site_id = #{ClickHouse.param(site.id)}
-            AND date >= #{ClickHouse.param(from_date)}
-            AND date <= #{ClickHouse.param(to_date)}
-          GROUP BY date
-          ORDER BY date ASC
+            AND timestamp >= #{ClickHouse.param(from_date <> " 00:00:00")}
+            AND timestamp <= #{ClickHouse.param(to_date <> " 23:59:59")}
+            AND ip_is_bot = 0
+          GROUP BY toDate(timestamp)
+          ORDER BY bucket ASC
           """
 
           case ClickHouse.query(sql) do
