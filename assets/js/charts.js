@@ -18,12 +18,26 @@ export const TimeseriesChart = {
     const canvas = this.el.querySelector("canvas")
     if (!canvas) return
 
+    const metric = data.metric || "pageviews"
+    const isPageviews = metric === "pageviews"
+    const values = isPageviews ? data.pageviews : data.visitors
+    const label = isPageviews ? "Pageviews" : "Visitors"
+    const borderColor = isPageviews ? "#6366f1" : "#10b981"
+    const bgColor = isPageviews ? "rgba(99, 102, 241, 0.1)" : "rgba(16, 185, 129, 0.1)"
+
     if (this.chart) {
       this.chart.data.labels = data.labels
-      this.chart.data.datasets[0].data = data.pageviews
-      this.chart.data.datasets[0].pointRadius = data.pageviews.length > 30 ? 0 : 3
-      this.chart.data.datasets[1].data = data.visitors
-      this.chart.data.datasets[1].pointRadius = data.visitors.length > 30 ? 0 : 3
+      this.chart.data.datasets = [{
+        label: label,
+        data: values,
+        borderColor: borderColor,
+        backgroundColor: bgColor,
+        fill: true,
+        tension: 0.3,
+        pointRadius: values.length > 30 ? 0 : 3,
+        pointHoverRadius: 5,
+        borderWidth: 2,
+      }]
       this.chart.resize()
       this.chart.update()
       return
@@ -35,24 +49,13 @@ export const TimeseriesChart = {
         labels: data.labels,
         datasets: [
           {
-            label: "Pageviews",
-            data: data.pageviews,
-            borderColor: "#6366f1",
-            backgroundColor: "rgba(99, 102, 241, 0.1)",
+            label: label,
+            data: values,
+            borderColor: borderColor,
+            backgroundColor: bgColor,
             fill: true,
             tension: 0.3,
-            pointRadius: data.pageviews.length > 30 ? 0 : 3,
-            pointHoverRadius: 5,
-            borderWidth: 2,
-          },
-          {
-            label: "Visitors",
-            data: data.visitors,
-            borderColor: "#10b981",
-            backgroundColor: "rgba(16, 185, 129, 0.1)",
-            fill: true,
-            tension: 0.3,
-            pointRadius: data.visitors.length > 30 ? 0 : 3,
+            pointRadius: values.length > 30 ? 0 : 3,
             pointHoverRadius: 5,
             borderWidth: 2,
           },
@@ -82,17 +85,7 @@ export const TimeseriesChart = {
             padding: 10,
             cornerRadius: 8,
           },
-          legend: {
-            display: true,
-            position: "top",
-            align: "end",
-            labels: {
-              usePointStyle: true,
-              pointStyle: "line",
-              boxWidth: 20,
-              color: "#6b7280",
-            },
-          },
+          legend: { display: false },
         },
       },
     })

@@ -238,6 +238,18 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
      |> load_stats()}
   end
 
+  def handle_event("set_chart_metric", %{"metric" => metric}, socket)
+      when metric in ["pageviews", "visitors"] do
+    {:noreply,
+     socket
+     |> assign(:chart_metric, metric)
+     |> push_chart_data(
+       socket.assigns.timeseries,
+       socket.assigns[:locations] || [],
+       socket.assigns[:timezones] || []
+     )}
+  end
+
   defp schedule_refresh, do: Process.send_after(self(), :refresh, @refresh_interval_ms)
 
   defp date_range_and_opts(socket) do
@@ -342,6 +354,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     |> assign(:prev_stats, prev_stats)
     |> assign(:timeseries, timeseries)
     |> assign(:live_visitors, live_visitors)
+    |> assign_new(:chart_metric, fn -> "pageviews" end)
     |> push_chart_data(
       timeseries,
       socket.assigns[:locations] || [],
@@ -465,7 +478,8 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
       |> push_event("timeseries-data", %{
         labels: Enum.map(timeseries, & &1["label"]),
         pageviews: Enum.map(timeseries, &to_num(&1["pageviews"])),
-        visitors: Enum.map(timeseries, &to_num(&1["visitors"]))
+        visitors: Enum.map(timeseries, &to_num(&1["visitors"])),
+        metric: socket.assigns[:chart_metric] || "pageviews"
       })
       |> push_event("map-data", %{
         points:
@@ -710,12 +724,40 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         </div>
 
         <%!-- Time-series Chart --%>
-        <div
-          class="bg-white rounded-lg shadow p-5 mb-6"
-          id="timeseries-hook"
-          phx-hook="TimeseriesChart"
-        >
-          <div class="h-48 sm:h-[280px] relative">
+        <div class="bg-white rounded-lg shadow p-5 mb-6">
+          <div class="flex items-center justify-end gap-1 mb-3">
+            <button
+              phx-click="set_chart_metric"
+              phx-value-metric="pageviews"
+              class={[
+                "px-3 py-1 text-xs font-medium rounded-lg transition-colors",
+                if(@chart_metric == "pageviews",
+                  do: "bg-indigo-600 text-white",
+                  else: "text-gray-600 hover:bg-gray-100"
+                )
+              ]}
+            >
+              Pageviews
+            </button>
+            <button
+              phx-click="set_chart_metric"
+              phx-value-metric="visitors"
+              class={[
+                "px-3 py-1 text-xs font-medium rounded-lg transition-colors",
+                if(@chart_metric == "visitors",
+                  do: "bg-emerald-600 text-white",
+                  else: "text-gray-600 hover:bg-gray-100"
+                )
+              ]}
+            >
+              Visitors
+            </button>
+          </div>
+          <div
+            id="timeseries-hook"
+            phx-hook="TimeseriesChart"
+            class="h-48 sm:h-[280px] relative"
+          >
             <canvas></canvas>
           </div>
         </div>
