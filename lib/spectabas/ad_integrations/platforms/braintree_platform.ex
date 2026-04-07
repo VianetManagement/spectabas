@@ -462,7 +462,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
         id: extract_xml(block, "id"),
         amount: parse_amount(extract_xml(block, "amount")),
         currency: extract_xml(block, "currency-iso-code") |> String.upcase(),
-        email: extract_xml(block, "email"),
+        email: extract_xml(block, "email") |> String.downcase(),
         created_at: extract_xml(block, "created-at") |> format_bt_datetime(),
         status: extract_xml(block, "status"),
         refunded_transaction_id: extract_xml(block, "refunded-transaction-id")
@@ -480,7 +480,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
       # Try to get customer email from nested customer block
       customer_email =
         case Regex.run(~r/<customer>.*?<email>(.*?)<\/email>.*?<\/customer>/s, block) do
-          [_, email] -> email
+          [_, email] -> String.downcase(email)
           _ -> ""
         end
 

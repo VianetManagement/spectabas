@@ -190,7 +190,7 @@ defmodule SpectabasWeb.API.IdentifyTest do
 
       updated = Repo.get!(Visitor, visitor.id)
       assert updated.email_hash == expected_hash
-      assert updated.email == "Alice@Example.COM"
+      assert updated.email == "alice@example.com"
     end
 
     test "ip parameter updates visitor known_ips", %{conn: conn, site: site} do

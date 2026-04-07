@@ -48,6 +48,49 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.13.0", "2026-04-07T14:00:00Z",
+       [
+         %{
+           title: "Fix: Email case normalization",
+           description:
+             "All email addresses are now lowercased at every entry point — identify API, ecommerce API, Stripe sync, Braintree sync, and subscription imports. Existing emails in Postgres lowercased via migration. Ensures consistent matching across all payment providers."
+         },
+         %{
+           title: "Perf: Dashboard range caching + fast overview stats",
+           description:
+             "Switching between 7d/30d/90d is now instant after first visit (cached in session). Overview stats use a lighter ClickHouse query for 7d+ ranges. Data cards show loading spinners while deferred queries run."
+         },
+         %{
+           title: "Fix: Visitor cache periodic sweep",
+           description:
+             "ETS visitor cache now sweeps expired entries every 30 minutes instead of growing unbounded. Prevents overnight memory accumulation on high-traffic sites."
+         },
+         %{
+           title: "Fix: Oban worker pileup prevention",
+           description:
+             "StripeSync, BraintreeSync, and AdSpendSync workers now have unique constraints preventing duplicate jobs. Previously 42 StripeSync workers were found executing simultaneously due to pileup."
+         },
+         %{
+           title: "Perf: Async ecommerce transaction API",
+           description:
+             "Transaction API response time reduced from 200-800ms to single-digit ms. ClickHouse insert and visitor identification now run in background after responding."
+         },
+         %{
+           title: "Fix: Braintree backfill moved to Oban",
+           description:
+             "Payment backfill now runs as an Oban job on the ad_sync queue instead of a Task.start, isolating it from the web DB pool and surviving deploys."
+         },
+         %{
+           title: "Admin: Oban job management",
+           description:
+             "New /oban-admin endpoint for viewing executing jobs by worker and cancelling stuck jobs. Ingest diagnostics page shows per-worker breakdown of executing Oban jobs."
+         },
+         %{
+           title: "Admin: API logs + ingest diagnostics access",
+           description:
+             "API logs and ingest diagnostics pages moved to /admin scope — superadmins can now access them. API logs page loads faster with async stats and estimated counts."
+         }
+       ]},
       {"v5.12.0", "2026-04-06T21:00:00Z",
        [
          %{

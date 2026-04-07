@@ -154,12 +154,17 @@ defmodule Spectabas.Visitors do
       visitor ->
         now = DateTime.utc_now() |> DateTime.truncate(:second)
 
-        email = Map.get(traits, :email) || Map.get(traits, "email")
+        email =
+          case Map.get(traits, :email) || Map.get(traits, "email") do
+            nil -> nil
+            e -> e |> String.trim() |> String.downcase()
+          end
+
         user_id = Map.get(traits, :user_id) || Map.get(traits, "user_id")
 
         email_hash =
           if email do
-            :crypto.hash(:sha256, String.downcase(String.trim(email)))
+            :crypto.hash(:sha256, email)
             |> Base.hex_encode32(case: :lower, padding: false)
           else
             visitor.email_hash

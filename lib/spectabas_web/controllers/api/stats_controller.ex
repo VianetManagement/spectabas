@@ -372,9 +372,11 @@ defmodule SpectabasWeb.API.StatsController do
   defp find_visitor_by_email(site_id, email) do
     import Ecto.Query
 
+    normalized = String.downcase(String.trim(email))
+
     Spectabas.Repo.one(
       from(v in Spectabas.Visitors.Visitor,
-        where: v.site_id == ^site_id and v.email == ^email,
+        where: v.site_id == ^site_id and v.email == ^normalized,
         order_by: [desc: v.last_seen_at],
         limit: 1
       )

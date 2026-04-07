@@ -60,10 +60,10 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
             email =
               cond do
                 is_binary(pi["receipt_email"]) and pi["receipt_email"] != "" ->
-                  pi["receipt_email"]
+                  String.downcase(pi["receipt_email"])
 
-                is_map(pi["customer"]) ->
-                  pi["customer"]["email"] || ""
+                is_map(pi["customer"]) and is_binary(pi["customer"]["email"]) ->
+                  String.downcase(pi["customer"]["email"])
 
                 true ->
                   ""
@@ -423,7 +423,7 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
           Enum.map(subs, fn sub ->
             customer_email =
               case sub["customer"] do
-                %{"email" => email} when is_binary(email) -> email
+                %{"email" => email} when is_binary(email) -> String.downcase(email)
                 _ -> ""
               end
 
