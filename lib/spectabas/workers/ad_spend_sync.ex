@@ -1,7 +1,7 @@
 defmodule Spectabas.Workers.AdSpendSync do
   @moduledoc "Syncs ad spend data from connected ad platforms. Runs every 6 hours via Oban cron."
 
-  use Oban.Worker, queue: :ad_sync, max_attempts: 3
+  use Oban.Worker, queue: :ad_sync, max_attempts: 3, unique: [period: 300, states: [:available, :executing, :scheduled, :retryable]]
 
   require Logger
 

@@ -4,7 +4,7 @@ defmodule Spectabas.Workers.StripeSync do
   Syncs today + yesterday for each active Stripe integration.
   """
 
-  use Oban.Worker, queue: :ad_sync, max_attempts: 3
+  use Oban.Worker, queue: :ad_sync, max_attempts: 3, unique: [period: 300, states: [:available, :executing, :scheduled, :retryable]]
 
   require Logger
 

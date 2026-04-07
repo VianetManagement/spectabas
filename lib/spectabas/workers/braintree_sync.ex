@@ -4,7 +4,7 @@ defmodule Spectabas.Workers.BraintreeSync do
   Runs on the same schedule as StripeSync — frequency controlled per-integration.
   """
 
-  use Oban.Worker, queue: :ad_sync, max_attempts: 3
+  use Oban.Worker, queue: :ad_sync, max_attempts: 3, unique: [period: 300, states: [:available, :executing, :scheduled, :retryable]]
 
   require Logger
 
