@@ -115,7 +115,7 @@ defmodule SpectabasWeb.Platform.DashboardLive do
           <div class="text-sm text-gray-500">Manage referrer domain blocklist</div>
         </a>
         <a
-          href="/platform/api-logs"
+          href="/admin/api-logs"
           class="block bg-white border rounded-lg p-4 hover:border-indigo-300"
         >
           <div class="font-medium text-gray-900">API Logs</div>

@@ -137,7 +137,7 @@ defmodule SpectabasWeb.Admin.DashboardLive do
             </p>
           </.link>
           <.link
-            navigate="/platform/api-logs"
+            navigate="/admin/api-logs"
             class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
           >
             <h3 class="font-semibold text-gray-900 mb-1">API Access Logs</h3>

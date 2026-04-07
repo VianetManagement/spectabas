@@ -30,6 +30,8 @@ defmodule SpectabasWeb.Admin.ApiLogsLive do
     user = socket.assigns.current_scope.user
     tz = user.timezone || "America/New_York"
 
+    send(self(), :load_stats)
+
     {:ok,
      socket
      |> assign(:page_title, "API Access Logs")
@@ -40,8 +42,12 @@ defmodule SpectabasWeb.Admin.ApiLogsLive do
      |> assign(:user, user)
      |> assign(:timezone, tz)
      |> assign(:timezones, @timezones)
-     |> load_logs()
-     |> load_stats()}
+     |> assign(:calls_last_hour, nil)
+     |> assign(:calls_last_day, nil)
+     |> assign(:by_endpoint, [])
+     |> assign(:by_key, [])
+     |> assign(:by_status, [])
+     |> load_logs()}
   end
 
   @impl true
@@ -90,12 +96,21 @@ defmodule SpectabasWeb.Admin.ApiLogsLive do
      |> load_logs()}
   end
 
+  @impl true
+  def handle_info(:load_stats, socket) do
+    {:noreply, load_stats(socket)}
+  end
+
   defp load_logs(socket) do
     %{page: page, filter_method: method, filter_path: path} = socket.assigns
     offset = (page - 1) * @per_page
 
+    # Only query last 7 days to avoid full table scans
+    cutoff = DateTime.add(DateTime.utc_now(), -7 * 86400, :second)
+
     query =
       from(l in ApiAccessLog,
+        where: l.inserted_at >= ^cutoff,
         order_by: [desc: l.inserted_at],
         limit: ^@per_page,
         offset: ^offset
@@ -105,11 +120,20 @@ defmodule SpectabasWeb.Admin.ApiLogsLive do
     query = if path, do: where(query, [l], like(l.path, ^"%#{path}%")), else: query
 
     logs = Repo.all(query)
-    total = Repo.aggregate(ApiAccessLog, :count, :id)
+
+    # Use Postgres reltuples estimate instead of COUNT(*) full scan
+    total = estimated_count("api_access_logs")
 
     socket
     |> assign(:logs, logs)
     |> assign(:total, total)
+  end
+
+  defp estimated_count(table) do
+    case Repo.query("SELECT reltuples::bigint FROM pg_class WHERE relname = $1", [table]) do
+      {:ok, %{rows: [[count]]}} when is_integer(count) and count > 0 -> count
+      _ -> 0
+    end
   end
 
   defp load_stats(socket) do
@@ -203,15 +227,15 @@ defmodule SpectabasWeb.Admin.ApiLogsLive do
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <div class="bg-white rounded-lg shadow p-4">
           <dt class="text-xs font-medium text-gray-500 uppercase">Total Logged</dt>
-          <dd class="mt-1 text-2xl font-bold text-gray-900">{format_number(@total)}</dd>
+          <dd class="mt-1 text-2xl font-bold text-gray-900">~{format_number(@total)}</dd>
         </div>
         <div class="bg-white rounded-lg shadow p-4">
           <dt class="text-xs font-medium text-gray-500 uppercase">Last Hour</dt>
-          <dd class="mt-1 text-2xl font-bold text-indigo-600">{format_number(@calls_last_hour)}</dd>
+          <dd class="mt-1 text-2xl font-bold text-indigo-600">{if @calls_last_hour, do: format_number(@calls_last_hour), else: "..."}</dd>
         </div>
         <div class="bg-white rounded-lg shadow p-4">
           <dt class="text-xs font-medium text-gray-500 uppercase">Last 24h</dt>
-          <dd class="mt-1 text-2xl font-bold text-indigo-600">{format_number(@calls_last_day)}</dd>
+          <dd class="mt-1 text-2xl font-bold text-indigo-600">{if @calls_last_day, do: format_number(@calls_last_day), else: "..."}</dd>
         </div>
         <div class="bg-white rounded-lg shadow p-4">
           <dt class="text-xs font-medium text-gray-500 uppercase">Status Codes (24h)</dt>
@@ -404,7 +428,7 @@ defmodule SpectabasWeb.Admin.ApiLogsLive do
 
         <div class="px-6 py-3 border-t border-gray-100 flex justify-between items-center">
           <span class="text-xs text-gray-500">
-            Page {@page} &middot; {format_number(@total)} total
+            Page {@page} &middot; ~{format_number(@total)} total
           </span>
           <div class="flex gap-2">
             <button
