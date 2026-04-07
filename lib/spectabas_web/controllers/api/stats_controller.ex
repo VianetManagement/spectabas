@@ -150,8 +150,8 @@ defmodule SpectabasWeb.API.StatsController do
       else
         now = parse_occurred_at(params["occurred_at"])
 
-        # Resolve visitor: if email provided, identify the visitor and link the transaction
-        visitor_id = resolve_transaction_visitor(site, params)
+        # Resolve visitor_id synchronously (just a lookup), defer identify + CH insert
+        visitor_id = resolve_transaction_visitor_fast(site, params)
 
         row = %{
           "site_id" => site.id,
@@ -168,17 +168,25 @@ defmodule SpectabasWeb.API.StatsController do
           "timestamp" => Calendar.strftime(now, "%Y-%m-%d %H:%M:%S")
         }
 
-        case Spectabas.ClickHouse.insert("ecommerce_events", [row]) do
-          :ok ->
-            json(conn, %{ok: true, order_id: order_id})
+        # Async: ClickHouse insert + visitor identification (same as ingest fire-and-forget)
+        email = params["email"]
 
-          {:error, reason} ->
-            Logger.warning(
-              "[API] Ecommerce insert failed: #{inspect(reason) |> String.slice(0, 200)}"
-            )
+        Task.start(fn ->
+          case Spectabas.ClickHouse.insert("ecommerce_events", [row]) do
+            :ok -> :ok
+            {:error, reason} ->
+              Logger.warning(
+                "[API] Ecommerce insert failed: #{inspect(reason) |> String.slice(0, 200)}"
+              )
+          end
 
-            conn |> put_status(500) |> json(%{error: "failed to record transaction"})
-        end
+          # Deferred identify: link email to visitor after responding
+          if is_binary(email) and email != "" and visitor_id != "" do
+            Visitors.identify(site.id, visitor_id, %{email: email})
+          end
+        end)
+
+        json(conn, %{ok: true, order_id: order_id})
       end
     else
       error -> handle_error(conn, error)
@@ -333,16 +341,14 @@ defmodule SpectabasWeb.API.StatsController do
     end
   end
 
-  # Resolve visitor_id for a transaction. If email is provided, identify the visitor
-  # so the transaction links to their Spectabas profile. Falls back to raw visitor_id param.
-  defp resolve_transaction_visitor(site, params) do
+  # Fast visitor resolution — lookup only, no writes. Identify deferred to async Task.
+  defp resolve_transaction_visitor_fast(site, params) do
     email = params["email"]
     visitor_id = params["visitor_id"] || ""
 
     cond do
-      # Email + visitor_id: identify the visitor (associate email) and use that ID
-      is_binary(email) and email != "" and visitor_id != "" ->
-        Visitors.identify(site.id, visitor_id, %{email: email})
+      # Has visitor_id: use it directly (identify deferred to async)
+      visitor_id != "" ->
         visitor_id
 
       # Email only (no visitor_id): look up by email in Postgres
@@ -352,9 +358,8 @@ defmodule SpectabasWeb.API.StatsController do
           nil -> ""
         end
 
-      # No email: use raw visitor_id
       true ->
-        visitor_id
+        ""
     end
   end
 
