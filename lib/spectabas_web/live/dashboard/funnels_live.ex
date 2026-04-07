@@ -320,18 +320,20 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
                 </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr :if={@funnels == []}>
-                <td colspan="4" class="px-6 py-8 text-center text-gray-500">
+                <td colspan="3" class="px-6 py-8 text-center text-gray-500">
                   No funnels configured.
                 </td>
               </tr>
-              <tr :for={funnel <- @funnels} class="hover:bg-gray-50">
+              <tr
+                :for={funnel <- @funnels}
+                phx-click="view_funnel"
+                phx-value-id={funnel.id}
+                class="hover:bg-indigo-50 cursor-pointer transition-colors"
+              >
                 <td class="px-6 py-4 text-sm font-medium text-gray-900">{funnel.name}</td>
                 <td class="px-6 py-4 text-sm text-gray-500">{length(funnel.steps || [])} steps</td>
                 <td class="px-6 py-4">
@@ -344,15 +346,6 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
                   ]}>
                     {if funnel.active, do: "Active", else: "Inactive"}
                   </span>
-                </td>
-                <td class="px-6 py-4 text-right">
-                  <button
-                    phx-click="view_funnel"
-                    phx-value-id={funnel.id}
-                    class="text-indigo-600 hover:text-indigo-800 text-sm"
-                  >
-                    View
-                  </button>
                 </td>
               </tr>
             </tbody>
