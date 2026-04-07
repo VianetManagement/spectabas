@@ -312,6 +312,13 @@ defmodule SpectabasWeb.Dashboard.CategoryLive do
             "Automated email digests — daily, weekly, or monthly. HTML emails with period comparison, top pages, sources, and countries. One-click unsubscribe."
         },
         %{
+          key: "find",
+          path: "find",
+          label: "Find",
+          desc:
+            "Search across visitors, pages, orders, and more. Look up by email, IP address, order ID, URL path, referrer, UTM campaign, or organization."
+        },
+        %{
           key: "exports",
           path: "exports",
           label: "Exports",

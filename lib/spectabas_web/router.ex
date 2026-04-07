@@ -204,6 +204,7 @@ defmodule SpectabasWeb.Router do
       live "/sites/:site_id/events", Dashboard.EventsLive, :index
       live "/sites/:site_id/email-reports", Dashboard.EmailReportsLive, :index
       live "/sites/:site_id/exports", Dashboard.ExportLive, :index
+      live "/sites/:site_id/find", Dashboard.FindLive, :index
       live "/sites/:site_id/settings", Dashboard.SettingsLive, :edit
       live "/sites/:site_id/integration-log", Dashboard.IntegrationLogLive, :index
     end

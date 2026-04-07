@@ -321,6 +321,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
               active={@active == "email-reports"}
             />
             <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/find"}
+              label="Find"
+              active={@active == "find"}
+            />
+            <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/exports"}
               label="Exports"
               active={@active == "exports"}
@@ -619,6 +624,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
     # Tools
     "reports" => "Tools",
     "email-reports" => "Tools",
+    "find" => "Tools",
     "exports" => "Tools",
     "settings" => "Tools",
     "integration-log" => "Tools",
