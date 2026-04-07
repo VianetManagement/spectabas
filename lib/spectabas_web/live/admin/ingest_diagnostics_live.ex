@@ -187,6 +187,21 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
         _ -> 0
       end
 
+    oban_by_queue =
+      try do
+        import Ecto.Query
+        Spectabas.ObanRepo.all(
+          from(j in "oban_jobs",
+            where: j.state == "executing",
+            group_by: [j.queue, j.worker],
+            select: %{queue: j.queue, worker: j.worker, count: count(j.id)},
+            order_by: [desc: count(j.id)]
+          )
+        )
+      rescue
+        _ -> []
+      end
+
     # DB pool stats
     web_pool = db_pool_stats(Spectabas.Repo)
     oban_pool = db_pool_stats(Spectabas.ObanRepo)
@@ -226,6 +241,7 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
     |> assign(:flush_tasks, flush_tasks)
     |> assign(:oban_pending, oban_pending)
     |> assign(:oban_executing, oban_executing)
+    |> assign(:oban_by_queue, oban_by_queue)
     |> assign(:web_pool, web_pool)
     |> assign(:oban_pool, oban_pool)
     |> assign(:crash_file_kb, div(crash_file_size, 1024))
@@ -322,6 +338,29 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
           color="gray"
           sublabel="connections (ObanRepo)"
         />
+      </div>
+
+      <%!-- Oban Queue Breakdown --%>
+      <div :if={@oban_by_queue != []} class="bg-white rounded-lg shadow overflow-x-auto mb-8">
+        <div class="px-6 py-4 border-b border-gray-100">
+          <h2 class="font-semibold text-gray-900">Oban Executing by Worker</h2>
+        </div>
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Queue</th>
+              <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Worker</th>
+              <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Count</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <tr :for={row <- @oban_by_queue} class="hover:bg-gray-50">
+              <td class="px-4 py-2 text-sm font-mono text-gray-700">{row.queue}</td>
+              <td class="px-4 py-2 text-sm font-mono text-gray-600">{row.worker}</td>
+              <td class="px-4 py-2 text-sm text-gray-900 text-right tabular-nums font-bold">{row.count}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <%!-- Crash Recovery --%>
