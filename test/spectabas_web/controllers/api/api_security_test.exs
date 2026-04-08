@@ -77,8 +77,8 @@ defmodule SpectabasWeb.API.ApiSecurityTest do
           "email" => "test@test.com"
         })
 
-      # 404 (visitor not found) is fine — means scope check passed
-      assert conn.status in [200, 404]
+      # 200 with matched: false (visitor not found) is fine — means scope check passed
+      assert conn.status == 200
     end
 
     test "token without write:identify cannot identify visitors", %{

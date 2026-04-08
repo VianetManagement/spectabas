@@ -112,7 +112,7 @@ defmodule SpectabasWeb.API.StatsController do
               })
 
             {:error, :not_found} ->
-              conn |> put_status(404) |> json(%{error: "visitor not found"})
+              json(conn, %{ok: true, matched: false, reason: "visitor not found"})
 
             {:error, reason} ->
               conn |> put_status(422) |> json(%{error: inspect(reason)})

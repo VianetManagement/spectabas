@@ -103,14 +103,17 @@ defmodule SpectabasWeb.API.IdentifyTest do
       assert updated.user_id == "user_99"
     end
 
-    test "returns 404 for unknown visitor_id", %{conn: conn, site: site} do
+    test "returns 200 with matched: false for unknown visitor_id", %{conn: conn, site: site} do
       conn =
         post(conn, "/api/v1/sites/#{site.id}/identify", %{
           "visitor_id" => "nonexistent_cookie",
           "email" => "nobody@example.com"
         })
 
-      assert %{"error" => "visitor not found"} = json_response(conn, 404)
+      resp = json_response(conn, 200)
+      assert resp["ok"] == true
+      assert resp["matched"] == false
+      assert resp["reason"] == "visitor not found"
     end
 
     test "returns 400 when visitor_id is missing", %{conn: conn, site: site} do
@@ -170,8 +173,10 @@ defmodule SpectabasWeb.API.IdentifyTest do
           "email" => "alice@example.com"
         })
 
-      # Should be 404 or 403 since cookie belongs to different site
-      assert conn.status in [403, 404]
+      # Visitor belongs to different site — returns 200 with matched: false
+      resp = json_response(conn, 200)
+      assert resp["ok"] == true
+      assert resp["matched"] == false
     end
 
     test "email is stored as SHA-256 hash", %{conn: conn, site: site, visitor: visitor} do

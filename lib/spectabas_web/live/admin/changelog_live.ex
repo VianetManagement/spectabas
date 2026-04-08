@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.16.0", "2026-04-08T19:30:00Z",
+       [
+         %{
+           title: "Fix: Identify API returns 200 for unmatched visitors",
+           description:
+             "The /api/v1/sites/:id/identify endpoint now returns 200 with {ok: true, matched: false} when a visitor_id has no match, instead of 404. Prevents false error alerts on the calling server while still indicating the identify didn't link."
+         }
+       ]},
       {"v5.15.0", "2026-04-08T19:00:00Z",
        [
          %{
