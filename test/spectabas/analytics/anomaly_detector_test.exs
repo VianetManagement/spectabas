@@ -134,6 +134,7 @@ defmodule Spectabas.Analytics.AnomalyDetectorTest do
       #
       # We verify this by reading the source at compile-time isn't practical,
       # so we verify the module loaded and has the entry point.
+      Code.ensure_loaded!(AnomalyDetector)
       assert function_exported?(AnomalyDetector, :detect, 2)
     end
   end
