@@ -3,6 +3,7 @@ defmodule SpectabasWeb.Admin.DashboardLive do
 
   alias Spectabas.{Sites, Accounts, Analytics, Repo}
   import Ecto.Query
+  import Spectabas.TypeHelpers, only: [format_number: 1]
 
   @impl true
   def mount(_params, _session, socket) do
@@ -75,7 +76,7 @@ defmodule SpectabasWeb.Admin.DashboardLive do
         </div>
         <div class="bg-white rounded-lg shadow p-6">
           <dt class="text-sm font-medium text-gray-500">Events Today</dt>
-          <dd class="mt-2 text-3xl font-bold text-gray-900">{@events_today}</dd>
+          <dd class="mt-2 text-3xl font-bold text-gray-900">{format_number(@events_today)}</dd>
         </div>
         <div class="bg-white rounded-lg shadow p-6">
           <dt class="text-sm font-medium text-gray-500">Failed Events</dt>

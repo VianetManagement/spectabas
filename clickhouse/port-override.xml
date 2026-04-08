@@ -3,4 +3,14 @@
     <http_port replace="replace">10000</http_port>
     <listen_host>0.0.0.0</listen_host>
     <tcp_port replace="replace">9000</tcp_port>
+
+    <!-- Cap total server memory at 75% of available RAM -->
+    <max_server_memory_usage_to_ram_ratio>0.75</max_server_memory_usage_to_ram_ratio>
+
+    <!-- Per-query memory limit: 2GB (safety net against runaway queries) -->
+    <profiles>
+        <default>
+            <max_memory_usage>2000000000</max_memory_usage>
+        </default>
+    </profiles>
 </clickhouse>

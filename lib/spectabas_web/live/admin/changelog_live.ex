@@ -53,6 +53,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.15.0", "2026-04-08T19:00:00Z",
+       [
+         %{
+           title: "Perf: ClickHouse memory limits",
+           description:
+             "Added max_server_memory_usage_to_ram_ratio (75%) and per-query max_memory_usage (2GB) to prevent runaway memory growth without affecting query performance."
+         },
+         %{
+           title: "Fix: Events Today comma formatting",
+           description:
+             "Admin dashboard Events Today count now displays with comma separators (e.g. 1,234,567)."
+         }
+       ]},
       {"v5.14.0", "2026-04-08T18:00:00Z",
        [
          %{
