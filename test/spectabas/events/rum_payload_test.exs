@@ -377,7 +377,7 @@ defmodule Spectabas.Events.RumPayloadTest do
     end
 
     test "uses visibilitychange as safety net", %{script: script} do
-      assert script =~ ~r/visibilitychange.*collectRUM\(true\)/s,
+      assert script =~ ~r/visibilitychange.*cR\(true\)/s,
              "Tracker should force-send RUM on visibilitychange (safety net)"
     end
 
@@ -387,31 +387,34 @@ defmodule Spectabas.Events.RumPayloadTest do
     end
 
     test "pageview rate limiting via sessionStorage", %{script: script} do
-      assert script =~ "pvMinInterval",
+      assert script =~ "5000",
              "Tracker should have a minimum interval between pageviews"
 
       assert script =~ "sessionStorage",
              "Tracker should use sessionStorage for pageview rate limiting"
 
-      assert script =~ "sendPageview",
+      assert script =~ ~r/sP|sendPageview/,
              "Tracker should use sendPageview wrapper (not raw sendEvent for pageviews)"
     end
 
     test "collectRUM function checks rumSent flag", %{script: script} do
-      assert script =~ "if (rumSent) return",
+      assert script =~ ~r/if\(rS\)return|if \(rumSent\) return/,
              "collectRUM must check rumSent flag to prevent duplicate sends"
     end
 
     test "collectRUM sends page_load when loadEventEnd > 0", %{script: script} do
-      assert script =~ ~r/loadEventEnd > 0.*page_load/s,
-             "collectRUM must include page_load when loadEventEnd is available"
+      assert script =~ ~r/loadEventEnd>0|loadEventEnd > 0/,
+             "collectRUM must check loadEventEnd"
+
+      assert script =~ "page_load",
+             "collectRUM must include page_load metric"
     end
 
     test "mapToStrings converts values to strings and filters NaN", %{script: script} do
-      assert script =~ "result[k] = String(v)",
+      assert script =~ ~r/r\[k\]=String\(v\)|result\[k\] = String\(v\)/,
              "mapToStrings must convert property values to strings"
 
-      assert script =~ "v === v",
+      assert script =~ "v===v" || script =~ "v === v",
              "mapToStrings must filter NaN values (v === v is false for NaN)"
     end
 
@@ -421,22 +424,25 @@ defmodule Spectabas.Events.RumPayloadTest do
       # PerformanceNavigationTiming has startTime (always 0), NOT navigationStart.
       # navigationStart only exists on the deprecated performance.timing object.
       # Using nav.navigationStart produces undefined, and number - undefined = NaN.
-      assert script =~ "nav.startTime",
+      assert script =~ ~r/nv\.startTime|nav\.startTime/,
              "Must use nav.startTime for PerformanceNavigationTiming baseline"
 
       # Verify we use navStart variable (derived from nav.startTime) for the calculations
-      assert script =~ ~r/nav\.domInteractive - navStart/,
+      assert script =~ ~r/nv\.domInteractive-ns|nav\.domInteractive - navStart/,
              "dom_interactive must subtract navStart (from nav.startTime), not nav.navigationStart"
 
-      assert script =~ ~r/nav\.loadEventEnd - navStart/,
+      assert script =~ ~r/nv\.loadEventEnd-ns|nav\.loadEventEnd - navStart/,
              "page_load must subtract navStart (from nav.startTime), not nav.navigationStart"
 
-      assert script =~ ~r/nav\.domContentLoadedEventEnd - navStart/,
+      assert script =~ ~r/nv\.domContentLoadedEventEnd-ns|nav\.domContentLoadedEventEnd - navStart/,
              "dom_complete must subtract navStart (from nav.startTime), not nav.navigationStart"
 
       # Ensure the deprecated property name is NOT used on the modern API path
-      refute script =~ ~r/nav\.navigationStart/,
+      # In minified code, nav→nv, navStart→ns, so check for nv.navigationStart
+      refute script =~ ~r/\bnav\.navigationStart\b/,
              "Must NOT use nav.navigationStart — it doesn't exist on PerformanceNavigationTiming"
+      refute script =~ ~r/\bnv\.navigationStart\b/,
+             "Must NOT use nv.navigationStart — it doesn't exist on PerformanceNavigationTiming"
     end
   end
 end

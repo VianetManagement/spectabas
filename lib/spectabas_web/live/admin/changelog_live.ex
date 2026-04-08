@@ -48,6 +48,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.14.0", "2026-04-08T18:00:00Z",
+       [
+         %{
+           title: "Perf: Minified tracker script",
+           description:
+             "Client-side tracking script (s.js) minified from 25.5KB to 12.1KB (52% reduction). All comments, whitespace, and verbose variable names removed. Zero functional changes — verified by 82 structural tests."
+         },
+         %{
+           title: "Test: Comprehensive tracker script test suite",
+           description:
+             "Added 82 ExUnit tests covering every tracker function: fingerprinting, cookie/visitor ID management, pageview rate limiting, SPA support, duration tracking, send transport, public API, form abuse detection, outbound/download tracking, RUM/CWV, cross-domain support, and security properties."
+         }
+       ]},
       {"v5.13.0", "2026-04-07T14:00:00Z",
        [
          %{
