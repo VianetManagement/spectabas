@@ -119,4 +119,5 @@ config :wax_,
 
 config :phoenix, :json_library, Jason
 
+import_config "appsignal.exs"
 import_config "#{config_env()}.exs"

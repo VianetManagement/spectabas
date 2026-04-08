@@ -84,6 +84,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - `RENDER_API_KEY`, `RENDER_SERVICE_ID` — for auto-registering custom domains
 - `RESEND_API_KEY` — for email via Resend (from noreply@spectabas.com)
 - `MAXMIND_LICENSE_KEY` — for GeoLite2 timezone/EU enrichment (optional, graceful fallback)
+- `APPSIGNAL_PUSH_API_KEY` — AppSignal APM (error tracking, performance monitoring, Oban jobs)
 
 ### Adding a new tracked site
 1. Create site in Admin > Sites (domain = analytics subdomain, e.g. `b.example.com`)
@@ -276,7 +277,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Mobile responsiveness** — scrollable tables, collapsible mobile nav bar
 - **Accessible top nav** — WCAG AA contrast compliance
 - **Documentation pages** — docs split into `/docs` (index), `/docs/getting-started`, `/docs/dashboard`, `/docs/conversions`, `/docs/api`, `/docs/admin` with cross-category search. Requires login (behind :require_authenticated_user). Public pages: `/privacy`, `/terms`, homepage.
-- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.16.0)
+- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.17.0)
 - **Legal** — Privacy Policy at `/privacy` and Terms of Service at `/terms` (public, no auth required). Entity: Spectabas, Kent County MI. Contact: howdy@spectabas.com. Arbitration clause (AAA, Kent County). 18+ age restriction.
 
 ## Important Patterns

@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.17.0", "2026-04-08T20:00:00Z",
+       [
+         %{
+           title: "Feat: AppSignal APM integration",
+           description:
+             "Added AppSignal for error tracking, performance monitoring, and Oban job instrumentation. Phoenix requests, LiveView events, Ecto queries, and background jobs are auto-instrumented via Telemetry. Set APPSIGNAL_PUSH_API_KEY env var to activate."
+         }
+       ]},
       {"v5.16.0", "2026-04-08T19:30:00Z",
        [
          %{
