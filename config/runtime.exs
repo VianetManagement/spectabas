@@ -67,4 +67,11 @@ if config_env() == :prod do
 
   # Ad platform credentials are stored per-site in the database (encrypted)
   # No global environment variables needed — configure from each site's Settings page
+
+  # AppSignal — only active when push API key is set
+  if appsignal_key = System.get_env("APPSIGNAL_PUSH_API_KEY") do
+    config :appsignal, :config,
+      push_api_key: appsignal_key,
+      active: true
+  end
 end
