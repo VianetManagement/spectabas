@@ -25,7 +25,12 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
         <div :for={{version, utc_iso, items} <- @entries}>
           <h2 class="text-lg font-semibold text-gray-900 border-b border-gray-200 pb-2 mb-4">
             {version} —
-            <span phx-hook="LocalTime" id={"ts-#{version}"} data-utc={utc_iso} class="font-normal text-gray-600">
+            <span
+              phx-hook="LocalTime"
+              id={"ts-#{version}"}
+              data-utc={utc_iso}
+              class="font-normal text-gray-600"
+            >
               {utc_iso}
             </span>
           </h2>

@@ -27,7 +27,9 @@ defmodule Spectabas.Workers.ApiLogCleanup do
     {sync_count, _} = Spectabas.AdIntegrations.SyncLog.cleanup(@retention_days)
 
     if sync_count > 0 do
-      Logger.info("[ApiLogCleanup] Deleted #{sync_count} sync logs older than #{@retention_days} days")
+      Logger.info(
+        "[ApiLogCleanup] Deleted #{sync_count} sync logs older than #{@retention_days} days"
+      )
     end
 
     :ok

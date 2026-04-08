@@ -67,7 +67,10 @@ defmodule Spectabas.Visitors.Cache do
 
     if evicted > 0 do
       require Logger
-      Logger.info("[VisitorCache] Sweep: evicted #{evicted} expired entries, #{after_size} remaining")
+
+      Logger.info(
+        "[VisitorCache] Sweep: evicted #{evicted} expired entries, #{after_size} remaining"
+      )
     end
   end
 end

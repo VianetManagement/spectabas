@@ -4,7 +4,10 @@ defmodule Spectabas.Workers.BraintreeSync do
   Runs on the same schedule as StripeSync — frequency controlled per-integration.
   """
 
-  use Oban.Worker, queue: :ad_sync, max_attempts: 3, unique: [period: 300, states: [:available, :executing, :scheduled, :retryable]]
+  use Oban.Worker,
+    queue: :ad_sync,
+    max_attempts: 3,
+    unique: [period: 300, states: [:available, :executing, :scheduled, :retryable]]
 
   require Logger
 
@@ -34,7 +37,14 @@ defmodule Spectabas.Workers.BraintreeSync do
           BraintreePlatform.sync_subscriptions(integration.site, integration)
 
           ms = System.monotonic_time(:millisecond) - start
-          SyncLog.log(integration, "cron_sync", "ok", "Synced transactions, refunds, subscriptions", duration_ms: ms)
+
+          SyncLog.log(
+            integration,
+            "cron_sync",
+            "ok",
+            "Synced transactions, refunds, subscriptions",
+            duration_ms: ms
+          )
         rescue
           e ->
             ms = System.monotonic_time(:millisecond) - start
@@ -63,7 +73,10 @@ defmodule Spectabas.Workers.BraintreeSync do
       BraintreePlatform.sync_subscriptions(integration.site, integration)
 
       ms = System.monotonic_time(:millisecond) - start
-      SyncLog.log(integration, "manual_sync", "ok", "Synced transactions, refunds, subscriptions", duration_ms: ms)
+
+      SyncLog.log(integration, "manual_sync", "ok", "Synced transactions, refunds, subscriptions",
+        duration_ms: ms
+      )
     rescue
       e ->
         ms = System.monotonic_time(:millisecond) - start

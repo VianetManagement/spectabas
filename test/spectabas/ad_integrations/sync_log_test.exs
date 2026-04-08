@@ -34,7 +34,10 @@ defmodule Spectabas.AdIntegrations.SyncLogTest do
   describe "log/5" do
     test "creates a log entry with all fields", %{integration: integration} do
       assert {:ok, log} =
-               SyncLog.log(integration, "sync_started", "ok", "Sync began", details: %{"count" => 42}, duration_ms: 150)
+               SyncLog.log(integration, "sync_started", "ok", "Sync began",
+                 details: %{"count" => 42},
+                 duration_ms: 150
+               )
 
       assert log.id
       assert log.integration_id == integration.id

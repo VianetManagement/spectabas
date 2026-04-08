@@ -38,6 +38,7 @@ defmodule Spectabas.DataCase do
   def setup_sandbox(tags) do
     pid = Ecto.Adapters.SQL.Sandbox.start_owner!(Spectabas.Repo, shared: not tags[:async])
     pid2 = Ecto.Adapters.SQL.Sandbox.start_owner!(Spectabas.ObanRepo, shared: not tags[:async])
+
     on_exit(fn ->
       Ecto.Adapters.SQL.Sandbox.stop_owner(pid)
       Ecto.Adapters.SQL.Sandbox.stop_owner(pid2)

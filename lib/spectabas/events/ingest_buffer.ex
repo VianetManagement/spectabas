@@ -363,7 +363,10 @@ defmodule Spectabas.Events.IngestBuffer do
           events = :erlang.binary_to_term(binary, [:safe])
 
           if is_list(events) and length(events) > 0 do
-            Logger.info("[IngestBuffer] Crash recovery: flushing #{length(events)} persisted events")
+            Logger.info(
+              "[IngestBuffer] Crash recovery: flushing #{length(events)} persisted events"
+            )
+
             do_flush(events)
             clear_crash_file()
             length(events)

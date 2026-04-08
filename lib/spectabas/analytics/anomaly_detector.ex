@@ -338,7 +338,8 @@ defmodule Spectabas.Analytics.AnomalyDetector do
                 current: pct,
                 previous: nil,
                 change_pct: nil,
-                message: "#{path} is a top exit page (#{pct}% of sessions end here, #{row["sessions"]} sessions)",
+                message:
+                  "#{path} is a top exit page (#{pct}% of sessions end here, #{row["sessions"]} sessions)",
                 action: "Consider adding CTAs, related content, or reducing friction on this page"
               }
               | acc
@@ -720,8 +721,10 @@ defmodule Spectabas.Analytics.AnomalyDetector do
               current: to_float(row["current_pos"]),
               previous: to_float(row["previous_pos"]),
               change_pct: nil,
-              message: "\"#{row["query"]}\" moved into top 10 (#{row["previous_pos"]} → #{row["current_pos"]})",
-              action: "This keyword is now on page 1. Optimize the landing page to capture more clicks."
+              message:
+                "\"#{row["query"]}\" moved into top 10 (#{row["previous_pos"]} → #{row["current_pos"]})",
+              action:
+                "This keyword is now on page 1. Optimize the landing page to capture more clicks."
             }
             | acc
           ]
@@ -761,7 +764,8 @@ defmodule Spectabas.Analytics.AnomalyDetector do
               change_pct: nil,
               message:
                 "\"#{row["query"]}\" has #{format_num(to_int(row["impr"]))} impressions but only #{row["ctr"]}% CTR (position #{row["pos"]})",
-              action: "Improve the page title and meta description for this keyword to increase click-through rate."
+              action:
+                "Improve the page title and meta description for this keyword to increase click-through rate."
             }
             | acc
           ]
@@ -803,8 +807,10 @@ defmodule Spectabas.Analytics.AnomalyDetector do
                 "Ad spend #{if change > 0, do: "increased", else: "decreased"} by #{abs(change)}% this week ($#{Float.round(cs, 0)} vs $#{Float.round(ps, 0)})",
               action:
                 if(change > 0,
-                  do: "Review campaign performance to ensure increased spend is generating proportional returns.",
-                  else: "Check if campaigns were paused or budgets reduced — this may impact traffic."
+                  do:
+                    "Review campaign performance to ensure increased spend is generating proportional returns.",
+                  else:
+                    "Check if campaigns were paused or budgets reduced — this may impact traffic."
                 )
             }
             | anomalies

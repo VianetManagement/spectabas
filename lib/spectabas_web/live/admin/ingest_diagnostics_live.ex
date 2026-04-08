@@ -168,6 +168,7 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
     oban_pending =
       try do
         import Ecto.Query
+
         Spectabas.ObanRepo.aggregate(
           from(j in "oban_jobs", where: j.state in ["available", "scheduled", "retryable"]),
           :count
@@ -179,6 +180,7 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
     oban_executing =
       try do
         import Ecto.Query
+
         Spectabas.ObanRepo.aggregate(
           from(j in "oban_jobs", where: j.state == "executing"),
           :count
@@ -190,6 +192,7 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
     oban_by_queue =
       try do
         import Ecto.Query
+
         Spectabas.ObanRepo.all(
           from(j in "oban_jobs",
             where: j.state == "executing",
@@ -313,11 +316,13 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
         <.metric_card
           label="Oban Pending"
           value={format_number(@oban_pending)}
-          color={cond do
-            @oban_pending >= 500_000 -> "red"
-            @oban_pending >= 10_000 -> "yellow"
-            true -> "green"
-          end}
+          color={
+            cond do
+              @oban_pending >= 500_000 -> "red"
+              @oban_pending >= 10_000 -> "yellow"
+              true -> "green"
+            end
+          }
           sublabel="queued jobs"
         />
         <.metric_card
@@ -357,7 +362,9 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
             <tr :for={row <- @oban_by_queue} class="hover:bg-gray-50">
               <td class="px-4 py-2 text-sm font-mono text-gray-700">{row.queue}</td>
               <td class="px-4 py-2 text-sm font-mono text-gray-600">{row.worker}</td>
-              <td class="px-4 py-2 text-sm text-gray-900 text-right tabular-nums font-bold">{row.count}</td>
+              <td class="px-4 py-2 text-sm text-gray-900 text-right tabular-nums font-bold">
+                {row.count}
+              </td>
             </tr>
           </tbody>
         </table>

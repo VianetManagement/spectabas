@@ -84,7 +84,13 @@ defmodule SpectabasWeb.Dashboard.FindLive do
       |> Enum.map(fn {_email, dupes} ->
         primary = hd(dupes)
         all_ips = dupes |> Enum.flat_map(&(&1.known_ips || [])) |> Enum.uniq()
-        first_seen = dupes |> Enum.map(& &1.first_seen_at) |> Enum.reject(&is_nil/1) |> Enum.min(DateTime, fn -> nil end)
+
+        first_seen =
+          dupes
+          |> Enum.map(& &1.first_seen_at)
+          |> Enum.reject(&is_nil/1)
+          |> Enum.min(DateTime, fn -> nil end)
+
         %{primary | known_ips: all_ips, first_seen_at: first_seen || primary.first_seen_at}
       end)
       |> Enum.sort_by(& &1.last_seen_at, {:desc, DateTime})
@@ -135,7 +141,13 @@ defmodule SpectabasWeb.Dashboard.FindLive do
       |> Enum.map(fn {_uid, dupes} ->
         primary = hd(dupes)
         all_ips = dupes |> Enum.flat_map(&(&1.known_ips || [])) |> Enum.uniq()
-        first_seen = dupes |> Enum.map(& &1.first_seen_at) |> Enum.reject(&is_nil/1) |> Enum.min(DateTime, fn -> nil end)
+
+        first_seen =
+          dupes
+          |> Enum.map(& &1.first_seen_at)
+          |> Enum.reject(&is_nil/1)
+          |> Enum.min(DateTime, fn -> nil end)
+
         %{primary | known_ips: all_ips, first_seen_at: first_seen || primary.first_seen_at}
       end)
 
@@ -152,10 +164,11 @@ defmodule SpectabasWeb.Dashboard.FindLive do
     LIMIT 10
     """
 
-    rows = case ClickHouse.query(sql) do
-      {:ok, r} -> r
-      _ -> []
-    end
+    rows =
+      case ClickHouse.query(sql) do
+        {:ok, r} -> r
+        _ -> []
+      end
 
     %{type: :orders, rows: rows}
   end
@@ -178,10 +191,11 @@ defmodule SpectabasWeb.Dashboard.FindLive do
     LIMIT 50
     """
 
-    rows = case ClickHouse.query(sql) do
-      {:ok, r} -> r
-      _ -> []
-    end
+    rows =
+      case ClickHouse.query(sql) do
+        {:ok, r} -> r
+        _ -> []
+      end
 
     %{type: :pages, rows: rows}
   end
@@ -202,10 +216,11 @@ defmodule SpectabasWeb.Dashboard.FindLive do
     LIMIT 50
     """
 
-    rows = case ClickHouse.query(sql) do
-      {:ok, r} -> r
-      _ -> []
-    end
+    rows =
+      case ClickHouse.query(sql) do
+        {:ok, r} -> r
+        _ -> []
+      end
 
     %{type: :referrers, rows: rows}
   end
@@ -227,10 +242,11 @@ defmodule SpectabasWeb.Dashboard.FindLive do
     LIMIT 50
     """
 
-    rows = case ClickHouse.query(sql) do
-      {:ok, r} -> r
-      _ -> []
-    end
+    rows =
+      case ClickHouse.query(sql) do
+        {:ok, r} -> r
+        _ -> []
+      end
 
     %{type: :campaigns, rows: rows}
   end
@@ -252,10 +268,11 @@ defmodule SpectabasWeb.Dashboard.FindLive do
     LIMIT 50
     """
 
-    rows = case ClickHouse.query(sql) do
-      {:ok, r} -> r
-      _ -> []
-    end
+    rows =
+      case ClickHouse.query(sql) do
+        {:ok, r} -> r
+        _ -> []
+      end
 
     %{type: :orgs, rows: rows}
   end
@@ -320,7 +337,10 @@ defmodule SpectabasWeb.Dashboard.FindLive do
         </div>
 
         <%!-- Visitor results --%>
-        <div :if={@results && @results.type == :visitors && @results.rows != []} class="bg-white rounded-lg shadow overflow-x-auto">
+        <div
+          :if={@results && @results.type == :visitors && @results.rows != []}
+          class="bg-white rounded-lg shadow overflow-x-auto"
+        >
           <div class="px-6 py-4 border-b border-gray-100">
             <h2 class="font-semibold text-gray-900">Visitors ({length(@results.rows)})</h2>
           </div>
@@ -328,10 +348,18 @@ defmodule SpectabasWeb.Dashboard.FindLive do
             <thead class="bg-gray-50">
               <tr>
                 <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">User ID</th>
-                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Last IP</th>
-                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">First Seen</th>
-                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Last Seen</th>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                  User ID
+                </th>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                  Last IP
+                </th>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                  First Seen
+                </th>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                  Last Seen
+                </th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
@@ -351,17 +379,28 @@ defmodule SpectabasWeb.Dashboard.FindLive do
         </div>
 
         <%!-- Order results --%>
-        <div :if={@results && @results.type == :orders && @results.rows != []} class="bg-white rounded-lg shadow overflow-x-auto">
+        <div
+          :if={@results && @results.type == :orders && @results.rows != []}
+          class="bg-white rounded-lg shadow overflow-x-auto"
+        >
           <div class="px-6 py-4 border-b border-gray-100">
             <h2 class="font-semibold text-gray-900">Orders ({length(@results.rows)})</h2>
           </div>
           <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
               <tr>
-                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Order ID</th>
-                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Revenue</th>
-                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Currency</th>
-                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Timestamp</th>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                  Order ID
+                </th>
+                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                  Revenue
+                </th>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                  Currency
+                </th>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                  Timestamp
+                </th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
@@ -372,13 +411,17 @@ defmodule SpectabasWeb.Dashboard.FindLive do
                   class="table-row hover:bg-indigo-50 cursor-pointer transition-colors"
                 >
                   <td class="px-4 py-3 text-sm font-mono text-gray-900">{o["order_id"]}</td>
-                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{o["revenue"]}</td>
+                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
+                    {o["revenue"]}
+                  </td>
                   <td class="px-4 py-3 text-sm text-gray-600">{o["currency"]}</td>
                   <td class="px-4 py-3 text-sm text-gray-500">{o["timestamp"]}</td>
                 </.link>
                 <tr :if={o["visitor_id"] == ""} class="hover:bg-gray-50">
                   <td class="px-4 py-3 text-sm font-mono text-gray-900">{o["order_id"]}</td>
-                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{o["revenue"]}</td>
+                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
+                    {o["revenue"]}
+                  </td>
                   <td class="px-4 py-3 text-sm text-gray-600">{o["currency"]}</td>
                   <td class="px-4 py-3 text-sm text-gray-500">{o["timestamp"]}</td>
                 </tr>
@@ -388,16 +431,25 @@ defmodule SpectabasWeb.Dashboard.FindLive do
         </div>
 
         <%!-- Page results --%>
-        <div :if={@results && @results.type == :pages && @results.rows != []} class="bg-white rounded-lg shadow overflow-x-auto">
+        <div
+          :if={@results && @results.type == :pages && @results.rows != []}
+          class="bg-white rounded-lg shadow overflow-x-auto"
+        >
           <div class="px-6 py-4 border-b border-gray-100">
             <h2 class="font-semibold text-gray-900">Pages ({length(@results.rows)})</h2>
           </div>
           <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
               <tr>
-                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">URL Path</th>
-                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Pageviews</th>
-                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Visitors</th>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                  URL Path
+                </th>
+                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                  Pageviews
+                </th>
+                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                  Visitors
+                </th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
@@ -406,25 +458,43 @@ defmodule SpectabasWeb.Dashboard.FindLive do
                 navigate={~p"/dashboard/sites/#{@site.id}/pages?filter=#{p["url_path"]}"}
                 class="table-row hover:bg-indigo-50 cursor-pointer transition-colors"
               >
-                <td class="px-4 py-3 text-sm font-mono text-gray-900 truncate max-w-md" title={p["url_path"]}>{p["url_path"]}</td>
-                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{format_number(p["pageviews"])}</td>
-                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{format_number(p["visitors"])}</td>
+                <td
+                  class="px-4 py-3 text-sm font-mono text-gray-900 truncate max-w-md"
+                  title={p["url_path"]}
+                >
+                  {p["url_path"]}
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
+                  {format_number(p["pageviews"])}
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
+                  {format_number(p["visitors"])}
+                </td>
               </.link>
             </tbody>
           </table>
         </div>
 
         <%!-- Referrer results --%>
-        <div :if={@results && @results.type == :referrers && @results.rows != []} class="bg-white rounded-lg shadow overflow-x-auto">
+        <div
+          :if={@results && @results.type == :referrers && @results.rows != []}
+          class="bg-white rounded-lg shadow overflow-x-auto"
+        >
           <div class="px-6 py-4 border-b border-gray-100">
             <h2 class="font-semibold text-gray-900">Referrers ({length(@results.rows)})</h2>
           </div>
           <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
               <tr>
-                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Domain</th>
-                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Pageviews</th>
-                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Visitors</th>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                  Domain
+                </th>
+                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                  Pageviews
+                </th>
+                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                  Visitors
+                </th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
@@ -434,25 +504,40 @@ defmodule SpectabasWeb.Dashboard.FindLive do
                 class="table-row hover:bg-indigo-50 cursor-pointer transition-colors"
               >
                 <td class="px-4 py-3 text-sm text-gray-900">{r["referrer_domain"]}</td>
-                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{format_number(r["pageviews"])}</td>
-                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{format_number(r["visitors"])}</td>
+                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
+                  {format_number(r["pageviews"])}
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
+                  {format_number(r["visitors"])}
+                </td>
               </.link>
             </tbody>
           </table>
         </div>
 
         <%!-- Campaign results --%>
-        <div :if={@results && @results.type == :campaigns && @results.rows != []} class="bg-white rounded-lg shadow overflow-x-auto">
+        <div
+          :if={@results && @results.type == :campaigns && @results.rows != []}
+          class="bg-white rounded-lg shadow overflow-x-auto"
+        >
           <div class="px-6 py-4 border-b border-gray-100">
             <h2 class="font-semibold text-gray-900">Campaigns ({length(@results.rows)})</h2>
           </div>
           <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
               <tr>
-                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Campaign</th>
-                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Pageviews</th>
-                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Visitors</th>
-                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Sessions</th>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                  Campaign
+                </th>
+                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                  Pageviews
+                </th>
+                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                  Visitors
+                </th>
+                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                  Sessions
+                </th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
@@ -462,26 +547,41 @@ defmodule SpectabasWeb.Dashboard.FindLive do
                 class="table-row hover:bg-indigo-50 cursor-pointer transition-colors"
               >
                 <td class="px-4 py-3 text-sm text-gray-900">{c["campaign"]}</td>
-                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{format_number(c["pageviews"])}</td>
-                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{format_number(c["visitors"])}</td>
-                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{format_number(c["sessions"])}</td>
+                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
+                  {format_number(c["pageviews"])}
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
+                  {format_number(c["visitors"])}
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
+                  {format_number(c["sessions"])}
+                </td>
               </.link>
             </tbody>
           </table>
         </div>
 
         <%!-- Organization results --%>
-        <div :if={@results && @results.type == :orgs && @results.rows != []} class="bg-white rounded-lg shadow overflow-x-auto">
+        <div
+          :if={@results && @results.type == :orgs && @results.rows != []}
+          class="bg-white rounded-lg shadow overflow-x-auto"
+        >
           <div class="px-6 py-4 border-b border-gray-100">
             <h2 class="font-semibold text-gray-900">Organizations ({length(@results.rows)})</h2>
           </div>
           <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
               <tr>
-                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Organization</th>
+                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                  Organization
+                </th>
                 <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ASN</th>
-                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Visitors</th>
-                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Pageviews</th>
+                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                  Visitors
+                </th>
+                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                  Pageviews
+                </th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
@@ -492,8 +592,12 @@ defmodule SpectabasWeb.Dashboard.FindLive do
               >
                 <td class="px-4 py-3 text-sm text-gray-900">{o["ip_org"]}</td>
                 <td class="px-4 py-3 text-sm text-gray-600 font-mono">{o["ip_asn"]}</td>
-                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{format_number(o["visitors"])}</td>
-                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">{format_number(o["pageviews"])}</td>
+                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
+                  {format_number(o["visitors"])}
+                </td>
+                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
+                  {format_number(o["pageviews"])}
+                </td>
               </.link>
             </tbody>
           </table>

@@ -35,7 +35,8 @@ defmodule Spectabas.Health do
       postgres: format_check(pg),
       clickhouse: format_check(ch),
       ingest_buffer: %{
-        status: if(Process.whereis(Spectabas.Events.IngestBuffer), do: "running", else: "not_started"),
+        status:
+          if(Process.whereis(Spectabas.Events.IngestBuffer), do: "running", else: "not_started"),
         size: buffer_size,
         soft_limit: 5_000,
         hard_limit: 10_000
@@ -77,6 +78,7 @@ defmodule Spectabas.Health do
   defp oban_queue_depth do
     try do
       import Ecto.Query
+
       Spectabas.ObanRepo.aggregate(
         from(j in "oban_jobs", where: j.state in ["available", "scheduled", "retryable"]),
         :count

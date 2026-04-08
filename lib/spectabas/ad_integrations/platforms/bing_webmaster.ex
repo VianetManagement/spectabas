@@ -28,7 +28,10 @@ defmodule Spectabas.AdIntegrations.Platforms.BingWebmaster do
         # Log sample for debugging
         if length(data) > 0 do
           sample = List.first(data)
-          Logger.info("[Bing] API returned #{length(data)} total rows. Sample date: #{inspect(sample["Date"])}, query: #{inspect(sample["Query"])}")
+
+          Logger.info(
+            "[Bing] API returned #{length(data)} total rows. Sample date: #{inspect(sample["Date"])}, query: #{inspect(sample["Query"])}"
+          )
         end
 
         # Filter to the requested date and parse
@@ -87,7 +90,10 @@ defmodule Spectabas.AdIntegrations.Platforms.BingWebmaster do
           sample = List.first(data)
           sample_keys = if sample, do: Map.keys(sample), else: []
           sample_date = if sample, do: sample["Date"], else: nil
-          Logger.info("[Bing] Bulk sync: #{length(data)} rows. Sample keys: #{inspect(sample_keys)}. Sample Date: #{inspect(sample_date)}")
+
+          Logger.info(
+            "[Bing] Bulk sync: #{length(data)} rows. Sample keys: #{inspect(sample_keys)}. Sample Date: #{inspect(sample_date)}"
+          )
 
           # Parse all rows and bucket by date
           all_rows =
@@ -98,16 +104,24 @@ defmodule Spectabas.AdIntegrations.Platforms.BingWebmaster do
                 page: row["Page"] || "",
                 clicks: row["Clicks"] || 0,
                 impressions: row["Impressions"] || 0,
-                ctr: if(row["Impressions"] > 0, do: Float.round(row["Clicks"] / row["Impressions"] * 100, 2), else: 0),
+                ctr:
+                  if(row["Impressions"] > 0,
+                    do: Float.round(row["Clicks"] / row["Impressions"] * 100, 2),
+                    else: 0
+                  ),
                 position: row["AvgClickPosition"] || row["AvgImpressionPosition"] || 0
               }
             end)
             |> Enum.reject(fn r -> r.date == "" end)
 
           rejected = length(data) - length(all_rows)
+
           if rejected > 0 do
             sample_dates = data |> Enum.take(3) |> Enum.map(& &1["Date"]) |> inspect()
-            Logger.warning("[Bing] #{rejected}/#{length(data)} rows rejected (empty date). Sample raw dates: #{sample_dates}")
+
+            Logger.warning(
+              "[Bing] #{rejected}/#{length(data)} rows rejected (empty date). Sample raw dates: #{sample_dates}"
+            )
           end
 
           if all_rows == [] do
@@ -139,15 +153,22 @@ defmodule Spectabas.AdIntegrations.Platforms.BingWebmaster do
                 {:ok, length(ch_rows)}
 
               {:error, reason} ->
-                Logger.error("[Bing] CH insert failed: #{inspect(reason) |> String.slice(0, 200)}")
+                Logger.error(
+                  "[Bing] CH insert failed: #{inspect(reason) |> String.slice(0, 200)}"
+                )
+
                 {:error, reason}
             end
           end
 
         {:ok, %{status: 200, body: body}} ->
           # Unexpected response structure
-          Logger.warning("[Bing] Unexpected 200 body structure: #{inspect(body) |> String.slice(0, 500)}")
-          {:error, "Unexpected Bing API response format: #{inspect(body) |> String.slice(0, 200)}"}
+          Logger.warning(
+            "[Bing] Unexpected 200 body structure: #{inspect(body) |> String.slice(0, 500)}"
+          )
+
+          {:error,
+           "Unexpected Bing API response format: #{inspect(body) |> String.slice(0, 200)}"}
 
         {:ok, %{status: status, body: body}} ->
           msg = if is_map(body), do: inspect(body) |> String.slice(0, 200), else: "HTTP #{status}"

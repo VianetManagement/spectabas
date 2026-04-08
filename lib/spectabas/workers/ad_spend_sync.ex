@@ -1,7 +1,10 @@
 defmodule Spectabas.Workers.AdSpendSync do
   @moduledoc "Syncs ad spend data from connected ad platforms. Runs every 6 hours via Oban cron."
 
-  use Oban.Worker, queue: :ad_sync, max_attempts: 3, unique: [period: 300, states: [:available, :executing, :scheduled, :retryable]]
+  use Oban.Worker,
+    queue: :ad_sync,
+    max_attempts: 3,
+    unique: [period: 300, states: [:available, :executing, :scheduled, :retryable]]
 
   require Logger
 
@@ -76,7 +79,14 @@ defmodule Spectabas.Workers.AdSpendSync do
 
           {:error, reason} ->
             AdIntegrations.mark_error(integration, "Token refresh failed: #{inspect(reason)}")
-            SyncLog.log(integration, "token_refresh", "error", "Token refresh failed: #{inspect(reason)}")
+
+            SyncLog.log(
+              integration,
+              "token_refresh",
+              "error",
+              "Token refresh failed: #{inspect(reason)}"
+            )
+
             nil
         end
       else
@@ -113,7 +123,10 @@ defmodule Spectabas.Workers.AdSpendSync do
 
               AdIntegrations.mark_synced(integration)
 
-              SyncLog.log(integration, "ad_sync", "ok",
+              SyncLog.log(
+                integration,
+                "ad_sync",
+                "ok",
                 "#{length(ch_rows)} campaigns for #{date}",
                 duration_ms: ms,
                 details: %{"date" => to_string(date), "campaigns" => length(ch_rows)}
@@ -128,7 +141,10 @@ defmodule Spectabas.Workers.AdSpendSync do
 
               AdIntegrations.mark_error(integration, "ClickHouse insert failed")
 
-              SyncLog.log(integration, "ad_sync", "error",
+              SyncLog.log(
+                integration,
+                "ad_sync",
+                "error",
                 "CH insert failed for #{date}: #{inspect(reason) |> String.slice(0, 200)}",
                 duration_ms: ms
               )
@@ -147,7 +163,10 @@ defmodule Spectabas.Workers.AdSpendSync do
 
           AdIntegrations.mark_error(integration, reason)
 
-          SyncLog.log(integration, "ad_sync", "error",
+          SyncLog.log(
+            integration,
+            "ad_sync",
+            "error",
             "Fetch failed for #{date}: #{inspect(reason) |> String.slice(0, 200)}",
             duration_ms: ms
           )

@@ -190,7 +190,9 @@ defmodule Spectabas.Reports.EmailReportHTML do
 
   defp text_keywords(%{top_keywords: kw}) when kw != [] do
     "Top Keywords:\n" <>
-      Enum.map_join(kw, "\n", fn k -> "  #{k["query"]} — #{k["clicks"]} clicks (pos #{k["avg_pos"]})" end) <>
+      Enum.map_join(kw, "\n", fn k ->
+        "  #{k["query"]} — #{k["clicks"]} clicks (pos #{k["avg_pos"]})"
+      end) <>
       "\n\n"
   end
 
@@ -204,7 +206,9 @@ defmodule Spectabas.Reports.EmailReportHTML do
 
   defp text_ad_spend(%{ad_spend: ads}) when ads != [] do
     "Ad Spend:\n" <>
-      Enum.map_join(ads, "\n", fn a -> "  #{a["platform"]}: $#{a["spend"]} (#{a["clicks"]} clicks)" end) <>
+      Enum.map_join(ads, "\n", fn a ->
+        "  #{a["platform"]}: $#{a["spend"]} (#{a["clicks"]} clicks)"
+      end) <>
       "\n\n"
   end
 
@@ -225,9 +229,11 @@ defmodule Spectabas.Reports.EmailReportHTML do
   defp esc(other), do: to_string(other)
 
   defp keywords_section(%{top_keywords: kw}) when kw != [] do
-    rows = Enum.map(kw, fn k ->
-      [esc(k["query"]), k["clicks"], k["impressions"], k["avg_pos"]]
-    end)
+    rows =
+      Enum.map(kw, fn k ->
+        [esc(k["query"]), k["clicks"], k["impressions"], k["avg_pos"]]
+      end)
+
     section_table("Top Search Keywords", ["Query", "Clicks", "Impressions", "Pos"], rows)
   end
 
@@ -244,7 +250,7 @@ defmodule Spectabas.Reports.EmailReportHTML do
         </tr>
         <tr>
           <td style="padding:4px 0;color:#6b7280;">Orders</td>
-          <td style="padding:4px 0;text-align:right;">#{ rev["orders"]}</td>
+          <td style="padding:4px 0;text-align:right;">#{rev["orders"]}</td>
         </tr>
         <tr>
           <td style="padding:4px 0;color:#6b7280;">Refunds</td>
@@ -258,9 +264,11 @@ defmodule Spectabas.Reports.EmailReportHTML do
   defp revenue_section(_), do: ""
 
   defp ad_spend_section(%{ad_spend: ads}) when ads != [] do
-    rows = Enum.map(ads, fn a ->
-      [esc(a["platform"]), "$#{a["spend"]}", a["clicks"], a["impressions"]]
-    end)
+    rows =
+      Enum.map(ads, fn a ->
+        [esc(a["platform"]), "$#{a["spend"]}", a["clicks"], a["impressions"]]
+      end)
+
     section_table("Ad Spend (7 days)", ["Platform", "Spend", "Clicks", "Impressions"], rows)
   end
 

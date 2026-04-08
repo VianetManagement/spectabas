@@ -32,7 +32,12 @@ defmodule Spectabas.AI.ConfigTest do
     end
 
     test "returns decrypted config after save", %{site: site} do
-      config = %{"provider" => "anthropic", "api_key" => "sk-test-123", "model" => "claude-haiku-4-5-20251001"}
+      config = %{
+        "provider" => "anthropic",
+        "api_key" => "sk-test-123",
+        "model" => "claude-haiku-4-5-20251001"
+      }
+
       {:ok, updated_site} = Config.save(site, config)
 
       assert Config.get(updated_site) == config
@@ -109,7 +114,9 @@ defmodule Spectabas.AI.ConfigTest do
     test "returns true for all valid providers", %{site: site} do
       for provider <- ["anthropic", "openai", "google"] do
         {:ok, site} = Config.save(site, %{"provider" => provider, "api_key" => "key-#{provider}"})
-        assert Config.configured?(site), "Expected configured? to be true for provider: #{provider}"
+
+        assert Config.configured?(site),
+               "Expected configured? to be true for provider: #{provider}"
       end
     end
   end

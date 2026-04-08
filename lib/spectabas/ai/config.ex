@@ -44,8 +44,12 @@ defmodule Spectabas.AI.Config do
   @doc "Get AI config for a site. Returns map or empty map."
   def get(site) do
     case site.ai_config_encrypted do
-      nil -> %{}
-      <<>> -> %{}
+      nil ->
+        %{}
+
+      <<>> ->
+        %{}
+
       encrypted ->
         case Vault.decrypt(encrypted) do
           json when is_binary(json) -> Jason.decode!(json)

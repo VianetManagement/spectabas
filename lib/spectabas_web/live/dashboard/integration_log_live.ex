@@ -142,7 +142,14 @@ defmodule SpectabasWeb.Dashboard.IntegrationLogLive do
           <%!-- Filter tabs --%>
           <div class="flex gap-2 mb-4">
             <button
-              :for={{val, label} <- [{"all", "All Events"}, {"sync", "Syncs Only"}, {"errors", "Errors Only"}, {"config", "Config Changes"}]}
+              :for={
+                {val, label} <- [
+                  {"all", "All Events"},
+                  {"sync", "Syncs Only"},
+                  {"errors", "Errors Only"},
+                  {"config", "Config Changes"}
+                ]
+              }
               phx-click="filter"
               phx-value-filter={val}
               class={"px-3 py-1.5 text-sm rounded-full font-medium " <> if(@filter == val, do: "bg-indigo-100 text-indigo-700", else: "bg-gray-100 text-gray-600 hover:bg-gray-200")}
@@ -150,7 +157,10 @@ defmodule SpectabasWeb.Dashboard.IntegrationLogLive do
               {label}
               <%= if val == "errors" do %>
                 <% error_count = Enum.count(@sync_logs, &(&1.status == "error")) %>
-                <span :if={error_count > 0} class="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-red-100 text-red-600">
+                <span
+                  :if={error_count > 0}
+                  class="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-red-100 text-red-600"
+                >
                   {error_count}
                 </span>
               <% end %>
@@ -175,8 +185,7 @@ defmodule SpectabasWeb.Dashboard.IntegrationLogLive do
                 <%= for entry <- filtered_logs do %>
                   <div class="px-6 py-3 hover:bg-gray-50">
                     <div class="flex items-start gap-3">
-                      <div class={"w-2 h-2 mt-2 rounded-full shrink-0 " <> entry_dot(entry)}>
-                      </div>
+                      <div class={"w-2 h-2 mt-2 rounded-full shrink-0 " <> entry_dot(entry)}></div>
                       <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2">
                           <span class={"inline-block px-2 py-0.5 text-xs font-medium rounded " <> platform_color(entry.platform)}>
@@ -245,7 +254,7 @@ defmodule SpectabasWeb.Dashboard.IntegrationLogLive do
         "sync" -> sync_entries |> Enum.filter(&(&1.event not in ["manual_sync_start"]))
         "errors" -> sync_entries |> Enum.filter(&(&1.status == "error"))
         "config" -> audit_entries
-        _ -> (sync_entries ++ audit_entries)
+        _ -> sync_entries ++ audit_entries
       end
 
     Enum.sort_by(all, & &1.timestamp, {:desc, NaiveDateTime})

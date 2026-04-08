@@ -43,7 +43,11 @@ defmodule Spectabas.AI.Completion do
         {:ok, text}
 
       {:ok, %{status: status, body: body}} ->
-        msg = if is_map(body), do: get_in(body, ["error", "message"]) || "HTTP #{status}", else: "HTTP #{status}"
+        msg =
+          if is_map(body),
+            do: get_in(body, ["error", "message"]) || "HTTP #{status}",
+            else: "HTTP #{status}"
+
         Logger.warning("[AI:anthropic] #{msg}")
         {:error, msg}
 
@@ -76,7 +80,11 @@ defmodule Spectabas.AI.Completion do
         {:ok, text}
 
       {:ok, %{status: status, body: body}} ->
-        msg = if is_map(body), do: get_in(body, ["error", "message"]) || "HTTP #{status}", else: "HTTP #{status}"
+        msg =
+          if is_map(body),
+            do: get_in(body, ["error", "message"]) || "HTTP #{status}",
+            else: "HTTP #{status}"
+
         Logger.warning("[AI:openai] #{msg}")
         {:error, msg}
 
@@ -100,11 +108,19 @@ defmodule Spectabas.AI.Completion do
            headers: [{"content-type", "application/json"}],
            receive_timeout: @timeout
          ) do
-      {:ok, %{status: 200, body: %{"candidates" => [%{"content" => %{"parts" => [%{"text" => text} | _]}} | _]}}} ->
+      {:ok,
+       %{
+         status: 200,
+         body: %{"candidates" => [%{"content" => %{"parts" => [%{"text" => text} | _]}} | _]}
+       }} ->
         {:ok, text}
 
       {:ok, %{status: status, body: body}} ->
-        msg = if is_map(body), do: get_in(body, ["error", "message"]) || "HTTP #{status}", else: "HTTP #{status}"
+        msg =
+          if is_map(body),
+            do: get_in(body, ["error", "message"]) || "HTTP #{status}",
+            else: "HTTP #{status}"
+
         Logger.warning("[AI:google] #{msg}")
         {:error, msg}
 

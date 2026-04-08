@@ -179,7 +179,9 @@ defmodule SpectabasWeb.API.StatsController do
 
         Task.start(fn ->
           case Spectabas.ClickHouse.insert("ecommerce_events", [row]) do
-            :ok -> :ok
+            :ok ->
+              :ok
+
             {:error, reason} ->
               Logger.warning(
                 "[API] Ecommerce insert failed: #{inspect(reason) |> String.slice(0, 200)}"

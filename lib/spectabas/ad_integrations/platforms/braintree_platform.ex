@@ -47,7 +47,12 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
   defp fetch_all_by_ids(merchant_id, auth_header, search_body) do
     ids_url = "#{base_url(merchant_id)}/transactions/advanced_search_ids"
 
-    case Req.post(ids_url, body: search_body, headers: xml_headers(auth_header), receive_timeout: 60_000, connect_options: [timeout: 15_000]) do
+    case Req.post(ids_url,
+           body: search_body,
+           headers: xml_headers(auth_header),
+           receive_timeout: 60_000,
+           connect_options: [timeout: 15_000]
+         ) do
       {:ok, %{status: 200, body: resp_body}} ->
         ids = parse_ids(resp_body)
         page_size = parse_page_size(resp_body)
@@ -68,8 +73,11 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
               ids_xml = Enum.map_join(batch_ids, "", fn id -> "<item>#{id}</item>" end)
 
               batch_body =
-                String.replace(search_body, "</search>",
-                  "<ids type=\"array\">#{ids_xml}</ids></search>")
+                String.replace(
+                  search_body,
+                  "</search>",
+                  "<ids type=\"array\">#{ids_xml}</ids></search>"
+                )
 
               fetch_batch_with_retry(search_url, batch_body, auth_header, batch_num)
             end)
@@ -90,7 +98,12 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
   end
 
   defp fetch_batch_with_retry(url, body, auth_header, batch_num, attempt \\ 1) do
-    case Req.post(url, body: body, headers: xml_headers(auth_header), receive_timeout: 60_000, connect_options: [timeout: 15_000]) do
+    case Req.post(url,
+           body: body,
+           headers: xml_headers(auth_header),
+           receive_timeout: 60_000,
+           connect_options: [timeout: 15_000]
+         ) do
       {:ok, %{status: 200, body: resp}} ->
         txns = parse_transactions(resp)
         Logger.info("[BraintreeSync] Batch #{batch_num}: #{length(txns)} txns fetched")
@@ -101,7 +114,10 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
         []
 
       {:error, %Req.TransportError{reason: reason}} when attempt < 3 ->
-        Logger.warning("[BraintreeSync] Batch #{batch_num} transport error: #{inspect(reason)}, retrying (#{attempt}/3)...")
+        Logger.warning(
+          "[BraintreeSync] Batch #{batch_num} transport error: #{inspect(reason)}, retrying (#{attempt}/3)..."
+        )
+
         Process.sleep(1_000 * attempt)
         fetch_batch_with_retry(url, body, auth_header, batch_num, attempt + 1)
 
@@ -121,7 +137,8 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
         |> Enum.map(fn [_, id] -> String.trim(id) end)
         |> Enum.reject(&(&1 == ""))
 
-      _ -> []
+      _ ->
+        []
     end
   end
 
@@ -175,7 +192,10 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
     end
   end
 
-  defp extract_refunded_id_from_txn(%{refunded_transaction_id: id}) when is_binary(id) and id != "", do: id
+  defp extract_refunded_id_from_txn(%{refunded_transaction_id: id})
+       when is_binary(id) and id != "",
+       do: id
+
   defp extract_refunded_id_from_txn(_), do: ""
 
   @doc """
@@ -278,6 +298,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
 
           # Insert in chunks to avoid oversized HTTP payloads
           chunk_size = 200
+
           results =
             rows
             |> Enum.chunk_every(chunk_size)
@@ -285,13 +306,17 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
             |> Enum.map(fn {chunk, batch_num} ->
               case ClickHouse.insert("ecommerce_events", chunk) do
                 :ok ->
-                  Logger.info("[BraintreeSync] Batch #{batch_num}: inserted #{length(chunk)} rows for #{date}")
+                  Logger.info(
+                    "[BraintreeSync] Batch #{batch_num}: inserted #{length(chunk)} rows for #{date}"
+                  )
+
                   :ok
 
                 {:error, reason} ->
                   Logger.error(
                     "[BraintreeSync] CH insert batch #{batch_num} failed for #{date}: #{inspect(reason) |> String.slice(0, 500)}"
                   )
+
                   {:error, reason}
               end
             end)

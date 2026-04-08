@@ -39,7 +39,10 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
       # Debug: log AI config state
       require Logger
       ai_config = Config.get(site)
-      Logger.info("[Insights] AI configured=#{ai_configured}, provider=#{ai_config["provider"]}, has_key=#{ai_config["api_key"] != nil and ai_config["api_key"] != ""}, encrypted_field=#{site.ai_config_encrypted != nil}")
+
+      Logger.info(
+        "[Insights] AI configured=#{ai_configured}, provider=#{ai_config["provider"]}, has_key=#{ai_config["api_key"] != nil and ai_config["api_key"] != ""}, encrypted_field=#{site.ai_config_encrypted != nil}"
+      )
 
       cached_ai = if ai_configured, do: InsightsCache.get(site.id), else: nil
 
@@ -172,8 +175,11 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
             <% end %>
             <%= if @ai_loading do %>
               <div class="flex items-center gap-3 text-gray-500">
-                <div class="animate-spin h-5 w-5 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
-                <span class="text-sm">Analyzing your data across traffic, SEO, revenue, and ad spend...</span>
+                <div class="animate-spin h-5 w-5 border-2 border-indigo-600 border-t-transparent rounded-full">
+                </div>
+                <span class="text-sm">
+                  Analyzing your data across traffic, SEO, revenue, and ad spend...
+                </span>
               </div>
             <% end %>
             <%= if @ai_analysis do %>
@@ -271,13 +277,35 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
             Enum.filter(anomalies, &(&1.category == "seo"))
 
           {"Traffic Trends", _} ->
-            Enum.filter(anomalies, &(&1.category in ["traffic", "engagement", "sources", "pages"] and &1.severity not in [:high, :medium]))
+            Enum.filter(
+              anomalies,
+              &(&1.category in ["traffic", "engagement", "sources", "pages"] and
+                  &1.severity not in [:high, :medium])
+            )
 
           {"Revenue & Ads", _} ->
-            Enum.filter(anomalies, &(&1.category in ["revenue", "advertising", "retention", "ad traffic"] and &1.severity not in [:high, :medium]))
+            Enum.filter(
+              anomalies,
+              &(&1.category in ["revenue", "advertising", "retention", "ad traffic"] and
+                  &1.severity not in [:high, :medium])
+            )
 
           {"Opportunities", severities} ->
-            Enum.filter(anomalies, &(&1.severity in severities and &1.category not in ["seo", "traffic", "engagement", "sources", "pages", "revenue", "advertising", "retention", "ad traffic"]))
+            Enum.filter(
+              anomalies,
+              &(&1.severity in severities and
+                  &1.category not in [
+                    "seo",
+                    "traffic",
+                    "engagement",
+                    "sources",
+                    "pages",
+                    "revenue",
+                    "advertising",
+                    "retention",
+                    "ad traffic"
+                  ])
+            )
 
           _ ->
             []

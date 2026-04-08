@@ -502,6 +502,7 @@ defmodule Spectabas.TrackerScriptTest do
     test "all try blocks have catch clauses", %{js: js} do
       try_count = js |> String.split("try{") |> length() |> Kernel.-(1)
       catch_count = js |> String.split("catch(") |> length() |> Kernel.-(1)
+
       assert catch_count >= try_count,
              "Missing catch clauses: #{try_count} try blocks vs #{catch_count} catch blocks"
     end

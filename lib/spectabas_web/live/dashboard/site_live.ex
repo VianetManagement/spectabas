@@ -352,7 +352,8 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     # Use pre-aggregated daily_stats for 7d+ ranges (much faster on large tables)
     days_in_range = Date.diff(to, from)
 
-    stats_task = Task.async(fn -> fetch_overview(site, user, date_range, seg_opts, days_in_range) end)
+    stats_task =
+      Task.async(fn -> fetch_overview(site, user, date_range, seg_opts, days_in_range) end)
 
     timeseries_task =
       Task.async(fn ->
@@ -1058,7 +1059,8 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
       </div>
       <div class="px-5 py-2 divide-y divide-gray-50">
         <div :if={@loading} class="py-6 text-center">
-          <div class="inline-block h-5 w-5 animate-spin rounded-full border-2 border-indigo-600 border-r-transparent"></div>
+          <div class="inline-block h-5 w-5 animate-spin rounded-full border-2 border-indigo-600 border-r-transparent">
+          </div>
         </div>
         <div :if={!@loading && @empty} class="py-6 text-center text-sm text-gray-500">
           No data yet

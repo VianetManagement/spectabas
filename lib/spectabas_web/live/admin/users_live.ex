@@ -257,7 +257,8 @@ defmodule SpectabasWeb.Admin.UsersLive do
         sessions_terminated: count
       })
 
-      {:noreply, put_flash(socket, :info, "#{user.email} has been logged out of #{count} session(s).")}
+      {:noreply,
+       put_flash(socket, :info, "#{user.email} has been logged out of #{count} session(s).")}
     end
   end
 

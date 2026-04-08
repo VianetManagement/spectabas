@@ -19,7 +19,16 @@ defmodule Spectabas.AdIntegrations.SyncLog do
 
   def changeset(log, attrs) do
     log
-    |> cast(attrs, [:integration_id, :site_id, :platform, :event, :status, :message, :details, :duration_ms])
+    |> cast(attrs, [
+      :integration_id,
+      :site_id,
+      :platform,
+      :event,
+      :status,
+      :message,
+      :details,
+      :duration_ms
+    ])
     |> validate_required([:integration_id, :site_id, :platform, :event, :status])
   end
 
@@ -71,8 +80,6 @@ defmodule Spectabas.AdIntegrations.SyncLog do
 
     cutoff = DateTime.add(DateTime.utc_now(), -days * 86400, :second)
 
-    Spectabas.Repo.delete_all(
-      from(l in __MODULE__, where: l.inserted_at < ^cutoff)
-    )
+    Spectabas.Repo.delete_all(from(l in __MODULE__, where: l.inserted_at < ^cutoff))
   end
 end

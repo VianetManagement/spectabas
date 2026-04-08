@@ -231,13 +231,25 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
             {:ok, count} ->
               ms = System.monotonic_time(:millisecond) - start
               status = if count == 0, do: "error", else: "ok"
-              SyncLog.log(integration, "manual_sync", status,
+
+              SyncLog.log(
+                integration,
+                "manual_sync",
+                status,
                 "Bing bulk sync: #{count} rows inserted. Check Render logs for [Bing] debug output.",
-                duration_ms: ms)
+                duration_ms: ms
+              )
 
             {:error, reason} ->
               ms = System.monotonic_time(:millisecond) - start
-              SyncLog.log(integration, "manual_sync", "error", "Bing bulk sync failed: #{inspect(reason)}", duration_ms: ms)
+
+              SyncLog.log(
+                integration,
+                "manual_sync",
+                "error",
+                "Bing bulk sync failed: #{inspect(reason)}",
+                duration_ms: ms
+              )
           end
         else
           Spectabas.Workers.SearchConsoleSync.sync_now(integration, force_backfill: true)
@@ -266,9 +278,15 @@ defmodule SpectabasWeb.Admin.IntegrationStatusLive do
       case integration.platform do
         "google_search_console" ->
           cond do
-            String.starts_with?(site_url, "sc-domain:") -> site_url
-            String.starts_with?(site_url, "http") -> site_url
-            site_url != "" -> "sc-domain:#{site_url}"
+            String.starts_with?(site_url, "sc-domain:") ->
+              site_url
+
+            String.starts_with?(site_url, "http") ->
+              site_url
+
+            site_url != "" ->
+              "sc-domain:#{site_url}"
+
             true ->
               # Derive from site domain
               parent = Spectabas.Sites.parent_domain_for(integration.site)

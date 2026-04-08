@@ -29,7 +29,10 @@ defmodule SpectabasWeb.Plugs.Require2FA do
       # Account requires MFA but user hasn't set it up → setup
       account_requires_mfa?(user) && !user.totp_enabled && !has_webauthn?(user) ->
         conn
-        |> put_flash(:error, "Your organization requires two-factor authentication. Please set it up to continue.")
+        |> put_flash(
+          :error,
+          "Your organization requires two-factor authentication. Please set it up to continue."
+        )
         |> put_session(:user_return_to, conn.request_path)
         |> redirect(to: "/auth/2fa/setup")
         |> halt()
@@ -61,6 +64,7 @@ defmodule SpectabasWeb.Plugs.Require2FA do
 
   defp has_webauthn?(user) do
     import Ecto.Query
+
     Spectabas.Repo.exists?(
       from(w in Spectabas.Accounts.WebauthnCredential, where: w.user_id == ^user.id)
     )

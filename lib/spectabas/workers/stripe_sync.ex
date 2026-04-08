@@ -4,7 +4,10 @@ defmodule Spectabas.Workers.StripeSync do
   Syncs today + yesterday for each active Stripe integration.
   """
 
-  use Oban.Worker, queue: :ad_sync, max_attempts: 3, unique: [period: 300, states: [:available, :executing, :scheduled, :retryable]]
+  use Oban.Worker,
+    queue: :ad_sync,
+    max_attempts: 3,
+    unique: [period: 300, states: [:available, :executing, :scheduled, :retryable]]
 
   require Logger
 
@@ -33,10 +36,16 @@ defmodule Spectabas.Workers.StripeSync do
 
           ms = System.monotonic_time(:millisecond) - start
 
-          SyncLog.log(integration, "cron_sync", "ok",
+          SyncLog.log(
+            integration,
+            "cron_sync",
+            "ok",
             "Synced charges (today+yesterday) and subscriptions",
             duration_ms: ms,
-            details: %{"dates" => [to_string(today), to_string(yesterday)], "subscriptions" => inspect(sub_result)}
+            details: %{
+              "dates" => [to_string(today), to_string(yesterday)],
+              "subscriptions" => inspect(sub_result)
+            }
           )
         rescue
           e ->
@@ -76,23 +85,32 @@ defmodule Spectabas.Workers.StripeSync do
           other -> "subscriptions: #{inspect(other) |> String.slice(0, 100)}"
         end
 
-      SyncLog.log(integration, "manual_sync", "ok",
-        "Charges (#{days + 1} days), #{sub_msg}",
+      SyncLog.log(integration, "manual_sync", "ok", "Charges (#{days + 1} days), #{sub_msg}",
         duration_ms: ms,
         details: %{"days" => days + 1}
       )
     rescue
       e ->
         ms = System.monotonic_time(:millisecond) - start
-        SyncLog.log(integration, "manual_sync", "error",
+
+        SyncLog.log(
+          integration,
+          "manual_sync",
+          "error",
           "#{Exception.message(e)}\n#{Exception.format_stacktrace(__STACKTRACE__) |> String.slice(0, 300)}",
-          duration_ms: ms)
+          duration_ms: ms
+        )
     catch
       kind, reason ->
         ms = System.monotonic_time(:millisecond) - start
-        SyncLog.log(integration, "manual_sync", "error",
+
+        SyncLog.log(
+          integration,
+          "manual_sync",
+          "error",
           "#{kind}: #{inspect(reason) |> String.slice(0, 300)}",
-          duration_ms: ms)
+          duration_ms: ms
+        )
     end
   end
 end

@@ -49,7 +49,10 @@ defmodule SpectabasWeb.UserSessionController do
         case Hammer.check_rate("lockout:#{normalized_email}", 900_000, 5) do
           {:deny, _} ->
             conn
-            |> put_flash(:error, "Account temporarily locked due to too many failed attempts. Try again in 15 minutes.")
+            |> put_flash(
+              :error,
+              "Account temporarily locked due to too many failed attempts. Try again in 15 minutes."
+            )
             |> redirect(to: ~p"/users/log-in")
 
           {:allow, count} ->

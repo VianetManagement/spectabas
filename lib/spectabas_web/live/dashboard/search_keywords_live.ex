@@ -260,7 +260,11 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     |> assign(:stats, stats)
     |> assign(:queries, queries)
     |> assign(:pages, pages)
-    |> assign(:has_data, to_num(stats["total_clicks"] || "0") > 0 or to_num(stats["total_impressions"] || "0") > 0 or queries != [])
+    |> assign(
+      :has_data,
+      to_num(stats["total_clicks"] || "0") > 0 or to_num(stats["total_impressions"] || "0") > 0 or
+        queries != []
+    )
     |> assign(:query_error, query_error)
     |> assign(:ranking_changes, ranking_changes)
     |> assign(:ctr_opportunities, ctr_opportunities)
@@ -458,19 +462,27 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
               <h2 class="text-lg font-semibold text-gray-900 mb-4">Position Distribution</h2>
               <div class="grid grid-cols-4 gap-4">
                 <div class="text-center p-3 bg-green-50 rounded-lg">
-                  <div class="text-2xl font-bold text-green-700">{format_number(to_num(@pos_dist["top3"] || "0"))}</div>
+                  <div class="text-2xl font-bold text-green-700">
+                    {format_number(to_num(@pos_dist["top3"] || "0"))}
+                  </div>
                   <div class="text-xs text-green-600 mt-1">Top 3</div>
                 </div>
                 <div class="text-center p-3 bg-blue-50 rounded-lg">
-                  <div class="text-2xl font-bold text-blue-700">{format_number(to_num(@pos_dist["top10"] || "0"))}</div>
+                  <div class="text-2xl font-bold text-blue-700">
+                    {format_number(to_num(@pos_dist["top10"] || "0"))}
+                  </div>
                   <div class="text-xs text-blue-600 mt-1">4-10</div>
                 </div>
                 <div class="text-center p-3 bg-amber-50 rounded-lg">
-                  <div class="text-2xl font-bold text-amber-700">{format_number(to_num(@pos_dist["top20"] || "0"))}</div>
+                  <div class="text-2xl font-bold text-amber-700">
+                    {format_number(to_num(@pos_dist["top20"] || "0"))}
+                  </div>
                   <div class="text-xs text-amber-600 mt-1">11-20</div>
                 </div>
                 <div class="text-center p-3 bg-red-50 rounded-lg">
-                  <div class="text-2xl font-bold text-red-700">{format_number(to_num(@pos_dist["beyond20"] || "0"))}</div>
+                  <div class="text-2xl font-bold text-red-700">
+                    {format_number(to_num(@pos_dist["beyond20"] || "0"))}
+                  </div>
                   <div class="text-xs text-red-600 mt-1">20+</div>
                 </div>
               </div>
@@ -481,7 +493,9 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
           <%= if @ranking_changes != [] do %>
             <div class="bg-white rounded-lg shadow p-6 mb-8">
               <h2 class="text-lg font-semibold text-gray-900 mb-1">Ranking Changes</h2>
-              <p class="text-xs text-gray-500 mb-4">Keywords with significant position changes (last 7 days vs prior 7 days)</p>
+              <p class="text-xs text-gray-500 mb-4">
+                Keywords with significant position changes (last 7 days vs prior 7 days)
+              </p>
               <table class="w-full">
                 <thead>
                   <tr class="border-b-2 border-gray-200">
@@ -497,8 +511,12 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                     <% change = to_float(r["pos_change"]) %>
                     <tr class="border-b border-gray-100 hover:bg-gray-50">
                       <td class="py-2 text-sm text-gray-900 max-w-xs truncate">{r["query"]}</td>
-                      <td class="text-right py-2 text-sm">{format_number(to_num(r["current_clicks"]))}</td>
-                      <td class={"text-right py-2 text-sm font-medium " <> position_color(to_float(r["current_pos"]))}>{r["current_pos"]}</td>
+                      <td class="text-right py-2 text-sm">
+                        {format_number(to_num(r["current_clicks"]))}
+                      </td>
+                      <td class={"text-right py-2 text-sm font-medium " <> position_color(to_float(r["current_pos"]))}>
+                        {r["current_pos"]}
+                      </td>
                       <td class="text-right py-2 text-sm text-gray-500">{r["previous_pos"]}</td>
                       <td class={"text-right py-2 text-sm font-bold " <> if(change > 0, do: "text-green-600", else: "text-red-600")}>
                         {if change > 0, do: "+#{r["pos_change"]}", else: r["pos_change"]}
@@ -514,7 +532,9 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
           <%= if @ctr_opportunities != [] do %>
             <div class="bg-white rounded-lg shadow p-6 mb-8">
               <h2 class="text-lg font-semibold text-gray-900 mb-1">CTR Opportunities</h2>
-              <p class="text-xs text-gray-500 mb-4">High impressions with below-average CTR — improve title/meta description for more clicks</p>
+              <p class="text-xs text-gray-500 mb-4">
+                High impressions with below-average CTR — improve title/meta description for more clicks
+              </p>
               <table class="w-full">
                 <thead>
                   <tr class="border-b-2 border-gray-200">
@@ -529,10 +549,16 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                   <%= for r <- @ctr_opportunities do %>
                     <tr class="border-b border-gray-100 hover:bg-gray-50">
                       <td class="py-2 text-sm text-gray-900 max-w-xs truncate">{r["query"]}</td>
-                      <td class="text-right py-2 text-sm font-semibold text-amber-600">{format_number(to_num(r["total_impressions"]))}</td>
-                      <td class="text-right py-2 text-sm">{format_number(to_num(r["total_clicks"]))}</td>
+                      <td class="text-right py-2 text-sm font-semibold text-amber-600">
+                        {format_number(to_num(r["total_impressions"]))}
+                      </td>
+                      <td class="text-right py-2 text-sm">
+                        {format_number(to_num(r["total_clicks"]))}
+                      </td>
                       <td class="text-right py-2 text-sm text-red-600 font-medium">{r["ctr"]}%</td>
-                      <td class={"text-right py-2 text-sm " <> position_color(to_float(r["avg_pos"]))}>{r["avg_pos"]}</td>
+                      <td class={"text-right py-2 text-sm " <> position_color(to_float(r["avg_pos"]))}>
+                        {r["avg_pos"]}
+                      </td>
                     </tr>
                   <% end %>
                 </tbody>
@@ -545,7 +571,9 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
             <%= if @new_keywords != [] do %>
               <div class="bg-white rounded-lg shadow p-6">
                 <h2 class="text-lg font-semibold text-green-700 mb-1">New Keywords</h2>
-                <p class="text-xs text-gray-500 mb-4">Appeared in last 7 days, not seen in prior 7 days</p>
+                <p class="text-xs text-gray-500 mb-4">
+                  Appeared in last 7 days, not seen in prior 7 days
+                </p>
                 <table class="w-full">
                   <thead>
                     <tr class="border-b border-gray-200">
@@ -557,9 +585,15 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                   <tbody>
                     <%= for r <- @new_keywords do %>
                       <tr class="border-b border-gray-100">
-                        <td class="py-2 text-sm text-gray-900 max-w-[200px] truncate">{r["query"]}</td>
-                        <td class="text-right py-2 text-sm font-medium text-green-600">{format_number(to_num(r["clicks"]))}</td>
-                        <td class={"text-right py-2 text-sm " <> position_color(to_float(r["avg_pos"]))}>{r["avg_pos"]}</td>
+                        <td class="py-2 text-sm text-gray-900 max-w-[200px] truncate">
+                          {r["query"]}
+                        </td>
+                        <td class="text-right py-2 text-sm font-medium text-green-600">
+                          {format_number(to_num(r["clicks"]))}
+                        </td>
+                        <td class={"text-right py-2 text-sm " <> position_color(to_float(r["avg_pos"]))}>
+                          {r["avg_pos"]}
+                        </td>
                       </tr>
                     <% end %>
                   </tbody>
@@ -569,7 +603,9 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
             <%= if @lost_keywords != [] do %>
               <div class="bg-white rounded-lg shadow p-6">
                 <h2 class="text-lg font-semibold text-red-700 mb-1">Lost Keywords</h2>
-                <p class="text-xs text-gray-500 mb-4">In prior 7 days but disappeared from last 7 days</p>
+                <p class="text-xs text-gray-500 mb-4">
+                  In prior 7 days but disappeared from last 7 days
+                </p>
                 <table class="w-full">
                   <thead>
                     <tr class="border-b border-gray-200">
@@ -581,9 +617,15 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                   <tbody>
                     <%= for r <- @lost_keywords do %>
                       <tr class="border-b border-gray-100">
-                        <td class="py-2 text-sm text-gray-900 max-w-[200px] truncate">{r["query"]}</td>
-                        <td class="text-right py-2 text-sm font-medium text-red-600">{format_number(to_num(r["clicks"]))}</td>
-                        <td class={"text-right py-2 text-sm " <> position_color(to_float(r["avg_pos"]))}>{r["avg_pos"]}</td>
+                        <td class="py-2 text-sm text-gray-900 max-w-[200px] truncate">
+                          {r["query"]}
+                        </td>
+                        <td class="text-right py-2 text-sm font-medium text-red-600">
+                          {format_number(to_num(r["clicks"]))}
+                        </td>
+                        <td class={"text-right py-2 text-sm " <> position_color(to_float(r["avg_pos"]))}>
+                          {r["avg_pos"]}
+                        </td>
                       </tr>
                     <% end %>
                   </tbody>

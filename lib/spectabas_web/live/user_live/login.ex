@@ -52,7 +52,11 @@ defmodule SpectabasWeb.UserLive.Login do
               </div>
 
               <%!-- Honeypot: hidden field that bots will fill in --%>
-              <div style="position:absolute;left:-9999px;top:-9999px;" aria-hidden="true" tabindex="-1">
+              <div
+                style="position:absolute;left:-9999px;top:-9999px;"
+                aria-hidden="true"
+                tabindex="-1"
+              >
                 <label for="reset_website">Website</label>
                 <input type="text" name="website" id="reset_website" autocomplete="off" tabindex="-1" />
               </div>
@@ -215,7 +219,9 @@ defmodule SpectabasWeb.UserLive.Login do
 
           # Always show success message to prevent email enumeration
           case Accounts.get_user_by_email(email) do
-            nil -> :ok
+            nil ->
+              :ok
+
             user ->
               Accounts.deliver_login_instructions(user, &url(~p"/users/log-in/#{&1}"))
           end

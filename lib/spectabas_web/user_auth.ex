@@ -145,7 +145,9 @@ defmodule SpectabasWeb.UserAuth do
     ip = conn.remote_ip |> :inet.ntoa() |> to_string()
     ua = Plug.Conn.get_req_header(conn, "user-agent") |> List.first() || ""
 
-    token = Accounts.generate_user_session_token(user, %{ip: ip, user_agent: String.slice(ua, 0, 255)})
+    token =
+      Accounts.generate_user_session_token(user, %{ip: ip, user_agent: String.slice(ua, 0, 255)})
+
     remember_me = get_session(conn, :user_remember_me)
 
     conn
@@ -257,7 +259,12 @@ defmodule SpectabasWeb.UserAuth do
     if socket.assigns.current_scope && socket.assigns.current_scope.user do
       socket =
         try do
-          Phoenix.LiveView.attach_hook(socket, :idle_timeout, :handle_event, &handle_idle_timeout/3)
+          Phoenix.LiveView.attach_hook(
+            socket,
+            :idle_timeout,
+            :handle_event,
+            &handle_idle_timeout/3
+          )
         rescue
           _ -> socket
         end

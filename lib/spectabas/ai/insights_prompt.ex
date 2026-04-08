@@ -112,37 +112,39 @@ defmodule Spectabas.AI.InsightsPrompt do
         if to_num(r["clicks"]) == 0 and to_num(r["impressions"]) == 0 do
           nil
         else
-        base = "Clicks: #{r["clicks"]}, Impressions: #{r["impressions"]}, CTR: #{r["ctr"]}%, Avg Position: #{r["avg_pos"]}, Queries: #{r["unique_queries"]}"
+          base =
+            "Clicks: #{r["clicks"]}, Impressions: #{r["impressions"]}, CTR: #{r["ctr"]}%, Avg Position: #{r["avg_pos"]}, Queries: #{r["unique_queries"]}"
 
-        # Top ranking changes
-        changes =
-          case ClickHouse.query("""
-               SELECT cur.query, round(prev.pos - cur.pos, 1) AS change, cur.pos AS current_pos
-               FROM (
-                 SELECT query, avg(position) AS pos FROM search_console FINAL
-                 WHERE site_id = #{site_p} AND date >= today() - 7
-                 GROUP BY query HAVING sum(impressions) >= 5
-               ) cur
-               JOIN (
-                 SELECT query, avg(position) AS pos FROM search_console FINAL
-                 WHERE site_id = #{site_p} AND date >= today() - 14 AND date < today() - 7
-                 GROUP BY query HAVING sum(impressions) >= 5
-               ) prev ON cur.query = prev.query
-               ORDER BY abs(prev.pos - cur.pos) DESC
-               LIMIT 5
-               """) do
-            {:ok, rows} when rows != [] ->
-              "\nBiggest ranking changes:\n" <>
-                Enum.map_join(rows, "\n", fn r ->
-                  dir = if to_float(r["change"]) > 0, do: "improved", else: "dropped"
-                  "- \"#{r["query"]}\" #{dir} by #{abs(to_float(r["change"]))} positions (now #{r["current_pos"]})"
-                end)
+          # Top ranking changes
+          changes =
+            case ClickHouse.query("""
+                 SELECT cur.query, round(prev.pos - cur.pos, 1) AS change, cur.pos AS current_pos
+                 FROM (
+                   SELECT query, avg(position) AS pos FROM search_console FINAL
+                   WHERE site_id = #{site_p} AND date >= today() - 7
+                   GROUP BY query HAVING sum(impressions) >= 5
+                 ) cur
+                 JOIN (
+                   SELECT query, avg(position) AS pos FROM search_console FINAL
+                   WHERE site_id = #{site_p} AND date >= today() - 14 AND date < today() - 7
+                   GROUP BY query HAVING sum(impressions) >= 5
+                 ) prev ON cur.query = prev.query
+                 ORDER BY abs(prev.pos - cur.pos) DESC
+                 LIMIT 5
+                 """) do
+              {:ok, rows} when rows != [] ->
+                "\nBiggest ranking changes:\n" <>
+                  Enum.map_join(rows, "\n", fn r ->
+                    dir = if to_float(r["change"]) > 0, do: "improved", else: "dropped"
 
-            _ ->
-              ""
-          end
+                    "- \"#{r["query"]}\" #{dir} by #{abs(to_float(r["change"]))} positions (now #{r["current_pos"]})"
+                  end)
 
-        base <> changes
+              _ ->
+                ""
+            end
+
+          base <> changes
         end
 
       _ ->

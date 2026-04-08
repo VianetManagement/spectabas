@@ -859,32 +859,34 @@ defmodule SpectabasWeb.HealthController do
         "geo_diag" ->
           site_p = Spectabas.ClickHouse.param(site_id)
 
-          regions = case Spectabas.ClickHouse.query("""
-            SELECT ip_region_name, ip_country, count() AS cnt, uniq(ip_address) AS unique_ips
-            FROM events
-            WHERE site_id = #{site_p} AND timestamp >= now() - INTERVAL 7 DAY
-              AND ip_is_bot = 0 AND event_type = 'pageview' AND ip_region_name != ''
-            GROUP BY ip_region_name, ip_country
-            ORDER BY cnt DESC
-            LIMIT 20
-          """) do
-            {:ok, rows} -> rows
-            {:error, e} -> [%{"error" => inspect(e)}]
-          end
+          regions =
+            case Spectabas.ClickHouse.query("""
+                   SELECT ip_region_name, ip_country, count() AS cnt, uniq(ip_address) AS unique_ips
+                   FROM events
+                   WHERE site_id = #{site_p} AND timestamp >= now() - INTERVAL 7 DAY
+                     AND ip_is_bot = 0 AND event_type = 'pageview' AND ip_region_name != ''
+                   GROUP BY ip_region_name, ip_country
+                   ORDER BY cnt DESC
+                   LIMIT 20
+                 """) do
+              {:ok, rows} -> rows
+              {:error, e} -> [%{"error" => inspect(e)}]
+            end
 
           # Check for duplicate IPs
-          top_ips = case Spectabas.ClickHouse.query("""
-            SELECT ip_address, ip_region_name, ip_country, count() AS cnt
-            FROM events
-            WHERE site_id = #{site_p} AND timestamp >= now() - INTERVAL 7 DAY
-              AND ip_is_bot = 0 AND event_type = 'pageview'
-            GROUP BY ip_address, ip_region_name, ip_country
-            ORDER BY cnt DESC
-            LIMIT 10
-          """) do
-            {:ok, rows} -> rows
-            {:error, e} -> [%{"error" => inspect(e)}]
-          end
+          top_ips =
+            case Spectabas.ClickHouse.query("""
+                   SELECT ip_address, ip_region_name, ip_country, count() AS cnt
+                   FROM events
+                   WHERE site_id = #{site_p} AND timestamp >= now() - INTERVAL 7 DAY
+                     AND ip_is_bot = 0 AND event_type = 'pageview'
+                   GROUP BY ip_address, ip_region_name, ip_country
+                   ORDER BY cnt DESC
+                   LIMIT 10
+                 """) do
+              {:ok, rows} -> rows
+              {:error, e} -> [%{"error" => inspect(e)}]
+            end
 
           json(conn, %{action: "geo_diag", top_regions: regions, top_ips: top_ips})
 
@@ -893,69 +895,74 @@ defmodule SpectabasWeb.HealthController do
 
         "attribution_diag" ->
           site_p = Spectabas.ClickHouse.param(site_id)
-          ecom_filter = Spectabas.Analytics.ecommerce_source_filter(Spectabas.Sites.get_site!(site_id))
+
+          ecom_filter =
+            Spectabas.Analytics.ecommerce_source_filter(Spectabas.Sites.get_site!(site_id))
 
           # How many ecom events have valid visitor_ids?
-          coverage = case Spectabas.ClickHouse.query("""
-            SELECT
-              count() AS total_orders,
-              countIf(visitor_id != '') AS with_visitor_id,
-              countIf(visitor_id = '') AS without_visitor_id,
-              round(countIf(visitor_id != '') / greatest(count(), 1) * 100, 1) AS match_pct
-            FROM ecommerce_events
-            WHERE site_id = #{site_p} #{ecom_filter}
-              AND timestamp >= now() - INTERVAL 30 DAY
-          """) do
-            {:ok, [row | _]} -> row
-            {:error, e} -> %{"error" => inspect(e)}
-          end
+          coverage =
+            case Spectabas.ClickHouse.query("""
+                   SELECT
+                     count() AS total_orders,
+                     countIf(visitor_id != '') AS with_visitor_id,
+                     countIf(visitor_id = '') AS without_visitor_id,
+                     round(countIf(visitor_id != '') / greatest(count(), 1) * 100, 1) AS match_pct
+                   FROM ecommerce_events
+                   WHERE site_id = #{site_p} #{ecom_filter}
+                     AND timestamp >= now() - INTERVAL 30 DAY
+                 """) do
+              {:ok, [row | _]} -> row
+              {:error, e} -> %{"error" => inspect(e)}
+            end
 
           # How many purchaser visitor_ids exist in events table?
-          cross_match = case Spectabas.ClickHouse.query("""
-            SELECT count() AS purchasers_with_events
-            FROM (
-              SELECT DISTINCT visitor_id FROM ecommerce_events
-              WHERE site_id = #{site_p} #{ecom_filter}
-                AND timestamp >= now() - INTERVAL 30 DAY
-                AND visitor_id != ''
-            ) AS buyers
-            WHERE buyer.visitor_id IN (
-              SELECT DISTINCT visitor_id FROM events
-              WHERE site_id = #{site_p}
-                AND event_type = 'pageview'
-                AND timestamp >= now() - INTERVAL 30 DAY
-            )
-          """) do
-            {:ok, [row | _]} -> row
-            {:error, e} -> %{"error" => inspect(e) |> String.slice(0, 200)}
-          end
+          cross_match =
+            case Spectabas.ClickHouse.query("""
+                   SELECT count() AS purchasers_with_events
+                   FROM (
+                     SELECT DISTINCT visitor_id FROM ecommerce_events
+                     WHERE site_id = #{site_p} #{ecom_filter}
+                       AND timestamp >= now() - INTERVAL 30 DAY
+                       AND visitor_id != ''
+                   ) AS buyers
+                   WHERE buyer.visitor_id IN (
+                     SELECT DISTINCT visitor_id FROM events
+                     WHERE site_id = #{site_p}
+                       AND event_type = 'pageview'
+                       AND timestamp >= now() - INTERVAL 30 DAY
+                   )
+                 """) do
+              {:ok, [row | _]} -> row
+              {:error, e} -> %{"error" => inspect(e) |> String.slice(0, 200)}
+            end
 
           # Test first-touch revenue query directly (simplified)
-          first_touch_test = case Spectabas.ClickHouse.query("""
-            SELECT count() AS attributed_purchasers
-            FROM (
-              SELECT visitor_id,
-                ifNull(nullIf(argMinIf(
-                  if(referrer_domain != '', referrer_domain, if(utm_source != '', utm_source, 'Direct')),
-                  timestamp,
-                  referrer_domain != '' OR utm_source != '' OR click_id != ''
-                ), ''), 'Direct') AS source
-              FROM events
-              WHERE site_id = #{site_p}
-                AND event_type = 'pageview' AND ip_is_bot = 0
-                AND timestamp >= now() - INTERVAL 30 DAY
-                AND visitor_id IN (
-                  SELECT DISTINCT visitor_id FROM ecommerce_events
-                  WHERE site_id = #{site_p} #{ecom_filter}
-                    AND timestamp >= now() - INTERVAL 30 DAY
-                    AND visitor_id != ''
-                )
-              GROUP BY visitor_id
-            )
-          """) do
-            {:ok, [row | _]} -> row
-            {:error, e} -> %{"error" => inspect(e) |> String.slice(0, 200)}
-          end
+          first_touch_test =
+            case Spectabas.ClickHouse.query("""
+                   SELECT count() AS attributed_purchasers
+                   FROM (
+                     SELECT visitor_id,
+                       ifNull(nullIf(argMinIf(
+                         if(referrer_domain != '', referrer_domain, if(utm_source != '', utm_source, 'Direct')),
+                         timestamp,
+                         referrer_domain != '' OR utm_source != '' OR click_id != ''
+                       ), ''), 'Direct') AS source
+                     FROM events
+                     WHERE site_id = #{site_p}
+                       AND event_type = 'pageview' AND ip_is_bot = 0
+                       AND timestamp >= now() - INTERVAL 30 DAY
+                       AND visitor_id IN (
+                         SELECT DISTINCT visitor_id FROM ecommerce_events
+                         WHERE site_id = #{site_p} #{ecom_filter}
+                           AND timestamp >= now() - INTERVAL 30 DAY
+                           AND visitor_id != ''
+                       )
+                     GROUP BY visitor_id
+                   )
+                 """) do
+              {:ok, [row | _]} -> row
+              {:error, e} -> %{"error" => inspect(e) |> String.slice(0, 200)}
+            end
 
           json(conn, %{
             action: "attribution_diag",
@@ -977,7 +984,8 @@ defmodule SpectabasWeb.HealthController do
             has_key: config["api_key"] != nil and config["api_key"] != "",
             model: config["model"],
             encrypted_field_nil: site.ai_config_encrypted == nil,
-            encrypted_field_size: if(site.ai_config_encrypted, do: byte_size(site.ai_config_encrypted), else: 0)
+            encrypted_field_size:
+              if(site.ai_config_encrypted, do: byte_size(site.ai_config_encrypted), else: 0)
           })
 
         _ ->
@@ -1380,11 +1388,12 @@ defmodule SpectabasWeb.HealthController do
         api_key = Spectabas.AdIntegrations.decrypt_access_token(integration)
 
         # Fetch first page of active subs WITH item expansion to calculate MRR
-        qs = URI.encode_query([
-          {"status", "active"},
-          {"limit", "100"},
-          {"expand[]", "data.items.data.price"}
-        ])
+        qs =
+          URI.encode_query([
+            {"status", "active"},
+            {"limit", "100"},
+            {"expand[]", "data.items.data.price"}
+          ])
 
         case Req.get("https://api.stripe.com/v1/subscriptions?#{qs}",
                headers: [
@@ -1399,24 +1408,30 @@ defmodule SpectabasWeb.HealthController do
             our_mrr =
               Enum.reduce(subs, 0.0, fn sub, acc ->
                 items = get_in(sub, ["items", "data"]) || []
-                item_mrr = Enum.reduce(items, 0.0, fn item, iacc ->
-                  price = item["price"] || %{}
-                  unit = (price["unit_amount"] || 0) / 100.0
-                  qty = item["quantity"] || 1
-                  interval = get_in(price, ["recurring", "interval"]) || "month"
-                  ic = get_in(price, ["recurring", "interval_count"]) || 1
-                  amount = unit * qty
-                  mrr = case {interval, ic} do
-                    {"month", n} -> amount / n
-                    {"year", n} -> amount / (12.0 * n)
-                    {"week", n} -> amount * 52.0 / (12.0 * n)
-                    {"day", 30} -> amount
-                    {"day", 7} -> amount * 52.0 / 12.0
-                    {"day", n} -> amount * 365.0 / (12.0 * n)
-                    _ -> amount
-                  end
-                  iacc + mrr
-                end)
+
+                item_mrr =
+                  Enum.reduce(items, 0.0, fn item, iacc ->
+                    price = item["price"] || %{}
+                    unit = (price["unit_amount"] || 0) / 100.0
+                    qty = item["quantity"] || 1
+                    interval = get_in(price, ["recurring", "interval"]) || "month"
+                    ic = get_in(price, ["recurring", "interval_count"]) || 1
+                    amount = unit * qty
+
+                    mrr =
+                      case {interval, ic} do
+                        {"month", n} -> amount / n
+                        {"year", n} -> amount / (12.0 * n)
+                        {"week", n} -> amount * 52.0 / (12.0 * n)
+                        {"day", 30} -> amount
+                        {"day", 7} -> amount * 52.0 / 12.0
+                        {"day", n} -> amount * 365.0 / (12.0 * n)
+                        _ -> amount
+                      end
+
+                    iacc + mrr
+                  end)
+
                 acc + item_mrr
               end)
 
@@ -1427,6 +1442,7 @@ defmodule SpectabasWeb.HealthController do
               |> Enum.map(fn s ->
                 items = get_in(s, ["items", "data"]) || []
                 first_price = get_in(items, [Access.at(0), "price"]) || %{}
+
                 %{
                   id: s["id"],
                   status: s["status"],
@@ -1463,7 +1479,8 @@ defmodule SpectabasWeb.HealthController do
 
     case Spectabas.Repo.one(
            from(a in Spectabas.AdIntegrations.AdIntegration,
-             where: a.site_id == ^site_id and a.platform == "bing_webmaster" and a.status == "active",
+             where:
+               a.site_id == ^site_id and a.platform == "bing_webmaster" and a.status == "active",
              limit: 1
            )
          ) do
@@ -1476,11 +1493,16 @@ defmodule SpectabasWeb.HealthController do
 
         # Try multiple URL formats and endpoints
         variants = [
-          {"GetQueryStats (bare)", "https://ssl.bing.com/webmaster/api.svc/json/GetQueryStats?apikey=#{api_key}&siteUrl=#{URI.encode(site_url, &URI.char_unreserved?/1)}"},
-          {"GetQueryStats (https://)", "https://ssl.bing.com/webmaster/api.svc/json/GetQueryStats?apikey=#{api_key}&siteUrl=#{URI.encode("https://#{site_url}/", &URI.char_unreserved?/1)}"},
-          {"GetQueryStats (http://)", "https://ssl.bing.com/webmaster/api.svc/json/GetQueryStats?apikey=#{api_key}&siteUrl=#{URI.encode("http://#{site_url}/", &URI.char_unreserved?/1)}"},
-          {"GetQueryPageStats (bare)", "https://ssl.bing.com/webmaster/api.svc/json/GetQueryPageStats?apikey=#{api_key}&siteUrl=#{URI.encode(site_url, &URI.char_unreserved?/1)}"},
-          {"GetQueryPageStats (bare+query)", "https://ssl.bing.com/webmaster/api.svc/json/GetQueryPageStats?apikey=#{api_key}&siteUrl=#{URI.encode(site_url, &URI.char_unreserved?/1)}&query=%27%27"}
+          {"GetQueryStats (bare)",
+           "https://ssl.bing.com/webmaster/api.svc/json/GetQueryStats?apikey=#{api_key}&siteUrl=#{URI.encode(site_url, &URI.char_unreserved?/1)}"},
+          {"GetQueryStats (https://)",
+           "https://ssl.bing.com/webmaster/api.svc/json/GetQueryStats?apikey=#{api_key}&siteUrl=#{URI.encode("https://#{site_url}/", &URI.char_unreserved?/1)}"},
+          {"GetQueryStats (http://)",
+           "https://ssl.bing.com/webmaster/api.svc/json/GetQueryStats?apikey=#{api_key}&siteUrl=#{URI.encode("http://#{site_url}/", &URI.char_unreserved?/1)}"},
+          {"GetQueryPageStats (bare)",
+           "https://ssl.bing.com/webmaster/api.svc/json/GetQueryPageStats?apikey=#{api_key}&siteUrl=#{URI.encode(site_url, &URI.char_unreserved?/1)}"},
+          {"GetQueryPageStats (bare+query)",
+           "https://ssl.bing.com/webmaster/api.svc/json/GetQueryPageStats?apikey=#{api_key}&siteUrl=#{URI.encode(site_url, &URI.char_unreserved?/1)}&query=%27%27"}
         ]
 
         results =
@@ -1502,8 +1524,10 @@ defmodule SpectabasWeb.HealthController do
                       %{empty_list: true}
 
                     _ ->
-                      %{body_keys: if(is_map(body), do: Map.keys(body), else: "not_map"),
-                        snippet: inspect(body) |> String.slice(0, 200)}
+                      %{
+                        body_keys: if(is_map(body), do: Map.keys(body), else: "not_map"),
+                        snippet: inspect(body) |> String.slice(0, 200)
+                      }
                   end
 
                 %{label: label, status: status, rows: row_count, sample: sample}
@@ -1578,7 +1602,9 @@ defmodule SpectabasWeb.HealthController do
           json(conn, %{ok: true, cancelled: count})
 
         _ ->
-          conn |> put_status(400) |> json(%{error: "unknown action. use: status, cancel_worker, cancel_all_executing"})
+          conn
+          |> put_status(400)
+          |> json(%{error: "unknown action. use: status, cancel_worker, cancel_all_executing"})
       end
     end
   end

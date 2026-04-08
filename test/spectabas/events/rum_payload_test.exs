@@ -434,13 +434,15 @@ defmodule Spectabas.Events.RumPayloadTest do
       assert script =~ ~r/nv\.loadEventEnd-ns|nav\.loadEventEnd - navStart/,
              "page_load must subtract navStart (from nav.startTime), not nav.navigationStart"
 
-      assert script =~ ~r/nv\.domContentLoadedEventEnd-ns|nav\.domContentLoadedEventEnd - navStart/,
+      assert script =~
+               ~r/nv\.domContentLoadedEventEnd-ns|nav\.domContentLoadedEventEnd - navStart/,
              "dom_complete must subtract navStart (from nav.startTime), not nav.navigationStart"
 
       # Ensure the deprecated property name is NOT used on the modern API path
       # In minified code, nav→nv, navStart→ns, so check for nv.navigationStart
       refute script =~ ~r/\bnav\.navigationStart\b/,
              "Must NOT use nav.navigationStart — it doesn't exist on PerformanceNavigationTiming"
+
       refute script =~ ~r/\bnv\.navigationStart\b/,
              "Must NOT use nv.navigationStart — it doesn't exist on PerformanceNavigationTiming"
     end

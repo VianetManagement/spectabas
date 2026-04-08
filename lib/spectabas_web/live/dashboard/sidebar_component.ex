@@ -457,7 +457,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
               <div class="flex items-start gap-3 p-4">
                 <div class="shrink-0 mt-0.5">
                   <svg class="h-5 w-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" />
+                    <path
+                      fill-rule="evenodd"
+                      d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z"
+                      clip-rule="evenodd"
+                    />
                   </svg>
                 </div>
                 <div class="flex-1 min-w-0">
@@ -468,7 +472,12 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
                   class="shrink-0 text-gray-400 hover:text-gray-600"
                   phx-click={
                     Phoenix.LiveView.JS.push("lv:clear-flash", value: %{key: "info"})
-                    |> Phoenix.LiveView.JS.hide(to: "#flash-info", transition: {"ease-out duration-200", "opacity-100 translate-y-0", "opacity-0 -translate-y-2"})
+                    |> Phoenix.LiveView.JS.hide(
+                      to: "#flash-info",
+                      transition:
+                        {"ease-out duration-200", "opacity-100 translate-y-0",
+                         "opacity-0 -translate-y-2"}
+                    )
                   }
                 >
                   <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
@@ -487,7 +496,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
               <div class="flex items-start gap-3 p-4">
                 <div class="shrink-0 mt-0.5">
                   <svg class="h-5 w-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clip-rule="evenodd" />
+                    <path
+                      fill-rule="evenodd"
+                      d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z"
+                      clip-rule="evenodd"
+                    />
                   </svg>
                 </div>
                 <div class="flex-1 min-w-0">
@@ -498,7 +511,12 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
                   class="shrink-0 text-gray-400 hover:text-gray-600"
                   phx-click={
                     Phoenix.LiveView.JS.push("lv:clear-flash", value: %{key: "error"})
-                    |> Phoenix.LiveView.JS.hide(to: "#flash-error", transition: {"ease-out duration-200", "opacity-100 translate-y-0", "opacity-0 -translate-y-2"})
+                    |> Phoenix.LiveView.JS.hide(
+                      to: "#flash-error",
+                      transition:
+                        {"ease-out duration-200", "opacity-100 translate-y-0",
+                         "opacity-0 -translate-y-2"}
+                    )
                   }
                 >
                   <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">

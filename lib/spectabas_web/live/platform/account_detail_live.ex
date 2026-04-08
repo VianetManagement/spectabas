@@ -54,7 +54,10 @@ defmodule SpectabasWeb.Platform.AccountDetailLive do
         {:noreply,
          socket
          |> assign(:account, updated)
-         |> put_flash(:info, if(new_val, do: "MFA now required for all users", else: "MFA requirement removed"))}
+         |> put_flash(
+           :info,
+           if(new_val, do: "MFA now required for all users", else: "MFA requirement removed")
+         )}
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Failed to update MFA setting")}

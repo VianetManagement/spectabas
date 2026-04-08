@@ -27,12 +27,23 @@ defmodule Spectabas.AI.InsightsCache do
 
     case Spectabas.Repo.one(from(c in __MODULE__, where: c.site_id == ^site_id)) do
       nil ->
-        %__MODULE__{site_id: site_id, content: content, provider: provider, model: model, generated_at: now}
+        %__MODULE__{
+          site_id: site_id,
+          content: content,
+          provider: provider,
+          model: model,
+          generated_at: now
+        }
         |> Spectabas.Repo.insert()
 
       existing ->
         existing
-        |> Ecto.Changeset.change(%{content: content, provider: provider, model: model, generated_at: now})
+        |> Ecto.Changeset.change(%{
+          content: content,
+          provider: provider,
+          model: model,
+          generated_at: now
+        })
         |> Spectabas.Repo.update()
     end
   end

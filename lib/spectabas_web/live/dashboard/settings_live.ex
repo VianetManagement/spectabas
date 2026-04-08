@@ -238,7 +238,10 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
 
     {:noreply,
      socket
-     |> put_flash(:info, "#{platform_label(integration.platform)} sync started. Panels will update automatically.")}
+     |> put_flash(
+       :info,
+       "#{platform_label(integration.platform)} sync started. Panels will update automatically."
+     )}
   end
 
   def handle_event("save_ad_credentials", %{"platform" => platform} = params, socket) do
@@ -523,7 +526,11 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
      )}
   end
 
-  def handle_event("update_sync_frequency", %{"integration_id" => id, "frequency" => freq}, socket) do
+  def handle_event(
+        "update_sync_frequency",
+        %{"integration_id" => id, "frequency" => freq},
+        socket
+      ) do
     integration = authorize_integration!(id, socket)
     minutes = String.to_integer(freq)
 
@@ -602,7 +609,9 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
           <div class="mb-5">
             <h3 class="text-sm font-medium text-gray-700 mb-2">Standard (direct)</h3>
             <p class="text-xs text-gray-500 mb-2">
-              Uses the analytics subdomain directly. Add to your site's <code class="bg-gray-100 px-1 rounded text-xs">&lt;head&gt;</code> tag.
+              Uses the analytics subdomain directly. Add to your site's
+              <code class="bg-gray-100 px-1 rounded text-xs">&lt;head&gt;</code>
+              tag.
             </p>
             <div class="relative">
               <pre class="bg-gray-900 text-gray-100 rounded-lg p-4 text-sm overflow-x-auto"><code><%= @snippet %></code></pre>
@@ -623,7 +632,9 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
           <div>
             <h3 class="text-sm font-medium text-gray-700 mb-2">
               Proxy mode (Cloudflare)
-              <span class="ml-1 text-xs font-normal text-gray-400">— recommended for ad blocker evasion</span>
+              <span class="ml-1 text-xs font-normal text-gray-400">
+                — recommended for ad blocker evasion
+              </span>
             </h3>
             <p class="text-xs text-gray-500 mb-2">
               Routes tracking through your main domain via a Cloudflare Worker. Bypasses most ad blockers.
@@ -942,7 +953,11 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                   type="password"
                   name="api_key"
                   value=""
-                  placeholder={if ai_config["api_key"], do: mask_credential(ai_config["api_key"]), else: "API Key"}
+                  placeholder={
+                    if ai_config["api_key"],
+                      do: mask_credential(ai_config["api_key"]),
+                      else: "API Key"
+                  }
                   class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                 />
               </div>
@@ -1513,14 +1528,30 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
 
   defp validate_ai_key("anthropic", key, _model) do
     case Req.post("https://api.anthropic.com/v1/messages",
-           body: Jason.encode!(%{model: "claude-haiku-4-5-20251001", max_tokens: 1, messages: [%{role: "user", content: "hi"}]}),
-           headers: [{"x-api-key", key}, {"anthropic-version", "2023-06-01"}, {"content-type", "application/json"}],
+           body:
+             Jason.encode!(%{
+               model: "claude-haiku-4-5-20251001",
+               max_tokens: 1,
+               messages: [%{role: "user", content: "hi"}]
+             }),
+           headers: [
+             {"x-api-key", key},
+             {"anthropic-version", "2023-06-01"},
+             {"content-type", "application/json"}
+           ],
            receive_timeout: 10_000
          ) do
-      {:ok, %{status: 200}} -> :ok
-      {:ok, %{status: 401}} -> {:error, "Invalid API key"}
-      {:ok, %{status: s, body: b}} -> {:error, get_in(b, ["error", "message"]) || "HTTP #{s}"}
-      {:error, reason} -> {:error, "Connection failed: #{inspect(reason) |> String.slice(0, 100)}"}
+      {:ok, %{status: 200}} ->
+        :ok
+
+      {:ok, %{status: 401}} ->
+        {:error, "Invalid API key"}
+
+      {:ok, %{status: s, body: b}} ->
+        {:error, get_in(b, ["error", "message"]) || "HTTP #{s}"}
+
+      {:error, reason} ->
+        {:error, "Connection failed: #{inspect(reason) |> String.slice(0, 100)}"}
     end
   end
 
@@ -1529,10 +1560,17 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
            headers: [{"authorization", "Bearer #{key}"}],
            receive_timeout: 10_000
          ) do
-      {:ok, %{status: 200}} -> :ok
-      {:ok, %{status: 401}} -> {:error, "Invalid API key"}
-      {:ok, %{status: s, body: b}} -> {:error, get_in(b, ["error", "message"]) || "HTTP #{s}"}
-      {:error, reason} -> {:error, "Connection failed: #{inspect(reason) |> String.slice(0, 100)}"}
+      {:ok, %{status: 200}} ->
+        :ok
+
+      {:ok, %{status: 401}} ->
+        {:error, "Invalid API key"}
+
+      {:ok, %{status: s, body: b}} ->
+        {:error, get_in(b, ["error", "message"]) || "HTTP #{s}"}
+
+      {:error, reason} ->
+        {:error, "Connection failed: #{inspect(reason) |> String.slice(0, 100)}"}
     end
   end
 
@@ -1540,10 +1578,18 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
     case Req.get("https://generativelanguage.googleapis.com/v1beta/models?key=#{key}",
            receive_timeout: 10_000
          ) do
-      {:ok, %{status: 200}} -> :ok
-      {:ok, %{status: 400}} -> {:error, "Invalid API key"}
-      {:ok, %{status: s, body: b}} -> {:error, if(is_map(b), do: get_in(b, ["error", "message"]) || "HTTP #{s}", else: "HTTP #{s}")}
-      {:error, reason} -> {:error, "Connection failed: #{inspect(reason) |> String.slice(0, 100)}"}
+      {:ok, %{status: 200}} ->
+        :ok
+
+      {:ok, %{status: 400}} ->
+        {:error, "Invalid API key"}
+
+      {:ok, %{status: s, body: b}} ->
+        {:error,
+         if(is_map(b), do: get_in(b, ["error", "message"]) || "HTTP #{s}", else: "HTTP #{s}")}
+
+      {:error, reason} ->
+        {:error, "Connection failed: #{inspect(reason) |> String.slice(0, 100)}"}
     end
   end
 

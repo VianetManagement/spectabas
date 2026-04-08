@@ -48,7 +48,17 @@ defmodule Spectabas.Analytics.AnomalyDetectorTest do
     # This documents the contract that dashboard templates rely on.
 
     test "anomaly map has all required keys" do
-      required_keys = [:severity, :severity_rank, :category, :metric, :current, :previous, :change_pct, :message, :action]
+      required_keys = [
+        :severity,
+        :severity_rank,
+        :category,
+        :metric,
+        :current,
+        :previous,
+        :change_pct,
+        :message,
+        :action
+      ]
 
       sample = %{
         severity: :high,

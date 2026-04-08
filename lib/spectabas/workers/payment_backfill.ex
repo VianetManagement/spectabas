@@ -21,7 +21,12 @@ defmodule Spectabas.Workers.PaymentBackfill do
     start = System.monotonic_time(:millisecond)
     today = Date.utc_today()
 
-    SyncLog.log(integration, "backfill_start", "ok", "Backfill started for last #{num_days} days (Oban)")
+    SyncLog.log(
+      integration,
+      "backfill_start",
+      "ok",
+      "Backfill started for last #{num_days} days (Oban)"
+    )
 
     result =
       Enum.reduce_while(0..num_days, 0, fn offset, synced_days ->
@@ -51,10 +56,11 @@ defmodule Spectabas.Workers.PaymentBackfill do
           end
 
         case day_result do
-          {:error, reason} when reason in [
-            "Braintree credentials not configured",
-            "Invalid Braintree credentials"
-          ] ->
+          {:error, reason}
+          when reason in [
+                 "Braintree credentials not configured",
+                 "Invalid Braintree credentials"
+               ] ->
             Logger.warning("[Backfill] Aborting — #{reason}")
             ms = System.monotonic_time(:millisecond) - start
             SyncLog.log(integration, "backfill", "error", reason, duration_ms: ms)
@@ -66,10 +72,15 @@ defmodule Spectabas.Workers.PaymentBackfill do
       end)
 
     case result do
-      {:error, _} -> :ok
+      {:error, _} ->
+        :ok
+
       days_done ->
         ms = System.monotonic_time(:millisecond) - start
-        SyncLog.log(integration, "backfill", "ok", "Backfill completed: #{days_done} days synced", duration_ms: ms)
+
+        SyncLog.log(integration, "backfill", "ok", "Backfill completed: #{days_done} days synced",
+          duration_ms: ms
+        )
     end
 
     :ok

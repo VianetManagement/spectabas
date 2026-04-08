@@ -28,7 +28,10 @@ defmodule Spectabas.Workers.SearchConsoleSync do
         synced = Enum.count(dates, fn date -> sync_one(integration, date) == :ok end)
         ms = System.monotonic_time(:millisecond) - start
 
-        SyncLog.log(integration, "cron_sync", "ok",
+        SyncLog.log(
+          integration,
+          "cron_sync",
+          "ok",
           "Synced #{synced}/#{length(dates)} days (#{Enum.map(dates, &to_string/1) |> Enum.join(", ")})",
           duration_ms: ms,
           details: %{"dates_synced" => synced, "dates_total" => length(dates)}
@@ -44,10 +47,17 @@ defmodule Spectabas.Workers.SearchConsoleSync do
     integration =
       if AdIntegrations.token_expired?(integration) do
         case refresh_gsc_token(integration) do
-          {:ok, updated} -> updated
+          {:ok, updated} ->
+            updated
 
           {:error, reason} ->
-            SyncLog.log(integration, "token_refresh", "error", "Token refresh failed: #{inspect(reason)}")
+            SyncLog.log(
+              integration,
+              "token_refresh",
+              "error",
+              "Token refresh failed: #{inspect(reason)}"
+            )
+
             nil
         end
       else
@@ -56,7 +66,9 @@ defmodule Spectabas.Workers.SearchConsoleSync do
 
     if integration do
       case GoogleSearchConsole.sync_search_data(integration.site, integration, date) do
-        :ok -> :ok
+        :ok ->
+          :ok
+
         {:error, reason} ->
           SyncLog.log(integration, "day_sync", "error", "#{date}: #{inspect(reason)}")
           {:error, reason}
@@ -68,7 +80,9 @@ defmodule Spectabas.Workers.SearchConsoleSync do
 
   defp sync_one(%{platform: "bing_webmaster"} = integration, date) do
     case BingWebmaster.sync_search_data(integration.site, integration, date) do
-      :ok -> :ok
+      :ok ->
+        :ok
+
       {:error, reason} ->
         SyncLog.log(integration, "day_sync", "error", "#{date}: #{inspect(reason)}")
         {:error, reason}
@@ -111,40 +125,54 @@ defmodule Spectabas.Workers.SearchConsoleSync do
     start_date = Date.add(today, -max_offset)
 
     # force_backfill also skips the "already synced" check — re-syncs all days
-    SyncLog.log(integration, "manual_sync_start", "ok",
-      "Backfill from #{start_date} (#{max_offset} days, force=#{force_backfill})")
+    SyncLog.log(
+      integration,
+      "manual_sync_start",
+      "ok",
+      "Backfill from #{start_date} (#{max_offset} days, force=#{force_backfill})"
+    )
 
-    Logger.info("[SearchConsoleSync] sync_now from #{start_date} (#{max_offset} days, force=#{force_backfill})")
+    Logger.info(
+      "[SearchConsoleSync] sync_now from #{start_date} (#{max_offset} days, force=#{force_backfill})"
+    )
 
-    synced = Enum.reduce(0..max_offset, 0, fn offset, acc ->
-      date = Date.add(start_date, offset)
+    synced =
+      Enum.reduce(0..max_offset, 0, fn offset, acc ->
+        date = Date.add(start_date, offset)
 
-      if Date.diff(today, date) >= 2 do
-        source = if integration.platform == "bing_webmaster", do: "bing", else: "google"
-        should_sync = force_backfill or not gsc_day_synced?(integration.site.id, date, source)
+        if Date.diff(today, date) >= 2 do
+          source = if integration.platform == "bing_webmaster", do: "bing", else: "google"
+          should_sync = force_backfill or not gsc_day_synced?(integration.site.id, date, source)
 
-        if should_sync do
-          # Throttle Bing API calls — their rate limit is strict
-          if integration.platform == "bing_webmaster" and acc > 0, do: Process.sleep(1500)
+          if should_sync do
+            # Throttle Bing API calls — their rate limit is strict
+            if integration.platform == "bing_webmaster" and acc > 0, do: Process.sleep(1500)
 
-          case sync_one(integration, date) do
-            :ok -> acc + 1
-            _ -> acc
+            case sync_one(integration, date) do
+              :ok -> acc + 1
+              _ -> acc
+            end
+          else
+            acc
           end
         else
           acc
         end
-      else
-        acc
-      end
-    end)
+      end)
 
     ms = System.monotonic_time(:millisecond) - start_time
 
-    SyncLog.log(integration, "manual_sync", "ok",
+    SyncLog.log(
+      integration,
+      "manual_sync",
+      "ok",
       "Backfill complete: #{synced} days synced from #{start_date}",
       duration_ms: ms,
-      details: %{"days_synced" => synced, "total_days" => max_offset, "start_date" => to_string(start_date)}
+      details: %{
+        "days_synced" => synced,
+        "total_days" => max_offset,
+        "start_date" => to_string(start_date)
+      }
     )
   end
 
