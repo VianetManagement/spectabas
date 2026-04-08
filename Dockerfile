@@ -12,7 +12,7 @@ ENV MIX_ENV=prod
 COPY mix.exs mix.lock ./
 RUN mix deps.get --only $MIX_ENV
 
-COPY config/config.exs config/prod.exs config/runtime.exs config/
+COPY config/config.exs config/prod.exs config/runtime.exs config/appsignal.exs config/
 RUN mix deps.compile
 
 # Pre-install esbuild + tailwind binaries and UA parser data (cached with deps)
