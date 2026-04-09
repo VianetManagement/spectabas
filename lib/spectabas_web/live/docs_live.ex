@@ -407,6 +407,18 @@ defmodule SpectabasWeb.DocsLive do
       "<code class=\"bg-gray-100 text-indigo-700 px-1 py-0.5 rounded text-xs font-mono\">\\1</code>"
     )
     |> String.replace(~r/\*\*([^*]+)\*\*/, "<strong>\\1</strong>")
+    |> render_links()
+  end
+
+  # Render markdown links: [text](url) — external links open in new tab
+  defp render_links(text) do
+    Regex.replace(~r/\[([^\]]+)\]\(([^)]+)\)/, text, fn _, label, url ->
+      if String.starts_with?(url, "http") do
+        "<a href=\"#{url}\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"text-indigo-600 hover:text-indigo-800 underline\">#{label}</a>"
+      else
+        "<a href=\"#{url}\" class=\"text-indigo-600 hover:text-indigo-800 underline\">#{label}</a>"
+      end
+    end)
   end
 
   defp render_table(block) do
@@ -2475,7 +2487,7 @@ defmodule SpectabasWeb.DocsLive do
 
             - An admin connects each ad account via OAuth2 from **Site Settings > Ad Platform Integrations**
             - Spectabas syncs daily campaign spend data (spend, clicks, impressions) every 6 hours
-            - Payment providers (Stripe, Braintree) sync completed charges every 6 hours
+            - Payment providers (Stripe, Braintree) sync completed charges every 15 minutes by default (configurable)
             - The **Revenue Attribution** page joins ad spend with purchase data to calculate ROAS per campaign
 
             ### Connecting an Account
@@ -2494,7 +2506,7 @@ defmodule SpectabasWeb.DocsLive do
             | Field | Description |
             |-------|-------------|
             | Campaign ID | The platform's internal campaign identifier |
-            | Campaign Name | Human-readable campaign name (should match your UTM campaign values) |
+            | Campaign Name | Human-readable campaign name (matched to UTM campaign values by name or ID) |
             | Spend | Total spend for the day in the account's currency |
             | Clicks | Total ad clicks |
             | Impressions | Total ad impressions |
@@ -2503,13 +2515,13 @@ defmodule SpectabasWeb.DocsLive do
 
             | Field | Description |
             |-------|-------------|
-            | Charge/Transaction ID | Platform ID (e.g., `ch_1234...`) used as order ID |
+            | Payment/Transaction ID | Platform ID (e.g., `pi_1234...`) used as order ID |
             | Revenue | Charge amount (converted from cents) |
             | Currency | Charge currency (USD, EUR, etc.) |
             | Email | Customer email — matched to identified visitors |
             | Timestamp | When the charge was created |
 
-            All integrations sync every 6 hours via Oban background jobs.
+            Ad platforms sync every 6 hours; payment providers (Stripe, Braintree) sync every 15 minutes by default. Frequency is configurable per integration (5 min to 24 hours). All syncs run via Oban background jobs.
 
             ### ROAS on Revenue Attribution
 
@@ -2538,7 +2550,7 @@ defmodule SpectabasWeb.DocsLive do
 
             Click IDs are persisted in the visitor's session, so they're tracked even if the visitor browses multiple pages before converting.
 
-            > **For campaign-level ROAS:** Add UTM parameters to your ad URLs. When combined with click IDs, UTM tags tell Spectabas *which specific campaign* drove the conversion, while the click ID verifies it was a real paid click. Set up URL templates in your ad platform using `{campaignname}` (Google), `{CampaignName}` (Bing), or manual UTM tags (Meta).
+            > **For campaign-level ROAS:** Add UTM parameters to your ad URLs. When combined with click IDs, UTM tags tell Spectabas *which specific campaign* drove the conversion, while the click ID verifies it was a real paid click. Set up URL templates in your ad platform using `{campaignname}` or `{campaignid}` (Google), `{CampaignName}` or `{CampaignId}` (Bing), or manual UTM tags (Meta). Spectabas automatically resolves campaign IDs to human-readable names.
 
             ### Token Security
 
@@ -2549,10 +2561,12 @@ defmodule SpectabasWeb.DocsLive do
 
             ### Sync Schedule
 
-            - Ad spend data syncs **every 6 hours** automatically
+            - Ad spend data syncs **every 6 hours** automatically; payment providers sync **every 15 minutes** by default
+            - Sync frequency is configurable per integration (5 min to 24 hours)
             - Each sync fetches **yesterday's data** from all connected platforms
             - On first connection, the **last 30 days** are backfilled
             - If a sync fails (API error, token expired), the error is shown on the settings card and retried next cycle
+            - Transient network errors are automatically retried up to 3 times before reporting failure
             - Token refresh happens automatically before each sync if the token is expired
 
             ### Troubleshooting
@@ -2560,7 +2574,7 @@ defmodule SpectabasWeb.DocsLive do
             - **No "Connect" button visible** — Click **Configure** first and enter your OAuth credentials (Client ID, Client Secret, etc.). The Connect button appears after credentials are saved.
             - **"Configure" shows empty fields** — Credentials haven't been entered yet for this site. Follow the setup steps above to get credentials from the ad platform.
             - **Error status on card** — The last sync failed. Common causes: expired token (click Disconnect then reconnect), revoked permissions in the ad platform, API rate limit (will retry automatically). Transient network errors (connection closed, timeout, refused) are retried automatically up to 3 times with exponential backoff before marking as failed.
-            - **No ROAS showing on Revenue Attribution** — Campaign names don't match between your UTM parameters and the ad platform. Check that `utm_campaign` values in your ad URLs exactly match the campaign names in Google/Bing/Meta.
+            - **No ROAS showing on Revenue Attribution** — Campaign values don't match between your UTM parameters and the ad platform. Spectabas matches `utm_campaign` to both the campaign name and campaign ID from the ad platform. If using campaign IDs in your UTM tags, verify the ID matches what's in the ad platform.
             - **Data seems outdated** — Syncs happen every 6 hours. The most recent data is from yesterday (ad platforms don't report same-day spend in real time).
             - **Disconnecting doesn't delete spend data** — Historical ad spend data in ClickHouse is retained after disconnecting. Only the OAuth tokens are deleted.
             """
@@ -2619,7 +2633,7 @@ defmodule SpectabasWeb.DocsLive do
             - **MCC (Manager) accounts:** If your Google Ads account is managed by an MCC, Spectabas shows an account picker after connecting. Select the specific ad account(s) to sync.
             - **Basic API access** is sufficient — you do not need Standard access for reading your own campaign data.
             - **Auto-tagging:** Google Ads appends `gclid` to landing page URLs automatically. Spectabas captures this for platform-level ROAS attribution.
-            - **UTM templates:** For campaign-level ROAS, set a tracking template in Google Ads: `{lpurl}?utm_source=google&utm_medium=cpc&utm_campaign={campaignname}`
+            - **UTM templates:** For campaign-level ROAS, set a tracking template in Google Ads: `{lpurl}?utm_source=google&utm_medium=cpc&utm_campaign={campaignname}` (or use `{campaignid}` — Spectabas resolves campaign IDs to names automatically)
 
             ### Troubleshooting
 
@@ -2675,7 +2689,7 @@ defmodule SpectabasWeb.DocsLive do
             ### Bing-specific notes
 
             - **Auto-tagging:** Microsoft Ads appends `msclkid` to landing page URLs. Spectabas captures this for platform-level ROAS attribution.
-            - **UTM templates:** For campaign-level ROAS, set a tracking template: `{lpurl}?utm_source=bing&utm_medium=cpc&utm_campaign={CampaignName}`
+            - **UTM templates:** For campaign-level ROAS, set a tracking template: `{lpurl}?utm_source=bing&utm_medium=cpc&utm_campaign={CampaignName}` (or use `{CampaignId}` — Spectabas resolves campaign IDs to names automatically)
             - **Client secret expiry:** Azure app secrets expire (24 months max). Set a calendar reminder to rotate before expiry. When it expires, update the secret in Spectabas settings and reconnect.
 
             ### Troubleshooting
@@ -2820,7 +2834,7 @@ defmodule SpectabasWeb.DocsLive do
 
             - Go to **Conversions > Revenue Attribution** — revenue from Stripe charges should appear
             - Check the **Ecommerce** page for order counts and totals
-            - Stripe charges show with order IDs starting with `ch_` (Stripe charge IDs)
+            - Stripe charges show with order IDs starting with `pi_` (Stripe PaymentIntent IDs)
 
             ### How the Sync Works
 

@@ -1072,13 +1072,13 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
             <%= for {platform, label, icon_color, doc_anchor} <- [
-              {"google_ads", "Google Ads", "bg-blue-100 text-blue-700", "google-ads-setup"},
-              {"bing_ads", "Microsoft Ads", "bg-amber-100 text-amber-700", "bing-ads-setup"},
-              {"meta_ads", "Meta Ads", "bg-purple-100 text-purple-700", "meta-ads-setup"},
-              {"stripe", "Stripe", "bg-indigo-100 text-indigo-700", "stripe-setup"},
-              {"braintree", "Braintree", "bg-teal-100 text-teal-700", "braintree-setup"},
-              {"google_search_console", "Google Search Console", "bg-green-100 text-green-700", "search-console-setup"},
-              {"bing_webmaster", "Bing Webmaster", "bg-cyan-100 text-cyan-700", "bing-webmaster-setup"}
+              {"google_ads", "Google Ads", "bg-blue-100 text-blue-700", "/docs/conversions#google-ads-setup"},
+              {"bing_ads", "Microsoft Ads", "bg-amber-100 text-amber-700", "/docs/conversions#bing-ads-setup"},
+              {"meta_ads", "Meta Ads", "bg-purple-100 text-purple-700", "/docs/conversions#meta-ads-setup"},
+              {"stripe", "Stripe", "bg-indigo-100 text-indigo-700", "/docs/admin#stripe-setup"},
+              {"braintree", "Braintree", "bg-teal-100 text-teal-700", "/docs/admin#braintree-setup"},
+              {"google_search_console", "Google Search Console", "bg-green-100 text-green-700", "/docs/admin#search-console-setup"},
+              {"bing_webmaster", "Bing Webmaster", "bg-cyan-100 text-cyan-700", "/docs/admin#bing-webmaster-setup"}
             ] do %>
               <% integration =
                 Enum.find(@ad_integrations, &(&1.platform == platform && &1.status == "active")) %>
@@ -1290,7 +1290,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                       <% end %>
                     </p>
                     <a
-                      href={"/docs/conversions##{doc_anchor}"}
+                      href={doc_anchor}
                       target="_blank"
                       class="inline-flex items-center text-sm text-indigo-600 hover:text-indigo-800 font-medium mb-2"
                     >
