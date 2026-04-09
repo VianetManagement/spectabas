@@ -110,20 +110,36 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
         _ -> []
       end
 
-    # Build spend lookup keyed by campaign_name for merging into rows
-    spend_by_campaign = Map.new(ad_campaigns, fn c -> {c["campaign_name"], c} end)
+    # Build spend lookups keyed by both campaign_name and campaign_id
+    # so we match whether utm_campaign contains a name or an ID
+    spend_by_name = Map.new(ad_campaigns, fn c -> {c["campaign_name"], c} end)
+
+    spend_by_id = Map.new(ad_campaigns, fn c -> {c["campaign_id"], c} end)
+
+    # Also build campaign_id → campaign_name map for display resolution
+    id_to_name =
+      Map.new(ad_campaigns, fn c ->
+        {c["campaign_id"], c["campaign_name"]}
+      end)
 
     # Merge ad spend into revenue rows when viewing by campaign
     rows =
       if group == "campaign" do
         Enum.map(rows, fn row ->
           source = row["source"] || ""
-          spend_row = Map.get(spend_by_campaign, source, %{})
+          # Try matching by name first, then by campaign ID
+          spend_row =
+            Map.get(spend_by_name, source) || Map.get(spend_by_id, source, %{})
+
           spend = parse_float(spend_row["total_spend"])
           revenue = parse_float(row["total_revenue"])
           roas = if spend > 0, do: Float.round(revenue / spend, 2), else: nil
 
+          # If utm_campaign is an ID, resolve to campaign name for display
+          display_name = Map.get(id_to_name, source, source)
+
           row
+          |> Map.put("source", display_name)
           |> Map.put("ad_spend", spend)
           |> Map.put("ad_clicks", to_num(spend_row["total_clicks"]))
           |> Map.put("ad_impressions", to_num(spend_row["total_impressions"]))

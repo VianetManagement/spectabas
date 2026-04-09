@@ -1568,6 +1568,7 @@ defmodule Spectabas.Analytics do
       sql = """
       SELECT
         campaign_name,
+        campaign_id,
         platform,
         sum(spend) AS total_spend,
         sum(clicks) AS total_clicks,
@@ -1576,7 +1577,7 @@ defmodule Spectabas.Analytics do
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND date >= #{ClickHouse.param(Date.to_iso8601(DateTime.to_date(date_range.from)))}
         AND date <= #{ClickHouse.param(Date.to_iso8601(DateTime.to_date(date_range.to)))}
-      GROUP BY campaign_name, platform
+      GROUP BY campaign_name, campaign_id, platform
       ORDER BY total_spend DESC
       """
 

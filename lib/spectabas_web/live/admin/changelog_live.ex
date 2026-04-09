@@ -53,6 +53,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.19.0", "2026-04-09T16:00:00Z",
+       [
+         %{
+           title: "Feat: Campaign ID to name resolution in Revenue Attribution",
+           description:
+             "Revenue Attribution now matches utm_campaign values containing campaign IDs (not just names) to ad spend data. When PPC teams use campaign IDs in UTM parameters, the dashboard resolves them to human-readable campaign names from the ad platform."
+         },
+         %{
+           title: "UX: Integration setup documentation links",
+           description:
+             "Each integration's Configure section now includes a direct link to its setup documentation, opening in a new browser tab."
+         }
+       ]},
       {"v5.18.0", "2026-04-09T12:00:00Z",
        [
          %{
