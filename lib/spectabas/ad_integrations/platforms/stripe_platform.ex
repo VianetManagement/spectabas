@@ -8,7 +8,7 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
   require Logger
 
   alias Spectabas.AdIntegrations
-  alias Spectabas.AdIntegrations.SyncLock
+  alias Spectabas.AdIntegrations.{HTTP, SyncLock}
   alias Spectabas.ClickHouse
 
   @stripe_api "https://api.stripe.com/v1"
@@ -46,7 +46,7 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
 
     qs = URI.encode_query(params)
 
-    case Req.get("#{@stripe_api}/payment_intents?#{qs}",
+    case HTTP.get("#{@stripe_api}/payment_intents?#{qs}",
            headers: [
              {"authorization", "Bearer #{api_key}"},
              {"stripe-version", "2024-12-18.acacia"}
@@ -270,7 +270,7 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
 
     qs = URI.encode_query(params)
 
-    case Req.get("#{@stripe_api}/refunds?#{qs}",
+    case HTTP.get("#{@stripe_api}/refunds?#{qs}",
            headers: [
              {"authorization", "Bearer #{api_key}"},
              {"stripe-version", "2024-12-18.acacia"}
@@ -412,7 +412,7 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
 
     qs = URI.encode_query(params)
 
-    case Req.get("#{@stripe_api}/subscriptions?#{qs}",
+    case HTTP.get("#{@stripe_api}/subscriptions?#{qs}",
            headers: [
              {"authorization", "Bearer #{api_key}"},
              {"stripe-version", "2024-12-18.acacia"}

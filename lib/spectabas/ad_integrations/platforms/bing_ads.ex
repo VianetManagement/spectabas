@@ -11,7 +11,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BingAds do
   @max_poll_attempts 20
   @poll_interval_ms 5_000
 
-  alias Spectabas.AdIntegrations.Credentials
+  alias Spectabas.AdIntegrations.{Credentials, HTTP}
 
   def authorize_url(site, state) do
     creds = Credentials.get_for_platform(site, "bing_ads")
@@ -31,7 +31,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BingAds do
   def exchange_code(site, code) do
     creds = Credentials.get_for_platform(site, "bing_ads")
 
-    case Req.post!(@token_url,
+    case HTTP.post!(@token_url,
            form: [
              code: code,
              client_id: creds["client_id"],
@@ -56,7 +56,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BingAds do
   def refresh_token(site, refresh_token) do
     creds = Credentials.get_for_platform(site, "bing_ads")
 
-    case Req.post!(@token_url,
+    case HTTP.post!(@token_url,
            form: [
              refresh_token: refresh_token,
              client_id: creds["client_id"],
@@ -81,7 +81,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BingAds do
     ]
 
     # Step 1: Get current user to find their customer IDs
-    case Req.post("#{@customer_mgmt_url}/GetUser",
+    case HTTP.post("#{@customer_mgmt_url}/GetUser",
            json: %{},
            headers: headers
          ) do
@@ -114,7 +114,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BingAds do
   defp fetch_accounts_for_customer(customer_id, headers) do
     headers_with_customer = headers ++ [{"CustomerId", to_string(customer_id)}]
 
-    case Req.post("#{@customer_mgmt_url}/SearchAccounts",
+    case HTTP.post("#{@customer_mgmt_url}/SearchAccounts",
            json: %{
              "PageInfo" => %{"Index" => 0, "Size" => 100},
              "Predicates" => []
@@ -159,7 +159,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BingAds do
     # Step 1: Submit report request
     report_request = build_report_request(integration.account_id, date)
 
-    case Req.post("#{@reporting_base}/Submit",
+    case HTTP.post("#{@reporting_base}/Submit",
            json: %{"ReportRequest" => report_request},
            headers: headers
          ) do
@@ -203,7 +203,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BingAds do
     else
       if attempt > 0, do: Process.sleep(@poll_interval_ms)
 
-      case Req.post("#{@reporting_base}/Poll",
+      case HTTP.post("#{@reporting_base}/Poll",
              json: %{"ReportRequestId" => request_id},
              headers: headers
            ) do
@@ -235,7 +235,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BingAds do
   defp download_report(nil), do: {:ok, []}
 
   defp download_report(url) do
-    case Req.get(url) do
+    case HTTP.get(url) do
       {:ok, %{status: 200, body: csv_body}} when is_binary(csv_body) ->
         rows = parse_csv(csv_body)
         {:ok, rows}

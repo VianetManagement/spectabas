@@ -277,7 +277,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Mobile responsiveness** — scrollable tables, collapsible mobile nav bar
 - **Accessible top nav** — WCAG AA contrast compliance
 - **Documentation pages** — docs split into `/docs` (index), `/docs/getting-started`, `/docs/dashboard`, `/docs/conversions`, `/docs/api`, `/docs/admin` with cross-category search. Requires login (behind :require_authenticated_user). Public pages: `/privacy`, `/terms`, homepage.
-- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.17.0)
+- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.18.0)
 - **Legal** — Privacy Policy at `/privacy` and Terms of Service at `/terms` (public, no auth required). Entity: Spectabas, Kent County MI. Contact: howdy@spectabas.com. Arbitration clause (AAA, Kent County). 18+ age restriction.
 
 ## Important Patterns
@@ -335,6 +335,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Session token encryption**: OAuth tokens stored in session cookies are encrypted via `Spectabas.AdIntegrations.Vault` before storage.
 - **Integration credential masking**: Saved API keys/secrets show as masked (`****...last4`) in form fields. Full values only stored, never re-displayed.
 - **Integration IDOR protection**: `authorize_integration!/2` verifies the integration belongs to the current site before any operation (sync, clear, delete).
+- **Integration HTTP retry**: All integration API calls use `Spectabas.AdIntegrations.HTTP` instead of raw `Req`. Wraps get/post with 3-attempt retry on TransportError with exponential backoff. New integrations must use this module.
 - **ecom-diag endpoint**: Supports `action=sync&start=YYYY-MM-DD&bg=1` for historical backfill in background.
 - **fix-ch-schema endpoint**: Uses `execute_admin` (ClickHouse default user) for DDL operations since writer user may lack ALTER TABLE privileges for schema changes.
 - **Subscription MRR calculation**: `sum(unit_amount * quantity)` across all subscription items, apply percentage/fixed discount, normalize by billing interval (weekly×4.33, monthly×1, quarterly÷3, annual÷12).

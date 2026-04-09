@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.18.0", "2026-04-09T12:00:00Z",
+       [
+         %{
+           title: "Fix: Retry logic for transient transport errors across all integrations",
+           description:
+             "Created shared Spectabas.AdIntegrations.HTTP module wrapping Req.get/post with automatic 3-attempt retry on TransportError (:closed, :timeout, :econnrefused, etc.) with exponential backoff. Applied to all 7 integration platforms (Stripe, Google Ads, Bing Ads, Meta Ads, Google Search Console, Bing Webmaster, Braintree). Consolidated Braintree's per-function retry logic into the shared module. Fixes intermittent 'Braintree API error: %Req.TransportError{reason: :closed}' errors."
+         }
+       ]},
       {"v5.17.0", "2026-04-08T20:00:00Z",
        [
          %{

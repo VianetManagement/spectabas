@@ -2559,7 +2559,7 @@ defmodule SpectabasWeb.DocsLive do
 
             - **No "Connect" button visible** — Click **Configure** first and enter your OAuth credentials (Client ID, Client Secret, etc.). The Connect button appears after credentials are saved.
             - **"Configure" shows empty fields** — Credentials haven't been entered yet for this site. Follow the setup steps above to get credentials from the ad platform.
-            - **Error status on card** — The last sync failed. Common causes: expired token (click Disconnect then reconnect), revoked permissions in the ad platform, API rate limit (will retry automatically).
+            - **Error status on card** — The last sync failed. Common causes: expired token (click Disconnect then reconnect), revoked permissions in the ad platform, API rate limit (will retry automatically). Transient network errors (connection closed, timeout, refused) are retried automatically up to 3 times with exponential backoff before marking as failed.
             - **No ROAS showing on Revenue Attribution** — Campaign names don't match between your UTM parameters and the ad platform. Check that `utm_campaign` values in your ad URLs exactly match the campaign names in Google/Bing/Meta.
             - **Data seems outdated** — Syncs happen every 6 hours. The most recent data is from yesterday (ad platforms don't report same-day spend in real time).
             - **Disconnecting doesn't delete spend data** — Historical ad spend data in ClickHouse is retained after disconnecting. Only the OAuth tokens are deleted.

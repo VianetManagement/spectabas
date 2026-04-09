@@ -7,6 +7,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BingWebmaster do
   require Logger
 
   alias Spectabas.AdIntegrations
+  alias Spectabas.AdIntegrations.HTTP
   alias Spectabas.ClickHouse
 
   @api_url "https://ssl.bing.com/webmaster/api.svc/json"
@@ -21,7 +22,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BingWebmaster do
 
     url = "#{@api_url}/GetQueryStats?apikey=#{api_key}&siteUrl=#{encoded_url}"
 
-    case Req.get(url) do
+    case HTTP.get(url) do
       {:ok, %{status: 200, body: %{"d" => data}}} when is_list(data) ->
         date_str = Date.to_iso8601(date)
 
@@ -85,7 +86,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BingWebmaster do
 
       url = "#{@api_url}/GetQueryStats?apikey=#{api_key}&siteUrl=#{encoded_url}"
 
-      case Req.get(url) do
+      case HTTP.get(url) do
         {:ok, %{status: 200, body: %{"d" => data}}} when is_list(data) ->
           sample = List.first(data)
           sample_keys = if sample, do: Map.keys(sample), else: []

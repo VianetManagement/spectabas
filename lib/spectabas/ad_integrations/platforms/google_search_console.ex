@@ -7,7 +7,7 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleSearchConsole do
   require Logger
 
   alias Spectabas.AdIntegrations
-  alias Spectabas.AdIntegrations.Credentials
+  alias Spectabas.AdIntegrations.{Credentials, HTTP}
   alias Spectabas.ClickHouse
 
   @auth_url "https://accounts.google.com/o/oauth2/v2/auth"
@@ -48,7 +48,7 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleSearchConsole do
         grant_type: "authorization_code"
       })
 
-    case Req.post(@token_url,
+    case HTTP.post(@token_url,
            body: body,
            headers: [{"content-type", "application/x-www-form-urlencoded"}]
          ) do
@@ -80,7 +80,7 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleSearchConsole do
         grant_type: "refresh_token"
       })
 
-    case Req.post(@token_url,
+    case HTTP.post(@token_url,
            body: body,
            headers: [{"content-type", "application/x-www-form-urlencoded"}]
          ) do
@@ -118,7 +118,7 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleSearchConsole do
 
     encoded_url = URI.encode(site_url, &URI.char_unreserved?/1)
 
-    case Req.post(
+    case HTTP.post(
            "#{@api_url}/sites/#{encoded_url}/searchAnalytics/query",
            body: body,
            headers: [
@@ -227,7 +227,7 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleSearchConsole do
 
   @doc "List available GSC properties for the authenticated user."
   def list_sites(access_token) do
-    case Req.get("#{@api_url}/sites",
+    case HTTP.get("#{@api_url}/sites",
            headers: [{"authorization", "Bearer #{access_token}"}]
          ) do
       {:ok, %{status: 200, body: %{"siteEntry" => entries}}} ->

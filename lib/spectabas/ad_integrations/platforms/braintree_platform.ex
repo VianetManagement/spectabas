@@ -7,7 +7,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
   require Logger
 
   alias Spectabas.{AdIntegrations, ClickHouse}
-  alias Spectabas.AdIntegrations.SyncLock
+  alias Spectabas.AdIntegrations.{HTTP, SyncLock}
 
   @doc """
   Fetch settled/submitted transactions from Braintree for a given date.
@@ -47,7 +47,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
   defp fetch_all_by_ids(merchant_id, auth_header, search_body) do
     ids_url = "#{base_url(merchant_id)}/transactions/advanced_search_ids"
 
-    case Req.post(ids_url,
+    case HTTP.post(ids_url,
            body: search_body,
            headers: xml_headers(auth_header),
            receive_timeout: 60_000,
@@ -79,7 +79,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
                   "<ids type=\"array\">#{ids_xml}</ids></search>"
                 )
 
-              fetch_batch_with_retry(search_url, batch_body, auth_header, batch_num)
+              fetch_batch(search_url, batch_body, auth_header, batch_num)
             end)
 
           Logger.info("[BraintreeSync] Total: #{length(txns)} transactions fetched")
@@ -97,8 +97,8 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
     end
   end
 
-  defp fetch_batch_with_retry(url, body, auth_header, batch_num, attempt \\ 1) do
-    case Req.post(url,
+  defp fetch_batch(url, body, auth_header, batch_num) do
+    case HTTP.post(url,
            body: body,
            headers: xml_headers(auth_header),
            receive_timeout: 60_000,
@@ -112,14 +112,6 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
       {:ok, %{status: status}} ->
         Logger.warning("[BraintreeSync] Batch #{batch_num} returned HTTP #{status}")
         []
-
-      {:error, %Req.TransportError{reason: reason}} when attempt < 3 ->
-        Logger.warning(
-          "[BraintreeSync] Batch #{batch_num} transport error: #{inspect(reason)}, retrying (#{attempt}/3)..."
-        )
-
-        Process.sleep(1_000 * attempt)
-        fetch_batch_with_retry(url, body, auth_header, batch_num, attempt + 1)
 
       {:error, reason} ->
         Logger.warning("[BraintreeSync] Batch #{batch_num} failed: #{inspect(reason)}")
@@ -219,19 +211,28 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
         </search>
         """
 
-        url = "#{base_url(merchant_id)}/subscriptions/advanced_search"
+        fetch_subscriptions_with_auth(merchant_id, auth_header, body)
+    end
+  end
 
-        case Req.post(url, body: body, headers: xml_headers(auth_header)) do
-          {:ok, %{status: 200, body: resp_body}} ->
-            subs = parse_subscriptions(resp_body)
-            {:ok, subs}
+  defp fetch_subscriptions_with_auth(merchant_id, auth_header, body) do
+    url = "#{base_url(merchant_id)}/subscriptions/advanced_search"
 
-          {:ok, %{status: status}} ->
-            {:error, "Braintree subscriptions HTTP #{status}"}
+    case HTTP.post(url,
+           body: body,
+           headers: xml_headers(auth_header),
+           receive_timeout: 60_000,
+           connect_options: [timeout: 15_000]
+         ) do
+      {:ok, %{status: 200, body: resp_body}} ->
+        subs = parse_subscriptions(resp_body)
+        {:ok, subs}
 
-          {:error, reason} ->
-            {:error, "Braintree API error: #{inspect(reason)}"}
-        end
+      {:ok, %{status: status}} ->
+        {:error, "Braintree subscriptions HTTP #{status}"}
+
+      {:error, reason} ->
+        {:error, "Braintree API error: #{inspect(reason)}"}
     end
   end
 

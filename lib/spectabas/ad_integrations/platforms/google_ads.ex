@@ -8,7 +8,7 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleAds do
   @api_base "https://googleads.googleapis.com/v23"
   @scope "https://www.googleapis.com/auth/adwords"
 
-  alias Spectabas.AdIntegrations.Credentials
+  alias Spectabas.AdIntegrations.{Credentials, HTTP}
 
   def authorize_url(site, state) do
     creds = Credentials.get_for_platform(site, "google_ads")
@@ -30,7 +30,7 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleAds do
   def exchange_code(site, code) do
     creds = Credentials.get_for_platform(site, "google_ads")
 
-    case Req.post!(@token_url,
+    case HTTP.post!(@token_url,
            form: [
              code: code,
              client_id: creds["client_id"],
@@ -55,7 +55,7 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleAds do
   def refresh_token(site, refresh_token) do
     creds = Credentials.get_for_platform(site, "google_ads")
 
-    case Req.post!(@token_url,
+    case HTTP.post!(@token_url,
            form: [
              refresh_token: refresh_token,
              client_id: creds["client_id"],
@@ -98,7 +98,7 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleAds do
       {"login-customer-id", String.replace(login_customer_id, "-", "")}
     ]
 
-    case Req.post(url, json: %{query: gaql}, headers: headers) do
+    case HTTP.post(url, json: %{query: gaql}, headers: headers) do
       {:ok, %{status: 200, body: body}} ->
         rows = parse_google_response(body)
         {:ok, rows}
@@ -174,7 +174,7 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleAds do
   def list_accessible_customers(access_token, developer_token) do
     url = "#{@api_base}/customers:listAccessibleCustomers"
 
-    case Req.get(url,
+    case HTTP.get(url,
            headers: [
              {"authorization", "Bearer #{access_token}"},
              {"developer-token", developer_token}
@@ -203,7 +203,7 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleAds do
   defp fetch_customer_name(customer_id, access_token, developer_token) do
     url = "#{@api_base}/customers/#{customer_id}/googleAds:searchStream"
 
-    case Req.post(url,
+    case HTTP.post(url,
            json: %{query: "SELECT customer.id, customer.descriptive_name FROM customer LIMIT 1"},
            headers: [
              {"authorization", "Bearer #{access_token}"},

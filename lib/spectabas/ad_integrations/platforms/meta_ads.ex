@@ -6,7 +6,7 @@ defmodule Spectabas.AdIntegrations.Platforms.MetaAds do
   @graph_url "https://graph.facebook.com/v25.0"
   @authorize_url "https://www.facebook.com/v25.0/dialog/oauth"
 
-  alias Spectabas.AdIntegrations.Credentials
+  alias Spectabas.AdIntegrations.{Credentials, HTTP}
 
   def authorize_url(site, state) do
     creds = Credentials.get_for_platform(site, "meta_ads")
@@ -27,7 +27,7 @@ defmodule Spectabas.AdIntegrations.Platforms.MetaAds do
     creds = Credentials.get_for_platform(site, "meta_ads")
 
     # Get short-lived token
-    case Req.get!("#{@graph_url}/oauth/access_token",
+    case HTTP.get!("#{@graph_url}/oauth/access_token",
            params: [
              client_id: creds["app_id"],
              client_secret: creds["app_secret"],
@@ -41,7 +41,7 @@ defmodule Spectabas.AdIntegrations.Platforms.MetaAds do
         case body do
           %{"access_token" => short_token} ->
             # Exchange for long-lived token (60 days)
-            case Req.get!("#{@graph_url}/oauth/access_token",
+            case HTTP.get!("#{@graph_url}/oauth/access_token",
                    params: [
                      grant_type: "fb_exchange_token",
                      client_id: creds["app_id"],
@@ -76,7 +76,7 @@ defmodule Spectabas.AdIntegrations.Platforms.MetaAds do
     creds = Credentials.get_for_platform(site, "meta_ads")
 
     # Meta long-lived tokens are refreshed by exchanging again
-    case Req.get!("#{@graph_url}/oauth/access_token",
+    case HTTP.get!("#{@graph_url}/oauth/access_token",
            params: [
              grant_type: "fb_exchange_token",
              client_id: creds["app_id"],
@@ -99,7 +99,7 @@ defmodule Spectabas.AdIntegrations.Platforms.MetaAds do
   end
 
   def fetch_ad_accounts(access_token) do
-    case Req.get("#{@graph_url}/me/adaccounts",
+    case HTTP.get("#{@graph_url}/me/adaccounts",
            params: [fields: "account_id,name,currency", access_token: access_token]
          ) do
       {:ok, %{status: 200, body: body}} ->
@@ -139,7 +139,7 @@ defmodule Spectabas.AdIntegrations.Platforms.MetaAds do
 
     url = "#{@graph_url}/act_#{account_id}/insights"
 
-    case Req.get(url,
+    case HTTP.get(url,
            params: [
              fields: "campaign_id,campaign_name,spend,clicks,impressions",
              time_range: Jason.encode!(%{since: date_str, until: date_str}),
