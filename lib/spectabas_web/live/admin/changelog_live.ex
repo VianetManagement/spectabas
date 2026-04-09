@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.20.0", "2026-04-09T20:00:00Z",
+       [
+         %{
+           title: "Fix: First/last touch Revenue Attribution returning empty results",
+           description:
+             "First and last touch attribution queries were silently failing due to full events table scans hitting ClickHouse limits. Added signal filter to WHERE clause (matching any-touch approach) and error logging. Also fixed AOV calculation — ClickHouse non-Nullable Decimal returns 0 (not NULL) on LEFT JOIN misses, so avg() was diluted by thousands of zero rows. Now uses sum/count for correct AOV."
+         }
+       ]},
       {"v5.19.0", "2026-04-09T16:00:00Z",
        [
          %{

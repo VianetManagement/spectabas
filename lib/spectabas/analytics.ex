@@ -4,6 +4,8 @@ defmodule Spectabas.Analytics do
   All interpolated values use ClickHouse.param/1 for safety.
   """
 
+  require Logger
+
   import Ecto.Query, only: [from: 2]
 
   alias Spectabas.{Accounts, ClickHouse}
@@ -1421,7 +1423,7 @@ defmodule Spectabas.Analytics do
           uniq(e.visitor_id) AS visitors,
           countDistinct(ec.order_id) AS orders,
           sum(ec.revenue) AS total_revenue,
-          round(avg(ec.revenue), 2) AS avg_order_value,
+          round(sum(ec.revenue) / greatest(countDistinct(ec.order_id), 1), 2) AS avg_order_value,
           round(countDistinct(ec.order_id) / greatest(uniq(e.visitor_id), 1) * 100, 2) AS conversion_rate
         FROM (
           #{visitor_source_subquery}
@@ -1442,11 +1444,10 @@ defmodule Spectabas.Analytics do
         ClickHouse.query(sql)
       else
         # First/last touch: two parallel flat queries to avoid timeout.
-        # The single-query approach scans ALL events (millions) before JOIN,
-        # which times out on large tables. Instead:
-        #   Q1: flat visitor counts by attributed source (no cross-table JOIN)
-        #   Q2: revenue scoped to purchasing visitors only (small JOIN)
-        agg_fn_if = if touch == "last", do: "argMaxIf", else: "argMinIf"
+        # Filter to events WITH a signal (referrer, UTM, click ID) to avoid
+        # scanning the full events table — visitors with no signal are "Direct"
+        # and not useful in attribution. This matches the "any" touch approach.
+        agg_fn = if touch == "last", do: "argMax", else: "argMin"
         site_p = ClickHouse.param(site.id)
         from_p = ClickHouse.param(format_datetime(date_range.from))
         to_p = ClickHouse.param(format_datetime(date_range.to))
@@ -1455,11 +1456,12 @@ defmodule Spectabas.Analytics do
         SELECT source, ad_platform, count() AS visitors
         FROM (
           SELECT visitor_id,
-            ifNull(nullIf(#{agg_fn_if}(#{source_expr}, timestamp, #{has_signal}), ''), 'Direct') AS source,
-            #{agg_fn_if}(click_id_type, timestamp, #{has_signal}) AS ad_platform
+            #{agg_fn}(#{source_expr}, timestamp) AS source,
+            #{agg_fn}(click_id_type, timestamp) AS ad_platform
           FROM events
           WHERE site_id = #{site_p}
             AND event_type = 'pageview' AND ip_is_bot = 0
+            AND #{has_signal}
             AND timestamp >= #{from_p} AND timestamp <= #{to_p}
           GROUP BY visitor_id
         )
@@ -1470,14 +1472,15 @@ defmodule Spectabas.Analytics do
         SELECT source, ad_platform,
           countDistinct(ec.order_id) AS orders,
           sum(ec.revenue) AS total_revenue,
-          round(avg(ec.revenue), 2) AS avg_order_value
+          round(sum(ec.revenue) / greatest(countDistinct(ec.order_id), 1), 2) AS avg_order_value
         FROM (
           SELECT visitor_id,
-            ifNull(nullIf(#{agg_fn_if}(#{source_expr}, timestamp, #{has_signal}), ''), 'Direct') AS source,
-            #{agg_fn_if}(click_id_type, timestamp, #{has_signal}) AS ad_platform
+            #{agg_fn}(#{source_expr}, timestamp) AS source,
+            #{agg_fn}(click_id_type, timestamp) AS ad_platform
           FROM events
           WHERE site_id = #{site_p}
             AND event_type = 'pageview' AND ip_is_bot = 0
+            AND #{has_signal}
             AND timestamp >= #{from_p} AND timestamp <= #{to_p}
             AND visitor_id IN (
               SELECT DISTINCT visitor_id FROM ecommerce_events
@@ -1510,7 +1513,8 @@ defmodule Spectabas.Analytics do
                 {{r["source"], r["ad_platform"]}, to_int(r["visitors"])}
               end)
 
-            _ ->
+            {:error, reason} ->
+              Logger.warning("[RevAttribution] visitors query failed: #{inspect(reason) |> String.slice(0, 200)}")
               %{}
           end
 
@@ -1521,7 +1525,8 @@ defmodule Spectabas.Analytics do
                 {{r["source"], r["ad_platform"]}, r}
               end)
 
-            _ ->
+            {:error, reason} ->
+              Logger.warning("[RevAttribution] revenue query failed: #{inspect(reason) |> String.slice(0, 200)}")
               %{}
           end
 
@@ -2166,13 +2171,11 @@ defmodule Spectabas.Analytics do
       FROM (
         SELECT
           visitor_id,
-          ifNull(
-            nullIf(argMinIf(#{channel_expr}, timestamp, #{has_signal}), ''),
-            'Direct'
-          ) AS channel
+          argMin(#{channel_expr}, timestamp) AS channel
         FROM events
         WHERE site_id = #{ClickHouse.param(site.id)}
           AND event_type = 'pageview' AND ip_is_bot = 0
+          AND #{has_signal}
           AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
           AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
         GROUP BY visitor_id
