@@ -1177,13 +1177,13 @@ defmodule SpectabasWeb.HealthController do
     site_p = Spectabas.ClickHouse.param(site_id)
     tz_p = Spectabas.ClickHouse.param(timezone)
 
-    # Count duplicate order_ids
+    # Count duplicate order_ids (all sources: Stripe, Braintree, API)
     dupes =
       case Spectabas.ClickHouse.query("""
-           SELECT order_id, count() AS cnt, any(revenue) AS rev
+           SELECT order_id, import_source, count() AS cnt, any(revenue) AS rev
            FROM ecommerce_events
-           WHERE site_id = #{site_p} AND (order_id LIKE 'ch_%' OR order_id LIKE 'pi_%')
-           GROUP BY order_id
+           WHERE site_id = #{site_p}
+           GROUP BY order_id, import_source
            HAVING cnt > 1
            ORDER BY cnt DESC
            LIMIT 20
@@ -1192,66 +1192,82 @@ defmodule SpectabasWeb.HealthController do
         {:error, e} -> [%{"error" => inspect(e)}]
       end
 
-    # Total impact of duplicates
+    # Total impact of duplicates per source
     dupe_impact =
       case Spectabas.ClickHouse.query("""
            SELECT
+             import_source,
              count() AS total_rows,
              uniqExact(order_id) AS unique_orders,
              count() - uniqExact(order_id) AS duplicate_rows,
              sum(revenue) AS total_rev_with_dupes,
-             (SELECT sum(rev) FROM (
-               SELECT order_id, any(revenue) AS rev
-               FROM ecommerce_events
-               WHERE site_id = #{site_p} AND (order_id LIKE 'ch_%' OR order_id LIKE 'pi_%')
-               GROUP BY order_id
-             )) AS total_rev_deduped
+             round(sum(revenue) * uniqExact(order_id) / greatest(count(), 1), 2) AS estimated_rev_deduped
            FROM ecommerce_events
-           WHERE site_id = #{site_p} AND (order_id LIKE 'ch_%' OR order_id LIKE 'pi_%')
+           WHERE site_id = #{site_p}
+           GROUP BY import_source
            """) do
-        {:ok, [row | _]} -> row
-        {:error, e} -> %{"error" => inspect(e)}
+        {:ok, rows} -> rows
+        {:error, e} -> [%{"error" => inspect(e)}]
+      end
+
+    # Cross-source overlap: same order_id in multiple import_sources
+    cross_source =
+      case Spectabas.ClickHouse.query("""
+           SELECT order_id, groupArray(DISTINCT import_source) AS sources, count() AS cnt, any(revenue) AS rev
+           FROM ecommerce_events
+           WHERE site_id = #{site_p}
+           GROUP BY order_id
+           HAVING length(groupArray(DISTINCT import_source)) > 1
+           ORDER BY cnt DESC
+           LIMIT 20
+           """) do
+        {:ok, rows} -> rows
+        {:error, e} -> [%{"error" => inspect(e)}]
       end
 
     # Last month in UTC vs site timezone
     last_month_utc =
       case Spectabas.ClickHouse.query("""
            SELECT
+             import_source,
              uniqExact(order_id) AS unique_orders,
              sum(revenue) AS rev
            FROM ecommerce_events
            WHERE site_id = #{site_p}
-             AND (order_id LIKE 'ch_%' OR order_id LIKE 'pi_%')
              AND toStartOfMonth(timestamp) = toStartOfMonth(today() - 1)
+           GROUP BY import_source
            """) do
-        {:ok, [row | _]} -> row
-        _ -> %{}
+        {:ok, rows} -> rows
+        _ -> []
       end
 
     last_month_tz =
       case Spectabas.ClickHouse.query("""
            SELECT
+             import_source,
              uniqExact(order_id) AS unique_orders,
              sum(revenue) AS rev
            FROM ecommerce_events
            WHERE site_id = #{site_p}
-             AND (order_id LIKE 'ch_%' OR order_id LIKE 'pi_%')
              AND toStartOfMonth(toTimezone(timestamp, #{tz_p})) = toStartOfMonth(today() - 1)
+           GROUP BY import_source
            """) do
-        {:ok, [row | _]} -> row
-        _ -> %{}
+        {:ok, rows} -> rows
+        _ -> []
       end
 
-    # All months breakdown (site timezone)
+    # All months breakdown (site timezone) per source
     by_month =
       case Spectabas.ClickHouse.query("""
            SELECT
              toStartOfMonth(toTimezone(timestamp, #{tz_p})) AS month,
+             import_source,
              uniqExact(order_id) AS orders,
              sum(revenue) AS rev
            FROM ecommerce_events
-           WHERE site_id = #{site_p} AND (order_id LIKE 'ch_%' OR order_id LIKE 'pi_%')
-           GROUP BY month ORDER BY month
+           WHERE site_id = #{site_p}
+           GROUP BY month, import_source
+           ORDER BY month, import_source
            """) do
         {:ok, rows} -> rows
         _ -> []
@@ -1259,7 +1275,8 @@ defmodule SpectabasWeb.HealthController do
 
     json(conn, %{
       duplicate_samples: dupes,
-      overall_impact: dupe_impact,
+      impact_by_source: dupe_impact,
+      cross_source_overlap: cross_source,
       last_month_utc: last_month_utc,
       last_month_tz: last_month_tz,
       by_month_tz: by_month
