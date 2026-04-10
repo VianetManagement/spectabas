@@ -53,6 +53,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.21.0", "2026-04-10T15:00:00Z",
+       [
+         %{
+           title: "Perf: Smarter payment sync — today only with automatic catchup",
+           description:
+             "Stripe and Braintree cron syncs now fetch today's data only, cutting API calls and duration in half. If the last successful sync was more than 6 hours ago (e.g., after an outage), yesterday is automatically included to prevent data gaps."
+         },
+         %{
+           title: "Feat: Slack notifications for sync failures",
+           description:
+             "New Spectabas.Notifications.Slack module sends alerts to a Slack channel when payment syncs fail. Set SLACK_WEBHOOK_URL env var to enable. Includes site name, error details, and suggested action."
+         }
+       ]},
       {"v5.20.0", "2026-04-09T20:00:00Z",
        [
          %{

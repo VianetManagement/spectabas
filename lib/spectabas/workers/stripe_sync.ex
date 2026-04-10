@@ -1,7 +1,7 @@
 defmodule Spectabas.Workers.StripeSync do
   @moduledoc """
-  Syncs Stripe charges into ecommerce_events. Runs every 6 hours via Oban cron.
-  Syncs today + yesterday for each active Stripe integration.
+  Syncs Stripe charges into ecommerce_events via Oban cron.
+  Syncs today only; also syncs yesterday if last successful sync was > 6h ago.
   """
 
   use Oban.Worker,
@@ -14,6 +14,9 @@ defmodule Spectabas.Workers.StripeSync do
   alias Spectabas.AdIntegrations
   alias Spectabas.AdIntegrations.Platforms.StripePlatform
   alias Spectabas.AdIntegrations.SyncLog
+  alias Spectabas.Notifications.Slack
+
+  @catchup_threshold_hours 6
 
   @impl Oban.Worker
   def perform(_job) do
@@ -23,15 +26,18 @@ defmodule Spectabas.Workers.StripeSync do
       |> Spectabas.Repo.preload(:site)
 
     today = Date.utc_today()
-    yesterday = Date.add(today, -1)
 
     Enum.each(integrations, fn integration ->
       if AdIntegrations.should_sync?(integration) do
         start = System.monotonic_time(:millisecond)
 
         try do
-          StripePlatform.sync_charges(integration.site, integration, today)
-          StripePlatform.sync_charges(integration.site, integration, yesterday)
+          dates = sync_dates(integration, today)
+
+          Enum.each(dates, fn date ->
+            StripePlatform.sync_charges(integration.site, integration, date)
+          end)
+
           sub_result = StripePlatform.sync_subscriptions(integration.site, integration)
 
           ms = System.monotonic_time(:millisecond) - start
@@ -40,17 +46,19 @@ defmodule Spectabas.Workers.StripeSync do
             integration,
             "cron_sync",
             "ok",
-            "Synced charges (today+yesterday) and subscriptions",
+            "Synced charges (#{length(dates)} day(s)) and subscriptions",
             duration_ms: ms,
             details: %{
-              "dates" => [to_string(today), to_string(yesterday)],
+              "dates" => Enum.map(dates, &to_string/1),
               "subscriptions" => inspect(sub_result)
             }
           )
         rescue
           e ->
             ms = System.monotonic_time(:millisecond) - start
-            SyncLog.log(integration, "cron_sync", "error", Exception.message(e), duration_ms: ms)
+            error_msg = Exception.message(e)
+            SyncLog.log(integration, "cron_sync", "error", error_msg, duration_ms: ms)
+            Slack.sync_failed("StripeSync", integration.site.name, error_msg)
         end
       end
     end)
@@ -92,14 +100,17 @@ defmodule Spectabas.Workers.StripeSync do
     rescue
       e ->
         ms = System.monotonic_time(:millisecond) - start
+        error_msg = Exception.message(e)
 
         SyncLog.log(
           integration,
           "manual_sync",
           "error",
-          "#{Exception.message(e)}\n#{Exception.format_stacktrace(__STACKTRACE__) |> String.slice(0, 300)}",
+          "#{error_msg}\n#{Exception.format_stacktrace(__STACKTRACE__) |> String.slice(0, 300)}",
           duration_ms: ms
         )
+
+        Slack.sync_failed("StripeSync (manual)", integration.site.name, error_msg)
     catch
       kind, reason ->
         ms = System.monotonic_time(:millisecond) - start
@@ -111,6 +122,22 @@ defmodule Spectabas.Workers.StripeSync do
           "#{kind}: #{inspect(reason) |> String.slice(0, 300)}",
           duration_ms: ms
         )
+    end
+  end
+
+  # Sync today; also sync yesterday if last successful sync was > 6h ago
+  defp sync_dates(integration, today) do
+    if needs_catchup?(integration) do
+      [today, Date.add(today, -1)]
+    else
+      [today]
+    end
+  end
+
+  defp needs_catchup?(integration) do
+    case integration.last_synced_at do
+      nil -> true
+      last -> DateTime.diff(DateTime.utc_now(), last, :hour) >= @catchup_threshold_hours
     end
   end
 end

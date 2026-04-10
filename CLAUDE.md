@@ -277,7 +277,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Mobile responsiveness** — scrollable tables, collapsible mobile nav bar
 - **Accessible top nav** — WCAG AA contrast compliance
 - **Documentation pages** — docs split into `/docs` (index), `/docs/getting-started`, `/docs/dashboard`, `/docs/conversions`, `/docs/api`, `/docs/admin` with cross-category search. Requires login (behind :require_authenticated_user). Public pages: `/privacy`, `/terms`, homepage.
-- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.20.0)
+- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.21.0)
 - **Legal** — Privacy Policy at `/privacy` and Terms of Service at `/terms` (public, no auth required). Entity: Spectabas, Kent County MI. Contact: howdy@spectabas.com. Arbitration clause (AAA, Kent County). 18+ age restriction.
 
 ## Important Patterns
@@ -329,7 +329,8 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **import_source column**: `ecommerce_events` has `import_source` LowCardinality(String) — values: `"stripe"`, `"braintree"`, `""` (API). Clear Data only deletes rows matching that integration's source. This prevents one integration's Clear Data from wiping another's data.
 - **Integration mark_error**: Does NOT change status to "error" — keeps `status: "active"` so cron continues retrying. Only stores error message and increments error count.
 - **Sync lock**: `persistent_term`-based lock per integration ID prevents concurrent sync runs from inserting duplicate data.
-- **Fast-skip with always re-sync**: Historical backfill checks ClickHouse for existing data before calling payment APIs (skips already-synced days). But today and yesterday always re-sync to capture new transactions.
+- **Smart sync with catchup**: Payment sync (Stripe/Braintree) fetches today only. If last successful sync was > 6h ago, yesterday is included to prevent data gaps after outages. Historical backfill checks ClickHouse for existing data before calling payment APIs.
+- **Slack notifications**: `Spectabas.Notifications.Slack` sends alerts via incoming webhook. Set `SLACK_WEBHOOK_URL` env var. Used for sync failures; available for other alerts.
 - **ClickHouse schema migrations**: `CREATE TABLE IF NOT EXISTS` does NOT add new columns to existing tables. Use `ALTER TABLE ADD COLUMN IF NOT EXISTS` for new columns on existing tables.
 - **ClickHouse OPTIMIZE DEDUPLICATE BY**: Must include ALL ORDER BY columns in the BY clause, not just a subset.
 - **Integration auto-repair**: Settings page `mount` calls `auto_repair_integrations/1` to fix orphaned records (credentials exist but no integration record). Integration records also auto-created on first sync.

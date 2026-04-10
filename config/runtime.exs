@@ -74,4 +74,8 @@ if config_env() == :prod do
       push_api_key: appsignal_key,
       active: true
   end
+
+  if slack_url = System.get_env("SLACK_WEBHOOK_URL") do
+    config :spectabas, slack_webhook_url: slack_url
+  end
 end

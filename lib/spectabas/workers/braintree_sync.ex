@@ -1,7 +1,7 @@
 defmodule Spectabas.Workers.BraintreeSync do
   @moduledoc """
   Syncs Braintree transactions, refunds, and subscriptions.
-  Runs on the same schedule as StripeSync — frequency controlled per-integration.
+  Syncs today only; also syncs yesterday if last successful sync was > 6h ago.
   """
 
   use Oban.Worker,
@@ -14,6 +14,9 @@ defmodule Spectabas.Workers.BraintreeSync do
   alias Spectabas.AdIntegrations
   alias Spectabas.AdIntegrations.Platforms.BraintreePlatform
   alias Spectabas.AdIntegrations.SyncLog
+  alias Spectabas.Notifications.Slack
+
+  @catchup_threshold_hours 6
 
   @impl Oban.Worker
   def perform(_job) do
@@ -23,17 +26,19 @@ defmodule Spectabas.Workers.BraintreeSync do
       |> Spectabas.Repo.preload(:site)
 
     today = Date.utc_today()
-    yesterday = Date.add(today, -1)
 
     Enum.each(integrations, fn integration ->
       if AdIntegrations.should_sync?(integration) do
         start = System.monotonic_time(:millisecond)
 
         try do
-          BraintreePlatform.sync_transactions(integration.site, integration, today)
-          BraintreePlatform.sync_transactions(integration.site, integration, yesterday)
-          BraintreePlatform.sync_refunds(integration.site, integration, today)
-          BraintreePlatform.sync_refunds(integration.site, integration, yesterday)
+          dates = sync_dates(integration, today)
+
+          Enum.each(dates, fn date ->
+            BraintreePlatform.sync_transactions(integration.site, integration, date)
+            BraintreePlatform.sync_refunds(integration.site, integration, date)
+          end)
+
           BraintreePlatform.sync_subscriptions(integration.site, integration)
 
           ms = System.monotonic_time(:millisecond) - start
@@ -42,13 +47,15 @@ defmodule Spectabas.Workers.BraintreeSync do
             integration,
             "cron_sync",
             "ok",
-            "Synced transactions, refunds, subscriptions",
+            "Synced transactions, refunds (#{length(dates)} day(s)), subscriptions",
             duration_ms: ms
           )
         rescue
           e ->
             ms = System.monotonic_time(:millisecond) - start
-            SyncLog.log(integration, "cron_sync", "error", Exception.message(e), duration_ms: ms)
+            error_msg = Exception.message(e)
+            SyncLog.log(integration, "cron_sync", "error", error_msg, duration_ms: ms)
+            Slack.sync_failed("BraintreeSync", integration.site.name, error_msg)
         end
       end
     end)
@@ -80,7 +87,25 @@ defmodule Spectabas.Workers.BraintreeSync do
     rescue
       e ->
         ms = System.monotonic_time(:millisecond) - start
-        SyncLog.log(integration, "manual_sync", "error", Exception.message(e), duration_ms: ms)
+        error_msg = Exception.message(e)
+        SyncLog.log(integration, "manual_sync", "error", error_msg, duration_ms: ms)
+        Slack.sync_failed("BraintreeSync (manual)", integration.site.name, error_msg)
+    end
+  end
+
+  # Sync today; also sync yesterday if last successful sync was > 6h ago
+  defp sync_dates(integration, today) do
+    if needs_catchup?(integration) do
+      [today, Date.add(today, -1)]
+    else
+      [today]
+    end
+  end
+
+  defp needs_catchup?(integration) do
+    case integration.last_synced_at do
+      nil -> true
+      last -> DateTime.diff(DateTime.utc_now(), last, :hour) >= @catchup_threshold_hours
     end
   end
 end
