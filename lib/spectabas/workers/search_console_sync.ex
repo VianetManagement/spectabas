@@ -11,6 +11,7 @@ defmodule Spectabas.Workers.SearchConsoleSync do
   alias Spectabas.AdIntegrations
   alias Spectabas.AdIntegrations.Platforms.{GoogleSearchConsole, BingWebmaster}
   alias Spectabas.AdIntegrations.SyncLog
+  alias Spectabas.Notifications.Slack
 
   @impl Oban.Worker
   def perform(_job) do
@@ -51,13 +52,9 @@ defmodule Spectabas.Workers.SearchConsoleSync do
             updated
 
           {:error, reason} ->
-            SyncLog.log(
-              integration,
-              "token_refresh",
-              "error",
-              "Token refresh failed: #{inspect(reason)}"
-            )
-
+            error_msg = "Token refresh failed: #{inspect(reason)}"
+            SyncLog.log(integration, "token_refresh", "error", error_msg)
+            Slack.sync_failed("SearchConsoleSync", integration.site.name, error_msg)
             nil
         end
       else
@@ -70,7 +67,9 @@ defmodule Spectabas.Workers.SearchConsoleSync do
           :ok
 
         {:error, reason} ->
-          SyncLog.log(integration, "day_sync", "error", "#{date}: #{inspect(reason)}")
+          error_msg = "#{date}: #{inspect(reason)}"
+          SyncLog.log(integration, "day_sync", "error", error_msg)
+          Slack.sync_failed("SearchConsoleSync (Google)", integration.site.name, error_msg)
           {:error, reason}
       end
     else
@@ -84,7 +83,9 @@ defmodule Spectabas.Workers.SearchConsoleSync do
         :ok
 
       {:error, reason} ->
-        SyncLog.log(integration, "day_sync", "error", "#{date}: #{inspect(reason)}")
+        error_msg = "#{date}: #{inspect(reason)}"
+        SyncLog.log(integration, "day_sync", "error", error_msg)
+        Slack.sync_failed("SearchConsoleSync (Bing)", integration.site.name, error_msg)
         {:error, reason}
     end
   end

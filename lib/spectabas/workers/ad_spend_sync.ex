@@ -11,6 +11,7 @@ defmodule Spectabas.Workers.AdSpendSync do
   alias Spectabas.{AdIntegrations, ClickHouse}
   alias Spectabas.AdIntegrations.Platforms.{GoogleAds, BingAds, MetaAds}
   alias Spectabas.AdIntegrations.SyncLog
+  alias Spectabas.Notifications.Slack
   import Spectabas.TypeHelpers, only: [to_int: 1]
 
   @impl Oban.Worker
@@ -78,15 +79,10 @@ defmodule Spectabas.Workers.AdSpendSync do
             updated
 
           {:error, reason} ->
-            AdIntegrations.mark_error(integration, "Token refresh failed: #{inspect(reason)}")
-
-            SyncLog.log(
-              integration,
-              "token_refresh",
-              "error",
-              "Token refresh failed: #{inspect(reason)}"
-            )
-
+            error_msg = "Token refresh failed: #{inspect(reason)}"
+            AdIntegrations.mark_error(integration, error_msg)
+            SyncLog.log(integration, "token_refresh", "error", error_msg)
+            Slack.sync_failed("AdSpendSync", integration.site.name, error_msg)
             nil
         end
       else
@@ -134,20 +130,12 @@ defmodule Spectabas.Workers.AdSpendSync do
 
             {:error, reason} ->
               ms = System.monotonic_time(:millisecond) - start
+              error_msg = "CH insert failed for #{date}: #{inspect(reason) |> String.slice(0, 200)}"
 
-              Logger.error(
-                "[AdSpendSync] CH insert failed: #{inspect(reason) |> String.slice(0, 200)}"
-              )
-
+              Logger.error("[AdSpendSync] #{error_msg}")
               AdIntegrations.mark_error(integration, "ClickHouse insert failed")
-
-              SyncLog.log(
-                integration,
-                "ad_sync",
-                "error",
-                "CH insert failed for #{date}: #{inspect(reason) |> String.slice(0, 200)}",
-                duration_ms: ms
-              )
+              SyncLog.log(integration, "ad_sync", "error", error_msg, duration_ms: ms)
+              Slack.sync_failed("AdSpendSync (#{integration.platform})", integration.site.name, error_msg)
           end
 
         {:ok, []} ->
@@ -156,20 +144,12 @@ defmodule Spectabas.Workers.AdSpendSync do
 
         {:error, reason} ->
           ms = System.monotonic_time(:millisecond) - start
+          error_msg = "Fetch failed for #{date}: #{inspect(reason) |> String.slice(0, 200)}"
 
-          Logger.warning(
-            "[AdSpendSync] #{integration.platform} fetch failed: #{inspect(reason) |> String.slice(0, 200)}"
-          )
-
+          Logger.warning("[AdSpendSync] #{integration.platform} #{error_msg}")
           AdIntegrations.mark_error(integration, reason)
-
-          SyncLog.log(
-            integration,
-            "ad_sync",
-            "error",
-            "Fetch failed for #{date}: #{inspect(reason) |> String.slice(0, 200)}",
-            duration_ms: ms
-          )
+          SyncLog.log(integration, "ad_sync", "error", error_msg, duration_ms: ms)
+          Slack.sync_failed("AdSpendSync (#{integration.platform})", integration.site.name, error_msg)
       end
     end
   end
