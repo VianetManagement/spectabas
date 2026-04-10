@@ -130,12 +130,19 @@ defmodule Spectabas.Workers.AdSpendSync do
 
             {:error, reason} ->
               ms = System.monotonic_time(:millisecond) - start
-              error_msg = "CH insert failed for #{date}: #{inspect(reason) |> String.slice(0, 200)}"
+
+              error_msg =
+                "CH insert failed for #{date}: #{inspect(reason) |> String.slice(0, 200)}"
 
               Logger.error("[AdSpendSync] #{error_msg}")
               AdIntegrations.mark_error(integration, "ClickHouse insert failed")
               SyncLog.log(integration, "ad_sync", "error", error_msg, duration_ms: ms)
-              Slack.sync_failed("AdSpendSync (#{integration.platform})", integration.site.name, error_msg)
+
+              Slack.sync_failed(
+                "AdSpendSync (#{integration.platform})",
+                integration.site.name,
+                error_msg
+              )
           end
 
         {:ok, []} ->
@@ -149,7 +156,12 @@ defmodule Spectabas.Workers.AdSpendSync do
           Logger.warning("[AdSpendSync] #{integration.platform} #{error_msg}")
           AdIntegrations.mark_error(integration, reason)
           SyncLog.log(integration, "ad_sync", "error", error_msg, duration_ms: ms)
-          Slack.sync_failed("AdSpendSync (#{integration.platform})", integration.site.name, error_msg)
+
+          Slack.sync_failed(
+            "AdSpendSync (#{integration.platform})",
+            integration.site.name,
+            error_msg
+          )
       end
     end
   end

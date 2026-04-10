@@ -35,7 +35,9 @@ defmodule Spectabas.Application do
     result = Supervisor.start_link(children, opts)
 
     # Notify Slack on deploy (async, non-blocking)
-    Task.start(fn -> Spectabas.Notifications.Slack.notify(":rocket: *Spectabas deployed* — v5.21.0") end)
+    Task.start(fn ->
+      Spectabas.Notifications.Slack.notify(":rocket: *Spectabas deployed* — v5.21.0")
+    end)
 
     result
   end

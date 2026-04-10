@@ -1514,7 +1514,10 @@ defmodule Spectabas.Analytics do
               end)
 
             {:error, reason} ->
-              Logger.warning("[RevAttribution] visitors query failed: #{inspect(reason) |> String.slice(0, 200)}")
+              Logger.warning(
+                "[RevAttribution] visitors query failed: #{inspect(reason) |> String.slice(0, 200)}"
+              )
+
               %{}
           end
 
@@ -1526,7 +1529,10 @@ defmodule Spectabas.Analytics do
               end)
 
             {:error, reason} ->
-              Logger.warning("[RevAttribution] revenue query failed: #{inspect(reason) |> String.slice(0, 200)}")
+              Logger.warning(
+                "[RevAttribution] revenue query failed: #{inspect(reason) |> String.slice(0, 200)}"
+              )
+
               %{}
           end
 
