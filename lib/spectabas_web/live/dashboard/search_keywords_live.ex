@@ -36,29 +36,20 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
         |> assign(:drawer_pages, [])
         |> assign(:drawer_devices, [])
         |> assign(:drawer_countries, [])
+        |> assign(:drawer_chart_key, nil)
+        |> assign(:drawer_clicks_json, "{}")
+        |> assign(:drawer_impressions_json, "{}")
+        |> assign(:drawer_ctr_json, "{}")
+        |> assign(:drawer_position_json, "{}")
         |> assign(:drawer_loading, false)
         |> assign(:expanded_cannibalization, nil)
         |> load_data()
-
-      # Defer the initial chart push — on first mount the client's chart hooks
-      # haven't registered their handleEvent listeners yet, so pushes from
-      # inside mount get silently dropped. send(self(), ...) routes through
-      # the message queue so handle_info runs after the LiveView finishes its
-      # first render, by which time hooks are mounted client-side.
-      if connected?(socket), do: send(self(), :push_initial_charts)
 
       {:ok, socket}
     end
   end
 
   @impl true
-  def handle_info(:push_initial_charts, socket) do
-    {:noreply,
-     socket
-     |> push_charts(socket.assigns.daily_trends)
-     |> push_query_sparklines(socket.assigns.query_sparklines)}
-  end
-
   def handle_info({:load_drawer, query}, socket) do
     # Only apply if the user hasn't navigated away since clicking.
     if socket.assigns.drawer_query == query do
@@ -161,6 +152,12 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     top_query_strings = queries |> Enum.take(20) |> Enum.map(& &1["query"])
     sparklines = query_sparklines(site_p, days, source_filter, top_query_strings)
 
+    # Pre-render chart JSON as assigns so data-chart attributes render inline
+    # (guaranteed delivery — no push_event race with hook mount). chart_key
+    # changes on every load so DOM ids change, which forces the hook to
+    # remount with the new data on range/source/sort change.
+    {ci_json, ctr_json, pos_json} = build_chart_jsons(daily_trends)
+
     socket
     |> assign(:stats, stats)
     |> assign(:queries, queries)
@@ -173,14 +170,66 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     |> assign(:cannibalization, Map.get(results, :cannibalization, []))
     |> assign(:daily_trends, daily_trends)
     |> assign(:query_sparklines, sparklines)
+    |> assign(:chart_key, Integer.to_string(System.unique_integer([:positive])))
+    |> assign(:chart_clicks_impressions_json, ci_json)
+    |> assign(:chart_ctr_json, ctr_json)
+    |> assign(:chart_position_json, pos_json)
     |> assign(
       :has_data,
       to_num(stats["total_clicks"] || "0") > 0 or
         to_num(stats["total_impressions"] || "0") > 0 or
         queries != []
     )
-    |> push_charts(daily_trends)
-    |> push_query_sparklines(sparklines)
+  end
+
+  defp build_chart_jsons(daily_trends) do
+    labels = Enum.map(daily_trends, &short_date(&1["date"]))
+    clicks = Enum.map(daily_trends, &to_num(&1["clicks"]))
+    impressions = Enum.map(daily_trends, &to_num(&1["impressions"]))
+    ctr = Enum.map(daily_trends, &to_float(&1["ctr"]))
+    position = Enum.map(daily_trends, &to_float(&1["avg_position"]))
+
+    ci =
+      Jason.encode!(%{
+        labels: labels,
+        datasets: [
+          %{label: "Impressions", data: impressions, type: "bar", color: "#c7d2fe", y_axis: "y"},
+          %{
+            label: "Clicks",
+            data: clicks,
+            type: "line",
+            color: "#4338ca",
+            fill: true,
+            y_axis: "y1"
+          }
+        ]
+      })
+
+    ctr_json =
+      Jason.encode!(%{
+        labels: labels,
+        datasets: [%{label: "CTR %", data: ctr, type: "line", color: "#059669", fill: true}]
+      })
+
+    pos_json =
+      Jason.encode!(%{
+        labels: labels,
+        datasets: [%{label: "Avg Position", data: position, type: "line", color: "#d97706"}],
+        invert_y: true
+      })
+
+    {ci, ctr_json, pos_json}
+  end
+
+  # Per-query sparkline JSON lookup (called from the template).
+  def query_sparkline_json(sparklines_by_query, query) do
+    pairs = Map.get(sparklines_by_query, query, [])
+    pairs = Enum.sort_by(pairs, &elem(&1, 0))
+
+    Jason.encode!(%{
+      labels: Enum.map(pairs, &short_date(elem(&1, 0))),
+      values: Enum.map(pairs, &elem(&1, 1))
+    })
   end
 
   defp load_drawer_data(socket, query) do
@@ -214,13 +263,80 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
       end)
 
     ts = Map.get(results, :drawer_timeseries, [])
+    {clicks_j, imp_j, ctr_j, pos_j} = build_drawer_chart_jsons(ts)
 
     socket
     |> assign(:drawer_timeseries, ts)
     |> assign(:drawer_pages, Map.get(results, :drawer_pages, []))
     |> assign(:drawer_devices, Map.get(results, :drawer_devices, []))
     |> assign(:drawer_countries, Map.get(results, :drawer_countries, []))
-    |> push_drawer_charts(ts)
+    |> assign(:drawer_chart_key, Integer.to_string(System.unique_integer([:positive])))
+    |> assign(:drawer_clicks_json, clicks_j)
+    |> assign(:drawer_impressions_json, imp_j)
+    |> assign(:drawer_ctr_json, ctr_j)
+    |> assign(:drawer_position_json, pos_j)
+  end
+
+  defp build_drawer_chart_jsons(timeseries) do
+    labels = Enum.map(timeseries, &short_date(&1["date"]))
+
+    clicks =
+      Jason.encode!(%{
+        labels: labels,
+        datasets: [
+          %{
+            label: "Clicks",
+            data: Enum.map(timeseries, &to_num(&1["clicks"])),
+            type: "line",
+            color: "#4338ca",
+            fill: true
+          }
+        ]
+      })
+
+    imp =
+      Jason.encode!(%{
+        labels: labels,
+        datasets: [
+          %{
+            label: "Impressions",
+            data: Enum.map(timeseries, &to_num(&1["impressions"])),
+            type: "line",
+            color: "#6366f1",
+            fill: true
+          }
+        ]
+      })
+
+    ctr =
+      Jason.encode!(%{
+        labels: labels,
+        datasets: [
+          %{
+            label: "CTR %",
+            data: Enum.map(timeseries, &to_float(&1["ctr"])),
+            type: "line",
+            color: "#059669",
+            fill: true
+          }
+        ]
+      })
+
+    pos =
+      Jason.encode!(%{
+        labels: labels,
+        datasets: [
+          %{
+            label: "Avg Position",
+            data: Enum.map(timeseries, &to_float(&1["avg_position"])),
+            type: "line",
+            color: "#d97706"
+          }
+        ],
+        invert_y: true
+      })
+
+    {clicks, imp, ctr, pos}
   end
 
   # ---------------- Query functions ----------------
@@ -627,120 +743,6 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     end
   end
 
-  # ---------------- Chart pushes ----------------
-
-  defp push_charts(socket, daily_trends) do
-    labels = Enum.map(daily_trends, &short_date(&1["date"]))
-    clicks = Enum.map(daily_trends, &to_num(&1["clicks"]))
-    impressions = Enum.map(daily_trends, &to_num(&1["impressions"]))
-    ctr = Enum.map(daily_trends, &to_float(&1["ctr"]))
-    position = Enum.map(daily_trends, &to_float(&1["avg_position"]))
-
-    socket
-    |> push_event("search-chart-data", %{
-      id: "chart-clicks-impressions",
-      labels: labels,
-      datasets: [
-        %{
-          label: "Impressions",
-          data: impressions,
-          type: "bar",
-          color: "#c7d2fe",
-          y_axis: "y"
-        },
-        %{
-          label: "Clicks",
-          data: clicks,
-          type: "line",
-          color: "#4338ca",
-          fill: true,
-          y_axis: "y1"
-        }
-      ]
-    })
-    |> push_event("search-chart-data", %{
-      id: "chart-ctr",
-      labels: labels,
-      datasets: [%{label: "CTR %", data: ctr, type: "line", color: "#059669", fill: true}]
-    })
-    |> push_event("search-chart-data", %{
-      id: "chart-position",
-      labels: labels,
-      datasets: [%{label: "Avg Position", data: position, type: "line", color: "#d97706"}],
-      invert_y: true
-    })
-  end
-
-  defp push_query_sparklines(socket, sparklines_by_query) do
-    Enum.reduce(sparklines_by_query, socket, fn {query, pairs}, acc ->
-      pairs = Enum.sort_by(pairs, &elem(&1, 0))
-
-      push_event(acc, "sparkline-data", %{
-        id: query_sparkline_id(query),
-        labels: Enum.map(pairs, &short_date(elem(&1, 0))),
-        values: Enum.map(pairs, &elem(&1, 1))
-      })
-    end)
-  end
-
-  defp push_drawer_charts(socket, timeseries) do
-    labels = Enum.map(timeseries, &short_date(&1["date"]))
-
-    socket
-    |> push_event("search-chart-data", %{
-      id: "drawer-chart-clicks",
-      labels: labels,
-      datasets: [
-        %{
-          label: "Clicks",
-          data: Enum.map(timeseries, &to_num(&1["clicks"])),
-          type: "line",
-          color: "#4338ca",
-          fill: true
-        }
-      ]
-    })
-    |> push_event("search-chart-data", %{
-      id: "drawer-chart-impressions",
-      labels: labels,
-      datasets: [
-        %{
-          label: "Impressions",
-          data: Enum.map(timeseries, &to_num(&1["impressions"])),
-          type: "line",
-          color: "#6366f1",
-          fill: true
-        }
-      ]
-    })
-    |> push_event("search-chart-data", %{
-      id: "drawer-chart-ctr",
-      labels: labels,
-      datasets: [
-        %{
-          label: "CTR %",
-          data: Enum.map(timeseries, &to_float(&1["ctr"])),
-          type: "line",
-          color: "#059669",
-          fill: true
-        }
-      ]
-    })
-    |> push_event("search-chart-data", %{
-      id: "drawer-chart-position",
-      labels: labels,
-      datasets: [
-        %{
-          label: "Avg Position",
-          data: Enum.map(timeseries, &to_float(&1["avg_position"])),
-          type: "line",
-          color: "#d97706"
-        }
-      ],
-      invert_y: true
-    })
-  end
-
   # ---------------- Render ----------------
 
   @impl true
@@ -817,13 +819,15 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
             </div>
           </div>
 
-          <%!-- Trend charts --%>
+          <%!-- Trend charts (data in data-chart attr; id changes each reload so the
+          element is replaced on range change and hook remounts fresh) --%>
           <div class="bg-white rounded-lg shadow p-6 mb-4">
             <h2 class="text-sm font-semibold text-gray-700 mb-3">Clicks &amp; Impressions</h2>
             <div
-              id="chart-clicks-impressions"
+              id={"chart-clicks-impressions-" <> @chart_key}
               phx-hook="SearchChart"
               phx-update="ignore"
+              data-chart={@chart_clicks_impressions_json}
               class="h-64 relative"
             >
               <canvas></canvas>
@@ -833,7 +837,13 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
             <div class="bg-white rounded-lg shadow p-6">
               <h2 class="text-sm font-semibold text-gray-700 mb-3">Avg CTR</h2>
-              <div id="chart-ctr" phx-hook="SearchChart" phx-update="ignore" class="h-48 relative">
+              <div
+                id={"chart-ctr-" <> @chart_key}
+                phx-hook="SearchChart"
+                phx-update="ignore"
+                data-chart={@chart_ctr_json}
+                class="h-48 relative"
+              >
                 <canvas></canvas>
               </div>
             </div>
@@ -842,9 +852,10 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                 Avg Position <span class="text-xs font-normal text-gray-500">(lower is better)</span>
               </h2>
               <div
-                id="chart-position"
+                id={"chart-position-" <> @chart_key}
                 phx-hook="SearchChart"
                 phx-update="ignore"
+                data-chart={@chart_position_json}
                 class="h-48 relative"
               >
                 <canvas></canvas>
@@ -907,9 +918,10 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                       <td class="py-2">
                         <%= if idx < 20 do %>
                           <div
-                            id={query_sparkline_id(q["query"])}
+                            id={query_sparkline_id(q["query"]) <> "-" <> @chart_key}
                             phx-hook="Sparkline"
                             phx-update="ignore"
+                            data-spark={query_sparkline_json(@query_sparklines, q["query"])}
                             class="w-24 h-8"
                           >
                             <canvas></canvas>
@@ -1270,51 +1282,60 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
           </div>
 
           <div class="px-6 py-4 space-y-6">
-            <%!-- 4 stacked per-query time series --%>
-            <div>
-              <h4 class="text-sm font-semibold text-gray-700 mb-2">Clicks</h4>
-              <div
-                id="drawer-chart-clicks"
-                phx-hook="SearchChart"
-                phx-update="ignore"
-                class="h-32 relative"
-              >
-                <canvas></canvas>
+            <%!-- 4 stacked per-query time series (loaded on click; ids vary by
+            drawer_chart_key so hooks remount fresh on each open/reopen) --%>
+            <%= if @drawer_chart_key do %>
+              <div>
+                <h4 class="text-sm font-semibold text-gray-700 mb-2">Clicks</h4>
+                <div
+                  id={"drawer-chart-clicks-" <> @drawer_chart_key}
+                  phx-hook="SearchChart"
+                  phx-update="ignore"
+                  data-chart={@drawer_clicks_json}
+                  class="h-32 relative"
+                >
+                  <canvas></canvas>
+                </div>
               </div>
-            </div>
-            <div>
-              <h4 class="text-sm font-semibold text-gray-700 mb-2">Impressions</h4>
-              <div
-                id="drawer-chart-impressions"
-                phx-hook="SearchChart"
-                phx-update="ignore"
-                class="h-32 relative"
-              >
-                <canvas></canvas>
+              <div>
+                <h4 class="text-sm font-semibold text-gray-700 mb-2">Impressions</h4>
+                <div
+                  id={"drawer-chart-impressions-" <> @drawer_chart_key}
+                  phx-hook="SearchChart"
+                  phx-update="ignore"
+                  data-chart={@drawer_impressions_json}
+                  class="h-32 relative"
+                >
+                  <canvas></canvas>
+                </div>
               </div>
-            </div>
-            <div>
-              <h4 class="text-sm font-semibold text-gray-700 mb-2">CTR</h4>
-              <div
-                id="drawer-chart-ctr"
-                phx-hook="SearchChart"
-                phx-update="ignore"
-                class="h-32 relative"
-              >
-                <canvas></canvas>
+              <div>
+                <h4 class="text-sm font-semibold text-gray-700 mb-2">CTR</h4>
+                <div
+                  id={"drawer-chart-ctr-" <> @drawer_chart_key}
+                  phx-hook="SearchChart"
+                  phx-update="ignore"
+                  data-chart={@drawer_ctr_json}
+                  class="h-32 relative"
+                >
+                  <canvas></canvas>
+                </div>
               </div>
-            </div>
-            <div>
-              <h4 class="text-sm font-semibold text-gray-700 mb-2">Position</h4>
-              <div
-                id="drawer-chart-position"
-                phx-hook="SearchChart"
-                phx-update="ignore"
-                class="h-32 relative"
-              >
-                <canvas></canvas>
+              <div>
+                <h4 class="text-sm font-semibold text-gray-700 mb-2">Position</h4>
+                <div
+                  id={"drawer-chart-position-" <> @drawer_chart_key}
+                  phx-hook="SearchChart"
+                  phx-update="ignore"
+                  data-chart={@drawer_position_json}
+                  class="h-32 relative"
+                >
+                  <canvas></canvas>
+                </div>
               </div>
-            </div>
+            <% else %>
+              <div class="text-center py-8 text-sm text-gray-500">Loading...</div>
+            <% end %>
 
             <%!-- Pages ranking for this query --%>
             <div>

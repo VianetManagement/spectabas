@@ -121,8 +121,7 @@ const PieChart = {
 
 const Sparkline = {
   mounted() {
-    this.handleEvent("sparkline-data", ({labels, values, id}) => {
-      if (this.el.id !== id) return
+    this._render = ({labels, values}) => {
       const canvas = this.el.querySelector("canvas")
       if (!canvas) return
       if (this._chart) this._chart.destroy()
@@ -150,6 +149,18 @@ const Sparkline = {
           }
         }
       })
+    }
+
+    // Initial data via data-spark attribute (race-free).
+    const raw = this.el.dataset.spark
+    if (raw) {
+      try { this._render(JSON.parse(raw)) } catch (e) { console.error("Sparkline parse", e) }
+    }
+
+    // Subsequent updates via push_event (used by Pages row-evolution click flow).
+    this.handleEvent("sparkline-data", (payload) => {
+      if (this.el.id !== payload.id) return
+      this._render(payload)
     })
   },
   destroyed() {
@@ -158,16 +169,18 @@ const Sparkline = {
 }
 
 // Generic multi-instance chart hook used by the Search Keywords page.
-// Server pushes {id, labels, datasets, invert_y} — hook filters by id so
-// several charts can coexist on one page. Supports line, bar, and combo
-// charts (bar + line overlay with dual y-axes).
 //
-// Dataset shape:
-//   {label, data, type: "line"|"bar", color, fill?, y_axis: "y"|"y1"}
+// Reads initial data from `data-chart` JSON attribute on the element
+// (reliable — data is in the DOM by the time mounted() runs). Subsequent
+// updates come from push_event("search-chart-data", {id, ...}).
+//
+// Payload shape:
+//   {id, labels, datasets: [{label, data, type: "line"|"bar", color,
+//    fill?, y_axis: "y"|"y1"}], invert_y?}
 const SearchChart = {
   mounted() {
-    this.handleEvent("search-chart-data", (payload) => {
-      if (this.el.id !== payload.id) return
+    this._render = (payload) => {
+      if (!payload || !payload.datasets) return
       const canvas = this.el.querySelector("canvas")
       if (!canvas) return
       if (this._chart) this._chart.destroy()
@@ -216,6 +229,18 @@ const SearchChart = {
           scales: scales
         }
       })
+    }
+
+    // Render initial data from the data-chart attribute (race-free).
+    const raw = this.el.dataset.chart
+    if (raw) {
+      try { this._render(JSON.parse(raw)) } catch (e) { console.error("SearchChart parse", e) }
+    }
+
+    // Still listen for pushed updates (e.g. date range change).
+    this.handleEvent("search-chart-data", (payload) => {
+      if (this.el.id !== payload.id) return
+      this._render(payload)
     })
   },
   destroyed() {

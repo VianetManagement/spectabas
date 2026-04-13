@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.26.2", "2026-04-13T22:00:00Z",
+       [
+         %{
+           title: "Fix: Search Keywords charts actually render data now",
+           description:
+             "Rather than fight the push_event/hook-mount race with timing workarounds, the charts now read their initial data from a data-chart JSON attribute rendered directly into the HTML. Guaranteed delivery — the data is in the DOM by the time mounted() runs. Each reload gets a new chart_key suffix on the DOM id, so LiveView swaps the whole element and the hook remounts fresh with the new data. Applied to all three page charts, four drawer charts, and per-query sparklines. Removed all the old push_event chart machinery."
+         }
+       ]},
       {"v5.26.1", "2026-04-13T21:30:00Z",
        [
          %{
