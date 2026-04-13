@@ -14,6 +14,54 @@ defmodule Spectabas.Workers.SearchConsoleSync do
   alias Spectabas.Notifications.Slack
 
   @impl Oban.Worker
+  def perform(%Oban.Job{args: %{"backfill_days" => days, "integration_id" => id}}) do
+    # Historical backfill mode: pull one day at a time going backwards from
+    # 2 days ago for `days` total days. GSC data has a 2-3 day delay so we
+    # start at today-2. Sleeps briefly between days to respect rate limits.
+    case safe_get_integration(id) do
+      nil ->
+        Logger.warning("[SearchConsoleSync] backfill: integration #{id} not found")
+        :ok
+
+      integration ->
+        integration = Spectabas.Repo.preload(integration, :site)
+        today = Date.utc_today()
+        dates = Enum.map(2..(days + 1), &Date.add(today, -&1))
+
+        Logger.notice(
+          "[SearchConsoleSync] backfill start: #{integration.site.name} #{length(dates)} days (#{List.last(dates)} → #{hd(dates)})"
+        )
+
+        {ok, failed} =
+          Enum.reduce(dates, {0, 0}, fn date, {ok, failed} ->
+            result =
+              case sync_one(integration, date) do
+                :ok -> {ok + 1, failed}
+                _ -> {ok, failed + 1}
+              end
+
+            # Brief pause between calls — GSC allows ~1200 requests/minute per
+            # user. At ~200ms apart we stay well under.
+            Process.sleep(200)
+            result
+          end)
+
+        SyncLog.log(
+          integration,
+          "backfill",
+          "ok",
+          "Backfilled #{ok}/#{length(dates)} days (#{failed} failed)",
+          details: %{"dates_backfilled" => ok, "dates_failed" => failed}
+        )
+
+        Logger.notice(
+          "[SearchConsoleSync] backfill complete: #{integration.site.name} #{ok} ok, #{failed} failed"
+        )
+
+        :ok
+    end
+  end
+
   def perform(_job) do
     integrations =
       AdIntegrations.list_active()
@@ -91,6 +139,14 @@ defmodule Spectabas.Workers.SearchConsoleSync do
   end
 
   defp sync_one(_, _), do: :ok
+
+  defp safe_get_integration(id) do
+    try do
+      AdIntegrations.get!(id)
+    rescue
+      Ecto.NoResultsError -> nil
+    end
+  end
 
   defp refresh_gsc_token(integration) do
     rt = AdIntegrations.decrypt_refresh_token(integration)

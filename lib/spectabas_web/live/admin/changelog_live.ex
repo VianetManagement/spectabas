@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.27.0", "2026-04-14T02:00:00Z",
+       [
+         %{
+           title: "Feat: Historical backfill for Search Console / Bing Webmaster",
+           description:
+             "The daily sync worker only pulls 2-4 days ago, so sites with newer GSC/Bing connections only have ~10 days of chart data visible. Added two backfill buttons on Site Settings → Integrations: 'Backfill 90d' and 'Backfill 16mo' (Google's max retention). Runs via Oban with a 200ms pause between days to respect rate limits. New /health/diag block `search_console_coverage` shows per-site, per-day row counts so you can see exactly which dates have data and where the gaps are."
+         }
+       ]},
       {"v5.26.9", "2026-04-14T01:30:00Z",
        [
          %{

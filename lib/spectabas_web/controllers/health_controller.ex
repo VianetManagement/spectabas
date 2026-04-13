@@ -27,7 +27,8 @@ defmodule SpectabasWeb.HealthController do
       geo_sample: test_geo_sample(),
       rum_debug: test_rum_debug(),
       daily_rollup: test_daily_rollup(),
-      search_console: test_search_console()
+      search_console: test_search_console(),
+      search_console_coverage: test_search_console_coverage()
     }
 
     results = Map.put(results, :visitor_breakdown, test_visitor_breakdown())
@@ -1648,6 +1649,32 @@ defmodule SpectabasWeb.HealthController do
       GROUP BY site_id
       ORDER BY total_impressions DESC
       LIMIT 20
+      """
+
+      case Spectabas.ClickHouse.query(sql) do
+        {:ok, rows} -> rows
+        {:error, e} -> "error: #{inspect(e) |> String.slice(0, 200)}"
+      end
+    else
+      "not_started"
+    end
+  end
+
+  defp test_search_console_coverage do
+    if Process.whereis(Spectabas.ClickHouse) do
+      # Per-day row counts for the last 90 days per site. Lets us see which
+      # dates have GSC data and which are gaps.
+      sql = """
+      SELECT
+        site_id,
+        toString(date) AS date,
+        count() AS rows,
+        sum(clicks) AS clicks,
+        sum(impressions) AS impressions
+      FROM search_console
+      WHERE date >= today() - 90
+      GROUP BY site_id, date
+      ORDER BY site_id ASC, date ASC
       """
 
       case Spectabas.ClickHouse.query(sql) do

@@ -190,6 +190,32 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
      )}
   end
 
+  def handle_event("backfill_search_console", %{"id" => id, "days" => days}, socket) do
+    integration = authorize_integration!(id, socket)
+
+    # GSC returns up to 16 months of data. Cap at 500 days to be safe.
+    num_days =
+      case Integer.parse(days) do
+        {n, _} when n > 0 and n <= 500 -> n
+        _ -> 90
+      end
+
+    %{"backfill_days" => num_days, "integration_id" => integration.id}
+    |> Spectabas.Workers.SearchConsoleSync.new()
+    |> Oban.insert()
+
+    Process.send_after(self(), :refresh_integrations, 15_000)
+    Process.send_after(self(), :refresh_integrations, 60_000)
+    Process.send_after(self(), :refresh_integrations, 180_000)
+
+    {:noreply,
+     put_flash(
+       socket,
+       :info,
+       "Search Console backfill started for last #{num_days} days. Chart data will populate as each day is fetched (~200ms/day + API latency). Refresh the Search Keywords page to see progress."
+     )}
+  end
+
   def handle_event("sync_ad_now", %{"id" => id}, socket) do
     integration = authorize_integration!(id, socket) |> Spectabas.Repo.preload(:site)
 
@@ -1159,6 +1185,26 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                         class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200"
                       >
                         Clear Data
+                      </button>
+                    <% end %>
+                    <%= if platform in ["google_search_console", "bing_webmaster"] do %>
+                      <button
+                        phx-click="backfill_search_console"
+                        phx-value-id={integration.id}
+                        phx-value-days="90"
+                        data-confirm={"Backfill last 90 days of #{label} data? This runs in the background and takes ~30 seconds for 90 days (one request per day with a small pause between)."}
+                        class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg text-green-700 bg-green-50 hover:bg-green-100 border border-green-200"
+                      >
+                        Backfill 90d
+                      </button>
+                      <button
+                        phx-click="backfill_search_console"
+                        phx-value-id={integration.id}
+                        phx-value-days="480"
+                        data-confirm={"Backfill last 16 months of #{label} data (the maximum Google returns)? This runs in the background and takes ~2-3 minutes."}
+                        class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200"
+                      >
+                        Backfill 16mo
                       </button>
                     <% end %>
                     <button
