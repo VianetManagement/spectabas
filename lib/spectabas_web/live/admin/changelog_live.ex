@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.26.6", "2026-04-14T00:00:00Z",
+       [
+         %{
+           title: "Fix: Search Keywords ILLEGAL_AGGREGATION across daily_trends + drawer",
+           description:
+             "The SQL aliases sum(clicks) AS clicks and sum(impressions) AS impressions were shadowing the underlying column names. ClickHouse then interpreted the sum(impressions) inside the if(...) CTR calculation as sum(the_alias) = nested aggregation → ILLEGAL_AGGREGATION error. FINAL was silently returning 0 rows to hide the error; once dropped, the actual error surfaced. Renamed aliases to total_clicks / total_impressions (same pattern as the already-working query_stats). Fixed in daily_trends AND all four drawer queries (timeseries, pages, devices, countries). Drawer 'pages ranking' table should now populate too."
+         }
+       ]},
       {"v5.26.5", "2026-04-13T23:30:00Z",
        [
          %{

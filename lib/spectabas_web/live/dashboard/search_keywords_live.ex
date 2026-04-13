@@ -221,8 +221,8 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
 
   defp build_chart_jsons(daily_trends) do
     labels = Enum.map(daily_trends, &short_date(&1["date"]))
-    clicks = Enum.map(daily_trends, &to_num(&1["clicks"]))
-    impressions = Enum.map(daily_trends, &to_num(&1["impressions"]))
+    clicks = Enum.map(daily_trends, &to_num(&1["total_clicks"]))
+    impressions = Enum.map(daily_trends, &to_num(&1["total_impressions"]))
     ctr = Enum.map(daily_trends, &to_float(&1["ctr"]))
     position = Enum.map(daily_trends, &to_float(&1["avg_position"]))
 
@@ -337,7 +337,7 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
         datasets: [
           %{
             label: "Clicks",
-            data: Enum.map(timeseries, &to_num(&1["clicks"])),
+            data: Enum.map(timeseries, &to_num(&1["total_clicks"])),
             type: "line",
             color: "#4338ca",
             fill: true
@@ -351,7 +351,7 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
         datasets: [
           %{
             label: "Impressions",
-            data: Enum.map(timeseries, &to_num(&1["impressions"])),
+            data: Enum.map(timeseries, &to_num(&1["total_impressions"])),
             type: "line",
             color: "#6366f1",
             fill: true
@@ -590,20 +590,18 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
   # Per-day totals across all queries. Drives the three trend charts at the
   # top of the page (clicks+impressions combo, CTR, position).
   defp query_daily_trends(site_p, days, source_filter) do
-    # FINAL on a 6M+ row search_console table with GROUP BY date was returning
-    # 0 rows (query likely exceeded ClickHouse's default 10s max_execution_time
-    # within the HTTP client but returning 200 with empty body).
-    #
-    # Dropped FINAL: search_console is ReplacingMergeTree keyed by
-    # (site_id, date, query, page, country, device, source). Dedup happens on
-    # merge; without FINAL we might over-count very briefly between syncs, but
-    # for a trend chart the per-day sums are stable enough. The raw stats card
-    # does its own FINAL aggregate for exact numbers.
+    # Aliases MUST NOT shadow column names. Previously `sum(clicks) AS clicks`
+    # made ClickHouse interpret the `sum(clicks)` inside `if(...)` as
+    # `sum(the_alias)` = nested aggregation → ILLEGAL_AGGREGATION. Use
+    # `total_clicks` / `total_impressions` (same pattern as query_stats).
+    # FINAL is also skipped here — with 6M+ rows, FINAL + GROUP BY date hit
+    # max_execution_time and silently returned an empty response. The Stats
+    # card still uses FINAL for exact aggregate numbers.
     sql = """
     SELECT
       toString(date) AS date,
-      sum(clicks) AS clicks,
-      sum(impressions) AS impressions,
+      sum(clicks) AS total_clicks,
+      sum(impressions) AS total_impressions,
       if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
       round(avg(position), 1) AS avg_position
     FROM search_console
@@ -717,12 +715,16 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
 
   # ---------------- Drawer queries ----------------
 
+  # Drawer queries: aliases use total_clicks / total_impressions to avoid
+  # the same ILLEGAL_AGGREGATION shadow that bit daily_trends. FINAL kept
+  # here because the WHERE query = X filter narrows the scan massively.
+
   defp query_drawer_timeseries(site_p, query_p, days, source_filter) do
     sql = """
     SELECT
       toString(date) AS date,
-      sum(clicks) AS clicks,
-      sum(impressions) AS impressions,
+      sum(clicks) AS total_clicks,
+      sum(impressions) AS total_impressions,
       if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
       round(avg(position), 1) AS avg_position
     FROM search_console FINAL
@@ -744,8 +746,8 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     sql = """
     SELECT
       page,
-      sum(clicks) AS clicks,
-      sum(impressions) AS impressions,
+      sum(clicks) AS total_clicks,
+      sum(impressions) AS total_impressions,
       if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
       round(avg(position), 1) AS avg_pos
     FROM search_console FINAL
@@ -754,7 +756,7 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
       AND date >= today() - #{days}
       #{source_filter}
     GROUP BY page
-    ORDER BY impressions DESC
+    ORDER BY total_impressions DESC
     LIMIT 20
     """
 
@@ -768,8 +770,8 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     sql = """
     SELECT
       device,
-      sum(clicks) AS clicks,
-      sum(impressions) AS impressions,
+      sum(clicks) AS total_clicks,
+      sum(impressions) AS total_impressions,
       if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
       round(avg(position), 1) AS avg_pos
     FROM search_console FINAL
@@ -779,7 +781,7 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
       AND device != ''
       #{source_filter}
     GROUP BY device
-    ORDER BY impressions DESC
+    ORDER BY total_impressions DESC
     """
 
     case ClickHouse.query(sql) do
@@ -792,8 +794,8 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     sql = """
     SELECT
       country,
-      sum(clicks) AS clicks,
-      sum(impressions) AS impressions,
+      sum(clicks) AS total_clicks,
+      sum(impressions) AS total_impressions,
       if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
       round(avg(position), 1) AS avg_pos
     FROM search_console FINAL
@@ -803,7 +805,7 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
       AND country != ''
       #{source_filter}
     GROUP BY country
-    ORDER BY impressions DESC
+    ORDER BY total_impressions DESC
     LIMIT 10
     """
 
@@ -1429,9 +1431,9 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                         <td class="py-1.5 text-indigo-700 truncate max-w-xs">
                           {extract_path(p["page"])}
                         </td>
-                        <td class="text-right py-1.5">{format_number(to_num(p["clicks"]))}</td>
+                        <td class="text-right py-1.5">{format_number(to_num(p["total_clicks"]))}</td>
                         <td class="text-right py-1.5 text-gray-600">
-                          {format_number(to_num(p["impressions"]))}
+                          {format_number(to_num(p["total_impressions"]))}
                         </td>
                         <td class="text-right py-1.5 text-gray-600">{p["ctr"]}%</td>
                         <td class={"text-right py-1.5 " <> position_color(to_float(p["avg_pos"]))}>
@@ -1462,9 +1464,9 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                     <%= for d <- @drawer_devices do %>
                       <tr class="border-b border-gray-50">
                         <td class="py-1.5 capitalize text-gray-900">{d["device"]}</td>
-                        <td class="text-right py-1.5">{format_number(to_num(d["clicks"]))}</td>
+                        <td class="text-right py-1.5">{format_number(to_num(d["total_clicks"]))}</td>
                         <td class="text-right py-1.5 text-gray-600">
-                          {format_number(to_num(d["impressions"]))}
+                          {format_number(to_num(d["total_impressions"]))}
                         </td>
                         <td class="text-right py-1.5 text-gray-600">{d["ctr"]}%</td>
                         <td class={"text-right py-1.5 " <> position_color(to_float(d["avg_pos"]))}>
@@ -1495,9 +1497,9 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                     <%= for c <- @drawer_countries do %>
                       <tr class="border-b border-gray-50">
                         <td class="py-1.5 uppercase text-gray-900">{c["country"]}</td>
-                        <td class="text-right py-1.5">{format_number(to_num(c["clicks"]))}</td>
+                        <td class="text-right py-1.5">{format_number(to_num(c["total_clicks"]))}</td>
                         <td class="text-right py-1.5 text-gray-600">
-                          {format_number(to_num(c["impressions"]))}
+                          {format_number(to_num(c["total_impressions"]))}
                         </td>
                         <td class="text-right py-1.5 text-gray-600">{c["ctr"]}%</td>
                         <td class={"text-right py-1.5 " <> position_color(to_float(c["avg_pos"]))}>
