@@ -1575,8 +1575,92 @@ defmodule Spectabas.Analytics do
   end
 
   @doc """
-  Top bot user agents.
+  Per-user-agent bot details: full UA, parsed browser/os/device, unique
+  visitors, first/last seen, and top pages hit. Used by the Bot Traffic
+  page modal when the user clicks a UA row.
   """
+  def bot_ua_details(%Site{} = site, %User{} = user, user_agent, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      site_p = ClickHouse.param(site.id)
+      ua_p = ClickHouse.param(user_agent)
+      from_p = ClickHouse.param(format_datetime(date_range.from))
+      to_p = ClickHouse.param(format_datetime(date_range.to))
+      tz = tz_sql(site)
+
+      summary_sql = """
+      SELECT
+        count() AS hits,
+        uniq(visitor_id) AS unique_visitors,
+        uniq(ip_address) AS unique_ips,
+        toTimezone(min(timestamp), #{tz}) AS first_seen,
+        toTimezone(max(timestamp), #{tz}) AS last_seen,
+        any(browser) AS browser,
+        any(os) AS os,
+        any(device_type) AS device_type,
+        any(ip_asn_org) AS asn_org
+      FROM events
+      WHERE site_id = #{site_p}
+        AND timestamp >= #{from_p}
+        AND timestamp <= #{to_p}
+        AND user_agent = #{ua_p}
+        AND ip_is_bot = 1
+      """
+
+      pages_sql = """
+      SELECT url_path, count() AS hits
+      FROM events
+      WHERE site_id = #{site_p}
+        AND timestamp >= #{from_p}
+        AND timestamp <= #{to_p}
+        AND user_agent = #{ua_p}
+        AND ip_is_bot = 1
+        AND event_type = 'pageview'
+        AND url_path != ''
+      GROUP BY url_path
+      ORDER BY hits DESC
+      LIMIT 10
+      """
+
+      ips_sql = """
+      SELECT ip_address, any(ip_country) AS country, any(ip_asn_org) AS asn_org,
+        count() AS hits
+      FROM events
+      WHERE site_id = #{site_p}
+        AND timestamp >= #{from_p}
+        AND timestamp <= #{to_p}
+        AND user_agent = #{ua_p}
+        AND ip_is_bot = 1
+        AND ip_address != ''
+      GROUP BY ip_address
+      ORDER BY hits DESC
+      LIMIT 10
+      """
+
+      summary =
+        case ClickHouse.query(summary_sql) do
+          {:ok, [row | _]} -> row
+          _ -> %{}
+        end
+
+      pages =
+        case ClickHouse.query(pages_sql) do
+          {:ok, rows} -> rows
+          _ -> []
+        end
+
+      ips =
+        case ClickHouse.query(ips_sql) do
+          {:ok, rows} -> rows
+          _ -> []
+        end
+
+      {:ok, %{summary: summary, pages: pages, ips: ips}}
+    end
+  end
+
+  @doc "Top bot user agents by hit count."
   def bot_top_user_agents(%Site{} = site, %User{} = user, date_range) do
     date_range = ensure_date_range(date_range)
 
@@ -3430,24 +3514,33 @@ defmodule Spectabas.Analytics do
   """
   def visitor_log(site, user, date_range, opts \\ [])
 
+  @visitor_log_sort_cols ~w(last_seen first_seen pageviews duration)
+  @visitor_log_sort_dirs ~w(asc desc)
+
   def visitor_log(%Site{} = site, %User{} = user, date_range, opts) do
     date_range = ensure_date_range(date_range)
     seg = segment_sql(opts)
     per_page = opts |> Keyword.get(:per_page, 50) |> min(200) |> max(1)
-    cursor = Keyword.get(opts, :cursor, nil)
+    page = opts |> Keyword.get(:page, 0) |> max(0) |> min(1000)
 
-    cursor_clause =
-      case cursor do
-        %{"last_seen" => ts, "visitor_id" => vid} when is_binary(ts) and is_binary(vid) ->
-          "HAVING (last_seen, visitor_id) < (#{ClickHouse.param(ts)}, #{ClickHouse.param(vid)})"
+    sort_by =
+      case Keyword.get(opts, :sort_by, "last_seen") do
+        s when s in @visitor_log_sort_cols -> s
+        _ -> "last_seen"
+      end
 
-        _ ->
-          ""
+    sort_dir =
+      case Keyword.get(opts, :sort_dir, "desc") do
+        d when d in @visitor_log_sort_dirs -> d
+        _ -> "desc"
       end
 
     with :ok <- authorize(site, user) do
       tz = tz_sql(site)
+      offset = page * per_page
 
+      # Tie-break on visitor_id DESC so page boundaries are deterministic
+      # across sort changes (and identical values).
       sql = """
       SELECT
         visitor_id,
@@ -3472,26 +3565,13 @@ defmodule Spectabas.Analytics do
         AND ip_is_bot = 0
         #{seg}
       GROUP BY visitor_id
-      #{cursor_clause}
-      ORDER BY last_seen DESC
-      LIMIT #{ClickHouse.param(per_page)}
+      ORDER BY #{sort_by} #{String.upcase(sort_dir)}, visitor_id DESC
+      LIMIT #{per_page} OFFSET #{offset}
       """
 
       case ClickHouse.query(sql) do
-        {:ok, rows} ->
-          next_cursor =
-            case List.last(rows) do
-              nil ->
-                nil
-
-              last_row ->
-                %{"last_seen" => last_row["last_seen"], "visitor_id" => last_row["visitor_id"]}
-            end
-
-          {:ok, rows, next_cursor}
-
-        error ->
-          error
+        {:ok, rows} -> {:ok, rows}
+        error -> error
       end
     end
   end

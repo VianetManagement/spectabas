@@ -8,6 +8,9 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
   import Spectabas.TypeHelpers
   import SpectabasWeb.Dashboard.DateHelpers
 
+  @per_page 30
+  @sortable_cols ~w(last_seen first_seen pageviews duration)
+
   @impl true
   def mount(%{"site_id" => site_id} = params, _session, socket) do
     user = socket.assigns.current_scope.user
@@ -34,9 +37,9 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
        |> assign(:site, site)
        |> assign(:user, user)
        |> assign(:date_range, "7d")
-       |> assign(:cursor, nil)
-       |> assign(:cursor_stack, [])
-       |> assign(:next_cursor, nil)
+       |> assign(:page, 0)
+       |> assign(:sort_by, "last_seen")
+       |> assign(:sort_dir, "desc")
        |> assign(:segment, segment)
        |> assign(:ip_search, ip_search)
        |> assign(:ip_results, nil)
@@ -50,35 +53,37 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
     {:noreply,
      socket
      |> assign(:date_range, range)
-     |> assign(:cursor, nil)
-     |> assign(:cursor_stack, [])
-     |> assign(:next_cursor, nil)
+     |> assign(:page, 0)
      |> load_data()}
   end
 
-  def handle_event("next_page", _params, socket) do
-    # Push current cursor onto stack for back navigation, advance to next_cursor
-    stack = [socket.assigns.cursor | socket.assigns.cursor_stack]
+  def handle_event("sort", %{"col" => col}, socket) when col in @sortable_cols do
+    # Clicking the current sort column toggles direction; clicking a different
+    # one switches to it with the "most useful" default (desc for all columns
+    # — top pageviews, most recent last_seen, longest duration, etc.).
+    new_dir =
+      cond do
+        col == socket.assigns.sort_by and socket.assigns.sort_dir == "desc" -> "asc"
+        col == socket.assigns.sort_by -> "desc"
+        true -> "desc"
+      end
 
     {:noreply,
      socket
-     |> assign(:cursor_stack, stack)
-     |> assign(:cursor, socket.assigns.next_cursor)
+     |> assign(:sort_by, col)
+     |> assign(:sort_dir, new_dir)
+     |> assign(:page, 0)
      |> load_data()}
   end
 
-  def handle_event("prev_page", _params, socket) do
-    case socket.assigns.cursor_stack do
-      [prev_cursor | rest] ->
-        {:noreply,
-         socket
-         |> assign(:cursor, prev_cursor)
-         |> assign(:cursor_stack, rest)
-         |> load_data()}
+  def handle_event("sort", _params, socket), do: {:noreply, socket}
 
-      [] ->
-        {:noreply, socket}
-    end
+  def handle_event("next_page", _params, socket) do
+    {:noreply, socket |> assign(:page, socket.assigns.page + 1) |> load_data()}
+  end
+
+  def handle_event("prev_page", _params, socket) do
+    {:noreply, socket |> assign(:page, max(socket.assigns.page - 1, 0)) |> load_data()}
   end
 
   def handle_event("search_ip", %{"ip" => ip}, socket) do
@@ -113,17 +118,26 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
   end
 
   defp load_data(socket) do
-    %{site: site, user: user, date_range: range, cursor: cursor, segment: segment} =
-      socket.assigns
+    %{
+      site: site,
+      user: user,
+      date_range: range,
+      page: page,
+      sort_by: sort_by,
+      sort_dir: sort_dir,
+      segment: segment
+    } = socket.assigns
 
-    {visitors, next_cursor} =
+    visitors =
       case Analytics.visitor_log(site, user, range_to_period(range),
-             cursor: cursor,
-             per_page: 30,
+             page: page,
+             per_page: @per_page,
+             sort_by: sort_by,
+             sort_dir: sort_dir,
              segment: segment
            ) do
-        {:ok, rows, next_cur} -> {rows, next_cur}
-        _ -> {[], nil}
+        {:ok, rows} -> rows
+        _ -> []
       end
 
     # Enrich with emails from Postgres
@@ -137,9 +151,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
         end
       end)
 
-    socket
-    |> assign(:visitors, visitors)
-    |> assign(:next_cursor, next_cursor)
+    assign(socket, :visitors, visitors)
   end
 
   @impl true
@@ -306,9 +318,19 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Intent
                 </th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pages</th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Duration
+                <th
+                  class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-indigo-700 select-none"
+                  phx-click="sort"
+                  phx-value-col="pageviews"
+                >
+                  Pages {sort_arrow("pageviews", @sort_by, @sort_dir)}
+                </th>
+                <th
+                  class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-indigo-700 select-none"
+                  phx-click="sort"
+                  phx-value-col="duration"
+                >
+                  Duration {sort_arrow("duration", @sort_by, @sort_dir)}
                 </th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Location
@@ -322,11 +344,18 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
                   Entry
                 </th>
+                <th
+                  class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-indigo-700 select-none"
+                  phx-click="sort"
+                  phx-value-col="last_seen"
+                >
+                  Last Seen {sort_arrow("last_seen", @sort_by, @sort_dir)}
+                </th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200">
               <tr :if={@visitors == []}>
-                <td colspan="8" class="px-4 py-8 text-center text-gray-500">
+                <td colspan="9" class="px-4 py-8 text-center text-gray-500">
                   No visitors for this period.
                 </td>
               </tr>
@@ -402,6 +431,9 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
                     {v["entry_page"]}
                   </.link>
                 </td>
+                <td class="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
+                  {v["last_seen"]}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -409,15 +441,16 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
 
         <div class="flex items-center justify-between mt-4">
           <button
-            :if={@cursor_stack != []}
+            :if={@page > 0}
             phx-click="prev_page"
             class="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50"
           >
             &larr; Previous
           </button>
-          <span :if={@cursor_stack == []} />
+          <span :if={@page == 0}></span>
+          <span class="text-xs text-gray-500">Page {@page + 1}</span>
           <button
-            :if={@next_cursor != nil and length(@visitors) == 30}
+            :if={length(@visitors) == 30}
             phx-click="next_page"
             class="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50"
           >
@@ -427,6 +460,14 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
       </div>
     </.dashboard_layout>
     """
+  end
+
+  defp sort_arrow(col, sort_by, sort_dir) do
+    cond do
+      col != sort_by -> ""
+      sort_dir == "desc" -> "\u25BC"
+      true -> "\u25B2"
+    end
   end
 
   defp intent_pill("buying"), do: "bg-green-100 text-green-800"

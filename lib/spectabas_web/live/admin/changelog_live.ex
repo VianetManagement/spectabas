@@ -53,6 +53,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.28.0", "2026-04-14T03:30:00Z",
+       [
+         %{
+           title: "Feat: Bot Traffic — click user agent to see full details",
+           description:
+             "Top Bot User Agents rows are now clickable. Modal shows the full user agent string (no truncation), parsed browser/OS/device type, network/ASN org, hit counts, unique visitor + IP counts, first/last seen timestamps, top 10 pages targeted, and top 10 IPs (each linking to the IP profile page). New Analytics.bot_ua_details/4 query."
+         },
+         %{
+           title: "Feat: Visitor Log — sortable columns",
+           description:
+             "Pages, Duration, and Last Seen column headers are now clickable to sort. Click toggles direction; switching columns defaults to descending (so 'Pages' defaults to most-pages-first, the most useful view). Added a Last Seen column to the table. Pagination switched from cursor to offset-based so sorting works correctly across pages."
+         }
+       ]},
       {"v5.27.2", "2026-04-14T02:45:00Z",
        [
          %{

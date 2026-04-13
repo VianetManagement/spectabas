@@ -22,6 +22,8 @@ defmodule SpectabasWeb.Dashboard.BotTrafficLive do
        |> assign(:site, site)
        |> assign(:user, user)
        |> assign(:date_range, "7d")
+       |> assign(:modal_ua, nil)
+       |> assign(:modal_details, nil)
        |> load_data()}
     end
   end
@@ -29,6 +31,46 @@ defmodule SpectabasWeb.Dashboard.BotTrafficLive do
   @impl true
   def handle_event("change_range", %{"range" => range}, socket) do
     {:noreply, socket |> assign(:date_range, range) |> load_data()}
+  end
+
+  # Open the UA details modal. UA strings are looked up from the current
+  # @top_uas assign via an index (they can contain any character and are too
+  # long to round-trip through a phx-value attribute safely).
+  def handle_event("open_ua", %{"idx" => idx_str}, socket) do
+    case Integer.parse(idx_str) do
+      {idx, _} ->
+        ua =
+          socket.assigns.top_uas
+          |> Enum.at(idx, %{})
+          |> Map.get("user_agent")
+
+        if is_binary(ua) and ua != "" do
+          details =
+            case Analytics.bot_ua_details(
+                   socket.assigns.site,
+                   socket.assigns.user,
+                   ua,
+                   range_to_period(socket.assigns.date_range)
+                 ) do
+              {:ok, d} -> d
+              _ -> %{summary: %{}, pages: [], ips: []}
+            end
+
+          {:noreply,
+           socket
+           |> assign(:modal_ua, ua)
+           |> assign(:modal_details, details)}
+        else
+          {:noreply, socket}
+        end
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
+  def handle_event("close_ua", _params, socket) do
+    {:noreply, socket |> assign(:modal_ua, nil) |> assign(:modal_details, nil)}
   end
 
   defp load_data(socket) do
@@ -173,7 +215,9 @@ defmodule SpectabasWeb.Dashboard.BotTrafficLive do
           <div class="bg-white rounded-lg shadow overflow-x-auto">
             <div class="px-6 py-4 border-b border-gray-100">
               <h3 class="font-semibold text-gray-900">Top Bot User Agents</h3>
-              <p class="text-xs text-gray-500 mt-0.5">Most common bot signatures</p>
+              <p class="text-xs text-gray-500 mt-0.5">
+                Click a row to see full user agent and targeting details.
+              </p>
             </div>
             <table class="min-w-full divide-y divide-gray-200">
               <thead class="bg-gray-50">
@@ -192,7 +236,12 @@ defmodule SpectabasWeb.Dashboard.BotTrafficLive do
                     No bot user agents detected.
                   </td>
                 </tr>
-                <tr :for={ua <- @top_uas} class="hover:bg-gray-50">
+                <tr
+                  :for={{ua, idx} <- Enum.with_index(@top_uas)}
+                  class="hover:bg-indigo-50 cursor-pointer"
+                  phx-click="open_ua"
+                  phx-value-idx={idx}
+                >
                   <td
                     class="px-6 py-3 text-xs text-gray-700 font-mono truncate max-w-sm"
                     title={ua["user_agent"]}
@@ -208,7 +257,176 @@ defmodule SpectabasWeb.Dashboard.BotTrafficLive do
           </div>
         </div>
       </div>
+
+      <%!-- User Agent details modal --%>
+      <%= if @modal_ua do %>
+        <div
+          class="fixed inset-0 bg-gray-900/50 z-40"
+          phx-click="close_ua"
+          aria-hidden="true"
+        >
+        </div>
+        <div class="fixed inset-0 z-50 flex items-start justify-center pt-10 pb-10 px-4 overflow-y-auto pointer-events-none">
+          <div class="bg-white rounded-lg shadow-2xl max-w-3xl w-full pointer-events-auto">
+            <div class="px-6 py-4 border-b border-gray-200 flex items-start justify-between">
+              <div>
+                <h3 class="text-lg font-semibold text-gray-900">User Agent Details</h3>
+                <p class="text-xs text-gray-500 mt-0.5">
+                  Bot traffic details for the selected signature in the {@date_range} window.
+                </p>
+              </div>
+              <button
+                phx-click="close_ua"
+                class="shrink-0 text-gray-400 hover:text-gray-700 text-xl"
+                aria-label="Close"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div class="px-6 py-4 space-y-5">
+              <%!-- Full UA string --%>
+              <div>
+                <h4 class="text-xs font-semibold text-gray-500 uppercase mb-1">User Agent</h4>
+                <div class="bg-gray-50 border border-gray-200 rounded p-3 text-xs font-mono text-gray-800 break-all">
+                  {@modal_ua}
+                </div>
+              </div>
+
+              <%!-- Summary grid --%>
+              <% s = @modal_details[:summary] || %{} %>
+              <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div>
+                  <div class="text-xs text-gray-500">Hits</div>
+                  <div class="text-lg font-semibold text-gray-900">
+                    {format_number(to_num(s["hits"]))}
+                  </div>
+                </div>
+                <div>
+                  <div class="text-xs text-gray-500">Unique Visitors</div>
+                  <div class="text-lg font-semibold text-gray-900">
+                    {format_number(to_num(s["unique_visitors"]))}
+                  </div>
+                </div>
+                <div>
+                  <div class="text-xs text-gray-500">Unique IPs</div>
+                  <div class="text-lg font-semibold text-gray-900">
+                    {format_number(to_num(s["unique_ips"]))}
+                  </div>
+                </div>
+                <div>
+                  <div class="text-xs text-gray-500">Browser</div>
+                  <div class="text-sm text-gray-800">
+                    {blank_to_dash(s["browser"])}
+                  </div>
+                </div>
+                <div>
+                  <div class="text-xs text-gray-500">OS</div>
+                  <div class="text-sm text-gray-800">
+                    {blank_to_dash(s["os"])}
+                  </div>
+                </div>
+                <div>
+                  <div class="text-xs text-gray-500">Device Type</div>
+                  <div class="text-sm text-gray-800">
+                    {blank_to_dash(s["device_type"])}
+                  </div>
+                </div>
+                <div class="col-span-2 sm:col-span-3">
+                  <div class="text-xs text-gray-500">Network</div>
+                  <div class="text-sm text-gray-800">
+                    {blank_to_dash(s["asn_org"])}
+                  </div>
+                </div>
+                <div>
+                  <div class="text-xs text-gray-500">First Seen</div>
+                  <div class="text-sm text-gray-800">{blank_to_dash(s["first_seen"])}</div>
+                </div>
+                <div>
+                  <div class="text-xs text-gray-500">Last Seen</div>
+                  <div class="text-sm text-gray-800">{blank_to_dash(s["last_seen"])}</div>
+                </div>
+              </div>
+
+              <%!-- Top pages --%>
+              <div>
+                <h4 class="text-xs font-semibold text-gray-500 uppercase mb-2">
+                  Top Pages Targeted
+                </h4>
+                <%= if @modal_details[:pages] == [] do %>
+                  <p class="text-sm text-gray-500 italic">No pageviews recorded for this UA.</p>
+                <% else %>
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="text-gray-600 border-b border-gray-200">
+                        <th class="text-left py-1 font-medium">Page</th>
+                        <th class="text-right py-1 font-medium">Hits</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <%= for p <- @modal_details[:pages] do %>
+                        <tr class="border-b border-gray-50">
+                          <td class="py-1.5 text-indigo-700 font-mono truncate max-w-md">
+                            {p["url_path"]}
+                          </td>
+                          <td class="text-right py-1.5 text-gray-700 tabular-nums">
+                            {format_number(to_num(p["hits"]))}
+                          </td>
+                        </tr>
+                      <% end %>
+                    </tbody>
+                  </table>
+                <% end %>
+              </div>
+
+              <%!-- Top IPs --%>
+              <div>
+                <h4 class="text-xs font-semibold text-gray-500 uppercase mb-2">Top IPs</h4>
+                <%= if @modal_details[:ips] == [] do %>
+                  <p class="text-sm text-gray-500 italic">No IP data.</p>
+                <% else %>
+                  <table class="w-full text-sm">
+                    <thead>
+                      <tr class="text-gray-600 border-b border-gray-200">
+                        <th class="text-left py-1 font-medium">IP</th>
+                        <th class="text-left py-1 font-medium">Country</th>
+                        <th class="text-left py-1 font-medium">Network</th>
+                        <th class="text-right py-1 font-medium">Hits</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <%= for ip <- @modal_details[:ips] do %>
+                        <tr class="border-b border-gray-50">
+                          <td class="py-1.5 font-mono text-xs">
+                            <.link
+                              navigate={~p"/dashboard/sites/#{@site.id}/ip/#{ip["ip_address"]}"}
+                              class="text-indigo-600 hover:text-indigo-800"
+                            >
+                              {ip["ip_address"]}
+                            </.link>
+                          </td>
+                          <td class="py-1.5 text-gray-700">{blank_to_dash(ip["country"])}</td>
+                          <td class="py-1.5 text-gray-600 truncate max-w-xs">
+                            {blank_to_dash(ip["asn_org"])}
+                          </td>
+                          <td class="text-right py-1.5 text-gray-700 tabular-nums">
+                            {format_number(to_num(ip["hits"]))}
+                          </td>
+                        </tr>
+                      <% end %>
+                    </tbody>
+                  </table>
+                <% end %>
+              </div>
+            </div>
+          </div>
+        </div>
+      <% end %>
     </.dashboard_layout>
     """
   end
+
+  defp blank_to_dash(nil), do: "—"
+  defp blank_to_dash(""), do: "—"
+  defp blank_to_dash(v), do: v
 end
