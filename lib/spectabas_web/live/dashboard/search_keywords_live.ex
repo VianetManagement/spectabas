@@ -121,26 +121,63 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     order = "#{sort_by} #{sort_dir}"
 
     # Fire all queries in parallel. Each returns its own assign key → value.
+    # timed/2 logs the elapsed time so we can spot slow/timing-out queries.
     tasks = [
-      Task.async(fn -> {:stats, query_stats(site_p, days, source_filter)} end),
-      Task.async(fn -> {:queries, query_top_queries(site_p, days, source_filter, order)} end),
-      Task.async(fn -> {:pages, query_top_pages(site_p, days, source_filter, order)} end),
-      Task.async(fn -> {:ranking_changes, query_ranking_changes(site_p, source_filter)} end),
       Task.async(fn ->
-        {:opportunity_queue, query_opportunity_queue(site_p, days, source_filter)}
+        {:stats, timed("stats", fn -> query_stats(site_p, days, source_filter) end)}
       end),
-      Task.async(fn -> {:new_keywords, query_new_keywords(site_p, source_filter)} end),
-      Task.async(fn -> {:lost_keywords, query_lost_keywords(site_p, source_filter)} end),
-      Task.async(fn -> {:pos_dist, query_pos_distribution(site_p, days, source_filter)} end),
-      Task.async(fn -> {:daily_trends, query_daily_trends(site_p, days, source_filter)} end),
-      Task.async(fn -> {:cannibalization, query_cannibalization(site_p, days, source_filter)} end)
+      Task.async(fn ->
+        {:queries,
+         timed("queries", fn -> query_top_queries(site_p, days, source_filter, order) end)}
+      end),
+      Task.async(fn ->
+        {:pages, timed("pages", fn -> query_top_pages(site_p, days, source_filter, order) end)}
+      end),
+      Task.async(fn ->
+        {:ranking_changes,
+         timed("ranking_changes", fn -> query_ranking_changes(site_p, source_filter) end)}
+      end),
+      Task.async(fn ->
+        {:opportunity_queue,
+         timed("opportunity_queue", fn -> query_opportunity_queue(site_p, days, source_filter) end)}
+      end),
+      Task.async(fn ->
+        {:new_keywords,
+         timed("new_keywords", fn -> query_new_keywords(site_p, source_filter) end)}
+      end),
+      Task.async(fn ->
+        {:lost_keywords,
+         timed("lost_keywords", fn -> query_lost_keywords(site_p, source_filter) end)}
+      end),
+      Task.async(fn ->
+        {:pos_dist,
+         timed("pos_dist", fn -> query_pos_distribution(site_p, days, source_filter) end)}
+      end),
+      Task.async(fn ->
+        {:daily_trends,
+         timed("daily_trends", fn -> query_daily_trends(site_p, days, source_filter) end)}
+      end),
+      Task.async(fn ->
+        {:cannibalization,
+         timed("cannibalization", fn -> query_cannibalization(site_p, days, source_filter) end)}
+      end)
     ]
 
     results =
       Enum.reduce(tasks, %{}, fn task, acc ->
-        case Task.yield(task, 15_000) || Task.shutdown(task) do
-          {:ok, {key, value}} -> Map.put(acc, key, value)
-          _ -> acc
+        case Task.yield(task, 30_000) || Task.shutdown(task) do
+          {:ok, {key, value}} ->
+            if key == :daily_trends do
+              require Logger
+              Logger.notice("[SearchKeywords] daily_trends returned #{length(value)} rows")
+            end
+
+            Map.put(acc, key, value)
+
+          _ ->
+            require Logger
+            Logger.warning("[SearchKeywords] task timed out")
+            acc
         end
       end)
 
@@ -219,6 +256,20 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
       })
 
     {ci, ctr_json, pos_json}
+  end
+
+  # Times a query and logs how long it took (anything over 1s is notable).
+  defp timed(name, fun) do
+    t0 = System.monotonic_time(:millisecond)
+    result = fun.()
+    ms = System.monotonic_time(:millisecond) - t0
+
+    if ms >= 1000 do
+      require Logger
+      Logger.notice("[SearchKeywords:slow] #{name} took=#{ms}ms")
+    end
+
+    result
   end
 
   # Per-query sparkline JSON lookup (called from the template).

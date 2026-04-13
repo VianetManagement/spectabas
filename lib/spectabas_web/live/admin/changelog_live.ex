@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.26.4", "2026-04-13T23:00:00Z",
+       [
+         %{
+           title: "Diag: Search Keywords query timing + row counts",
+           description:
+             "Each SearchKeywords load_data query now logs [SearchKeywords:slow] name took=Xms when it exceeds 1 second, and daily_trends always logs its returned row count. Also bumped the per-task timeout from 15s to 30s since FINAL on search_console with 6.8M+ rows + GROUP BY date can be heavy on larger sites."
+         }
+       ]},
       {"v5.26.3", "2026-04-13T22:30:00Z",
        [
          %{
