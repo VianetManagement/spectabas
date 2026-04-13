@@ -53,6 +53,24 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.23.0", "2026-04-13T18:30:00Z",
+       [
+         %{
+           title: "Perf: Progressive dashboard — cards appear as queries finish",
+           description:
+             "Previously the dashboard waited for the slowest deferred query (often 8-9s for identified_users, 7s for entry_pages) before rendering ANY of the cards below the chart. Refactored to fire-and-forget tasks that send each result back as it completes — Top Pages, Top Sources, map, etc. pop in independently between 0.5s and 7s. The LiveView remains interactive while cards load. Stale results are dropped when you change ranges mid-load."
+         },
+         %{
+           title: "Perf: identified_users card 1000x faster",
+           description:
+             "The identified users count was doing SELECT DISTINCT visitor_id over millions of raw events in ClickHouse, then shipping the entire list through a Postgres IN ($1,$2,…,$N) clause. Replaced with a pure Postgres range scan on a new partial index (visitors_identified_by_site_last_seen_idx) — 8-9 seconds becomes microseconds."
+         },
+         %{
+           title: "Diag: Dashboard:slow log tag",
+           description:
+             "Added timing instrumentation to every critical and deferred dashboard query. Queries over 500ms log at notice level with the prefix [Dashboard:slow] and include the query name, site id, date range, and duration. Makes it easy to identify slow dashboard queries from Render/AppSignal logs."
+         }
+       ]},
       {"v5.22.2", "2026-04-13T18:00:00Z",
        [
          %{

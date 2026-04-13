@@ -34,6 +34,24 @@ defmodule Spectabas.Visitors do
     end
   end
 
+  @doc """
+  Count identified visitors (those with an email) seen in a given time range.
+
+  Backed by the partial index `visitors_identified_by_site_last_seen_idx` —
+  a simple index range scan, microseconds even on 30-day ranges with millions
+  of visitors.
+  """
+  def count_identified_between(site_id, %DateTime{} = from, %DateTime{} = to) do
+    from(v in Visitor,
+      where:
+        v.site_id == ^site_id and v.last_seen_at >= ^from and v.last_seen_at <= ^to and
+          not is_nil(v.email) and v.email != "",
+      select: count(v.id)
+    )
+    |> Repo.one()
+    |> Kernel.||(0)
+  end
+
   @doc "Count visitors with email set, filtered to given site_id and visitor_id list."
   def count_identified(site_id, visitor_ids) when is_list(visitor_ids) do
     visitor_ids = Enum.reject(visitor_ids, &(is_nil(&1) or &1 == ""))

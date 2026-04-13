@@ -62,6 +62,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
        |> assign(:identified_users, 0)
        |> assign(:stats_cache, %{})
        |> assign(:deferred_loaded, false)
+       |> assign(:deferred_pending, 0)
        |> load_critical_stats()
        |> then(fn s ->
          if connected?(s), do: send(self(), :load_deferred)
@@ -80,10 +81,38 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   end
 
   def handle_info(:load_deferred, socket) do
-    socket = load_deferred_stats(socket)
-    # Cache the now-complete stats for this range
-    key = stats_cache_key(socket)
-    {:noreply, cache_stats(socket, key)}
+    {:noreply, start_deferred_stats(socket)}
+  end
+
+  # Each deferred query sends its result here as it completes. The card
+  # updates progressively — no waiting for the slowest query. The
+  # stats_cache_key guard drops stale results when the user switches ranges
+  # while queries are still in flight.
+  def handle_info({:deferred_result, key, value, for_cache_key}, socket) do
+    if for_cache_key != stats_cache_key(socket) do
+      # User navigated to a different range — discard the late result.
+      {:noreply, socket}
+    else
+      socket = assign(socket, key, value)
+
+      pending = max((socket.assigns[:deferred_pending] || 0) - 1, 0)
+
+      socket =
+        socket
+        |> assign(:deferred_pending, pending)
+        |> maybe_push_location_chart_data(key)
+
+      socket =
+        if pending == 0 do
+          socket
+          |> assign(:deferred_loaded, true)
+          |> cache_stats(for_cache_key)
+        else
+          socket
+        end
+
+      {:noreply, socket}
+    end
   end
 
   def handle_info({:new_event, _event}, socket) do
@@ -300,23 +329,44 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
                      top_regions top_browsers top_os entry_pages locations timezones
                      intents ecommerce identified_users)a
 
-  # Full reload — checks cache first, falls back to queries
+  # Full reload — checks cache first, falls back to queries.
+  # On cache miss, critical stats load synchronously (fast: stats_fast + rollup)
+  # and deferred stats start asynchronously — each card appears as its query
+  # completes, so the user never waits for the slowest card before seeing
+  # anything. Cache entry is written by handle_info when the last deferred
+  # result arrives.
   defp load_stats(socket) do
     key = stats_cache_key(socket)
 
     case Map.get(socket.assigns.stats_cache, key) do
       nil ->
-        # Cache miss — query and cache
         socket
+        |> reset_deferred_assigns()
         |> load_critical_stats()
-        |> load_deferred_stats()
-        |> cache_stats(key)
+        |> start_deferred_stats()
 
       cached ->
-        # Cache hit — restore assigns and push chart events
         socket
         |> restore_from_cache(cached)
     end
+  end
+
+  # Clear deferred assigns to their "loading" state so cards show a spinner
+  # between range changes instead of stale data from the previous range.
+  defp reset_deferred_assigns(socket) do
+    socket
+    |> assign(:top_pages, nil)
+    |> assign(:top_sources, nil)
+    |> assign(:top_regions, nil)
+    |> assign(:top_browsers, nil)
+    |> assign(:top_os, nil)
+    |> assign(:entry_pages, nil)
+    |> assign(:locations, [])
+    |> assign(:timezones, [])
+    |> assign(:intents, nil)
+    |> assign(:ecommerce, nil)
+    |> assign(:identified_users, 0)
+    |> assign(:deferred_loaded, false)
   end
 
   defp stats_cache_key(socket) do
@@ -424,123 +474,134 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     )
   end
 
-  # Slow path: all the data cards, map, timezones
-  # Runs all 9 queries in parallel for ~3x faster load vs sequential.
-  defp load_deferred_stats(socket) do
+  # Slow path: all the data cards, map, timezones.
+  # Spawns each query as an unlinked Task that sends its result back via
+  # {:deferred_result, assign_key, value, cache_key} — the LiveView renders
+  # each card as soon as its query completes, instead of waiting for the
+  # slowest one. cache_key lets handle_info drop stale results when the user
+  # changes ranges while queries are still in flight.
+  defp start_deferred_stats(socket) do
     %{site: site, user: user} = socket.assigns
     {date_range, seg_opts} = date_range_and_opts(socket)
+    cache_key = stats_cache_key(socket)
+    lv_pid = self()
 
     days_in_range = Date.diff(socket.assigns.date_to, socket.assigns.date_from)
 
-    # Launch all queries in parallel
-    tasks = %{
-      top_pages:
-        Task.async(fn ->
-          timed("top_pages", site.id, days_in_range, fn ->
-            safe_query(fn -> Analytics.top_pages(site, user, date_range, seg_opts) end)
-            |> Enum.take(5)
-          end)
-        end),
-      top_sources:
-        Task.async(fn ->
-          timed("top_sources", site.id, days_in_range, fn ->
-            safe_query(fn -> Analytics.top_sources(site, user, date_range) end) |> Enum.take(5)
-          end)
-        end),
-      top_regions:
-        Task.async(fn ->
-          timed("top_regions", site.id, days_in_range, fn ->
-            safe_query(fn -> Analytics.top_regions(site, user, date_range) end) |> Enum.take(5)
-          end)
-        end),
-      top_browsers:
-        Task.async(fn ->
-          timed("top_browsers", site.id, days_in_range, fn ->
-            safe_query(fn -> Analytics.top_browsers(site, user, date_range) end) |> Enum.take(5)
-          end)
-        end),
-      top_os:
-        Task.async(fn ->
-          timed("top_os", site.id, days_in_range, fn ->
-            safe_query(fn -> Analytics.top_os(site, user, date_range) end) |> Enum.take(5)
-          end)
-        end),
-      entry_pages:
-        Task.async(fn ->
-          timed("entry_pages", site.id, days_in_range, fn ->
-            safe_query(fn -> Analytics.entry_pages(site, user, date_range) end) |> Enum.take(5)
-          end)
-        end),
-      locations:
-        Task.async(fn ->
-          timed("locations", site.id, days_in_range, fn ->
-            safe_query(fn -> Analytics.visitor_locations(site, user, date_range) end)
-            |> Enum.take(50)
-          end)
-        end),
-      timezones:
-        Task.async(fn ->
-          timed("timezones", site.id, days_in_range, fn ->
-            safe_query(fn -> Analytics.timezone_distribution(site, user, date_range) end)
-            |> Enum.take(5)
-          end)
-        end),
-      intents:
-        Task.async(fn ->
-          timed("intents", site.id, days_in_range, fn ->
-            safe_query(fn -> Analytics.intent_breakdown(site, user, date_range) end)
-            |> Enum.take(10)
-          end)
-        end),
-      ecommerce:
-        if site.ecommerce_enabled do
-          Task.async(fn ->
-            timed("ecommerce", site.id, days_in_range, fn ->
-              case Analytics.ecommerce_stats(site, user, date_range) do
-                {:ok, data} -> data
-                _ -> nil
-              end
-            end)
-          end)
-        end,
-      identified_users:
-        Task.async(fn ->
-          timed("identified_users", site.id, days_in_range, fn ->
-            case Analytics.identified_visitors_count(site, user, date_range) do
-              {:ok, count} -> count
-              _ -> 0
-            end
-          end)
-        end)
-    }
+    # List of {assign_key, fallback, fn/0} for each deferred query.
+    jobs = [
+      {:top_pages, [],
+       fn ->
+         timed("top_pages", site.id, days_in_range, fn ->
+           safe_query(fn -> Analytics.top_pages(site, user, date_range, seg_opts) end)
+           |> Enum.take(5)
+         end)
+       end},
+      {:top_sources, [],
+       fn ->
+         timed("top_sources", site.id, days_in_range, fn ->
+           safe_query(fn -> Analytics.top_sources(site, user, date_range) end) |> Enum.take(5)
+         end)
+       end},
+      {:top_regions, [],
+       fn ->
+         timed("top_regions", site.id, days_in_range, fn ->
+           safe_query(fn -> Analytics.top_regions(site, user, date_range) end) |> Enum.take(5)
+         end)
+       end},
+      {:top_browsers, [],
+       fn ->
+         timed("top_browsers", site.id, days_in_range, fn ->
+           safe_query(fn -> Analytics.top_browsers(site, user, date_range) end) |> Enum.take(5)
+         end)
+       end},
+      {:top_os, [],
+       fn ->
+         timed("top_os", site.id, days_in_range, fn ->
+           safe_query(fn -> Analytics.top_os(site, user, date_range) end) |> Enum.take(5)
+         end)
+       end},
+      {:entry_pages, [],
+       fn ->
+         timed("entry_pages", site.id, days_in_range, fn ->
+           safe_query(fn -> Analytics.entry_pages(site, user, date_range) end) |> Enum.take(5)
+         end)
+       end},
+      {:locations, [],
+       fn ->
+         timed("locations", site.id, days_in_range, fn ->
+           safe_query(fn -> Analytics.visitor_locations(site, user, date_range) end)
+           |> Enum.take(50)
+         end)
+       end},
+      {:timezones, [],
+       fn ->
+         timed("timezones", site.id, days_in_range, fn ->
+           safe_query(fn -> Analytics.timezone_distribution(site, user, date_range) end)
+           |> Enum.take(5)
+         end)
+       end},
+      {:intents, [],
+       fn ->
+         timed("intents", site.id, days_in_range, fn ->
+           safe_query(fn -> Analytics.intent_breakdown(site, user, date_range) end)
+           |> Enum.take(10)
+         end)
+       end},
+      {:identified_users, 0,
+       fn ->
+         timed("identified_users", site.id, days_in_range, fn ->
+           case Analytics.identified_visitors_count(site, user, date_range) do
+             {:ok, count} -> count
+             _ -> 0
+           end
+         end)
+       end}
+    ]
 
-    # Collect results with safe yields — timeouts degrade gracefully
-    top_pages = safe_yield(tasks.top_pages, [])
-    top_sources = safe_yield(tasks.top_sources, [])
-    top_regions = safe_yield(tasks.top_regions, [])
-    top_browsers = safe_yield(tasks.top_browsers, [])
-    top_os = safe_yield(tasks.top_os, [])
-    entry_pages = safe_yield(tasks.entry_pages, [])
-    locations = safe_yield(tasks.locations, [])
-    timezones = safe_yield(tasks.timezones, [])
-    intents = safe_yield(tasks.intents, [])
-    ecommerce = if tasks.ecommerce, do: safe_yield(tasks.ecommerce, nil), else: nil
-    identified_users = safe_yield(tasks.identified_users, 0)
+    jobs =
+      if site.ecommerce_enabled do
+        jobs ++
+          [
+            {:ecommerce, nil,
+             fn ->
+               timed("ecommerce", site.id, days_in_range, fn ->
+                 case Analytics.ecommerce_stats(site, user, date_range) do
+                   {:ok, data} -> data
+                   _ -> nil
+                 end
+               end)
+             end}
+          ]
+      else
+        jobs
+      end
+
+    # Spawn each job. Results are sent back as {:deferred_result, key, value, cache_key}.
+    # Unlinked Task.start so a crash doesn't take the LiveView down.
+    Enum.each(jobs, fn {key, fallback, fun} ->
+      Task.start(fn ->
+        result =
+          try do
+            fun.()
+          rescue
+            e ->
+              require Logger
+
+              Logger.error(
+                "[Dashboard] #{key} crashed: #{Exception.format(:error, e, __STACKTRACE__)}"
+              )
+
+              fallback
+          end
+
+        send(lv_pid, {:deferred_result, key, result, cache_key})
+      end)
+    end)
 
     socket
-    |> assign(:top_pages, top_pages)
-    |> assign(:top_sources, top_sources)
-    |> assign(:top_regions, top_regions)
-    |> assign(:top_browsers, top_browsers)
-    |> assign(:top_os, top_os)
-    |> assign(:entry_pages, entry_pages)
-    |> assign(:locations, locations)
-    |> assign(:timezones, timezones)
-    |> assign(:intents, intents)
-    |> assign(:ecommerce, ecommerce)
-    |> assign(:identified_users, identified_users)
-    |> assign(:deferred_loaded, true)
-    |> push_chart_data(socket.assigns.timeseries, locations, timezones)
+    |> assign(:deferred_pending, length(jobs))
+    |> assign(:deferred_loaded, false)
   end
 
   defp fetch_overview(site, user, date_range, opts, days_in_range \\ 0) do
@@ -575,25 +636,52 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         visitors: Enum.map(timeseries, &to_num(&1["visitors"])),
         metric: socket.assigns[:chart_metric] || "visitors"
       })
-      |> push_event("map-data", %{
-        points:
-          Enum.map(locations, fn loc ->
-            %{
-              lat: to_float(loc["ip_lat"]),
-              lon: to_float(loc["ip_lon"]),
-              visitors: to_num(loc["visitors"]),
-              label: location_label(loc)
-            }
-          end)
-      })
-      |> push_event("bar-data", %{
-        labels: Enum.map(timezones, &short_tz(&1["timezone"])),
-        values: Enum.map(timezones, &to_num(&1["visitors"]))
-      })
+      |> push_map_data(locations)
+      |> push_tz_data(timezones)
     else
       socket
     end
   end
+
+  defp push_map_data(socket, locations) do
+    push_event(socket, "map-data", %{
+      points:
+        Enum.map(locations, fn loc ->
+          %{
+            lat: to_float(loc["ip_lat"]),
+            lon: to_float(loc["ip_lon"]),
+            visitors: to_num(loc["visitors"]),
+            label: location_label(loc)
+          }
+        end)
+    })
+  end
+
+  defp push_tz_data(socket, timezones) do
+    push_event(socket, "bar-data", %{
+      labels: Enum.map(timezones, &short_tz(&1["timezone"])),
+      values: Enum.map(timezones, &to_num(&1["visitors"]))
+    })
+  end
+
+  # When a deferred result arrives that feeds a chart, push just that chart's data.
+  defp maybe_push_location_chart_data(socket, :locations) do
+    if Phoenix.LiveView.connected?(socket) do
+      push_map_data(socket, socket.assigns.locations)
+    else
+      socket
+    end
+  end
+
+  defp maybe_push_location_chart_data(socket, :timezones) do
+    if Phoenix.LiveView.connected?(socket) do
+      push_tz_data(socket, socket.assigns.timezones)
+    else
+      socket
+    end
+  end
+
+  defp maybe_push_location_chart_data(socket, _key), do: socket
 
   defp preset_to_period("today", _, _), do: :day
   defp preset_to_period("yesterday", _, _), do: :day
