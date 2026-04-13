@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.26.5", "2026-04-13T23:30:00Z",
+       [
+         %{
+           title: "Fix: Search Keywords daily_trends + sparklines queries",
+           description:
+             "daily_trends and query_sparklines were dropping FINAL from the ReplacingMergeTree, which was returning 0 rows on large search_console tables (likely hitting ClickHouse's default max_execution_time mid-FINAL-merge and returning empty). Without FINAL we might briefly over-count while a sync is in flight, but the per-day sums are stable enough for a trend chart — and the big Stats card at the top still uses FINAL for exact aggregate numbers. Also added explicit {:error, _} logging so future failures are visible in logs instead of silently returning []."
+         }
+       ]},
       {"v5.26.4", "2026-04-13T23:00:00Z",
        [
          %{

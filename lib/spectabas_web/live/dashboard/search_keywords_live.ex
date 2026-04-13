@@ -590,6 +590,15 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
   # Per-day totals across all queries. Drives the three trend charts at the
   # top of the page (clicks+impressions combo, CTR, position).
   defp query_daily_trends(site_p, days, source_filter) do
+    # FINAL on a 6M+ row search_console table with GROUP BY date was returning
+    # 0 rows (query likely exceeded ClickHouse's default 10s max_execution_time
+    # within the HTTP client but returning 200 with empty body).
+    #
+    # Dropped FINAL: search_console is ReplacingMergeTree keyed by
+    # (site_id, date, query, page, country, device, source). Dedup happens on
+    # merge; without FINAL we might over-count very briefly between syncs, but
+    # for a trend chart the per-day sums are stable enough. The raw stats card
+    # does its own FINAL aggregate for exact numbers.
     sql = """
     SELECT
       toString(date) AS date,
@@ -597,7 +606,7 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
       sum(impressions) AS impressions,
       if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
       round(avg(position), 1) AS avg_position
-    FROM search_console FINAL
+    FROM search_console
     WHERE site_id = #{site_p}
       AND date >= today() - #{days}
       #{source_filter}
@@ -606,8 +615,17 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     """
 
     case ClickHouse.query(sql) do
-      {:ok, rows} -> rows
-      _ -> []
+      {:ok, rows} ->
+        rows
+
+      {:error, err} ->
+        require Logger
+
+        Logger.error(
+          "[SearchKeywords] daily_trends error: #{inspect(err) |> String.slice(0, 300)}"
+        )
+
+        []
     end
   end
 
@@ -619,9 +637,10 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
   defp query_sparklines(site_p, days, source_filter, queries) do
     in_clause = Enum.map_join(queries, ", ", &ClickHouse.param/1)
 
+    # FINAL dropped here too — same reason as daily_trends.
     sql = """
     SELECT query, toString(date) AS date, sum(clicks) AS clicks
-    FROM search_console FINAL
+    FROM search_console
     WHERE site_id = #{site_p}
       AND date >= today() - #{days}
       AND query IN (#{in_clause})
