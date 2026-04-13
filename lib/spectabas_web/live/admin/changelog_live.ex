@@ -53,6 +53,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.22.0", "2026-04-13T15:15:00Z",
+       [
+         %{
+           title: "Fix: Consistent visitor counts across date ranges (1d/7d/30d)",
+           description:
+             "The 7-day chart was overcounting visitors because Analytics.timeseries used uniq(visitor_id) over ALL events — including RUM, duration, identify, and custom events — not just pageviews. A visitor firing only a RUM beacon would count as a visitor for that day. Now filters to event_type='pageview' with uniqExactIf, matching overview_stats. Also switched timeseries_fast from uniq (HyperLogLog approximation) to uniqExact for exact counts that match the 1-day view."
+         },
+         %{
+           title: "Perf: Daily rollup table for fast 30/90-day chart loads",
+           description:
+             "New daily_rollup ClickHouse table (AggregatingMergeTree with uniqExactIfState) pre-aggregates per-site daily pageviews, visitors, and sessions. Populated by a daily Oban cron at 01:30 UTC. timeseries_fast now queries the rollup for complete prior days and raw events only for today + yesterday (covers the cron-delay gap). Dramatically faster on long ranges for high-volume sites. One-time historical backfill runs automatically on startup if the rollup is empty."
+         }
+       ]},
       {"v5.21.0", "2026-04-10T15:00:00Z",
        [
          %{

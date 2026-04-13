@@ -218,7 +218,7 @@ defmodule Spectabas.Analytics do
           SELECT
             #{trunc_fn}(toTimezone(timestamp, #{ClickHouse.param(tz)})) AS bucket,
             countIf(event_type = 'pageview') AS pageviews,
-            uniq(visitor_id) AS visitors
+            uniqExactIf(visitor_id, event_type = 'pageview') AS visitors
           FROM events
           WHERE site_id = #{ClickHouse.param(site.id)}
             AND timestamp >= #{ClickHouse.param(format_datetime(native_range.from))}
@@ -283,41 +283,76 @@ defmodule Spectabas.Analytics do
   end
 
   @doc """
-  Fast timeseries using pre-aggregated daily_stats (SummingMergeTree).
+  Fast timeseries using pre-aggregated daily_rollup (AggregatingMergeTree).
   Used for date ranges >= 30 days where hourly granularity is not needed.
   Returns the same format as timeseries/4.
+
+  Strategy: complete prior days come from the rollup (cheap uniqExactMerge);
+  the last 2 UTC days come from raw events (covers today + the window before
+  the 01:30 UTC cron has rolled up yesterday). Raw rows take precedence on
+  overlap.
   """
   def timeseries_fast(%Site{} = site, %User{} = user, %{from: _, to: _} = date_range, period) do
     with :ok <- authorize(site, user) do
       tz = site.timezone || "UTC"
       {native_range, import_range} = split_date_range(site, date_range)
 
-      # Query pre-aggregated daily_stats (SummingMergeTree — must SUM columns)
       native_rows =
         if native_range do
           from_date = native_range.from |> to_local(tz) |> DateTime.to_date() |> Date.to_iso8601()
           to_date = native_range.to |> to_local(tz) |> DateTime.to_date() |> Date.to_iso8601()
 
-          # Query raw events with uniq() (HyperLogLog) for accurate daily visitor counts.
-          # daily_stats SummingMergeTree incorrectly sums per-batch uniqExact values.
-          sql = """
+          # Dates (UTC) we always want live from events: today + yesterday.
+          # Covers the 01:30 UTC cron-delay gap and the in-progress day.
+          raw_cutoff = Date.utc_today() |> Date.add(-1) |> Date.to_iso8601()
+
+          # Rollup covers complete prior days — exact counts, one row per site per day.
+          rollup_sql = """
+          SELECT
+            toString(date) AS bucket,
+            countIfMerge(pv_state) AS pageviews,
+            uniqExactIfMerge(vis_state) AS visitors
+          FROM daily_rollup
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND date >= #{ClickHouse.param(from_date)}
+            AND date <= #{ClickHouse.param(to_date)}
+            AND date < #{ClickHouse.param(raw_cutoff)}
+          GROUP BY date
+          ORDER BY bucket ASC
+          """
+
+          rollup_rows =
+            case ClickHouse.query(rollup_sql) do
+              {:ok, rows} -> rows
+              _ -> []
+            end
+
+          # Raw events for the last 2 UTC days (today + yesterday).
+          raw_sql = """
           SELECT
             toString(toDate(timestamp)) AS bucket,
             countIf(event_type = 'pageview' AND ip_is_bot = 0) AS pageviews,
-            uniqIf(visitor_id, event_type = 'pageview' AND ip_is_bot = 0) AS visitors
+            uniqExactIf(visitor_id, event_type = 'pageview' AND ip_is_bot = 0) AS visitors
           FROM events
           WHERE site_id = #{ClickHouse.param(site.id)}
-            AND timestamp >= #{ClickHouse.param(from_date <> " 00:00:00")}
-            AND timestamp <= #{ClickHouse.param(to_date <> " 23:59:59")}
+            AND toDate(timestamp) >= #{ClickHouse.param(raw_cutoff)}
+            AND toDate(timestamp) >= #{ClickHouse.param(from_date)}
+            AND toDate(timestamp) <= #{ClickHouse.param(to_date)}
             AND ip_is_bot = 0
           GROUP BY toDate(timestamp)
           ORDER BY bucket ASC
           """
 
-          case ClickHouse.query(sql) do
-            {:ok, rows} -> rows
-            _ -> []
-          end
+          raw_rows =
+            case ClickHouse.query(raw_sql) do
+              {:ok, rows} -> rows
+              _ -> []
+            end
+
+          # Raw wins on overlap (shouldn't happen — raw_cutoff excludes from rollup — but defensive).
+          raw_dates = MapSet.new(raw_rows, & &1["bucket"])
+          rollup_rows = Enum.reject(rollup_rows, &MapSet.member?(raw_dates, &1["bucket"]))
+          rollup_rows ++ raw_rows
         else
           []
         end

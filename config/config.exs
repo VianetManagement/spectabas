@@ -77,7 +77,9 @@ config :spectabas, Oban,
        # Daily at 8am UTC — sync search console data (2-3 day delay for GSC)
        {"0 8 * * *", Spectabas.Workers.SearchConsoleSync},
        # Monday at 9am UTC — send weekly AI insights email
-       {"0 9 * * 1", Spectabas.Workers.AIWeeklyEmail}
+       {"0 9 * * 1", Spectabas.Workers.AIWeeklyEmail},
+       # Daily at 01:30 UTC — roll up yesterday's stats into daily_rollup
+       {"30 1 * * *", Spectabas.Workers.DailyRollup}
      ]}
   ]
 

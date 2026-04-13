@@ -333,6 +333,21 @@ defmodule Spectabas.ClickHouse do
       ORDER BY (site_id, date, query, page, country, device, source)
       SETTINGS index_granularity = 8192
       """,
+      # Daily pre-aggregated rollup for fast 7/30/90-day timeseries charts.
+      # Uses AggregatingMergeTree with uniqExactState for exact cross-merge-safe visitor counts.
+      # Populated by Spectabas.Workers.DailyRollup (daily cron + historical backfill).
+      """
+      CREATE TABLE IF NOT EXISTS #{db}.daily_rollup (
+        site_id UInt64,
+        date Date,
+        pv_state AggregateFunction(countIf, UInt8, UInt8),
+        vis_state AggregateFunction(uniqExactIf, String, UInt8),
+        sess_state AggregateFunction(uniqExactIf, String, UInt8)
+      ) ENGINE = AggregatingMergeTree()
+      PARTITION BY toYYYYMM(date)
+      ORDER BY (site_id, date)
+      SETTINGS index_granularity = 8192
+      """,
       # Schema migrations — add columns that may not exist on older tables
       "ALTER TABLE #{db}.ecommerce_events ADD COLUMN IF NOT EXISTS refund_amount Decimal(12, 2) DEFAULT 0",
       "ALTER TABLE #{db}.ecommerce_events ADD COLUMN IF NOT EXISTS import_source LowCardinality(String) DEFAULT ''",
@@ -536,7 +551,7 @@ defmodule Spectabas.ClickHouse do
     "'#{e}'"
   end
 
-  @allowed_tables ~w(events daily_stats source_stats country_stats device_stats network_stats ecommerce_events subscription_events search_console imported_daily_stats imported_pages imported_sources imported_countries imported_devices ad_spend)
+  @allowed_tables ~w(events daily_stats daily_rollup source_stats country_stats device_stats network_stats ecommerce_events subscription_events search_console imported_daily_stats imported_pages imported_sources imported_countries imported_devices ad_spend)
   defp sanitize_table(t) when t in @allowed_tables, do: t
   defp sanitize_table(t), do: raise(ArgumentError, "Unknown ClickHouse table: #{t}")
 

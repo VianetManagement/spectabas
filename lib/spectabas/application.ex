@@ -36,10 +36,44 @@ defmodule Spectabas.Application do
 
     # Notify Slack on deploy (async, non-blocking)
     Task.start(fn ->
-      Spectabas.Notifications.Slack.notify(":rocket: *Spectabas deployed* — v5.21.0")
+      Spectabas.Notifications.Slack.notify(":rocket: *Spectabas deployed* — v5.22.0")
+    end)
+
+    # One-time backfill of daily_rollup if empty. Delayed so CH schema is ready.
+    Task.start(fn ->
+      Process.sleep(60_000)
+      maybe_backfill_daily_rollup()
     end)
 
     result
+  end
+
+  defp maybe_backfill_daily_rollup do
+    cfg = Application.get_env(:spectabas, Spectabas.ClickHouse, [])
+
+    if cfg[:url] && cfg[:url] != "" && !String.contains?(cfg[:url], "placeholder") do
+      case Spectabas.ClickHouse.query("SELECT count() AS c FROM daily_rollup") do
+        {:ok, [%{"c" => c}]} ->
+          count =
+            case c do
+              n when is_integer(n) -> n
+              n when is_binary(n) -> String.to_integer(n)
+              _ -> 0
+            end
+
+          if count == 0 do
+            Logger.notice("[DailyRollup] Empty — enqueueing historical backfill")
+            Oban.insert(Spectabas.Workers.DailyRollup.new(%{"backfill" => true}))
+          end
+
+        _ ->
+          :ok
+      end
+    end
+  rescue
+    e ->
+      Logger.warning("[DailyRollup] Startup check skipped: #{inspect(e)}")
+      :ok
   end
 
   @impl true

@@ -25,7 +25,8 @@ defmodule SpectabasWeb.HealthController do
       write_test: test_write(),
       geoip_status: test_geoip(),
       geo_sample: test_geo_sample(),
-      rum_debug: test_rum_debug()
+      rum_debug: test_rum_debug(),
+      daily_rollup: test_daily_rollup()
     }
 
     results = Map.put(results, :visitor_breakdown, test_visitor_breakdown())
@@ -1628,5 +1629,26 @@ defmodule SpectabasWeb.HealthController do
 
   def oban_admin(conn, _params) do
     conn |> put_status(403) |> json(%{error: "forbidden"})
+  end
+
+  defp test_daily_rollup do
+    if Process.whereis(Spectabas.ClickHouse) do
+      sql = """
+      SELECT
+        count() AS row_count,
+        toString(max(date)) AS max_date,
+        toString(min(date)) AS min_date,
+        uniqExact(site_id) AS sites
+      FROM daily_rollup
+      """
+
+      case Spectabas.ClickHouse.query(sql) do
+        {:ok, [row]} -> row
+        {:ok, []} -> %{"row_count" => 0, "note" => "empty — backfill pending or not triggered"}
+        {:error, e} -> "error: #{inspect(e) |> String.slice(0, 200)}"
+      end
+    else
+      "not_started"
+    end
   end
 end
