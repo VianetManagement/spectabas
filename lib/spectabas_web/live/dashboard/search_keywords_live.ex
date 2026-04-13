@@ -8,6 +8,12 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
   @allowed_sort_cols ~w(total_clicks total_impressions ctr avg_pos)
   @allowed_sort_dirs ~w(asc desc)
 
+  # Industry-average click-through rate by SERP position (Google organic).
+  # Used to project the clicks a query would gain if moved to top 3.
+  # These numbers are deliberately conservative — the opportunity queue errs
+  # toward flagging fewer, higher-value queries rather than noisy small wins.
+  @target_ctr_top3 0.12
+
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
     user = socket.assigns.current_scope.user
@@ -25,6 +31,13 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
        |> assign(:source_filter, "all")
        |> assign(:sort_by, "total_clicks")
        |> assign(:sort_dir, "desc")
+       |> assign(:drawer_query, nil)
+       |> assign(:drawer_timeseries, [])
+       |> assign(:drawer_pages, [])
+       |> assign(:drawer_devices, [])
+       |> assign(:drawer_countries, [])
+       |> assign(:drawer_loading, false)
+       |> assign(:expanded_cannibalization, nil)
        |> load_data()}
     end
   end
@@ -46,15 +59,34 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
         "desc"
       end
 
-    # Belt-and-suspenders: validate sort_dir even though it's toggled in code
     safe_dir = if new_dir in @allowed_sort_dirs, do: new_dir, else: "desc"
-
     {:noreply, socket |> assign(:sort_by, col) |> assign(:sort_dir, safe_dir) |> load_data()}
   end
 
-  def handle_event("sort", _params, socket) do
-    {:noreply, socket}
+  def handle_event("sort", _params, socket), do: {:noreply, socket}
+
+  def handle_event("open_query", %{"query" => query}, socket) do
+    {:noreply, socket |> assign(:drawer_query, query) |> load_drawer_data(query)}
   end
+
+  def handle_event("close_query", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:drawer_query, nil)
+     |> assign(:drawer_timeseries, [])
+     |> assign(:drawer_pages, [])
+     |> assign(:drawer_devices, [])
+     |> assign(:drawer_countries, [])}
+  end
+
+  def handle_event("toggle_cannibalization", %{"query" => query}, socket) do
+    expanded =
+      if socket.assigns.expanded_cannibalization == query, do: nil, else: query
+
+    {:noreply, assign(socket, :expanded_cannibalization, expanded)}
+  end
+
+  # ---------------- Data loading (parallelized) ----------------
 
   defp load_data(socket) do
     site = socket.assigns.site
@@ -63,26 +95,108 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     source = socket.assigns.source_filter
     sort_by = socket.assigns.sort_by
     sort_dir = socket.assigns.sort_dir
-
-    days =
-      case range do
-        "7d" -> 7
-        "30d" -> 30
-        "90d" -> 90
-        _ -> 30
-      end
-
-    source_filter =
-      case source do
-        "google" -> "AND source = 'google'"
-        "bing" -> "AND source = 'bing'"
-        _ -> ""
-      end
-
+    days = range_to_days(range)
+    source_filter = source_filter_sql(source)
     order = "#{sort_by} #{sort_dir}"
 
-    # Overview stats
-    stats_sql = """
+    # Fire all queries in parallel. Each returns its own assign key → value.
+    tasks = [
+      Task.async(fn -> {:stats, query_stats(site_p, days, source_filter)} end),
+      Task.async(fn -> {:queries, query_top_queries(site_p, days, source_filter, order)} end),
+      Task.async(fn -> {:pages, query_top_pages(site_p, days, source_filter, order)} end),
+      Task.async(fn -> {:ranking_changes, query_ranking_changes(site_p, source_filter)} end),
+      Task.async(fn ->
+        {:opportunity_queue, query_opportunity_queue(site_p, days, source_filter)}
+      end),
+      Task.async(fn -> {:new_keywords, query_new_keywords(site_p, source_filter)} end),
+      Task.async(fn -> {:lost_keywords, query_lost_keywords(site_p, source_filter)} end),
+      Task.async(fn -> {:pos_dist, query_pos_distribution(site_p, days, source_filter)} end),
+      Task.async(fn -> {:daily_trends, query_daily_trends(site_p, days, source_filter)} end),
+      Task.async(fn -> {:cannibalization, query_cannibalization(site_p, days, source_filter)} end)
+    ]
+
+    results =
+      Enum.reduce(tasks, %{}, fn task, acc ->
+        case Task.yield(task, 15_000) || Task.shutdown(task) do
+          {:ok, {key, value}} -> Map.put(acc, key, value)
+          _ -> acc
+        end
+      end)
+
+    stats = Map.get(results, :stats, %{})
+    queries = Map.get(results, :queries, [])
+    daily_trends = Map.get(results, :daily_trends, [])
+
+    # Second-phase: per-query sparklines for the top 20 rendered rows.
+    top_query_strings = queries |> Enum.take(20) |> Enum.map(& &1["query"])
+    sparklines = query_sparklines(site_p, days, source_filter, top_query_strings)
+
+    socket
+    |> assign(:stats, stats)
+    |> assign(:queries, queries)
+    |> assign(:pages, Map.get(results, :pages, []))
+    |> assign(:ranking_changes, Map.get(results, :ranking_changes, []))
+    |> assign(:opportunity_queue, Map.get(results, :opportunity_queue, []))
+    |> assign(:new_keywords, Map.get(results, :new_keywords, []))
+    |> assign(:lost_keywords, Map.get(results, :lost_keywords, []))
+    |> assign(:pos_dist, Map.get(results, :pos_dist, %{}))
+    |> assign(:cannibalization, Map.get(results, :cannibalization, []))
+    |> assign(:daily_trends, daily_trends)
+    |> assign(:query_sparklines, sparklines)
+    |> assign(
+      :has_data,
+      to_num(stats["total_clicks"] || "0") > 0 or
+        to_num(stats["total_impressions"] || "0") > 0 or
+        queries != []
+    )
+    |> push_charts(daily_trends)
+    |> push_query_sparklines(sparklines)
+  end
+
+  defp load_drawer_data(socket, query) do
+    site = socket.assigns.site
+    site_p = ClickHouse.param(site.id)
+    query_p = ClickHouse.param(query)
+    days = range_to_days(socket.assigns.date_range)
+    source_filter = source_filter_sql(socket.assigns.source_filter)
+
+    tasks = [
+      Task.async(fn ->
+        {:drawer_timeseries, query_drawer_timeseries(site_p, query_p, days, source_filter)}
+      end),
+      Task.async(fn ->
+        {:drawer_pages, query_drawer_pages(site_p, query_p, days, source_filter)}
+      end),
+      Task.async(fn ->
+        {:drawer_devices, query_drawer_devices(site_p, query_p, days, source_filter)}
+      end),
+      Task.async(fn ->
+        {:drawer_countries, query_drawer_countries(site_p, query_p, days, source_filter)}
+      end)
+    ]
+
+    results =
+      Enum.reduce(tasks, %{}, fn task, acc ->
+        case Task.yield(task, 10_000) || Task.shutdown(task) do
+          {:ok, {key, value}} -> Map.put(acc, key, value)
+          _ -> acc
+        end
+      end)
+
+    ts = Map.get(results, :drawer_timeseries, [])
+
+    socket
+    |> assign(:drawer_timeseries, ts)
+    |> assign(:drawer_pages, Map.get(results, :drawer_pages, []))
+    |> assign(:drawer_devices, Map.get(results, :drawer_devices, []))
+    |> assign(:drawer_countries, Map.get(results, :drawer_countries, []))
+    |> push_drawer_charts(ts)
+  end
+
+  # ---------------- Query functions ----------------
+
+  defp query_stats(site_p, days, source_filter) do
+    sql = """
     SELECT
       sum(clicks) AS total_clicks,
       sum(impressions) AS total_impressions,
@@ -95,14 +209,14 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
       #{source_filter}
     """
 
-    stats =
-      case ClickHouse.query(stats_sql) do
-        {:ok, [row | _]} -> row
-        _ -> %{}
-      end
+    case ClickHouse.query(sql) do
+      {:ok, [row | _]} -> row
+      _ -> %{}
+    end
+  end
 
-    # Top queries
-    queries_sql = """
+  defp query_top_queries(site_p, days, source_filter, order) do
+    sql = """
     SELECT
       query,
       sum(clicks) AS total_clicks,
@@ -119,14 +233,14 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     LIMIT 100
     """
 
-    {queries, query_error} =
-      case ClickHouse.query(queries_sql) do
-        {:ok, rows} -> {rows, nil}
-        {:error, e} -> {[], inspect(e) |> String.slice(0, 200)}
-      end
+    case ClickHouse.query(sql) do
+      {:ok, rows} -> rows
+      _ -> []
+    end
+  end
 
-    # Top pages
-    pages_sql = """
+  defp query_top_pages(site_p, days, source_filter, order) do
+    sql = """
     SELECT
       page,
       sum(clicks) AS total_clicks,
@@ -142,136 +256,462 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     LIMIT 50
     """
 
-    pages =
-      case ClickHouse.query(pages_sql) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
+    case ClickHouse.query(sql) do
+      {:ok, rows} -> rows
+      _ -> []
+    end
+  end
 
-    # Ranking changes: queries with significant position changes (7d vs prior 7d)
-    ranking_changes =
-      case ClickHouse.query("""
-           SELECT
-             cur.query,
-             cur.clicks AS current_clicks,
-             cur.pos AS current_pos,
-             prev.pos AS previous_pos,
-             round(prev.pos - cur.pos, 1) AS pos_change
-           FROM (
-             SELECT query, sum(clicks) AS clicks, round(avg(position), 1) AS pos
-             FROM search_console FINAL
-             WHERE site_id = #{site_p} AND date >= today() - 7 #{source_filter}
-             GROUP BY query HAVING sum(impressions) >= 5
-           ) cur
-           LEFT JOIN (
-             SELECT query, round(avg(position), 1) AS pos
-             FROM search_console FINAL
-             WHERE site_id = #{site_p} AND date >= today() - 14 AND date < today() - 7 #{source_filter}
-             GROUP BY query HAVING sum(impressions) >= 5
-           ) prev ON cur.query = prev.query
-           WHERE prev.pos > 0 AND abs(cur.pos - prev.pos) >= 2
-           ORDER BY pos_change DESC
-           LIMIT 20
-           """) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
+  defp query_ranking_changes(site_p, source_filter) do
+    sql = """
+    SELECT
+      cur.query,
+      cur.clicks AS current_clicks,
+      cur.pos AS current_pos,
+      prev.pos AS previous_pos,
+      round(prev.pos - cur.pos, 1) AS pos_change
+    FROM (
+      SELECT query, sum(clicks) AS clicks, round(avg(position), 1) AS pos
+      FROM search_console FINAL
+      WHERE site_id = #{site_p} AND date >= today() - 7 #{source_filter}
+      GROUP BY query HAVING sum(impressions) >= 5
+    ) cur
+    LEFT JOIN (
+      SELECT query, round(avg(position), 1) AS pos
+      FROM search_console FINAL
+      WHERE site_id = #{site_p} AND date >= today() - 14 AND date < today() - 7 #{source_filter}
+      GROUP BY query HAVING sum(impressions) >= 5
+    ) prev ON cur.query = prev.query
+    WHERE prev.pos > 0 AND abs(cur.pos - prev.pos) >= 2
+    ORDER BY pos_change DESC
+    LIMIT 20
+    """
 
-    # CTR opportunities: high impressions, low CTR relative to position
-    ctr_opportunities =
-      case ClickHouse.query("""
-           SELECT
-             query,
-             sum(clicks) AS total_clicks,
-             sum(impressions) AS total_impressions,
-             if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
-             round(avg(position), 1) AS avg_pos
-           FROM search_console FINAL
-           WHERE site_id = #{site_p} AND date >= today() - #{days} #{source_filter}
-           GROUP BY query
-           HAVING sum(impressions) >= 50 AND ctr < 3 AND avg_pos <= 20
-           ORDER BY total_impressions DESC
-           LIMIT 15
-           """) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
+    case ClickHouse.query(sql) do
+      {:ok, rows} -> rows
+      _ -> []
+    end
+  end
 
-    # New keywords (appeared in last 7d, not in prior 7d)
-    new_keywords =
-      case ClickHouse.query("""
-           SELECT query, sum(clicks) AS clicks, sum(impressions) AS impressions,
-             round(avg(position), 1) AS avg_pos
-           FROM search_console FINAL
-           WHERE site_id = #{site_p} AND date >= today() - 7 #{source_filter}
-             AND query NOT IN (
-               SELECT query FROM search_console FINAL
-               WHERE site_id = #{site_p} AND date >= today() - 14 AND date < today() - 7 #{source_filter}
-             )
-           GROUP BY query
-           HAVING impressions >= 3
-           ORDER BY clicks DESC
-           LIMIT 15
-           """) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
+  # Queries at position 8-20 with meaningful impressions, ranked by projected
+  # additional clicks if moved into the top 3. This is more actionable than
+  # the previous "low CTR" heuristic because it surfaces queries where an
+  # SEO win would translate to a lot of extra traffic.
+  defp query_opportunity_queue(site_p, days, source_filter) do
+    sql = """
+    SELECT
+      query,
+      sum(clicks) AS total_clicks,
+      sum(impressions) AS total_impressions,
+      if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
+      round(avg(position), 1) AS avg_pos,
+      toUInt32(greatest(0, round(
+        sum(impressions) * (#{@target_ctr_top3} - if(sum(impressions) > 0, sum(clicks) / sum(impressions), 0))
+      ))) AS projected_gain
+    FROM search_console FINAL
+    WHERE site_id = #{site_p}
+      AND date >= today() - #{days}
+      AND query != ''
+      #{source_filter}
+    GROUP BY query
+    HAVING sum(impressions) >= 50 AND avg_pos >= 8 AND avg_pos <= 20
+    ORDER BY projected_gain DESC
+    LIMIT 20
+    """
 
-    # Lost keywords (in prior 7d, not in last 7d)
-    lost_keywords =
-      case ClickHouse.query("""
-           SELECT query, sum(clicks) AS clicks, sum(impressions) AS impressions,
-             round(avg(position), 1) AS avg_pos
-           FROM search_console FINAL
-           WHERE site_id = #{site_p} AND date >= today() - 14 AND date < today() - 7 #{source_filter}
-             AND query NOT IN (
-               SELECT query FROM search_console FINAL
-               WHERE site_id = #{site_p} AND date >= today() - 7 #{source_filter}
-             )
-           GROUP BY query
-           HAVING impressions >= 3
-           ORDER BY clicks DESC
-           LIMIT 15
-           """) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
+    case ClickHouse.query(sql) do
+      {:ok, rows} -> rows
+      _ -> []
+    end
+  end
 
-    # Position distribution
-    pos_dist =
-      case ClickHouse.query("""
-           SELECT
-             countIf(avg_pos <= 3) AS top3,
-             countIf(avg_pos > 3 AND avg_pos <= 10) AS top10,
-             countIf(avg_pos > 10 AND avg_pos <= 20) AS top20,
-             countIf(avg_pos > 20) AS beyond20
-           FROM (
-             SELECT query, avg(position) AS avg_pos
-             FROM search_console FINAL
-             WHERE site_id = #{site_p} AND date >= today() - #{days} #{source_filter}
-             GROUP BY query HAVING sum(impressions) >= 1
-           )
-           """) do
-        {:ok, [row | _]} -> row
-        _ -> %{}
-      end
+  defp query_new_keywords(site_p, source_filter) do
+    sql = """
+    SELECT query, sum(clicks) AS clicks, sum(impressions) AS impressions,
+      round(avg(position), 1) AS avg_pos
+    FROM search_console FINAL
+    WHERE site_id = #{site_p} AND date >= today() - 7 #{source_filter}
+      AND query NOT IN (
+        SELECT query FROM search_console FINAL
+        WHERE site_id = #{site_p} AND date >= today() - 14 AND date < today() - 7 #{source_filter}
+      )
+    GROUP BY query
+    HAVING impressions >= 3
+    ORDER BY clicks DESC
+    LIMIT 15
+    """
+
+    case ClickHouse.query(sql) do
+      {:ok, rows} -> rows
+      _ -> []
+    end
+  end
+
+  defp query_lost_keywords(site_p, source_filter) do
+    sql = """
+    SELECT query, sum(clicks) AS clicks, sum(impressions) AS impressions,
+      round(avg(position), 1) AS avg_pos
+    FROM search_console FINAL
+    WHERE site_id = #{site_p} AND date >= today() - 14 AND date < today() - 7 #{source_filter}
+      AND query NOT IN (
+        SELECT query FROM search_console FINAL
+        WHERE site_id = #{site_p} AND date >= today() - 7 #{source_filter}
+      )
+    GROUP BY query
+    HAVING impressions >= 3
+    ORDER BY clicks DESC
+    LIMIT 15
+    """
+
+    case ClickHouse.query(sql) do
+      {:ok, rows} -> rows
+      _ -> []
+    end
+  end
+
+  defp query_pos_distribution(site_p, days, source_filter) do
+    sql = """
+    SELECT
+      countIf(avg_pos <= 3) AS top3,
+      countIf(avg_pos > 3 AND avg_pos <= 10) AS top10,
+      countIf(avg_pos > 10 AND avg_pos <= 20) AS top20,
+      countIf(avg_pos > 20) AS beyond20
+    FROM (
+      SELECT query, avg(position) AS avg_pos
+      FROM search_console FINAL
+      WHERE site_id = #{site_p} AND date >= today() - #{days} #{source_filter}
+      GROUP BY query HAVING sum(impressions) >= 1
+    )
+    """
+
+    case ClickHouse.query(sql) do
+      {:ok, [row | _]} -> row
+      _ -> %{}
+    end
+  end
+
+  # Per-day totals across all queries. Drives the three trend charts at the
+  # top of the page (clicks+impressions combo, CTR, position).
+  defp query_daily_trends(site_p, days, source_filter) do
+    sql = """
+    SELECT
+      toString(date) AS date,
+      sum(clicks) AS clicks,
+      sum(impressions) AS impressions,
+      if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
+      round(avg(position), 1) AS avg_position
+    FROM search_console FINAL
+    WHERE site_id = #{site_p}
+      AND date >= today() - #{days}
+      #{source_filter}
+    GROUP BY date
+    ORDER BY date ASC
+    """
+
+    case ClickHouse.query(sql) do
+      {:ok, rows} -> rows
+      _ -> []
+    end
+  end
+
+  # One row per (top_query, date) over the given range. Used to populate
+  # per-query sparklines in the Top Queries table. Returns %{query => [clicks]}
+  # aligned to the same date sequence used for the trend charts.
+  defp query_sparklines(_site_p, _days, _source_filter, []), do: %{}
+
+  defp query_sparklines(site_p, days, source_filter, queries) do
+    in_clause = Enum.map_join(queries, ", ", &ClickHouse.param/1)
+
+    sql = """
+    SELECT query, toString(date) AS date, sum(clicks) AS clicks
+    FROM search_console FINAL
+    WHERE site_id = #{site_p}
+      AND date >= today() - #{days}
+      AND query IN (#{in_clause})
+      #{source_filter}
+    GROUP BY query, date
+    ORDER BY date ASC
+    """
+
+    case ClickHouse.query(sql) do
+      {:ok, rows} ->
+        Enum.group_by(rows, & &1["query"], &{&1["date"], to_num(&1["clicks"])})
+
+      _ ->
+        %{}
+    end
+  end
+
+  # Queries where 3+ pages rank in the top 30 with meaningful impressions —
+  # an indicator that Google is splitting authority across duplicate content.
+  # Returns pages/positions/impressions/clicks as parallel arrays.
+  defp query_cannibalization(site_p, days, source_filter) do
+    sql = """
+    SELECT
+      query,
+      count() AS page_count,
+      sum(clicks) AS total_clicks,
+      sum(imps) AS total_impressions,
+      groupArray(page) AS pages,
+      groupArray(round(pos, 1)) AS positions,
+      groupArray(imps) AS page_impressions,
+      groupArray(clicks) AS page_clicks
+    FROM (
+      SELECT
+        query, page,
+        sum(clicks) AS clicks,
+        sum(impressions) AS imps,
+        avg(position) AS pos
+      FROM search_console FINAL
+      WHERE site_id = #{site_p}
+        AND date >= today() - #{days}
+        AND query != ''
+        #{source_filter}
+      GROUP BY query, page
+      HAVING imps >= 10 AND pos <= 30
+    )
+    GROUP BY query
+    HAVING page_count >= 3
+    ORDER BY total_impressions DESC
+    LIMIT 15
+    """
+
+    case ClickHouse.query(sql) do
+      {:ok, rows} ->
+        Enum.map(rows, fn r ->
+          Map.merge(r, %{
+            "pages_zip" =>
+              Enum.zip([
+                ensure_list(r["pages"]),
+                ensure_list(r["positions"]),
+                ensure_list(r["page_impressions"]),
+                ensure_list(r["page_clicks"])
+              ])
+          })
+        end)
+
+      _ ->
+        []
+    end
+  end
+
+  defp ensure_list(nil), do: []
+  defp ensure_list(l) when is_list(l), do: l
+  defp ensure_list(_), do: []
+
+  # ---------------- Drawer queries ----------------
+
+  defp query_drawer_timeseries(site_p, query_p, days, source_filter) do
+    sql = """
+    SELECT
+      toString(date) AS date,
+      sum(clicks) AS clicks,
+      sum(impressions) AS impressions,
+      if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
+      round(avg(position), 1) AS avg_position
+    FROM search_console FINAL
+    WHERE site_id = #{site_p}
+      AND query = #{query_p}
+      AND date >= today() - #{days}
+      #{source_filter}
+    GROUP BY date
+    ORDER BY date ASC
+    """
+
+    case ClickHouse.query(sql) do
+      {:ok, rows} -> rows
+      _ -> []
+    end
+  end
+
+  defp query_drawer_pages(site_p, query_p, days, source_filter) do
+    sql = """
+    SELECT
+      page,
+      sum(clicks) AS clicks,
+      sum(impressions) AS impressions,
+      if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
+      round(avg(position), 1) AS avg_pos
+    FROM search_console FINAL
+    WHERE site_id = #{site_p}
+      AND query = #{query_p}
+      AND date >= today() - #{days}
+      #{source_filter}
+    GROUP BY page
+    ORDER BY impressions DESC
+    LIMIT 20
+    """
+
+    case ClickHouse.query(sql) do
+      {:ok, rows} -> rows
+      _ -> []
+    end
+  end
+
+  defp query_drawer_devices(site_p, query_p, days, source_filter) do
+    sql = """
+    SELECT
+      device,
+      sum(clicks) AS clicks,
+      sum(impressions) AS impressions,
+      if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
+      round(avg(position), 1) AS avg_pos
+    FROM search_console FINAL
+    WHERE site_id = #{site_p}
+      AND query = #{query_p}
+      AND date >= today() - #{days}
+      AND device != ''
+      #{source_filter}
+    GROUP BY device
+    ORDER BY impressions DESC
+    """
+
+    case ClickHouse.query(sql) do
+      {:ok, rows} -> rows
+      _ -> []
+    end
+  end
+
+  defp query_drawer_countries(site_p, query_p, days, source_filter) do
+    sql = """
+    SELECT
+      country,
+      sum(clicks) AS clicks,
+      sum(impressions) AS impressions,
+      if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
+      round(avg(position), 1) AS avg_pos
+    FROM search_console FINAL
+    WHERE site_id = #{site_p}
+      AND query = #{query_p}
+      AND date >= today() - #{days}
+      AND country != ''
+      #{source_filter}
+    GROUP BY country
+    ORDER BY impressions DESC
+    LIMIT 10
+    """
+
+    case ClickHouse.query(sql) do
+      {:ok, rows} -> rows
+      _ -> []
+    end
+  end
+
+  # ---------------- Chart pushes ----------------
+
+  defp push_charts(socket, daily_trends) do
+    labels = Enum.map(daily_trends, &short_date(&1["date"]))
+    clicks = Enum.map(daily_trends, &to_num(&1["clicks"]))
+    impressions = Enum.map(daily_trends, &to_num(&1["impressions"]))
+    ctr = Enum.map(daily_trends, &to_float(&1["ctr"]))
+    position = Enum.map(daily_trends, &to_float(&1["avg_position"]))
 
     socket
-    |> assign(:stats, stats)
-    |> assign(:queries, queries)
-    |> assign(:pages, pages)
-    |> assign(
-      :has_data,
-      to_num(stats["total_clicks"] || "0") > 0 or to_num(stats["total_impressions"] || "0") > 0 or
-        queries != []
-    )
-    |> assign(:query_error, query_error)
-    |> assign(:ranking_changes, ranking_changes)
-    |> assign(:ctr_opportunities, ctr_opportunities)
-    |> assign(:new_keywords, new_keywords)
-    |> assign(:lost_keywords, lost_keywords)
-    |> assign(:pos_dist, pos_dist)
+    |> push_event("search-chart-data", %{
+      id: "chart-clicks-impressions",
+      labels: labels,
+      datasets: [
+        %{
+          label: "Impressions",
+          data: impressions,
+          type: "bar",
+          color: "#c7d2fe",
+          y_axis: "y"
+        },
+        %{
+          label: "Clicks",
+          data: clicks,
+          type: "line",
+          color: "#4338ca",
+          fill: true,
+          y_axis: "y1"
+        }
+      ]
+    })
+    |> push_event("search-chart-data", %{
+      id: "chart-ctr",
+      labels: labels,
+      datasets: [%{label: "CTR %", data: ctr, type: "line", color: "#059669", fill: true}]
+    })
+    |> push_event("search-chart-data", %{
+      id: "chart-position",
+      labels: labels,
+      datasets: [%{label: "Avg Position", data: position, type: "line", color: "#d97706"}],
+      invert_y: true
+    })
   end
+
+  defp push_query_sparklines(socket, sparklines_by_query) do
+    Enum.reduce(sparklines_by_query, socket, fn {query, pairs}, acc ->
+      pairs = Enum.sort_by(pairs, &elem(&1, 0))
+
+      push_event(acc, "sparkline-data", %{
+        id: query_sparkline_id(query),
+        labels: Enum.map(pairs, &short_date(elem(&1, 0))),
+        values: Enum.map(pairs, &elem(&1, 1))
+      })
+    end)
+  end
+
+  defp push_drawer_charts(socket, timeseries) do
+    labels = Enum.map(timeseries, &short_date(&1["date"]))
+
+    socket
+    |> push_event("search-chart-data", %{
+      id: "drawer-chart-clicks",
+      labels: labels,
+      datasets: [
+        %{
+          label: "Clicks",
+          data: Enum.map(timeseries, &to_num(&1["clicks"])),
+          type: "line",
+          color: "#4338ca",
+          fill: true
+        }
+      ]
+    })
+    |> push_event("search-chart-data", %{
+      id: "drawer-chart-impressions",
+      labels: labels,
+      datasets: [
+        %{
+          label: "Impressions",
+          data: Enum.map(timeseries, &to_num(&1["impressions"])),
+          type: "line",
+          color: "#6366f1",
+          fill: true
+        }
+      ]
+    })
+    |> push_event("search-chart-data", %{
+      id: "drawer-chart-ctr",
+      labels: labels,
+      datasets: [
+        %{
+          label: "CTR %",
+          data: Enum.map(timeseries, &to_float(&1["ctr"])),
+          type: "line",
+          color: "#059669",
+          fill: true
+        }
+      ]
+    })
+    |> push_event("search-chart-data", %{
+      id: "drawer-chart-position",
+      labels: labels,
+      datasets: [
+        %{
+          label: "Avg Position",
+          data: Enum.map(timeseries, &to_float(&1["avg_position"])),
+          type: "line",
+          color: "#d97706"
+        }
+      ],
+      invert_y: true
+    })
+  end
+
+  # ---------------- Render ----------------
 
   @impl true
   def render(assigns) do
@@ -285,10 +725,7 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
           </div>
           <div class="flex items-center gap-3">
             <form phx-change="change_source">
-              <select
-                name="source"
-                class="text-sm rounded border-gray-300 py-1.5 pr-8"
-              >
+              <select name="source" class="text-sm rounded border-gray-300 py-1.5 pr-8">
                 <option value="all" selected={@source_filter == "all"}>All Sources</option>
                 <option value="google" selected={@source_filter == "google"}>Google</option>
                 <option value="bing" selected={@source_filter == "bing"}>Bing</option>
@@ -316,16 +753,12 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
               Connect Google Search Console or Bing Webmaster from <.link
                 navigate={~p"/dashboard/sites/#{@site.id}/settings"}
                 class="text-indigo-600 underline"
-              >Site Settings</.link>.
-              Data syncs daily with a 2-3 day delay.
+              >Site Settings</.link>. Data syncs daily with a 2-3 day delay.
             </p>
-            <%= if @query_error do %>
-              <p class="text-xs text-red-400 mt-2">Error: {@query_error}</p>
-            <% end %>
           </div>
         <% else %>
           <%!-- Stats cards --%>
-          <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+          <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
             <div class="bg-white rounded-lg shadow p-5 border-t-4 border-indigo-500">
               <dt class="text-sm font-medium text-gray-500 mb-1">Clicks</dt>
               <dd class="text-3xl font-bold text-indigo-700">
@@ -354,14 +787,43 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
             </div>
           </div>
 
-          <%!-- Top Queries --%>
+          <%!-- Trend charts --%>
+          <div class="bg-white rounded-lg shadow p-6 mb-4">
+            <h2 class="text-sm font-semibold text-gray-700 mb-3">Clicks &amp; Impressions</h2>
+            <div id="chart-clicks-impressions" phx-hook="SearchChart" class="h-64 relative">
+              <canvas></canvas>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+            <div class="bg-white rounded-lg shadow p-6">
+              <h2 class="text-sm font-semibold text-gray-700 mb-3">Avg CTR</h2>
+              <div id="chart-ctr" phx-hook="SearchChart" class="h-48 relative">
+                <canvas></canvas>
+              </div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-6">
+              <h2 class="text-sm font-semibold text-gray-700 mb-3">
+                Avg Position <span class="text-xs font-normal text-gray-500">(lower is better)</span>
+              </h2>
+              <div id="chart-position" phx-hook="SearchChart" class="h-48 relative">
+                <canvas></canvas>
+              </div>
+            </div>
+          </div>
+
+          <%!-- Top Queries with sparklines --%>
           <div class="bg-white rounded-lg shadow p-6 mb-8">
-            <h2 class="text-lg font-semibold text-gray-900 mb-4">Top Search Queries</h2>
+            <h2 class="text-lg font-semibold text-gray-900 mb-1">Top Search Queries</h2>
+            <p class="text-xs text-gray-500 mb-4">
+              Click a row to see per-query history, ranking pages, device and country breakdowns.
+            </p>
             <div class="overflow-x-auto">
               <table class="w-full">
                 <thead>
                   <tr class="border-b-2 border-gray-200">
                     <th class="text-left py-3 text-sm font-semibold text-gray-700">Query</th>
+                    <th class="text-left py-3 text-sm font-semibold text-gray-700 w-28">Trend</th>
                     <th
                       class="text-right py-3 text-sm font-semibold text-gray-700 cursor-pointer hover:text-indigo-600"
                       phx-click="sort"
@@ -393,10 +855,26 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                   </tr>
                 </thead>
                 <tbody>
-                  <%= for q <- @queries do %>
-                    <tr class="border-b border-gray-100 hover:bg-gray-50">
+                  <%= for {q, idx} <- Enum.with_index(@queries) do %>
+                    <tr
+                      class="border-b border-gray-100 hover:bg-indigo-50 cursor-pointer"
+                      phx-click="open_query"
+                      phx-value-query={q["query"]}
+                    >
                       <td class="py-3 text-sm font-medium text-gray-900 max-w-md truncate">
                         {q["query"]}
+                      </td>
+                      <td class="py-2">
+                        <%= if idx < 20 do %>
+                          <div
+                            id={query_sparkline_id(q["query"])}
+                            phx-hook="Sparkline"
+                            phx-update="ignore"
+                            class="w-24 h-8"
+                          >
+                            <canvas></canvas>
+                          </div>
+                        <% end %>
                       </td>
                       <td class="text-right py-3 text-sm font-semibold">
                         {format_number(to_num(q["total_clicks"]))}
@@ -417,8 +895,130 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
             </div>
           </div>
 
+          <%!-- Opportunity Queue --%>
+          <%= if @opportunity_queue != [] do %>
+            <div class="bg-white rounded-lg shadow p-6 mb-8">
+              <h2 class="text-lg font-semibold text-gray-900 mb-1">Opportunity Queue</h2>
+              <p class="text-xs text-gray-500 mb-4">
+                Queries ranking 8-20 with significant impressions — ordered by projected extra clicks
+                if moved to the top 3.
+              </p>
+              <table class="w-full">
+                <thead>
+                  <tr class="border-b-2 border-gray-200">
+                    <th class="text-left py-2 text-sm font-semibold text-gray-700">Query</th>
+                    <th class="text-right py-2 text-sm font-semibold text-gray-700">Impressions</th>
+                    <th class="text-right py-2 text-sm font-semibold text-gray-700">Current CTR</th>
+                    <th class="text-right py-2 text-sm font-semibold text-gray-700">Position</th>
+                    <th class="text-right py-2 text-sm font-semibold text-emerald-700">
+                      Projected Extra Clicks
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <%= for r <- @opportunity_queue do %>
+                    <tr
+                      class="border-b border-gray-100 hover:bg-emerald-50 cursor-pointer"
+                      phx-click="open_query"
+                      phx-value-query={r["query"]}
+                    >
+                      <td class="py-2 text-sm text-gray-900 max-w-xs truncate">{r["query"]}</td>
+                      <td class="text-right py-2 text-sm">
+                        {format_number(to_num(r["total_impressions"]))}
+                      </td>
+                      <td class="text-right py-2 text-sm text-gray-600">{r["ctr"]}%</td>
+                      <td class={"text-right py-2 text-sm " <> position_color(to_float(r["avg_pos"]))}>
+                        {r["avg_pos"]}
+                      </td>
+                      <td class="text-right py-2 text-sm font-bold text-emerald-600">
+                        +{format_number(to_num(r["projected_gain"]))}
+                      </td>
+                    </tr>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% end %>
+
+          <%!-- Cannibalization --%>
+          <%= if @cannibalization != [] do %>
+            <div class="bg-white rounded-lg shadow p-6 mb-8">
+              <h2 class="text-lg font-semibold text-gray-900 mb-1">Keyword Cannibalization</h2>
+              <p class="text-xs text-gray-500 mb-4">
+                Queries where 3+ pages compete in the top 30 — usually a duplicate-content
+                or internal-linking signal. Click a row to see which pages are fighting.
+              </p>
+              <table class="w-full">
+                <thead>
+                  <tr class="border-b-2 border-gray-200">
+                    <th class="text-left py-2 text-sm font-semibold text-gray-700">Query</th>
+                    <th class="text-right py-2 text-sm font-semibold text-gray-700">Pages</th>
+                    <th class="text-right py-2 text-sm font-semibold text-gray-700">Impressions</th>
+                    <th class="text-right py-2 text-sm font-semibold text-gray-700">Clicks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <%= for c <- @cannibalization do %>
+                    <tr
+                      class="border-b border-gray-100 hover:bg-amber-50 cursor-pointer"
+                      phx-click="toggle_cannibalization"
+                      phx-value-query={c["query"]}
+                    >
+                      <td class="py-2 text-sm text-gray-900 max-w-xs truncate">
+                        {c["query"]}
+                      </td>
+                      <td class="text-right py-2 text-sm font-semibold text-amber-600">
+                        {c["page_count"]}
+                      </td>
+                      <td class="text-right py-2 text-sm">
+                        {format_number(to_num(c["total_impressions"]))}
+                      </td>
+                      <td class="text-right py-2 text-sm">
+                        {format_number(to_num(c["total_clicks"]))}
+                      </td>
+                    </tr>
+                    <%= if @expanded_cannibalization == c["query"] do %>
+                      <tr class="bg-amber-50/50">
+                        <td colspan="4" class="px-4 py-3">
+                          <table class="w-full text-xs">
+                            <thead>
+                              <tr class="text-gray-600">
+                                <th class="text-left pb-1">Page</th>
+                                <th class="text-right pb-1">Position</th>
+                                <th class="text-right pb-1">Impressions</th>
+                                <th class="text-right pb-1">Clicks</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <%= for {page, pos, imps, clicks} <- c["pages_zip"] do %>
+                                <tr>
+                                  <td class="py-0.5 text-indigo-700 truncate max-w-lg">
+                                    {extract_path(page)}
+                                  </td>
+                                  <td class={"text-right py-0.5 " <> position_color(to_float(pos))}>
+                                    {pos}
+                                  </td>
+                                  <td class="text-right py-0.5 text-gray-700">
+                                    {format_number(to_num(imps))}
+                                  </td>
+                                  <td class="text-right py-0.5 text-gray-700">
+                                    {format_number(to_num(clicks))}
+                                  </td>
+                                </tr>
+                              <% end %>
+                            </tbody>
+                          </table>
+                        </td>
+                      </tr>
+                    <% end %>
+                  <% end %>
+                </tbody>
+              </table>
+            </div>
+          <% end %>
+
           <%!-- Top Pages --%>
-          <div class="bg-white rounded-lg shadow p-6">
+          <div class="bg-white rounded-lg shadow p-6 mb-8">
             <h2 class="text-lg font-semibold text-gray-900 mb-4">Top Pages by Search</h2>
             <div class="overflow-x-auto">
               <table class="w-full">
@@ -509,7 +1109,11 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                 <tbody>
                   <%= for r <- @ranking_changes do %>
                     <% change = to_float(r["pos_change"]) %>
-                    <tr class="border-b border-gray-100 hover:bg-gray-50">
+                    <tr
+                      class="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                      phx-click="open_query"
+                      phx-value-query={r["query"]}
+                    >
                       <td class="py-2 text-sm text-gray-900 max-w-xs truncate">{r["query"]}</td>
                       <td class="text-right py-2 text-sm">
                         {format_number(to_num(r["current_clicks"]))}
@@ -520,44 +1124,6 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                       <td class="text-right py-2 text-sm text-gray-500">{r["previous_pos"]}</td>
                       <td class={"text-right py-2 text-sm font-bold " <> if(change > 0, do: "text-green-600", else: "text-red-600")}>
                         {if change > 0, do: "+#{r["pos_change"]}", else: r["pos_change"]}
-                      </td>
-                    </tr>
-                  <% end %>
-                </tbody>
-              </table>
-            </div>
-          <% end %>
-
-          <%!-- CTR Opportunities --%>
-          <%= if @ctr_opportunities != [] do %>
-            <div class="bg-white rounded-lg shadow p-6 mb-8">
-              <h2 class="text-lg font-semibold text-gray-900 mb-1">CTR Opportunities</h2>
-              <p class="text-xs text-gray-500 mb-4">
-                High impressions with below-average CTR — improve title/meta description for more clicks
-              </p>
-              <table class="w-full">
-                <thead>
-                  <tr class="border-b-2 border-gray-200">
-                    <th class="text-left py-2 text-sm font-semibold text-gray-700">Query</th>
-                    <th class="text-right py-2 text-sm font-semibold text-gray-700">Impressions</th>
-                    <th class="text-right py-2 text-sm font-semibold text-gray-700">Clicks</th>
-                    <th class="text-right py-2 text-sm font-semibold text-gray-700">CTR</th>
-                    <th class="text-right py-2 text-sm font-semibold text-gray-700">Position</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <%= for r <- @ctr_opportunities do %>
-                    <tr class="border-b border-gray-100 hover:bg-gray-50">
-                      <td class="py-2 text-sm text-gray-900 max-w-xs truncate">{r["query"]}</td>
-                      <td class="text-right py-2 text-sm font-semibold text-amber-600">
-                        {format_number(to_num(r["total_impressions"]))}
-                      </td>
-                      <td class="text-right py-2 text-sm">
-                        {format_number(to_num(r["total_clicks"]))}
-                      </td>
-                      <td class="text-right py-2 text-sm text-red-600 font-medium">{r["ctr"]}%</td>
-                      <td class={"text-right py-2 text-sm " <> position_color(to_float(r["avg_pos"]))}>
-                        {r["avg_pos"]}
                       </td>
                     </tr>
                   <% end %>
@@ -584,7 +1150,11 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                   </thead>
                   <tbody>
                     <%= for r <- @new_keywords do %>
-                      <tr class="border-b border-gray-100">
+                      <tr
+                        class="border-b border-gray-100 cursor-pointer hover:bg-green-50"
+                        phx-click="open_query"
+                        phx-value-query={r["query"]}
+                      >
                         <td class="py-2 text-sm text-gray-900 max-w-[200px] truncate">
                           {r["query"]}
                         </td>
@@ -635,9 +1205,167 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
           </div>
         <% end %>
       </div>
+
+      <%!-- Query detail drawer --%>
+      <%= if @drawer_query do %>
+        <div
+          class="fixed inset-0 bg-gray-900/40 z-40"
+          phx-click="close_query"
+          aria-hidden="true"
+        >
+        </div>
+        <div class="fixed inset-y-0 right-0 z-50 w-full max-w-2xl bg-white shadow-2xl overflow-y-auto">
+          <div class="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-start justify-between">
+            <div class="min-w-0 flex-1 pr-4">
+              <p class="text-xs text-gray-500">Query</p>
+              <h3 class="text-lg font-semibold text-gray-900 break-words">{@drawer_query}</h3>
+            </div>
+            <button
+              phx-click="close_query"
+              class="shrink-0 text-gray-400 hover:text-gray-700 text-xl"
+              aria-label="Close"
+            >
+              &times;
+            </button>
+          </div>
+
+          <div class="px-6 py-4 space-y-6">
+            <%!-- 4 stacked per-query time series --%>
+            <div>
+              <h4 class="text-sm font-semibold text-gray-700 mb-2">Clicks</h4>
+              <div id="drawer-chart-clicks" phx-hook="SearchChart" class="h-32 relative">
+                <canvas></canvas>
+              </div>
+            </div>
+            <div>
+              <h4 class="text-sm font-semibold text-gray-700 mb-2">Impressions</h4>
+              <div id="drawer-chart-impressions" phx-hook="SearchChart" class="h-32 relative">
+                <canvas></canvas>
+              </div>
+            </div>
+            <div>
+              <h4 class="text-sm font-semibold text-gray-700 mb-2">CTR</h4>
+              <div id="drawer-chart-ctr" phx-hook="SearchChart" class="h-32 relative">
+                <canvas></canvas>
+              </div>
+            </div>
+            <div>
+              <h4 class="text-sm font-semibold text-gray-700 mb-2">Position</h4>
+              <div id="drawer-chart-position" phx-hook="SearchChart" class="h-32 relative">
+                <canvas></canvas>
+              </div>
+            </div>
+
+            <%!-- Pages ranking for this query --%>
+            <div>
+              <h4 class="text-sm font-semibold text-gray-700 mb-2">Pages Ranking for This Query</h4>
+              <%= if @drawer_pages == [] do %>
+                <p class="text-sm text-gray-500 italic">No data.</p>
+              <% else %>
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr class="text-gray-600 border-b border-gray-200">
+                      <th class="text-left py-1 font-medium">Page</th>
+                      <th class="text-right py-1 font-medium">Clicks</th>
+                      <th class="text-right py-1 font-medium">Impr</th>
+                      <th class="text-right py-1 font-medium">CTR</th>
+                      <th class="text-right py-1 font-medium">Pos</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <%= for p <- @drawer_pages do %>
+                      <tr class="border-b border-gray-50">
+                        <td class="py-1.5 text-indigo-700 truncate max-w-xs">
+                          {extract_path(p["page"])}
+                        </td>
+                        <td class="text-right py-1.5">{format_number(to_num(p["clicks"]))}</td>
+                        <td class="text-right py-1.5 text-gray-600">
+                          {format_number(to_num(p["impressions"]))}
+                        </td>
+                        <td class="text-right py-1.5 text-gray-600">{p["ctr"]}%</td>
+                        <td class={"text-right py-1.5 " <> position_color(to_float(p["avg_pos"]))}>
+                          {p["avg_pos"]}
+                        </td>
+                      </tr>
+                    <% end %>
+                  </tbody>
+                </table>
+              <% end %>
+            </div>
+
+            <%!-- Device split --%>
+            <%= if @drawer_devices != [] do %>
+              <div>
+                <h4 class="text-sm font-semibold text-gray-700 mb-2">Devices</h4>
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr class="text-gray-600 border-b border-gray-200">
+                      <th class="text-left py-1 font-medium">Device</th>
+                      <th class="text-right py-1 font-medium">Clicks</th>
+                      <th class="text-right py-1 font-medium">Impr</th>
+                      <th class="text-right py-1 font-medium">CTR</th>
+                      <th class="text-right py-1 font-medium">Pos</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <%= for d <- @drawer_devices do %>
+                      <tr class="border-b border-gray-50">
+                        <td class="py-1.5 capitalize text-gray-900">{d["device"]}</td>
+                        <td class="text-right py-1.5">{format_number(to_num(d["clicks"]))}</td>
+                        <td class="text-right py-1.5 text-gray-600">
+                          {format_number(to_num(d["impressions"]))}
+                        </td>
+                        <td class="text-right py-1.5 text-gray-600">{d["ctr"]}%</td>
+                        <td class={"text-right py-1.5 " <> position_color(to_float(d["avg_pos"]))}>
+                          {d["avg_pos"]}
+                        </td>
+                      </tr>
+                    <% end %>
+                  </tbody>
+                </table>
+              </div>
+            <% end %>
+
+            <%!-- Country split --%>
+            <%= if @drawer_countries != [] do %>
+              <div>
+                <h4 class="text-sm font-semibold text-gray-700 mb-2">Countries</h4>
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr class="text-gray-600 border-b border-gray-200">
+                      <th class="text-left py-1 font-medium">Country</th>
+                      <th class="text-right py-1 font-medium">Clicks</th>
+                      <th class="text-right py-1 font-medium">Impr</th>
+                      <th class="text-right py-1 font-medium">CTR</th>
+                      <th class="text-right py-1 font-medium">Pos</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <%= for c <- @drawer_countries do %>
+                      <tr class="border-b border-gray-50">
+                        <td class="py-1.5 uppercase text-gray-900">{c["country"]}</td>
+                        <td class="text-right py-1.5">{format_number(to_num(c["clicks"]))}</td>
+                        <td class="text-right py-1.5 text-gray-600">
+                          {format_number(to_num(c["impressions"]))}
+                        </td>
+                        <td class="text-right py-1.5 text-gray-600">{c["ctr"]}%</td>
+                        <td class={"text-right py-1.5 " <> position_color(to_float(c["avg_pos"]))}>
+                          {c["avg_pos"]}
+                        </td>
+                      </tr>
+                    <% end %>
+                  </tbody>
+                </table>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
     </.dashboard_layout>
     """
   end
+
+  # ---------------- Helpers ----------------
 
   defp sort_arrow(col, sort_by, sort_dir) do
     if col == sort_by do
@@ -647,9 +1375,9 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     end
   end
 
-  defp position_color(pos) when pos <= 3, do: "text-green-700"
-  defp position_color(pos) when pos <= 10, do: "text-blue-700"
-  defp position_color(pos) when pos <= 20, do: "text-amber-600"
+  defp position_color(pos) when is_number(pos) and pos <= 3, do: "text-green-700"
+  defp position_color(pos) when is_number(pos) and pos <= 10, do: "text-blue-700"
+  defp position_color(pos) when is_number(pos) and pos <= 20, do: "text-amber-600"
   defp position_color(_), do: "text-red-600"
 
   defp extract_path(nil), do: "/"
@@ -672,4 +1400,30 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
   end
 
   defp format_number(n), do: to_string(n)
+
+  defp range_to_days("7d"), do: 7
+  defp range_to_days("30d"), do: 30
+  defp range_to_days("90d"), do: 90
+  defp range_to_days(_), do: 30
+
+  defp source_filter_sql("google"), do: "AND source = 'google'"
+  defp source_filter_sql("bing"), do: "AND source = 'bing'"
+  defp source_filter_sql(_), do: ""
+
+  defp short_date(nil), do: ""
+
+  defp short_date(d) when is_binary(d) do
+    case String.split(d, "-") do
+      [_y, m, day] -> "#{m}/#{day}"
+      _ -> d
+    end
+  end
+
+  defp short_date(d), do: to_string(d)
+
+  # DOM id for a per-query sparkline. Query can contain anything; hex-encode
+  # to guarantee a valid id.
+  defp query_sparkline_id(query) do
+    "qspark-" <> Base.encode16(query, case: :lower)
+  end
 end

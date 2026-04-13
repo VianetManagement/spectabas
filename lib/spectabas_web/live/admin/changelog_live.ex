@@ -53,6 +53,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.25.0", "2026-04-13T20:30:00Z",
+       [
+         %{
+           title: "Feat: Search Keywords overhaul — trends, sparklines, drill-in, SEO insights",
+           description:
+             "Search Keywords page now shows per-day Clicks+Impressions combo chart, CTR trend, and Avg Position trend (inverted y-axis) at the top. Each row in Top Queries has a 30-day clicks sparkline. Clicking any row opens a right-side drawer with four per-query time series (clicks, impressions, CTR, position), the pages ranking for that query, and device+country splits. Added two new SEO-actionable sections: Opportunity Queue (queries at pos 8-20 ranked by projected extra clicks if moved to top 3) and Keyword Cannibalization (queries where 3+ of your pages compete in the top 30 — expandable to see which pages are fighting). All queries parallelized via Task.async."
+         },
+         %{
+           title: "Feat: Generic SearchChart Chart.js hook",
+           description:
+             "New multi-instance chart hook supporting line, bar, and combo charts with optional dual y-axes and inverted y-axis. Each chart filters events by DOM id, so many charts can coexist on one page. Used for all charts on the Search Keywords page."
+         }
+       ]},
       {"v5.24.0", "2026-04-13T19:30:00Z",
        [
          %{

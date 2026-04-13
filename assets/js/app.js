@@ -157,6 +157,72 @@ const Sparkline = {
   }
 }
 
+// Generic multi-instance chart hook used by the Search Keywords page.
+// Server pushes {id, labels, datasets, invert_y} — hook filters by id so
+// several charts can coexist on one page. Supports line, bar, and combo
+// charts (bar + line overlay with dual y-axes).
+//
+// Dataset shape:
+//   {label, data, type: "line"|"bar", color, fill?, y_axis: "y"|"y1"}
+const SearchChart = {
+  mounted() {
+    this.handleEvent("search-chart-data", (payload) => {
+      if (this.el.id !== payload.id) return
+      const canvas = this.el.querySelector("canvas")
+      if (!canvas) return
+      if (this._chart) this._chart.destroy()
+
+      const datasets = (payload.datasets || []).map(d => ({
+        label: d.label,
+        type: d.type || "line",
+        data: d.data || [],
+        borderColor: d.color || "#6366f1",
+        backgroundColor: d.type === "bar"
+          ? (d.color || "#6366f1") + "66"
+          : (d.fill ? (d.color || "#6366f1") + "22" : "transparent"),
+        fill: d.fill || false,
+        tension: 0.3,
+        borderWidth: 2,
+        pointRadius: (d.data || []).length > 30 ? 0 : 3,
+        pointHoverRadius: 5,
+        yAxisID: d.y_axis || "y",
+        order: d.type === "bar" ? 2 : 1
+      }))
+
+      const hasSecondAxis = datasets.some(d => d.yAxisID === "y1")
+      const scales = {
+        x: { grid: { display: false } },
+        y: { beginAtZero: true, position: "left" }
+      }
+      if (hasSecondAxis) {
+        scales.y1 = { beginAtZero: true, position: "right", grid: { drawOnChartArea: false } }
+      }
+      if (payload.invert_y) {
+        scales.y.reverse = true
+        scales.y.min = 1
+      }
+
+      this._chart = new Chart(canvas, {
+        type: datasets.some(d => d.type === "bar") ? "bar" : "line",
+        data: { labels: payload.labels || [], datasets: datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { display: datasets.length > 1, position: "top", align: "end" },
+            tooltip: { enabled: true }
+          },
+          scales: scales
+        }
+      })
+    })
+  },
+  destroyed() {
+    if (this._chart) this._chart.destroy()
+  }
+}
+
 const IdleTimeout = {
   mounted() {
     const timeoutMs = parseInt(this.el.dataset.timeout || "1800000") // 30 min default
@@ -248,6 +314,7 @@ const Hooks = {
   PasskeyRegister,
   AutoDismiss,
   Sparkline,
+  SearchChart,
   PieChart,
   IdleTimeout,
   LocalTime,
