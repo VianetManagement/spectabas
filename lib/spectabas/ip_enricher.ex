@@ -332,21 +332,54 @@ defmodule Spectabas.IPEnricher.ASNBlocklist do
     :ets.delete_all_objects(table)
 
     if File.exists?(path) do
-      path
-      |> File.stream!()
-      |> Stream.map(&String.trim/1)
-      |> Stream.reject(fn line -> line == "" or String.starts_with?(line, "#") end)
-      |> Stream.each(fn line ->
-        case Integer.parse(line) do
-          {asn, _} -> :ets.insert(table, {asn, true})
-          :error -> :ok
-        end
-      end)
-      |> Stream.run()
+      count =
+        path
+        |> File.stream!()
+        |> Stream.map(&parse_line/1)
+        |> Stream.reject(&is_nil/1)
+        |> Enum.reduce(0, fn asn, acc ->
+          :ets.insert(table, {asn, true})
+          acc + 1
+        end)
+
+      Logger.notice("[ASNBlocklist] Loaded #{count} ASNs from #{Path.basename(path)}")
     else
-      Logger.debug("[ASNBlocklist] File not found: #{path}")
+      Logger.warning("[ASNBlocklist] File not found: #{path}")
     end
   end
+
+  # File lines look like "AS45090 # Tencent cloud..." — strip the optional
+  # `AS` prefix and inline `#` comments before parsing.
+  defp parse_line(line) do
+    cleaned =
+      line
+      |> String.split("#", parts: 2)
+      |> hd()
+      |> String.trim()
+
+    cleaned =
+      if String.starts_with?(cleaned, "AS") or String.starts_with?(cleaned, "as") do
+        String.slice(cleaned, 2..-1//1)
+      else
+        cleaned
+      end
+
+    case Integer.parse(cleaned) do
+      {asn, _} -> asn
+      :error -> nil
+    end
+  end
+
+  @doc "Returns {dc_count, vpn_count, tor_count} — useful for health checks."
+  def sizes do
+    {:ets.info(@dc_table, :size) || 0, :ets.info(@vpn_table, :size) || 0,
+     :ets.info(@tor_table, :size) || 0}
+  end
+
+  @doc "Returns all ASNs in a given list as a sorted integer list."
+  def all(:datacenter), do: :ets.tab2list(@dc_table) |> Enum.map(&elem(&1, 0)) |> Enum.sort()
+  def all(:vpn), do: :ets.tab2list(@vpn_table) |> Enum.map(&elem(&1, 0)) |> Enum.sort()
+  def all(:tor), do: :ets.tab2list(@tor_table) |> Enum.map(&elem(&1, 0)) |> Enum.sort()
 
   defp asn_file(filename) do
     Path.join(:code.priv_dir(:spectabas), "asn_lists/#{filename}")

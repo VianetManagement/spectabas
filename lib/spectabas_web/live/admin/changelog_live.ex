@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.27.1", "2026-04-14T02:30:00Z",
+       [
+         %{
+           title: "Fix: ASN blocklist parser + Network page datacenter/VPN/Tor counts",
+           description:
+             "The ASN blocklist loader was silently failing on every line because priv/asn_lists/*.txt lines look like 'AS45090 # Tencent cloud...' and the parser called Integer.parse on the whole line (which fails immediately on the A). So the ETS tables have been empty since inception — every event got ip_is_datacenter/vpn/tor = 0, and the Network page's three percentage cards always showed zero. Fixed the parser to strip # comments and the optional AS prefix before parsing. Added a one-shot BackfillASNFlags Oban worker that walks the events table once and applies the flags to existing historical rows. Application startup auto-triggers the backfill if the blocklist loaded but no events in the last 30 days are flagged. ASNBlocklist now logs row counts on load and exposes sizes/0 and all/1 for diagnostics."
+         }
+       ]},
       {"v5.27.0", "2026-04-14T02:00:00Z",
        [
          %{

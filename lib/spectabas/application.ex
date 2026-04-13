@@ -36,7 +36,7 @@ defmodule Spectabas.Application do
 
     # Notify Slack on deploy (async, non-blocking)
     Task.start(fn ->
-      Spectabas.Notifications.Slack.notify(":rocket: *Spectabas deployed* — v5.27.0")
+      Spectabas.Notifications.Slack.notify(":rocket: *Spectabas deployed* — v5.27.1")
     end)
 
     # One-time backfill of daily_rollup if empty. Delayed so CH schema is ready.
@@ -45,8 +45,66 @@ defmodule Spectabas.Application do
       maybe_backfill_daily_rollup()
     end)
 
+    # One-time backfill of ip_is_datacenter / ip_is_vpn / ip_is_tor flags on
+    # existing events. The ASN-list parser was broken until v5.27.1 so every
+    # historical event has these flags = 0. We enqueue the backfill if we see
+    # a non-empty blocklist AND zero flagged rows in the last 30 days.
+    Task.start(fn ->
+      Process.sleep(90_000)
+      maybe_backfill_asn_flags()
+    end)
+
     result
   end
+
+  defp maybe_backfill_asn_flags do
+    cfg = Application.get_env(:spectabas, Spectabas.ClickHouse, [])
+
+    if cfg[:url] && cfg[:url] != "" && !String.contains?(cfg[:url], "placeholder") do
+      {dc, vpn, tor} = Spectabas.IPEnricher.ASNBlocklist.sizes()
+
+      if dc + vpn + tor == 0 do
+        Logger.warning("[BackfillASNFlags] Blocklists are empty — skipping backfill")
+      else
+        sql = """
+        SELECT
+          countIf(ip_is_datacenter = 1) AS dc,
+          countIf(ip_is_vpn = 1) AS vpn,
+          countIf(ip_is_tor = 1) AS tor
+        FROM events
+        WHERE timestamp >= now() - INTERVAL 30 DAY
+        """
+
+        case Spectabas.ClickHouse.query(sql) do
+          {:ok, [%{"dc" => dc_rows, "vpn" => vpn_rows, "tor" => tor_rows}]} ->
+            flagged = to_int(dc_rows) + to_int(vpn_rows) + to_int(tor_rows)
+
+            if flagged == 0 do
+              Logger.notice(
+                "[BackfillASNFlags] Lists loaded (dc=#{dc}, vpn=#{vpn}, tor=#{tor}) but zero flagged rows in last 30d — enqueueing backfill"
+              )
+
+              Oban.insert(Spectabas.Workers.BackfillASNFlags.new(%{}))
+            else
+              Logger.notice(
+                "[BackfillASNFlags] #{flagged} flagged rows present — skipping backfill"
+              )
+            end
+
+          _ ->
+            :ok
+        end
+      end
+    end
+  rescue
+    e ->
+      Logger.warning("[BackfillASNFlags] Startup check skipped: #{inspect(e)}")
+      :ok
+  end
+
+  defp to_int(n) when is_integer(n), do: n
+  defp to_int(n) when is_binary(n), do: String.to_integer(n)
+  defp to_int(_), do: 0
 
   defp maybe_backfill_daily_rollup do
     cfg = Application.get_env(:spectabas, Spectabas.ClickHouse, [])
