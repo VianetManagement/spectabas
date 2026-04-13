@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.26.8", "2026-04-14T01:00:00Z",
+       [
+         %{
+           title: "Fix: Search Keywords charts, round 3 — Date-column alias collision",
+           description:
+             "After the total_clicks/total_impressions fix, daily_trends was still returning 0 rows. Render logs surfaced NO_COMMON_TYPE (Code 386): toString(date) AS date aliased the Date column to a String, then GROUP BY date and ORDER BY date became ambiguous between the Date source column and the String alias. Renamed the alias to `bucket` and kept GROUP BY/ORDER BY on the Date source column. Applied to daily_trends, drawer_timeseries, and query_sparklines. Template + build_chart_jsons updated to read 'bucket' instead of 'date'. Added a catch-all CLAUDE.md note: aliases in ClickHouse must never collide with source column names, even if the type differs — both ILLEGAL_AGGREGATION and NO_COMMON_TYPE come from this class of bug."
+         }
+       ]},
       {"v5.26.7", "2026-04-14T00:30:00Z",
        [
          %{

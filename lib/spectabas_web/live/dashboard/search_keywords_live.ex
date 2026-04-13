@@ -220,7 +220,7 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
   end
 
   defp build_chart_jsons(daily_trends) do
-    labels = Enum.map(daily_trends, &short_date(&1["date"]))
+    labels = Enum.map(daily_trends, &short_date(&1["bucket"]))
     clicks = Enum.map(daily_trends, &to_num(&1["total_clicks"]))
     impressions = Enum.map(daily_trends, &to_num(&1["total_impressions"]))
     ctr = Enum.map(daily_trends, &to_float(&1["ctr"]))
@@ -329,7 +329,7 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
   end
 
   defp build_drawer_chart_jsons(timeseries) do
-    labels = Enum.map(timeseries, &short_date(&1["date"]))
+    labels = Enum.map(timeseries, &short_date(&1["bucket"]))
 
     clicks =
       Jason.encode!(%{
@@ -590,16 +590,18 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
   # Per-day totals across all queries. Drives the three trend charts at the
   # top of the page (clicks+impressions combo, CTR, position).
   defp query_daily_trends(site_p, days, source_filter) do
-    # Aliases MUST NOT shadow column names. Previously `sum(clicks) AS clicks`
-    # made ClickHouse interpret the `sum(clicks)` inside `if(...)` as
-    # `sum(the_alias)` = nested aggregation → ILLEGAL_AGGREGATION. Use
-    # `total_clicks` / `total_impressions` (same pattern as query_stats).
-    # FINAL is also skipped here — with 6M+ rows, FINAL + GROUP BY date hit
-    # max_execution_time and silently returned an empty response. The Stats
-    # card still uses FINAL for exact aggregate numbers.
+    # Aliases MUST NOT shadow column names.
+    # 1) `sum(clicks) AS clicks` made the inner `sum(clicks)` resolve to
+    #    `sum(the_alias)` = nested agg → ILLEGAL_AGGREGATION. Renamed to
+    #    total_clicks / total_impressions.
+    # 2) `toString(date) AS date` made `GROUP BY date` ambiguous between the
+    #    Date column and the String alias → NO_COMMON_TYPE. Renamed alias
+    #    to `bucket` and kept GROUP BY / ORDER BY on the Date column directly.
+    # FINAL is skipped — with 6M+ rows, FINAL + GROUP BY date silently returns
+    # 0 rows. Stats card uses FINAL for exact aggregate numbers.
     sql = """
     SELECT
-      toString(date) AS date,
+      toString(date) AS bucket,
       sum(clicks) AS total_clicks,
       sum(impressions) AS total_impressions,
       if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
@@ -635,9 +637,9 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
   defp query_sparklines(site_p, days, source_filter, queries) do
     in_clause = Enum.map_join(queries, ", ", &ClickHouse.param/1)
 
-    # FINAL dropped here too — same reason as daily_trends.
+    # FINAL dropped + alias renamed to avoid shadowing Date column.
     sql = """
-    SELECT query, toString(date) AS date, sum(clicks) AS clicks
+    SELECT query, toString(date) AS bucket, sum(clicks) AS total_clicks
     FROM search_console
     WHERE site_id = #{site_p}
       AND date >= today() - #{days}
@@ -649,7 +651,7 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
 
     case ClickHouse.query(sql) do
       {:ok, rows} ->
-        Enum.group_by(rows, & &1["query"], &{&1["date"], to_num(&1["clicks"])})
+        Enum.group_by(rows, & &1["query"], &{&1["bucket"], to_num(&1["total_clicks"])})
 
       _ ->
         %{}
@@ -720,11 +722,11 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
   # here because the WHERE query = X filter narrows the scan massively.
 
   defp query_drawer_timeseries(site_p, query_p, days, source_filter) do
-    # FINAL dropped — same silent-zero-rows issue as daily_trends when combined
-    # with GROUP BY date.
+    # FINAL dropped + alias renamed to avoid shadowing Date column (see
+    # daily_trends comment).
     sql = """
     SELECT
-      toString(date) AS date,
+      toString(date) AS bucket,
       sum(clicks) AS total_clicks,
       sum(impressions) AS total_impressions,
       if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
