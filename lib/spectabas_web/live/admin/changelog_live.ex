@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.26.9", "2026-04-14T01:30:00Z",
+       [
+         %{
+           title: "Fix: Search Keywords range buttons (7d/30d/90d) now actually change data",
+           description:
+             "Clicking 7d, 30d, or 90d wasn't updating any chart. Two layered bugs: (1) phx-update='ignore' on the chart containers meant LiveView never applied the new DOM id on re-render, so the hook never saw the new data-chart attribute. (2) chart_key was derived from System.unique_integer so it changed on EVERY load_data call — including sort clicks, which would have unnecessarily destroyed+remounted charts. Dropped phx-update='ignore' so id changes now trigger clean element replacement and hook remount. chart_key is now range + source so it changes only when the displayed data should change. drawer_chart_key is now derived from the query so clicking a different query while the drawer is open also forces a proper remount. Morphdom's smart diffing leaves unchanged canvases alone between re-renders, so Chart.js state is preserved when it should be."
+         }
+       ]},
       {"v5.26.8", "2026-04-14T01:00:00Z",
        [
          %{

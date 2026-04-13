@@ -207,7 +207,11 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     |> assign(:cannibalization, Map.get(results, :cannibalization, []))
     |> assign(:daily_trends, daily_trends)
     |> assign(:query_sparklines, sparklines)
-    |> assign(:chart_key, Integer.to_string(System.unique_integer([:positive])))
+    # chart_key is derived from the user-selected filters (not a unique id per
+    # load). This makes it stable across re-renders that don't change what the
+    # chart should display (e.g. sort), but change when date_range or source
+    # change — which is when we want the hook to remount with fresh data.
+    |> assign(:chart_key, "#{range}-#{source}")
     |> assign(:chart_clicks_impressions_json, ci_json)
     |> assign(:chart_ctr_json, ctr_json)
     |> assign(:chart_position_json, pos_json)
@@ -321,7 +325,10 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     |> assign(:drawer_pages, Map.get(results, :drawer_pages, []))
     |> assign(:drawer_devices, Map.get(results, :drawer_devices, []))
     |> assign(:drawer_countries, Map.get(results, :drawer_countries, []))
-    |> assign(:drawer_chart_key, Integer.to_string(System.unique_integer([:positive])))
+    # drawer_chart_key derived from the query itself so clicking between
+    # queries forces a remount (different key → different DOM id → LV replaces
+    # the element, hook remounts reading the fresh data-chart).
+    |> assign(:drawer_chart_key, Base.encode16(query, case: :lower))
     |> assign(:drawer_clicks_json, clicks_j)
     |> assign(:drawer_impressions_json, imp_j)
     |> assign(:drawer_ctr_json, ctr_j)
@@ -913,7 +920,6 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
             <div
               id={"chart-clicks-impressions-" <> @chart_key}
               phx-hook="SearchChart"
-              phx-update="ignore"
               data-chart={@chart_clicks_impressions_json}
               class="h-64 relative"
             >
@@ -927,7 +933,6 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
               <div
                 id={"chart-ctr-" <> @chart_key}
                 phx-hook="SearchChart"
-                phx-update="ignore"
                 data-chart={@chart_ctr_json}
                 class="h-48 relative"
               >
@@ -941,7 +946,6 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
               <div
                 id={"chart-position-" <> @chart_key}
                 phx-hook="SearchChart"
-                phx-update="ignore"
                 data-chart={@chart_position_json}
                 class="h-48 relative"
               >
@@ -1007,7 +1011,6 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                           <div
                             id={query_sparkline_id(q["query"]) <> "-" <> @chart_key}
                             phx-hook="Sparkline"
-                            phx-update="ignore"
                             data-spark={query_sparkline_json(@query_sparklines, q["query"])}
                             class="w-24 h-8"
                           >
@@ -1377,7 +1380,6 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                 <div
                   id={"drawer-chart-clicks-" <> @drawer_chart_key}
                   phx-hook="SearchChart"
-                  phx-update="ignore"
                   data-chart={@drawer_clicks_json}
                   class="h-32 relative"
                 >
@@ -1389,7 +1391,6 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                 <div
                   id={"drawer-chart-impressions-" <> @drawer_chart_key}
                   phx-hook="SearchChart"
-                  phx-update="ignore"
                   data-chart={@drawer_impressions_json}
                   class="h-32 relative"
                 >
@@ -1401,7 +1402,6 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                 <div
                   id={"drawer-chart-ctr-" <> @drawer_chart_key}
                   phx-hook="SearchChart"
-                  phx-update="ignore"
                   data-chart={@drawer_ctr_json}
                   class="h-32 relative"
                 >
@@ -1413,7 +1413,6 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                 <div
                   id={"drawer-chart-position-" <> @drawer_chart_key}
                   phx-hook="SearchChart"
-                  phx-update="ignore"
                   data-chart={@drawer_position_json}
                   class="h-32 relative"
                 >
