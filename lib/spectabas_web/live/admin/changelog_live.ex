@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.26.0", "2026-04-13T21:00:00Z",
+       [
+         %{
+           title: "Feat: Campaigns page auto-detects from events",
+           description:
+             "The Campaigns page was only showing pre-created campaigns from the UTM builder — silently missing any utm_campaign traffic that wasn't pre-created. Now the page is driven by actual ClickHouse events: every unique (utm_campaign, utm_source, utm_medium) triple in the selected date range is a row, whether it was pre-built or not. Saved campaigns get their nice name displayed in place of the raw utm value. Detected-but-unsaved campaigns get a one-click 'Save to Builder' button. Saved campaigns with no traffic still show (grayed) so you see everything you set up. Date range selector (7d/30d/90d) replaces the hardcoded 30d. campaign_performance query now groups by campaign+source+medium."
+         }
+       ]},
       {"v5.25.0", "2026-04-13T20:30:00Z",
        [
          %{

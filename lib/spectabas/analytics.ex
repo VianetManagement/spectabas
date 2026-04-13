@@ -1019,9 +1019,16 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
+      # Group by (utm_campaign, utm_source, utm_medium) so a campaign that runs
+      # across multiple sources/mediums (e.g. "spring_sale" on newsletter/email
+      # AND facebook/cpc) shows as separate rows — which is the actual reality
+      # for marketing attribution. The UI can decide whether to collapse by
+      # campaign name for the "saved campaigns" join.
       sql = """
       SELECT
         campaign,
+        source,
+        medium,
         sum(pv) AS pageviews,
         uniq(visitor_id) AS visitors,
         count() AS sessions,
@@ -1032,6 +1039,8 @@ defmodule Spectabas.Analytics do
           session_id,
           any(visitor_id) AS visitor_id,
           any(utm_campaign) AS campaign,
+          any(utm_source) AS source,
+          any(utm_medium) AS medium,
           countIf(event_type = 'pageview') AS pv,
           maxIf(duration_s, event_type = 'duration' AND duration_s > 0) AS dur
         FROM events
@@ -1043,9 +1052,9 @@ defmodule Spectabas.Analytics do
         GROUP BY session_id
         HAVING pv > 0
       )
-      GROUP BY campaign
+      GROUP BY campaign, source, medium
       ORDER BY visitors DESC
-      LIMIT 50
+      LIMIT 200
       """
 
       ClickHouse.query(sql)
