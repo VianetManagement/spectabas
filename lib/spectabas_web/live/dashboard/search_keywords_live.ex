@@ -720,6 +720,8 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
   # here because the WHERE query = X filter narrows the scan massively.
 
   defp query_drawer_timeseries(site_p, query_p, days, source_filter) do
+    # FINAL dropped — same silent-zero-rows issue as daily_trends when combined
+    # with GROUP BY date.
     sql = """
     SELECT
       toString(date) AS date,
@@ -727,7 +729,7 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
       sum(impressions) AS total_impressions,
       if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
       round(avg(position), 1) AS avg_position
-    FROM search_console FINAL
+    FROM search_console
     WHERE site_id = #{site_p}
       AND query = #{query_p}
       AND date >= today() - #{days}
@@ -737,8 +739,19 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     """
 
     case ClickHouse.query(sql) do
-      {:ok, rows} -> rows
-      _ -> []
+      {:ok, rows} ->
+        require Logger
+        Logger.notice("[SearchKeywords] drawer_timeseries returned #{length(rows)} rows")
+        rows
+
+      {:error, err} ->
+        require Logger
+
+        Logger.error(
+          "[SearchKeywords] drawer_timeseries error: #{inspect(err) |> String.slice(0, 300)}"
+        )
+
+        []
     end
   end
 

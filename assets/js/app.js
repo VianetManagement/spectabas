@@ -233,8 +233,16 @@ const SearchChart = {
 
     // Render initial data from the data-chart attribute (race-free).
     const raw = this.el.dataset.chart
+    console.log("[SearchChart]", this.el.id, "raw length:", (raw || "").length, "raw preview:", (raw || "").slice(0, 200))
     if (raw) {
-      try { this._render(JSON.parse(raw)) } catch (e) { console.error("SearchChart parse", e) }
+      try {
+        const parsed = JSON.parse(raw)
+        console.log("[SearchChart]", this.el.id, "datasets count:", parsed.datasets ? parsed.datasets.length : 0,
+                    "first dataset data length:", parsed.datasets?.[0]?.data?.length)
+        this._render(parsed)
+      } catch (e) { console.error("[SearchChart] parse error", this.el.id, e) }
+    } else {
+      console.warn("[SearchChart]", this.el.id, "has no data-chart attribute")
     }
 
     // Still listen for pushed updates (e.g. date range change).

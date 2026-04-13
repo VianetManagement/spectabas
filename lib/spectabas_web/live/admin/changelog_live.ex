@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.26.7", "2026-04-14T00:30:00Z",
+       [
+         %{
+           title: "Diag: SearchChart hook console logs + drawer_timeseries no-FINAL",
+           description:
+             "SearchChart hook now logs [SearchChart] id raw-length data-chart-preview and dataset counts to the browser console so we can see what the hook is actually receiving. Also dropped FINAL from drawer_timeseries (same silent-zero-rows issue as daily_trends) and added row-count + error logging."
+         }
+       ]},
       {"v5.26.6", "2026-04-14T00:00:00Z",
        [
          %{
