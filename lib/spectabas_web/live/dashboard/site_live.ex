@@ -357,8 +357,10 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
 
     timeseries_task =
       Task.async(fn ->
+        # Use daily_rollup-backed path for any multi-day range (7d, 30d, 90d, etc.).
+        # Short ranges (Today, 24h) keep hourly granularity via timeseries/4.
         result =
-          if days_in_range >= 30 do
+          if days_in_range >= 7 do
             Analytics.timeseries_fast(site, user, date_range, period)
           else
             Analytics.timeseries(site, user, date_range, period)

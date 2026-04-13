@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.22.1", "2026-04-13T17:00:00Z",
+       [
+         %{
+           title: "Perf: 7d chart and stats cards now use the rollup",
+           description:
+             "Lowered the daily_rollup threshold from 30 days to 7 days so the 7-day chart also benefits from pre-aggregated data. overview_stats_fast (the stats cards that block initial dashboard render) was still doing uniq(visitor_id) over the full range of raw events — rewrote it to split pv/visitors/sessions across rollup states (prior days) + raw event states (today+yesterday) via UNION ALL + uniqExactIfMerge for exact cross-day dedup. Bounce/duration stay as cheap per-event aggregates over the full range. Should cut 7d and 30d load times substantially."
+         }
+       ]},
       {"v5.22.0", "2026-04-13T15:15:00Z",
        [
          %{

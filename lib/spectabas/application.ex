@@ -36,7 +36,7 @@ defmodule Spectabas.Application do
 
     # Notify Slack on deploy (async, non-blocking)
     Task.start(fn ->
-      Spectabas.Notifications.Slack.notify(":rocket: *Spectabas deployed* — v5.22.0")
+      Spectabas.Notifications.Slack.notify(":rocket: *Spectabas deployed* — v5.22.1")
     end)
 
     # One-time backfill of daily_rollup if empty. Delayed so CH schema is ready.

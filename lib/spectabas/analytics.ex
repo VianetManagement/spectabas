@@ -89,14 +89,16 @@ defmodule Spectabas.Analytics do
   end
 
   @doc """
-  Fast overview stats using daily_stats SummingMergeTree.
-  Visitors/sessions are summed per-day (approximate for multi-day ranges).
+  Fast overview stats. Uses daily_rollup for exact pv/visitors/sessions
+  across prior days + raw events (as states) for today+yesterday, so uniqExact
+  dedups across the whole range without scanning raw events for 30+ days.
+  bounce/duration are a separate cheap per-event aggregation over the range.
   Falls back to regular overview_stats if segments are active.
   """
   def overview_stats_fast(%Site{} = site, %User{} = user, date_range, opts \\ []) do
     seg = segment_sql(opts)
 
-    # Segments require raw events — can't use daily_stats MV
+    # Segments require raw events — can't use rollup
     if seg != "" do
       overview_stats(site, user, date_range, opts)
     else
@@ -106,26 +108,64 @@ defmodule Spectabas.Analytics do
 
         native_result =
           if native_range do
-            # Lighter query than full overview_stats: uses uniq() (HyperLogLog) instead of
-            # uniqExact + session subquery. Avoids daily_stats SummingMergeTree which
-            # incorrectly sums per-batch uniqExact values.
-            sql = """
+            from_date = native_range.from |> DateTime.to_date() |> Date.to_iso8601()
+            to_date = native_range.to |> DateTime.to_date() |> Date.to_iso8601()
+            raw_cutoff = Date.utc_today() |> Date.add(-1) |> Date.to_iso8601()
+            site_id = ClickHouse.param(site.id)
+
+            # Query 1: pv/visitors/sessions via rollup (prior days) + raw states (today+yesterday)
+            # UNION ALL into a single outer merge gives exact cross-day uniqExact dedup.
+            core_sql = """
             SELECT
-              countIf(event_type = 'pageview') AS pageviews,
-              uniq(visitor_id) AS unique_visitors,
-              uniq(session_id) AS total_sessions,
-              round(sum(is_bounce) / greatest(uniq(session_id), 1) * 100, 1) AS bounce_rate,
-              round(avgIf(duration_s, event_type = 'duration' AND duration_s > 0), 0) AS avg_duration
+              countIfMerge(pv_s) AS pageviews,
+              uniqExactIfMerge(vis_s) AS unique_visitors,
+              uniqExactIfMerge(sess_s) AS total_sessions
+            FROM (
+              SELECT pv_state AS pv_s, vis_state AS vis_s, sess_state AS sess_s
+              FROM daily_rollup
+              WHERE site_id = #{site_id}
+                AND date >= #{ClickHouse.param(from_date)}
+                AND date <= #{ClickHouse.param(to_date)}
+                AND date < #{ClickHouse.param(raw_cutoff)}
+
+              UNION ALL
+
+              SELECT
+                countIfState(event_type = 'pageview' AND ip_is_bot = 0) AS pv_s,
+                uniqExactIfState(visitor_id, event_type = 'pageview' AND ip_is_bot = 0) AS vis_s,
+                uniqExactIfState(session_id, event_type = 'pageview' AND ip_is_bot = 0) AS sess_s
+              FROM events
+              WHERE site_id = #{site_id}
+                AND toDate(timestamp) >= #{ClickHouse.param(raw_cutoff)}
+                AND toDate(timestamp) >= #{ClickHouse.param(from_date)}
+                AND toDate(timestamp) <= #{ClickHouse.param(to_date)}
+                AND ip_is_bot = 0
+            )
+            """
+
+            # Query 2: bounce + duration. Cheap per-event aggregates, no uniqExact.
+            aux_sql = """
+            SELECT
+              sum(is_bounce) AS bounce_count,
+              sumIf(duration_s, event_type = 'duration' AND duration_s > 0) AS duration_sum,
+              countIf(event_type = 'duration' AND duration_s > 0) AS duration_count
             FROM events
-            WHERE site_id = #{ClickHouse.param(site.id)}
+            WHERE site_id = #{site_id}
               AND timestamp >= #{ClickHouse.param(format_datetime(native_range.from))}
               AND timestamp <= #{ClickHouse.param(format_datetime(native_range.to))}
               AND ip_is_bot = 0
             """
 
-            case ClickHouse.query(sql) do
-              {:ok, [row]} -> row
-              _ -> nil
+            core_task = Task.async(fn -> ClickHouse.query(core_sql) end)
+            aux_task = Task.async(fn -> ClickHouse.query(aux_sql) end)
+
+            core = safe_row(Task.await(core_task, 30_000))
+            aux = safe_row(Task.await(aux_task, 30_000))
+
+            if core || aux do
+              merge_fast_overview(core, aux)
+            else
+              nil
             end
           end
 
@@ -153,6 +193,35 @@ defmodule Spectabas.Analytics do
         {:ok, merge_overview(native_result, imported_result)}
       end
     end
+  end
+
+  defp safe_row({:ok, [row]}), do: row
+  defp safe_row(_), do: nil
+
+  # Combines the rollup-backed pv/vis/sess row with the raw-event bounce/duration row
+  # into the same shape that overview_stats returns.
+  defp merge_fast_overview(core, aux) do
+    core = core || %{}
+    aux = aux || %{}
+
+    sessions = to_int(core["total_sessions"])
+    bounce_count = to_int(aux["bounce_count"])
+    duration_sum = to_int(aux["duration_sum"])
+    duration_count = to_int(aux["duration_count"])
+
+    bounce_rate =
+      if sessions > 0, do: Float.round(bounce_count / sessions * 100, 1), else: 0.0
+
+    avg_duration =
+      if duration_count > 0, do: round(duration_sum / duration_count), else: 0
+
+    %{
+      "pageviews" => to_string(to_int(core["pageviews"])),
+      "unique_visitors" => to_string(to_int(core["unique_visitors"])),
+      "total_sessions" => to_string(sessions),
+      "bounce_rate" => to_string(bounce_rate),
+      "avg_duration" => to_string(avg_duration)
+    }
   end
 
   defp merge_overview(nil, nil), do: empty_overview()
