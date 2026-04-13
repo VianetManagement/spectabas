@@ -285,6 +285,28 @@ defmodule SpectabasWeb.HealthController do
     end
   end
 
+  def backfill_asn_flags(conn, _params) do
+    {dc, vpn, tor} = Spectabas.IPEnricher.ASNBlocklist.sizes()
+
+    if dc + vpn + tor == 0 do
+      conn
+      |> put_status(503)
+      |> json(%{
+        error: "ASN blocklists are empty — nothing to apply. Check app logs for load errors."
+      })
+    else
+      {:ok, job} = Oban.insert(Spectabas.Workers.BackfillASNFlags.new(%{}))
+
+      json(conn, %{
+        ok: true,
+        job_id: job.id,
+        blocklist_sizes: %{datacenter: dc, vpn: vpn, tor: tor},
+        note:
+          "Backfill enqueued. Watch logs for [BackfillASNFlags] lines. Runs as six ALTER UPDATE statements; mutations_sync=2 so it waits for completion. Expect minutes on large events tables."
+      })
+    end
+  end
+
   def backfill_geo(conn, _params) do
     # Run inline instead of via Oban so we see immediate results
     alias Spectabas.ClickHouse

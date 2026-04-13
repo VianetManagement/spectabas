@@ -36,7 +36,7 @@ defmodule Spectabas.Application do
 
     # Notify Slack on deploy (async, non-blocking)
     Task.start(fn ->
-      Spectabas.Notifications.Slack.notify(":rocket: *Spectabas deployed* — v5.27.1")
+      Spectabas.Notifications.Slack.notify(":rocket: *Spectabas deployed* — v5.27.2")
     end)
 
     # One-time backfill of daily_rollup if empty. Delayed so CH schema is ready.
@@ -79,15 +79,23 @@ defmodule Spectabas.Application do
           {:ok, [%{"dc" => dc_rows, "vpn" => vpn_rows, "tor" => tor_rows}]} ->
             flagged = to_int(dc_rows) + to_int(vpn_rows) + to_int(tor_rows)
 
-            if flagged == 0 do
+            # The parser bug made blocklists effectively empty since inception.
+            # A tiny handful of flagged rows (a few hundred) may exist from
+            # brief windows when the parser worked. Force the backfill if
+            # flagged rows are absurdly low compared to blocklist size — a
+            # healthy populated site should have way more flagged rows than
+            # total blocklist entries.
+            bl_size = dc + vpn + tor
+
+            if flagged < bl_size * 10 do
               Logger.notice(
-                "[BackfillASNFlags] Lists loaded (dc=#{dc}, vpn=#{vpn}, tor=#{tor}) but zero flagged rows in last 30d — enqueueing backfill"
+                "[BackfillASNFlags] Lists loaded (dc=#{dc}, vpn=#{vpn}, tor=#{tor}), only #{flagged} flagged rows in last 30d — enqueueing backfill"
               )
 
               Oban.insert(Spectabas.Workers.BackfillASNFlags.new(%{}))
             else
               Logger.notice(
-                "[BackfillASNFlags] #{flagged} flagged rows present — skipping backfill"
+                "[BackfillASNFlags] #{flagged} flagged rows present (threshold #{bl_size * 10}) — skipping backfill"
               )
             end
 

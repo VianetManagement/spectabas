@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.27.2", "2026-04-14T02:45:00Z",
+       [
+         %{
+           title: "Fix: Backfill ASN flags even when a few stray rows exist",
+           description:
+             "The v5.27.1 startup check skipped backfill if any flagged rows existed — but 59 rows from some brief prior window (out of millions of events) isn't meaningfully backfilled. Lowered the threshold: now triggers backfill if flagged rows < blocklist_size × 10 (a healthy site should have many multiples more flagged rows than total blocklist entries). Also added /health/backfill-asn-flags admin endpoint so you can force-run the backfill manually without redeploying."
+         }
+       ]},
       {"v5.27.1", "2026-04-14T02:30:00Z",
        [
          %{
