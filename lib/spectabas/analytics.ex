@@ -404,6 +404,313 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  # ----- Fast dashboard-summary variants backed by daily_*_rollup tables -----
+  #
+  # These are used only by the dashboard overview cards (Top Pages, Top Sources,
+  # etc. on site_live.ex) which show 5 rows and don't need drill-down detail.
+  # Detail pages (PagesLive, SourcesLive, GeoLive, MapLive, DevicesLive) keep
+  # calling the raw-events variants which support segments, city drill-down,
+  # avg_duration, etc.
+  #
+  # All use the same split: daily_*_rollup for complete prior days + raw events
+  # for today+yesterday. uniqExactIfMerge(State) gives exact cross-day dedup.
+
+  def top_pages_fast(%Site{} = site, %User{} = user, date_range) do
+    with :ok <- authorize(site, user) do
+      {from_date, to_date, raw_cutoff} = rollup_date_bounds(date_range, site)
+      site_id = ClickHouse.param(site.id)
+
+      sql = """
+      SELECT
+        url_path,
+        countIfMerge(pv_s) AS pageviews,
+        uniqExactIfMerge(vis_s) AS unique_visitors
+      FROM (
+        SELECT url_path, pv_state AS pv_s, vis_state AS vis_s
+        FROM daily_page_rollup
+        WHERE site_id = #{site_id}
+          AND date >= #{ClickHouse.param(from_date)}
+          AND date <= #{ClickHouse.param(to_date)}
+          AND date < #{ClickHouse.param(raw_cutoff)}
+
+        UNION ALL
+
+        SELECT
+          url_path,
+          countIfState(event_type = 'pageview' AND ip_is_bot = 0) AS pv_s,
+          uniqExactIfState(visitor_id, event_type = 'pageview' AND ip_is_bot = 0) AS vis_s
+        FROM events
+        WHERE site_id = #{site_id}
+          AND toDate(timestamp) >= #{ClickHouse.param(raw_cutoff)}
+          AND toDate(timestamp) >= #{ClickHouse.param(from_date)}
+          AND toDate(timestamp) <= #{ClickHouse.param(to_date)}
+          AND url_path != ''
+          AND ip_is_bot = 0
+        GROUP BY url_path
+      )
+      GROUP BY url_path
+      ORDER BY pageviews DESC
+      LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  def top_sources_fast(%Site{} = site, %User{} = user, date_range) do
+    with :ok <- authorize(site, user) do
+      {from_date, to_date, raw_cutoff} = rollup_date_bounds(date_range, site)
+      site_id = ClickHouse.param(site.id)
+
+      excluded = self_referrer_domains(site)
+
+      exclude_clause =
+        if excluded == [] do
+          ""
+        else
+          domains = Enum.map_join(excluded, ", ", &ClickHouse.param/1)
+          "HAVING referrer_domain NOT IN (#{domains})"
+        end
+
+      sql = """
+      SELECT
+        referrer_domain,
+        countIfMerge(pv_s) AS pageviews,
+        uniqExactIfMerge(sess_s) AS sessions
+      FROM (
+        SELECT referrer_domain, pv_state AS pv_s, sess_state AS sess_s
+        FROM daily_source_rollup
+        WHERE site_id = #{site_id}
+          AND date >= #{ClickHouse.param(from_date)}
+          AND date <= #{ClickHouse.param(to_date)}
+          AND date < #{ClickHouse.param(raw_cutoff)}
+
+        UNION ALL
+
+        SELECT
+          referrer_domain,
+          countIfState(event_type = 'pageview' AND ip_is_bot = 0) AS pv_s,
+          uniqExactIfState(session_id, event_type = 'pageview' AND ip_is_bot = 0) AS sess_s
+        FROM events
+        WHERE site_id = #{site_id}
+          AND toDate(timestamp) >= #{ClickHouse.param(raw_cutoff)}
+          AND toDate(timestamp) >= #{ClickHouse.param(from_date)}
+          AND toDate(timestamp) <= #{ClickHouse.param(to_date)}
+          AND referrer_domain != ''
+          AND ip_is_bot = 0
+        GROUP BY referrer_domain
+      )
+      GROUP BY referrer_domain
+      #{exclude_clause}
+      ORDER BY pageviews DESC
+      LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  def top_regions_fast(%Site{} = site, %User{} = user, date_range) do
+    with :ok <- authorize(site, user) do
+      {from_date, to_date, raw_cutoff} = rollup_date_bounds(date_range, site)
+      site_id = ClickHouse.param(site.id)
+
+      sql = """
+      SELECT
+        ip_region_name,
+        ip_country,
+        countIfMerge(pv_s) AS pageviews,
+        uniqExactIfMerge(vis_s) AS unique_visitors
+      FROM (
+        SELECT ip_region_name, ip_country, pv_state AS pv_s, vis_state AS vis_s
+        FROM daily_geo_rollup
+        WHERE site_id = #{site_id}
+          AND date >= #{ClickHouse.param(from_date)}
+          AND date <= #{ClickHouse.param(to_date)}
+          AND date < #{ClickHouse.param(raw_cutoff)}
+          AND ip_region_name != ''
+
+        UNION ALL
+
+        SELECT
+          ip_region_name,
+          ip_country,
+          countIfState(event_type = 'pageview' AND ip_is_bot = 0) AS pv_s,
+          uniqExactIfState(visitor_id, event_type = 'pageview' AND ip_is_bot = 0) AS vis_s
+        FROM events
+        WHERE site_id = #{site_id}
+          AND toDate(timestamp) >= #{ClickHouse.param(raw_cutoff)}
+          AND toDate(timestamp) >= #{ClickHouse.param(from_date)}
+          AND toDate(timestamp) <= #{ClickHouse.param(to_date)}
+          AND ip_region_name != ''
+          AND ip_is_bot = 0
+        GROUP BY ip_region_name, ip_country
+      )
+      GROUP BY ip_region_name, ip_country
+      ORDER BY unique_visitors DESC
+      LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  def top_browsers_fast(%Site{} = site, %User{} = user, date_range) do
+    device_dim_fast(site, user, date_range, "browser", "name")
+  end
+
+  def top_os_fast(%Site{} = site, %User{} = user, date_range) do
+    device_dim_fast(site, user, date_range, "os", "name")
+  end
+
+  defp device_dim_fast(%Site{} = site, %User{} = user, date_range, dimension, alias_name) do
+    with :ok <- authorize(site, user) do
+      {from_date, to_date, raw_cutoff} = rollup_date_bounds(date_range, site)
+      site_id = ClickHouse.param(site.id)
+
+      sql = """
+      SELECT
+        #{dimension} AS #{alias_name},
+        countIfMerge(pv_s) AS pageviews,
+        uniqExactIfMerge(vis_s) AS unique_visitors
+      FROM (
+        SELECT #{dimension}, pv_state AS pv_s, vis_state AS vis_s
+        FROM daily_device_rollup
+        WHERE site_id = #{site_id}
+          AND date >= #{ClickHouse.param(from_date)}
+          AND date <= #{ClickHouse.param(to_date)}
+          AND date < #{ClickHouse.param(raw_cutoff)}
+          AND #{dimension} != ''
+
+        UNION ALL
+
+        SELECT
+          #{dimension},
+          countIfState(event_type = 'pageview' AND ip_is_bot = 0) AS pv_s,
+          uniqExactIfState(visitor_id, event_type = 'pageview' AND ip_is_bot = 0) AS vis_s
+        FROM events
+        WHERE site_id = #{site_id}
+          AND toDate(timestamp) >= #{ClickHouse.param(raw_cutoff)}
+          AND toDate(timestamp) >= #{ClickHouse.param(from_date)}
+          AND toDate(timestamp) <= #{ClickHouse.param(to_date)}
+          AND #{dimension} != ''
+          AND ip_is_bot = 0
+        GROUP BY #{dimension}
+      )
+      GROUP BY #{alias_name}
+      ORDER BY unique_visitors DESC
+      LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  def visitor_locations_fast(%Site{} = site, %User{} = user, date_range) do
+    with :ok <- authorize(site, user) do
+      {from_date, to_date, raw_cutoff} = rollup_date_bounds(date_range, site)
+      site_id = ClickHouse.param(site.id)
+
+      sql = """
+      SELECT
+        ip_lat,
+        ip_lon,
+        any(ip_city) AS ip_city,
+        any(ip_region_name) AS ip_region_name,
+        any(ip_country) AS ip_country,
+        uniqExactIfMerge(vis_s) AS visitors
+      FROM (
+        SELECT ip_lat, ip_lon, ip_city, ip_region_name, ip_country, vis_state AS vis_s
+        FROM daily_geo_rollup
+        WHERE site_id = #{site_id}
+          AND date >= #{ClickHouse.param(from_date)}
+          AND date <= #{ClickHouse.param(to_date)}
+          AND date < #{ClickHouse.param(raw_cutoff)}
+          AND ip_lat != 0
+          AND ip_lon != 0
+
+        UNION ALL
+
+        SELECT
+          ip_lat,
+          ip_lon,
+          ip_city,
+          ip_region_name,
+          ip_country,
+          uniqExactIfState(visitor_id, event_type = 'pageview' AND ip_is_bot = 0) AS vis_s
+        FROM events
+        WHERE site_id = #{site_id}
+          AND toDate(timestamp) >= #{ClickHouse.param(raw_cutoff)}
+          AND toDate(timestamp) >= #{ClickHouse.param(from_date)}
+          AND toDate(timestamp) <= #{ClickHouse.param(to_date)}
+          AND ip_lat != 0
+          AND ip_lon != 0
+          AND ip_is_bot = 0
+        GROUP BY ip_lat, ip_lon, ip_city, ip_region_name, ip_country
+      )
+      GROUP BY ip_lat, ip_lon
+      ORDER BY visitors DESC
+      LIMIT 200
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  def timezone_distribution_fast(%Site{} = site, %User{} = user, date_range) do
+    with :ok <- authorize(site, user) do
+      {from_date, to_date, raw_cutoff} = rollup_date_bounds(date_range, site)
+      site_id = ClickHouse.param(site.id)
+
+      sql = """
+      SELECT
+        ip_timezone AS timezone,
+        countIfMerge(pv_s) AS pageviews,
+        uniqExactIfMerge(vis_s) AS visitors
+      FROM (
+        SELECT ip_timezone, pv_state AS pv_s, vis_state AS vis_s
+        FROM daily_geo_rollup
+        WHERE site_id = #{site_id}
+          AND date >= #{ClickHouse.param(from_date)}
+          AND date <= #{ClickHouse.param(to_date)}
+          AND date < #{ClickHouse.param(raw_cutoff)}
+          AND ip_timezone != ''
+
+        UNION ALL
+
+        SELECT
+          ip_timezone,
+          countIfState(event_type = 'pageview' AND ip_is_bot = 0) AS pv_s,
+          uniqExactIfState(visitor_id, event_type = 'pageview' AND ip_is_bot = 0) AS vis_s
+        FROM events
+        WHERE site_id = #{site_id}
+          AND toDate(timestamp) >= #{ClickHouse.param(raw_cutoff)}
+          AND toDate(timestamp) >= #{ClickHouse.param(from_date)}
+          AND toDate(timestamp) <= #{ClickHouse.param(to_date)}
+          AND ip_timezone != ''
+          AND ip_is_bot = 0
+        GROUP BY ip_timezone
+      )
+      GROUP BY timezone
+      ORDER BY visitors DESC
+      LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  # Normalizes a UTC or atom date_range into ISO date strings suitable for the
+  # rollup path, and returns the raw-events cutoff (UTC yesterday, string).
+  defp rollup_date_bounds(date_range, %Site{} = site) do
+    date_range = ensure_date_range(date_range)
+    tz = site.timezone || "UTC"
+    from_date = date_range.from |> to_local(tz) |> DateTime.to_date() |> Date.to_iso8601()
+    to_date = date_range.to |> to_local(tz) |> DateTime.to_date() |> Date.to_iso8601()
+    raw_cutoff = Date.utc_today() |> Date.add(-1) |> Date.to_iso8601()
+    {from_date, to_date, raw_cutoff}
+  end
+
   defp generate_buckets(from, to, :day, tz) do
     # Hourly buckets in the site's timezone
     # Convert UTC boundaries to local time for bucket generation

@@ -348,6 +348,65 @@ defmodule Spectabas.ClickHouse do
       ORDER BY (site_id, date)
       SETTINGS index_granularity = 8192
       """,
+      # Per-URL rollup for top_pages / (partial) entry_pages queries.
+      """
+      CREATE TABLE IF NOT EXISTS #{db}.daily_page_rollup (
+        site_id UInt64,
+        date Date,
+        url_path String,
+        pv_state AggregateFunction(countIf, UInt8, UInt8),
+        vis_state AggregateFunction(uniqExactIf, String, UInt8)
+      ) ENGINE = AggregatingMergeTree()
+      PARTITION BY toYYYYMM(date)
+      ORDER BY (site_id, date, url_path)
+      SETTINGS index_granularity = 8192
+      """,
+      # Per-source rollup for top_sources queries.
+      """
+      CREATE TABLE IF NOT EXISTS #{db}.daily_source_rollup (
+        site_id UInt64,
+        date Date,
+        referrer_domain String,
+        pv_state AggregateFunction(countIf, UInt8, UInt8),
+        sess_state AggregateFunction(uniqExactIf, String, UInt8)
+      ) ENGINE = AggregatingMergeTree()
+      PARTITION BY toYYYYMM(date)
+      ORDER BY (site_id, date, referrer_domain)
+      SETTINGS index_granularity = 8192
+      """,
+      # Per-geo rollup for top_regions / visitor_locations / timezone_distribution queries.
+      """
+      CREATE TABLE IF NOT EXISTS #{db}.daily_geo_rollup (
+        site_id UInt64,
+        date Date,
+        ip_country LowCardinality(String),
+        ip_region_name String,
+        ip_city String,
+        ip_lat Float64,
+        ip_lon Float64,
+        ip_timezone LowCardinality(String),
+        pv_state AggregateFunction(countIf, UInt8, UInt8),
+        vis_state AggregateFunction(uniqExactIf, String, UInt8)
+      ) ENGINE = AggregatingMergeTree()
+      PARTITION BY toYYYYMM(date)
+      ORDER BY (site_id, date, ip_country, ip_region_name, ip_city)
+      SETTINGS index_granularity = 8192
+      """,
+      # Per-device rollup for top_browsers / top_os queries.
+      """
+      CREATE TABLE IF NOT EXISTS #{db}.daily_device_rollup (
+        site_id UInt64,
+        date Date,
+        device_type LowCardinality(String),
+        browser LowCardinality(String),
+        os LowCardinality(String),
+        pv_state AggregateFunction(countIf, UInt8, UInt8),
+        vis_state AggregateFunction(uniqExactIf, String, UInt8)
+      ) ENGINE = AggregatingMergeTree()
+      PARTITION BY toYYYYMM(date)
+      ORDER BY (site_id, date, device_type, browser, os)
+      SETTINGS index_granularity = 8192
+      """,
       # Schema migrations — add columns that may not exist on older tables
       "ALTER TABLE #{db}.ecommerce_events ADD COLUMN IF NOT EXISTS refund_amount Decimal(12, 2) DEFAULT 0",
       "ALTER TABLE #{db}.ecommerce_events ADD COLUMN IF NOT EXISTS import_source LowCardinality(String) DEFAULT ''",
@@ -551,7 +610,7 @@ defmodule Spectabas.ClickHouse do
     "'#{e}'"
   end
 
-  @allowed_tables ~w(events daily_stats daily_rollup source_stats country_stats device_stats network_stats ecommerce_events subscription_events search_console imported_daily_stats imported_pages imported_sources imported_countries imported_devices ad_spend)
+  @allowed_tables ~w(events daily_stats daily_rollup daily_page_rollup daily_source_rollup daily_geo_rollup daily_device_rollup source_stats country_stats device_stats network_stats ecommerce_events subscription_events search_console imported_daily_stats imported_pages imported_sources imported_countries imported_devices ad_spend)
   defp sanitize_table(t) when t in @allowed_tables, do: t
   defp sanitize_table(t), do: raise(ArgumentError, "Unknown ClickHouse table: #{t}")
 

@@ -145,13 +145,12 @@ defmodule Spectabas.Workers.DailyRollupIntegrationTest do
   end
 
   defp cleanup do
-    ClickHouse.execute(
-      "ALTER TABLE events DELETE WHERE site_id = #{@site_id} SETTINGS mutations_sync = 2"
-    )
-
-    ClickHouse.execute(
-      "ALTER TABLE daily_rollup DELETE WHERE site_id = #{@site_id} SETTINGS mutations_sync = 2"
-    )
+    for table <-
+          ~w(events daily_rollup daily_page_rollup daily_source_rollup daily_geo_rollup daily_device_rollup) do
+      ClickHouse.execute(
+        "ALTER TABLE #{table} DELETE WHERE site_id = #{@site_id} SETTINGS mutations_sync = 2"
+      )
+    end
 
     :ok
   end

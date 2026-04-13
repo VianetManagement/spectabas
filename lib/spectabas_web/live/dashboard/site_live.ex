@@ -106,6 +106,14 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         if pending == 0 do
           socket
           |> assign(:deferred_loaded, true)
+          # Defensive final re-push so any chart hook that missed an
+          # earlier push (e.g. mounted after the critical-path event fired)
+          # gets a clean, complete dataset. Cheap — three push_event calls.
+          |> push_chart_data(
+            socket.assigns.timeseries,
+            socket.assigns[:locations] || [],
+            socket.assigns[:timezones] || []
+          )
           |> cache_stats(for_cache_key)
         else
           socket
@@ -351,8 +359,10 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     end
   end
 
-  # Clear deferred assigns to their "loading" state so cards show a spinner
-  # between range changes instead of stale data from the previous range.
+  # Clear deferred table/card assigns to their "loading" state so cards show a
+  # spinner between range changes. Keep locations/timezones from the previous
+  # range so the map/bar chart don't briefly go blank — they'll be replaced
+  # when the new deferred results arrive.
   defp reset_deferred_assigns(socket) do
     socket
     |> assign(:top_pages, nil)
@@ -361,8 +371,6 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     |> assign(:top_browsers, nil)
     |> assign(:top_os, nil)
     |> assign(:entry_pages, nil)
-    |> assign(:locations, [])
-    |> assign(:timezones, [])
     |> assign(:intents, nil)
     |> assign(:ecommerce, nil)
     |> assign(:identified_users, 0)
@@ -467,11 +475,24 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     |> assign(:timeseries, timeseries)
     |> assign(:live_visitors, live_visitors)
     |> assign_new(:chart_metric, fn -> "visitors" end)
-    |> push_chart_data(
-      timeseries,
-      socket.assigns[:locations] || [],
-      socket.assigns[:timezones] || []
-    )
+    # Push only the timeseries chart now — map and timezone bar are pushed
+    # individually by handle_info as their deferred results arrive. Pushing
+    # empty map/bar data here would briefly clear those charts during the
+    # 3-7 seconds before their queries finish.
+    |> push_timeseries_data(timeseries)
+  end
+
+  defp push_timeseries_data(socket, timeseries) do
+    if Phoenix.LiveView.connected?(socket) do
+      push_event(socket, "timeseries-data", %{
+        labels: Enum.map(timeseries, & &1["label"]),
+        pageviews: Enum.map(timeseries, &to_num(&1["pageviews"])),
+        visitors: Enum.map(timeseries, &to_num(&1["visitors"])),
+        metric: socket.assigns[:chart_metric] || "visitors"
+      })
+    else
+      socket
+    end
   end
 
   # Slow path: all the data cards, map, timezones.
@@ -488,37 +509,75 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
 
     days_in_range = Date.diff(socket.assigns.date_to, socket.assigns.date_from)
 
+    # For segmented queries we must hit raw events. Unsegmented queries
+    # can use the _fast rollup variants which are orders of magnitude cheaper.
+    use_fast? = Keyword.get(seg_opts, :segment, []) == []
+
+    top_pages_fn =
+      if use_fast?,
+        do: fn -> Analytics.top_pages_fast(site, user, date_range) end,
+        else: fn -> Analytics.top_pages(site, user, date_range, seg_opts) end
+
+    top_sources_fn =
+      if use_fast?,
+        do: fn -> Analytics.top_sources_fast(site, user, date_range) end,
+        else: fn -> Analytics.top_sources(site, user, date_range) end
+
+    top_regions_fn =
+      if use_fast?,
+        do: fn -> Analytics.top_regions_fast(site, user, date_range) end,
+        else: fn -> Analytics.top_regions(site, user, date_range) end
+
+    top_browsers_fn =
+      if use_fast?,
+        do: fn -> Analytics.top_browsers_fast(site, user, date_range) end,
+        else: fn -> Analytics.top_browsers(site, user, date_range) end
+
+    top_os_fn =
+      if use_fast?,
+        do: fn -> Analytics.top_os_fast(site, user, date_range) end,
+        else: fn -> Analytics.top_os(site, user, date_range) end
+
+    locations_fn =
+      if use_fast?,
+        do: fn -> Analytics.visitor_locations_fast(site, user, date_range) end,
+        else: fn -> Analytics.visitor_locations(site, user, date_range) end
+
+    timezones_fn =
+      if use_fast?,
+        do: fn -> Analytics.timezone_distribution_fast(site, user, date_range) end,
+        else: fn -> Analytics.timezone_distribution(site, user, date_range) end
+
     # List of {assign_key, fallback, fn/0} for each deferred query.
     jobs = [
       {:top_pages, [],
        fn ->
          timed("top_pages", site.id, days_in_range, fn ->
-           safe_query(fn -> Analytics.top_pages(site, user, date_range, seg_opts) end)
-           |> Enum.take(5)
+           safe_query(top_pages_fn) |> Enum.take(5)
          end)
        end},
       {:top_sources, [],
        fn ->
          timed("top_sources", site.id, days_in_range, fn ->
-           safe_query(fn -> Analytics.top_sources(site, user, date_range) end) |> Enum.take(5)
+           safe_query(top_sources_fn) |> Enum.take(5)
          end)
        end},
       {:top_regions, [],
        fn ->
          timed("top_regions", site.id, days_in_range, fn ->
-           safe_query(fn -> Analytics.top_regions(site, user, date_range) end) |> Enum.take(5)
+           safe_query(top_regions_fn) |> Enum.take(5)
          end)
        end},
       {:top_browsers, [],
        fn ->
          timed("top_browsers", site.id, days_in_range, fn ->
-           safe_query(fn -> Analytics.top_browsers(site, user, date_range) end) |> Enum.take(5)
+           safe_query(top_browsers_fn) |> Enum.take(5)
          end)
        end},
       {:top_os, [],
        fn ->
          timed("top_os", site.id, days_in_range, fn ->
-           safe_query(fn -> Analytics.top_os(site, user, date_range) end) |> Enum.take(5)
+           safe_query(top_os_fn) |> Enum.take(5)
          end)
        end},
       {:entry_pages, [],
@@ -530,15 +589,13 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
       {:locations, [],
        fn ->
          timed("locations", site.id, days_in_range, fn ->
-           safe_query(fn -> Analytics.visitor_locations(site, user, date_range) end)
-           |> Enum.take(50)
+           safe_query(locations_fn) |> Enum.take(50)
          end)
        end},
       {:timezones, [],
        fn ->
          timed("timezones", site.id, days_in_range, fn ->
-           safe_query(fn -> Analytics.timezone_distribution(site, user, date_range) end)
-           |> Enum.take(5)
+           safe_query(timezones_fn) |> Enum.take(5)
          end)
        end},
       {:intents, [],

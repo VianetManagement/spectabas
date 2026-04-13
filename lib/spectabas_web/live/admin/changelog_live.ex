@@ -53,6 +53,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.24.0", "2026-04-13T19:30:00Z",
+       [
+         %{
+           title: "Perf: Four new rollup tables for sub-second dashboard cards",
+           description:
+             "Added daily_page_rollup, daily_source_rollup, daily_geo_rollup, and daily_device_rollup — AggregatingMergeTree tables populated by the existing DailyRollup cron. top_pages, top_sources, top_regions, top_browsers, top_os, visitor_locations, and timezone_distribution on the dashboard overview now read from these for prior days and raw events only for today+yesterday. Was 3-7 seconds per card, should be a few hundred ms. Detail pages keep using the raw-events variants so they still have avg_duration, city drill-down, etc. Segmented dashboard queries also stay on raw events since rollups are unsegmented. Backfill runs automatically on first deploy — takes a few minutes on large sites."
+         },
+         %{
+           title: "Fix: Chart rendering during progressive load",
+           description:
+             "v5.23.0's progressive rendering was pushing empty map-data/bar-data during the critical path, briefly clearing those charts for 3-7 seconds until the deferred data arrived. Now critical path only pushes the timeseries chart data; map and timezone bar are pushed individually as their queries finish. Added a defensive final re-push when all deferred results complete, to handle any hook that missed an earlier push."
+         }
+       ]},
       {"v5.23.0", "2026-04-13T18:30:00Z",
        [
          %{

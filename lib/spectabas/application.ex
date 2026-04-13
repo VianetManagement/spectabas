@@ -36,7 +36,7 @@ defmodule Spectabas.Application do
 
     # Notify Slack on deploy (async, non-blocking)
     Task.start(fn ->
-      Spectabas.Notifications.Slack.notify(":rocket: *Spectabas deployed* — v5.23.0")
+      Spectabas.Notifications.Slack.notify(":rocket: *Spectabas deployed* — v5.24.0")
     end)
 
     # One-time backfill of daily_rollup if empty. Delayed so CH schema is ready.
@@ -52,22 +52,33 @@ defmodule Spectabas.Application do
     cfg = Application.get_env(:spectabas, Spectabas.ClickHouse, [])
 
     if cfg[:url] && cfg[:url] != "" && !String.contains?(cfg[:url], "placeholder") do
-      case Spectabas.ClickHouse.query("SELECT count() AS c FROM daily_rollup") do
-        {:ok, [%{"c" => c}]} ->
-          count =
-            case c do
-              n when is_integer(n) -> n
-              n when is_binary(n) -> String.to_integer(n)
-              _ -> 0
-            end
+      # Check all 5 rollup tables — if ANY is empty, backfill kicks in.
+      # Backfill is idempotent (DELETE then INSERT per table), so running it
+      # even when only one dimension rollup is empty is safe.
+      tables =
+        ~w(daily_rollup daily_page_rollup daily_source_rollup daily_geo_rollup daily_device_rollup)
 
-          if count == 0 do
-            Logger.notice("[DailyRollup] Empty — enqueueing historical backfill")
-            Oban.insert(Spectabas.Workers.DailyRollup.new(%{"backfill" => true}))
+      any_empty? =
+        Enum.any?(tables, fn table ->
+          case Spectabas.ClickHouse.query("SELECT count() AS c FROM #{table}") do
+            {:ok, [%{"c" => c}]} ->
+              count =
+                case c do
+                  n when is_integer(n) -> n
+                  n when is_binary(n) -> String.to_integer(n)
+                  _ -> 0
+                end
+
+              count == 0
+
+            _ ->
+              false
           end
+        end)
 
-        _ ->
-          :ok
+      if any_empty? do
+        Logger.notice("[DailyRollup] One or more rollup tables empty — enqueueing backfill")
+        Oban.insert(Spectabas.Workers.DailyRollup.new(%{"backfill" => true}))
       end
     end
   rescue
