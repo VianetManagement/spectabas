@@ -353,31 +353,39 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     days_in_range = Date.diff(to, from)
 
     stats_task =
-      Task.async(fn -> fetch_overview(site, user, date_range, seg_opts, days_in_range) end)
+      Task.async(fn ->
+        timed("stats", site.id, days_in_range, fn ->
+          fetch_overview(site, user, date_range, seg_opts, days_in_range)
+        end)
+      end)
 
     timeseries_task =
       Task.async(fn ->
-        # Use daily_rollup-backed path for any multi-day range (7d, 30d, 90d, etc.).
-        # Short ranges (Today, 24h) keep hourly granularity via timeseries/4.
-        result =
-          if days_in_range >= 7 do
-            Analytics.timeseries_fast(site, user, date_range, period)
-          else
-            Analytics.timeseries(site, user, date_range, period)
-          end
+        timed("timeseries", site.id, days_in_range, fn ->
+          # Use daily_rollup-backed path for any multi-day range (7d, 30d, 90d, etc.).
+          # Short ranges (Today, 24h) keep hourly granularity via timeseries/4.
+          result =
+            if days_in_range >= 7 do
+              Analytics.timeseries_fast(site, user, date_range, period)
+            else
+              Analytics.timeseries(site, user, date_range, period)
+            end
 
-        case result do
-          {:ok, rows} -> rows
-          _ -> []
-        end
+          case result do
+            {:ok, rows} -> rows
+            _ -> []
+          end
+        end)
       end)
 
     realtime_task =
       Task.async(fn ->
-        case Analytics.realtime_visitors(site) do
-          {:ok, count} -> count
-          _ -> 0
-        end
+        timed("realtime", site.id, days_in_range, fn ->
+          case Analytics.realtime_visitors(site) do
+            {:ok, count} -> count
+            _ -> 0
+          end
+        end)
       end)
 
     prev_task =
@@ -388,7 +396,11 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         {prev_from, prev_to} =
           dates_to_utc_range(Date.add(from, -(days + 1)), Date.add(from, -1), tz)
 
-        Task.async(fn -> fetch_overview(site, user, %{from: prev_from, to: prev_to}, []) end)
+        Task.async(fn ->
+          timed("prev_stats", site.id, days_in_range, fn ->
+            fetch_overview(site, user, %{from: prev_from, to: prev_to}, [])
+          end)
+        end)
       else
         nil
       end
@@ -418,63 +430,87 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     %{site: site, user: user} = socket.assigns
     {date_range, seg_opts} = date_range_and_opts(socket)
 
+    days_in_range = Date.diff(socket.assigns.date_to, socket.assigns.date_from)
+
     # Launch all queries in parallel
     tasks = %{
       top_pages:
         Task.async(fn ->
-          safe_query(fn -> Analytics.top_pages(site, user, date_range, seg_opts) end)
-          |> Enum.take(5)
+          timed("top_pages", site.id, days_in_range, fn ->
+            safe_query(fn -> Analytics.top_pages(site, user, date_range, seg_opts) end)
+            |> Enum.take(5)
+          end)
         end),
       top_sources:
         Task.async(fn ->
-          safe_query(fn -> Analytics.top_sources(site, user, date_range) end) |> Enum.take(5)
+          timed("top_sources", site.id, days_in_range, fn ->
+            safe_query(fn -> Analytics.top_sources(site, user, date_range) end) |> Enum.take(5)
+          end)
         end),
       top_regions:
         Task.async(fn ->
-          safe_query(fn -> Analytics.top_regions(site, user, date_range) end) |> Enum.take(5)
+          timed("top_regions", site.id, days_in_range, fn ->
+            safe_query(fn -> Analytics.top_regions(site, user, date_range) end) |> Enum.take(5)
+          end)
         end),
       top_browsers:
         Task.async(fn ->
-          safe_query(fn -> Analytics.top_browsers(site, user, date_range) end) |> Enum.take(5)
+          timed("top_browsers", site.id, days_in_range, fn ->
+            safe_query(fn -> Analytics.top_browsers(site, user, date_range) end) |> Enum.take(5)
+          end)
         end),
       top_os:
         Task.async(fn ->
-          safe_query(fn -> Analytics.top_os(site, user, date_range) end) |> Enum.take(5)
+          timed("top_os", site.id, days_in_range, fn ->
+            safe_query(fn -> Analytics.top_os(site, user, date_range) end) |> Enum.take(5)
+          end)
         end),
       entry_pages:
         Task.async(fn ->
-          safe_query(fn -> Analytics.entry_pages(site, user, date_range) end) |> Enum.take(5)
+          timed("entry_pages", site.id, days_in_range, fn ->
+            safe_query(fn -> Analytics.entry_pages(site, user, date_range) end) |> Enum.take(5)
+          end)
         end),
       locations:
         Task.async(fn ->
-          safe_query(fn -> Analytics.visitor_locations(site, user, date_range) end)
-          |> Enum.take(50)
+          timed("locations", site.id, days_in_range, fn ->
+            safe_query(fn -> Analytics.visitor_locations(site, user, date_range) end)
+            |> Enum.take(50)
+          end)
         end),
       timezones:
         Task.async(fn ->
-          safe_query(fn -> Analytics.timezone_distribution(site, user, date_range) end)
-          |> Enum.take(5)
+          timed("timezones", site.id, days_in_range, fn ->
+            safe_query(fn -> Analytics.timezone_distribution(site, user, date_range) end)
+            |> Enum.take(5)
+          end)
         end),
       intents:
         Task.async(fn ->
-          safe_query(fn -> Analytics.intent_breakdown(site, user, date_range) end)
-          |> Enum.take(10)
+          timed("intents", site.id, days_in_range, fn ->
+            safe_query(fn -> Analytics.intent_breakdown(site, user, date_range) end)
+            |> Enum.take(10)
+          end)
         end),
       ecommerce:
         if site.ecommerce_enabled do
           Task.async(fn ->
-            case Analytics.ecommerce_stats(site, user, date_range) do
-              {:ok, data} -> data
-              _ -> nil
-            end
+            timed("ecommerce", site.id, days_in_range, fn ->
+              case Analytics.ecommerce_stats(site, user, date_range) do
+                {:ok, data} -> data
+                _ -> nil
+              end
+            end)
           end)
         end,
       identified_users:
         Task.async(fn ->
-          case Analytics.identified_visitors_count(site, user, date_range) do
-            {:ok, count} -> count
-            _ -> 0
-          end
+          timed("identified_users", site.id, days_in_range, fn ->
+            case Analytics.identified_visitors_count(site, user, date_range) do
+              {:ok, count} -> count
+              _ -> 0
+            end
+          end)
         end)
     }
 
@@ -609,6 +645,22 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
       bounce_rate: 0.0,
       avg_duration: 0
     }
+  end
+
+  # Times a dashboard query and logs slow ones so we can see in AppSignal
+  # exactly where the 7d/30d delay is coming from. Threshold 500ms.
+  defp timed(name, site_id, days, fun) do
+    t0 = System.monotonic_time(:millisecond)
+    result = fun.()
+    ms = System.monotonic_time(:millisecond) - t0
+
+    if ms >= 500 do
+      require Logger
+
+      Logger.notice("[Dashboard:slow] #{name} site=#{site_id} days=#{days} took=#{ms}ms")
+    end
+
+    result
   end
 
   defp preset_label("today"), do: "Today"

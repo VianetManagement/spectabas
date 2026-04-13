@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.22.2", "2026-04-13T18:00:00Z",
+       [
+         %{
+           title: "Diag: dashboard query timing logs",
+           description:
+             "Each critical-path and deferred dashboard query now logs its wall-clock duration when it exceeds 500ms (format: '[Dashboard:slow] stats site=X days=30 took=4210ms'). Filter AppSignal by that tag to see which query is the bottleneck on 7d/30d views. Also reverted v5.22.1's UNION ALL rollup path in overview_stats_fast back to the simpler single-query raw-events form while we narrow down the real bottleneck."
+         }
+       ]},
       {"v5.22.1", "2026-04-13T17:00:00Z",
        [
          %{
