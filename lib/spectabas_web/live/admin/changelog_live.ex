@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.26.3", "2026-04-13T22:30:00Z",
+       [
+         %{
+           title: "Fix: Search Keywords sidebar highlight",
+           description:
+             "The Search Keywords page wasn't passing active=\"search-keywords\" to the dashboard layout, so the sidebar defaulted to highlighting Dashboard. Fixed. Also added a search_console block to /health/diag showing rows/date-range/sources per site so we can quickly verify whether a site has GSC/Bing data flowing."
+         }
+       ]},
       {"v5.26.2", "2026-04-13T22:00:00Z",
        [
          %{

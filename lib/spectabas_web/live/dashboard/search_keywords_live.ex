@@ -748,7 +748,7 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <.dashboard_layout flash={@flash} site={@site}>
+    <.dashboard_layout flash={@flash} site={@site} active="search-keywords">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div class="flex items-center justify-between mb-6">
           <div>

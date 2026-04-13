@@ -26,7 +26,8 @@ defmodule SpectabasWeb.HealthController do
       geoip_status: test_geoip(),
       geo_sample: test_geo_sample(),
       rum_debug: test_rum_debug(),
-      daily_rollup: test_daily_rollup()
+      daily_rollup: test_daily_rollup(),
+      search_console: test_search_console()
     }
 
     results = Map.put(results, :visitor_breakdown, test_visitor_breakdown())
@@ -1629,6 +1630,33 @@ defmodule SpectabasWeb.HealthController do
 
   def oban_admin(conn, _params) do
     conn |> put_status(403) |> json(%{error: "forbidden"})
+  end
+
+  defp test_search_console do
+    if Process.whereis(Spectabas.ClickHouse) do
+      sql = """
+      SELECT
+        site_id,
+        count() AS rows,
+        toString(min(date)) AS min_date,
+        toString(max(date)) AS max_date,
+        sum(clicks) AS total_clicks,
+        sum(impressions) AS total_impressions,
+        uniqExact(query) AS unique_queries,
+        groupUniqArray(source) AS sources
+      FROM search_console FINAL
+      GROUP BY site_id
+      ORDER BY total_impressions DESC
+      LIMIT 20
+      """
+
+      case Spectabas.ClickHouse.query(sql) do
+        {:ok, rows} -> rows
+        {:error, e} -> "error: #{inspect(e) |> String.slice(0, 200)}"
+      end
+    else
+      "not_started"
+    end
   end
 
   defp test_daily_rollup do
