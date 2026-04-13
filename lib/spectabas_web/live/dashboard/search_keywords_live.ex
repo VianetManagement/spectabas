@@ -22,23 +22,49 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     unless Accounts.can_access_site?(user, site) do
       {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
     else
-      {:ok,
-       socket
-       |> assign(:page_title, "Search Keywords - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:user, user)
-       |> assign(:date_range, "30d")
-       |> assign(:source_filter, "all")
-       |> assign(:sort_by, "total_clicks")
-       |> assign(:sort_dir, "desc")
-       |> assign(:drawer_query, nil)
-       |> assign(:drawer_timeseries, [])
-       |> assign(:drawer_pages, [])
-       |> assign(:drawer_devices, [])
-       |> assign(:drawer_countries, [])
-       |> assign(:drawer_loading, false)
-       |> assign(:expanded_cannibalization, nil)
-       |> load_data()}
+      socket =
+        socket
+        |> assign(:page_title, "Search Keywords - #{site.name}")
+        |> assign(:site, site)
+        |> assign(:user, user)
+        |> assign(:date_range, "30d")
+        |> assign(:source_filter, "all")
+        |> assign(:sort_by, "total_clicks")
+        |> assign(:sort_dir, "desc")
+        |> assign(:drawer_query, nil)
+        |> assign(:drawer_timeseries, [])
+        |> assign(:drawer_pages, [])
+        |> assign(:drawer_devices, [])
+        |> assign(:drawer_countries, [])
+        |> assign(:drawer_loading, false)
+        |> assign(:expanded_cannibalization, nil)
+        |> load_data()
+
+      # Defer the initial chart push — on first mount the client's chart hooks
+      # haven't registered their handleEvent listeners yet, so pushes from
+      # inside mount get silently dropped. send(self(), ...) routes through
+      # the message queue so handle_info runs after the LiveView finishes its
+      # first render, by which time hooks are mounted client-side.
+      if connected?(socket), do: send(self(), :push_initial_charts)
+
+      {:ok, socket}
+    end
+  end
+
+  @impl true
+  def handle_info(:push_initial_charts, socket) do
+    {:noreply,
+     socket
+     |> push_charts(socket.assigns.daily_trends)
+     |> push_query_sparklines(socket.assigns.query_sparklines)}
+  end
+
+  def handle_info({:load_drawer, query}, socket) do
+    # Only apply if the user hasn't navigated away since clicking.
+    if socket.assigns.drawer_query == query do
+      {:noreply, load_drawer_data(socket, query)}
+    else
+      {:noreply, socket}
     end
   end
 
@@ -66,7 +92,11 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
   def handle_event("sort", _params, socket), do: {:noreply, socket}
 
   def handle_event("open_query", %{"query" => query}, socket) do
-    {:noreply, socket |> assign(:drawer_query, query) |> load_drawer_data(query)}
+    # Set drawer_query first so the drawer DOM renders with chart hooks.
+    # Load data + push charts happens after on handle_info, by which time
+    # the hooks are mounted client-side.
+    send(self(), {:load_drawer, query})
+    {:noreply, assign(socket, :drawer_query, query)}
   end
 
   def handle_event("close_query", _params, socket) do
@@ -790,7 +820,12 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
           <%!-- Trend charts --%>
           <div class="bg-white rounded-lg shadow p-6 mb-4">
             <h2 class="text-sm font-semibold text-gray-700 mb-3">Clicks &amp; Impressions</h2>
-            <div id="chart-clicks-impressions" phx-hook="SearchChart" class="h-64 relative">
+            <div
+              id="chart-clicks-impressions"
+              phx-hook="SearchChart"
+              phx-update="ignore"
+              class="h-64 relative"
+            >
               <canvas></canvas>
             </div>
           </div>
@@ -798,7 +833,7 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
             <div class="bg-white rounded-lg shadow p-6">
               <h2 class="text-sm font-semibold text-gray-700 mb-3">Avg CTR</h2>
-              <div id="chart-ctr" phx-hook="SearchChart" class="h-48 relative">
+              <div id="chart-ctr" phx-hook="SearchChart" phx-update="ignore" class="h-48 relative">
                 <canvas></canvas>
               </div>
             </div>
@@ -806,7 +841,12 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
               <h2 class="text-sm font-semibold text-gray-700 mb-3">
                 Avg Position <span class="text-xs font-normal text-gray-500">(lower is better)</span>
               </h2>
-              <div id="chart-position" phx-hook="SearchChart" class="h-48 relative">
+              <div
+                id="chart-position"
+                phx-hook="SearchChart"
+                phx-update="ignore"
+                class="h-48 relative"
+              >
                 <canvas></canvas>
               </div>
             </div>
@@ -1233,25 +1273,45 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
             <%!-- 4 stacked per-query time series --%>
             <div>
               <h4 class="text-sm font-semibold text-gray-700 mb-2">Clicks</h4>
-              <div id="drawer-chart-clicks" phx-hook="SearchChart" class="h-32 relative">
+              <div
+                id="drawer-chart-clicks"
+                phx-hook="SearchChart"
+                phx-update="ignore"
+                class="h-32 relative"
+              >
                 <canvas></canvas>
               </div>
             </div>
             <div>
               <h4 class="text-sm font-semibold text-gray-700 mb-2">Impressions</h4>
-              <div id="drawer-chart-impressions" phx-hook="SearchChart" class="h-32 relative">
+              <div
+                id="drawer-chart-impressions"
+                phx-hook="SearchChart"
+                phx-update="ignore"
+                class="h-32 relative"
+              >
                 <canvas></canvas>
               </div>
             </div>
             <div>
               <h4 class="text-sm font-semibold text-gray-700 mb-2">CTR</h4>
-              <div id="drawer-chart-ctr" phx-hook="SearchChart" class="h-32 relative">
+              <div
+                id="drawer-chart-ctr"
+                phx-hook="SearchChart"
+                phx-update="ignore"
+                class="h-32 relative"
+              >
                 <canvas></canvas>
               </div>
             </div>
             <div>
               <h4 class="text-sm font-semibold text-gray-700 mb-2">Position</h4>
-              <div id="drawer-chart-position" phx-hook="SearchChart" class="h-32 relative">
+              <div
+                id="drawer-chart-position"
+                phx-hook="SearchChart"
+                phx-update="ignore"
+                class="h-32 relative"
+              >
                 <canvas></canvas>
               </div>
             </div>

@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.26.1", "2026-04-13T21:30:00Z",
+       [
+         %{
+           title: "Fix: Search Keywords charts now populate with data",
+           description:
+             "The three trend charts and per-query sparklines were rendering empty Chart.js frames because the server push_event fired during mount — before the client's chart hooks had registered their handleEvent listeners. Fixed by deferring the initial push via send(self(), :push_initial_charts), which routes through the message queue and runs after LiveView finishes rendering. Same fix applied to the query drawer: load_drawer_data is now triggered by send(self(), {:load_drawer, query}) after the drawer DOM renders. Also added phx-update='ignore' to all chart container divs so LiveView diffs don't mangle the Chart.js-managed canvas."
+         }
+       ]},
       {"v5.26.0", "2026-04-13T21:00:00Z",
        [
          %{
