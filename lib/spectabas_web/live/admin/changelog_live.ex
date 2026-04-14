@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.38.1", "2026-04-15T02:00:00Z",
+       [
+         %{
+           title: "Fix: First/last touch attribution actually shows revenue now",
+           description:
+             "v5.38.0 switched first/last to daily_session_facts which had no data yet. Reverted to the events table (same source as 'any touch' which works). All three models now use identical query structure — same events table, same filters, same LEFT JOIN to ecommerce. Only difference: any = GROUP BY (visitor, source, platform), first = argMin(source, timestamp) per visitor, last = argMax. Removed session_facts dependency."
+         }
+       ]},
       {"v5.38.0", "2026-04-15T01:00:00Z",
        [
          %{

@@ -2094,67 +2094,47 @@ defmodule Spectabas.Analytics do
       to_p = ClickHouse.param(format_datetime(date_range.to))
       ecom_filter = ecommerce_source_filter(site)
 
+      # All three models read from the SAME events table with the SAME filters.
+      # The only difference is the GROUP BY in the subquery:
+      # - any:   GROUP BY visitor_id, source, ad_platform (all touchpoints)
+      # - first: one row per visitor via argMin (earliest touchpoint)
+      # - last:  one row per visitor via argMax (latest touchpoint)
+      events_base = """
+        FROM events
+        WHERE site_id = #{site_p}
+          AND event_type = 'pageview' AND ip_is_bot = 0
+          AND timestamp >= #{from_p} AND timestamp <= #{to_p}
+          AND #{has_signal}
+      """
+
       visitor_source_subquery =
         case touch do
           "any" ->
-            # Every (visitor, source) pair — a visitor who came from Google AND
-            # Facebook gets credited to both.
             """
             SELECT visitor_id, source, ad_platform
             FROM (
               SELECT visitor_id, #{source_expr} AS source, click_id_type AS ad_platform
-              FROM events
-              WHERE site_id = #{site_p}
-                AND event_type = 'pageview' AND ip_is_bot = 0
-                AND timestamp >= #{from_p} AND timestamp <= #{to_p}
-                AND #{has_signal}
+              #{events_base}
             )
             GROUP BY visitor_id, source, ad_platform
             """
 
           "first" ->
-            # First source per visitor in the date range — uses daily_session_facts
-            # for pre-materialized session data (fast), falls back to raw events
-            # for today/yesterday.
-            from_date = date_range.from |> DateTime.to_date() |> Date.to_iso8601()
-            to_date = date_range.to |> DateTime.to_date() |> Date.to_iso8601()
-
             """
             SELECT visitor_id,
-              argMin(source, first_seen) AS source,
-              '' AS ad_platform
-            FROM (
-              SELECT visitor_id,
-                #{session_facts_source_expr(group_by)} AS source,
-                date AS first_seen
-              FROM daily_session_facts
-              WHERE site_id = #{site_p}
-                AND date >= #{ClickHouse.param(from_date)}
-                AND date <= #{ClickHouse.param(to_date)}
-                AND #{session_facts_has_signal(group_by)}
-            )
+              argMin(#{source_expr}, timestamp) AS source,
+              argMin(click_id_type, timestamp) AS ad_platform
+            #{events_base}
             GROUP BY visitor_id
             """
 
           _ ->
-            # "last" — last source per visitor in the date range
-            from_date = date_range.from |> DateTime.to_date() |> Date.to_iso8601()
-            to_date = date_range.to |> DateTime.to_date() |> Date.to_iso8601()
-
+            # "last" touch
             """
             SELECT visitor_id,
-              argMax(source, last_seen) AS source,
-              '' AS ad_platform
-            FROM (
-              SELECT visitor_id,
-                #{session_facts_source_expr(group_by)} AS source,
-                date AS last_seen
-              FROM daily_session_facts
-              WHERE site_id = #{site_p}
-                AND date >= #{ClickHouse.param(from_date)}
-                AND date <= #{ClickHouse.param(to_date)}
-                AND #{session_facts_has_signal(group_by)}
-            )
+              argMax(#{source_expr}, timestamp) AS source,
+              argMax(click_id_type, timestamp) AS ad_platform
+            #{events_base}
             GROUP BY visitor_id
             """
         end
@@ -4613,22 +4593,6 @@ defmodule Spectabas.Analytics do
   # SQL expression that strips self-referrals from referrer_domain.
   # Returns the referrer_domain if it's not the site itself, empty string otherwise.
   # Covers: analytics subdomain (b.example.com), parent (example.com), www.parent
-  # Source expression for daily_session_facts (columns are flat, not nested in events)
-  defp session_facts_source_expr("campaign"), do: "if(utm_campaign != '', utm_campaign, '(none)')"
-  defp session_facts_source_expr("medium"), do: "if(utm_medium != '', utm_medium, '(none)')"
-  defp session_facts_source_expr("term"), do: "'(none)'"
-  defp session_facts_source_expr("content"), do: "'(none)'"
-
-  defp session_facts_source_expr(_),
-    do: "if(referrer_domain != '', referrer_domain, if(utm_source != '', utm_source, 'Direct'))"
-
-  # Signal check for daily_session_facts
-  defp session_facts_has_signal("campaign"), do: "utm_campaign != ''"
-  defp session_facts_has_signal("medium"), do: "utm_medium != ''"
-
-  defp session_facts_has_signal(_),
-    do: "(referrer_domain != '' OR utm_source != '' OR utm_medium != '' OR utm_campaign != '')"
-
   defp clean_referrer_sql(%Site{} = site) do
     domain = site.domain || ""
     parent = parent_domain(domain)
