@@ -169,6 +169,7 @@ defmodule SpectabasWeb.Router do
       live "/sites/:site_id/channels", Dashboard.AcquisitionLive, :index
       live "/sites/:site_id/sources", Dashboard.AcquisitionLive, :sources
       live "/sites/:site_id/bot-traffic", Dashboard.BotTrafficLive, :index
+      live "/sites/:site_id/scrapers", Dashboard.ScrapersLive, :index
       live "/sites/:site_id/geo", Dashboard.GeoLive, :index
       live "/sites/:site_id/entry-exit", Dashboard.EntryExitLive, :index
       live "/sites/:site_id/map", Dashboard.MapLive, :index

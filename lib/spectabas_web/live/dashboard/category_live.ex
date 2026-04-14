@@ -174,6 +174,13 @@ defmodule SpectabasWeb.Dashboard.CategoryLive do
             "Dedicated view of bot-flagged traffic. All other pages exclude bots — this page shows only bots for analysis. Includes UA detection and navigator.webdriver checks."
         },
         %{
+          key: "scrapers",
+          path: "scrapers",
+          label: "Scrapers",
+          desc:
+            "Scraper detection via weighted signals: datacenter ASN, IP rotation with same cookie, spoofed mobile UAs on datacenter IPs, systematic crawl patterns, robotic request timing. Configurable content path prefixes per site (Settings → Scraper detection)."
+        },
+        %{
           key: "visitor-log",
           path: "visitor-log",
           label: "Visitor Log",

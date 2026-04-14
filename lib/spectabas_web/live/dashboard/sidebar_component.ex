@@ -219,6 +219,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
               active={@active == "bot-traffic"}
             />
             <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/scrapers"}
+              label="Scrapers"
+              active={@active == "scrapers"}
+            />
+            <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/visitor-log"}
               label="Visitor Log"
               active={@active == "visitor-log"}

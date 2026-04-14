@@ -3507,6 +3507,130 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  # ---- Scraper Detection ----
+
+  @doc """
+  Returns candidate scraper profiles for a site in the given date range.
+  Each row is enriched with the ScraperDetector score + signal atoms so the
+  dashboard page can filter and present them.
+
+  The query intentionally pre-filters to visitors with meaningful volume
+  (pageviews >= 20 OR visitor_ip_count >= 3) to keep the scoring workload
+  bounded; casual visitors are vanishingly unlikely to be scrapers.
+  """
+  def scraper_candidates(%Site{} = site, %User{} = user, date_range, opts \\ []) do
+    date_range = ensure_date_range(date_range)
+    limit = Keyword.get(opts, :limit, 200) |> min(1000)
+    min_score = Keyword.get(opts, :min_score, 60)
+
+    with :ok <- authorize(site, user) do
+      site_p = ClickHouse.param(site.id)
+      from_p = ClickHouse.param(format_datetime(date_range.from))
+      to_p = ClickHouse.param(format_datetime(date_range.to))
+      tz = tz_sql(site)
+
+      # One row per visitor with all fields ScraperDetector needs.
+      # `request_intervals_ms` is computed as the ClickHouse `arrayDifference`
+      # of the sorted timestamps-in-ms for that visitor.
+      sql = """
+      SELECT
+        visitor_id,
+        any(ip_asn_org) AS asn,
+        any(user_agent) AS user_agent,
+        uniq(ip_address) AS visitor_ip_count,
+        countIf(event_type = 'pageview') AS session_pageviews,
+        arrayFilter(p -> p != '',
+          groupArrayIf(url_path, event_type = 'pageview')) AS page_paths,
+        any(referrer_domain) AS referrer,
+        concat(toString(any(screen_width)), 'x', toString(any(screen_height))) AS screen_resolution,
+        arraySlice(arrayDifference(arraySort(groupArrayIf(toUnixTimestamp(timestamp) * 1000,
+          event_type = 'pageview'))), 2) AS request_intervals_ms,
+        toTimezone(min(timestamp), #{tz}) AS first_seen,
+        toTimezone(max(timestamp), #{tz}) AS last_seen,
+        any(ip_country) AS country,
+        any(ip_city) AS city
+      FROM events
+      WHERE site_id = #{site_p}
+        AND timestamp >= #{from_p}
+        AND timestamp <= #{to_p}
+      GROUP BY visitor_id
+      HAVING session_pageviews >= 20 OR visitor_ip_count >= 3
+      ORDER BY session_pageviews DESC
+      LIMIT #{limit * 3}
+      """
+
+      case ClickHouse.query(sql) do
+        {:ok, rows} ->
+          prefixes = List.wrap(site.scraper_content_prefixes)
+
+          scored =
+            rows
+            |> Enum.map(fn row ->
+              profile = row_to_profile(row, prefixes)
+              result = Spectabas.Analytics.ScraperDetector.score(profile)
+
+              Map.merge(row, %{
+                "score" => result.score,
+                "signals" => result.signals,
+                "verdict" => Spectabas.Analytics.ScraperDetector.verdict(result.score)
+              })
+            end)
+            |> Enum.filter(fn r -> r["score"] >= min_score end)
+            |> Enum.sort_by(&(-&1["score"]))
+            |> Enum.take(limit)
+
+          {:ok, scored}
+
+        error ->
+          error
+      end
+    end
+  end
+
+  defp row_to_profile(row, prefixes) do
+    %{
+      asn: row["asn"],
+      user_agent: row["user_agent"],
+      visitor_ip_count: to_int(row["visitor_ip_count"]),
+      session_pageviews: to_int(row["session_pageviews"]),
+      page_paths: List.wrap(row["page_paths"]),
+      content_path_prefixes: prefixes,
+      referrer: row["referrer"],
+      screen_resolution: row["screen_resolution"],
+      request_intervals_ms: List.wrap(row["request_intervals_ms"]) |> Enum.map(&to_int/1)
+    }
+  end
+
+  @doc """
+  Summary counts for the Scrapers dashboard header cards.
+  Computed from the same candidate set as `scraper_candidates/4` — includes
+  every candidate in the range (no limit) so totals are accurate.
+  """
+  def scraper_summary(%Site{} = site, %User{} = user, date_range) do
+    case scraper_candidates(site, user, date_range, limit: 1000, min_score: 0) do
+      {:ok, rows} ->
+        total = length(rows)
+        suspicious = Enum.count(rows, &(&1["verdict"] == :suspicious))
+        certain = Enum.count(rows, &(&1["verdict"] == :certain))
+        datacenter = Enum.count(rows, &(:datacenter_asn in &1["signals"]))
+        spoofed = Enum.count(rows, &(:spoofed_mobile_ua in &1["signals"]))
+        rotating = Enum.count(rows, &(:ip_rotation in &1["signals"]))
+
+        {:ok,
+         %{
+           total: total,
+           suspicious: suspicious,
+           certain: certain,
+           datacenter: datacenter,
+           spoofed: spoofed,
+           rotating: rotating
+         }}
+
+      error ->
+        error
+    end
+  end
+
   # ---- Visitor Log ----
 
   @doc """

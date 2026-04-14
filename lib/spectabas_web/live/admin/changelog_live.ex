@@ -53,6 +53,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.29.0", "2026-04-14T05:00:00Z",
+       [
+         %{
+           title: "Feat: Scraper Detection page under Audience",
+           description:
+             "New Scrapers page detects visitors that look like scrapers via weighted signals: datacenter ASN, IP rotation with same cookie (3+ IPs), spoofed mobile UA on datacenter IP, 50+/200+ session pageviews, systematic crawl (>80% of paths match configured content prefixes), no referrer, robotic request timing (std dev <300ms), emulator resolutions. Pure Spectabas.Analytics.ScraperDetector module with score/1 and verdict/1. Dashboard shows summary cards + sortable table of flagged visitors with signal pills. Click any row for full details (UA, page paths, signals explained, link to full visitor profile). Each site configures its own content path prefixes in Site Settings → Scraper Detection (the systematic-crawl signal is skipped when empty). 30 unit tests cover each signal plus composite profiles."
+         },
+         %{
+           title: "Feat: Site Settings — Scraper Detection content prefixes",
+           description:
+             "New site field scraper_content_prefixes (array of strings). Textarea on Site Settings, one prefix per line. Drives which URL paths count as content for the systematic-crawl scraper detection signal."
+         }
+       ]},
       {"v5.28.1", "2026-04-14T04:00:00Z",
        [
          %{

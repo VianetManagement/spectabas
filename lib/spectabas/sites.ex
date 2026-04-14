@@ -234,7 +234,13 @@ defmodule Spectabas.Sites do
     |> maybe_parse_list("cross_domain_sites_text", "cross_domain_sites")
     |> maybe_parse_list("ip_allowlist_text", "ip_allowlist")
     |> maybe_parse_list("ip_blocklist_text", "ip_blocklist")
-    |> Map.drop(["cross_domain_sites_text", "ip_allowlist_text", "ip_blocklist_text"])
+    |> maybe_parse_list("scraper_content_prefixes_text", "scraper_content_prefixes")
+    |> Map.drop([
+      "cross_domain_sites_text",
+      "ip_allowlist_text",
+      "ip_blocklist_text",
+      "scraper_content_prefixes_text"
+    ])
   end
 
   defp maybe_parse_list(attrs, text_key, list_key) do
