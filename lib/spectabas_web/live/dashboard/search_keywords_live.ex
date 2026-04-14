@@ -844,7 +844,7 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     ~H"""
     <.dashboard_layout flash={@flash} site={@site} active="search-keywords">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center justify-between flex-wrap gap-3 mb-6">
           <div>
             <h1 class="text-2xl font-bold text-gray-900">Search Keywords</h1>
             <p class="text-sm text-gray-500 mt-1">Organic search queries from Google and Bing</p>
@@ -1364,7 +1364,7 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
             </div>
             <button
               phx-click="close_query"
-              class="shrink-0 text-gray-400 hover:text-gray-700 text-xl"
+              class="shrink-0 text-gray-400 hover:text-gray-700 text-xl p-3"
               aria-label="Close"
             >
               &times;

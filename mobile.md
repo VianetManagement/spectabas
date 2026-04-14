@@ -71,14 +71,16 @@ Review the actual HEEx templates and Tailwind classes in the source code. Check 
     - Can users scroll the table without accidentally scrolling the page?
     - On touch devices, is horizontal scrolling smooth and natural?
 
-11. **Visitor Log table**: Review `lib/spectabas_web/live/dashboard/visitor_log_live.ex`. This has 8 columns (Visitor, Intent, Pages, Duration, Location, Device, Source, Entry). On mobile:
+11. **Visitor Log table**: Review `lib/spectabas_web/live/dashboard/visitor_log_live.ex`. This has 9 columns (Visitor, Intent, Pages, Duration, Location, Device, Source, Entry, Last Seen). Columns are sortable (Pages, Duration, Last Seen). On mobile:
     - How much horizontal scrolling is needed?
     - Are the most important columns (Visitor, Pages, Location) visible without scrolling?
     - Should some columns be hidden on mobile?
+    - Are sortable column headers (with arrow indicators) usable as touch targets?
 
-12. **Pages table**: Review `lib/spectabas_web/live/dashboard/pages_live.ex`. 5 columns including the new Load Time pill. Check:
+12. **Pages table**: Review `lib/spectabas_web/live/dashboard/pages_live.ex`. 6 columns including Load Time pill and Devices column (D/M/T percentages). Check:
     - Are page paths (font-mono) readable on mobile?
     - Does the Load Time color pill render correctly at small sizes?
+    - Does the Devices split (D 60% M 35% T 5%) fit or need a compact format?
     - Do sortable column headers have adequate touch targets?
 
 13. **Performance tables**: Review `lib/spectabas_web/live/dashboard/performance_live.ex`. Two tables (by Device, Slowest Pages). Check:
@@ -107,10 +109,17 @@ Review the actual HEEx templates and Tailwind classes in the source code. Check 
     - Sort column headers
     Are all touch targets at least 44x44px (WCAG minimum)?
 
-18. **Modals and popovers**: Check if any modals/popovers are used (e.g., date picker, segment builder, export options). Do they:
-    - Fill the mobile viewport appropriately?
-    - Have a clear close mechanism?
+18. **Modals, drawers, and popovers**: Multiple pages now use modals/slide-overs:
+    - Bot Traffic: UA detail modal (fixed center)
+    - Search Keywords: query detail slide-over (fixed right, full height)
+    - Scrapers: visitor detail modal (fixed center)
+    - Events: expandable property breakdown row
+    - Settings: 4-tab interface
+    Do they:
+    - Fill the mobile viewport appropriately without horizontal overflow?
+    - Have a clear, large-enough close button?
     - Not get cut off by the viewport?
+    - Allow scrolling within the modal when content is long?
 
 19. **Pagination**: Pages with pagination (visitor log, exports). Are pagination controls usable on mobile?
 
@@ -154,33 +163,56 @@ Review the actual HEEx templates and Tailwind classes in the source code. Check 
 
 28. **Visitor profile**: Review `lib/spectabas_web/live/dashboard/visitor_live.ex`. This has IP details, session history, and event timeline. Is this dense page usable on mobile?
 
-29. **Settings page**: Review `lib/spectabas_web/live/dashboard/settings_live.ex`. Forms with multiple sections (basic info, tracking snippet, GDPR, cross-domain, ecommerce). Are form layouts mobile-friendly?
+29. **Settings page**: Review `lib/spectabas_web/live/dashboard/settings_live.ex`. Now uses 4 tabs (General, Content, Integrations, Advanced). Check:
+    - Do tabs fit horizontally on 320px without wrapping?
+    - Are tab labels readable?
+    - Does switching tabs feel responsive?
+    - Are form fields within each tab usable on mobile?
+    - Is the Integrations tab (with OAuth buttons, credential forms, sync status) usable?
 
-30. **Campaign UTM builder**: Review `lib/spectabas_web/live/dashboard/campaigns_live.ex`. Has form inputs for building UTM URLs. Are the inputs and generated URL display usable on mobile?
+30. **Campaign UTM builder**: Review `lib/spectabas_web/live/dashboard/campaigns_live.ex`. Auto-detects UTM campaigns from events plus manual builder form. Check the "Save to Builder" button and form inputs on mobile.
 
-31. **Ecommerce dashboard**: Review `lib/spectabas_web/live/dashboard/ecommerce_live.ex`. Has stat cards + recent orders table. Layout on mobile?
+31. **Search Keywords page**: Review `lib/spectabas_web/live/dashboard/search_keywords_live.ex`. Has 3 trend charts at top, per-query sparklines in table, clickable rows opening a right-side drawer with 4 charts + tables. Check:
+    - Do the three chart cards stack properly on mobile?
+    - Is the "Trend" sparkline column visible or should it be hidden on mobile?
+    - Does the query detail drawer work on mobile (full-width? scrollable?)?
+    - Are the Opportunity Queue and Cannibalization tables readable?
 
-32. **Reports page**: Review `lib/spectabas_web/live/dashboard/reports_live.ex`. Check mobile layout.
+32. **Scrapers page**: Review `lib/spectabas_web/live/dashboard/scrapers_live.ex`. Has summary cards + candidate table with signal pills + detail modal. Check:
+    - Do the 6 summary cards stack properly?
+    - Are signal pills (tiny colored badges) readable on mobile?
+    - Does the visitor detail modal fill the viewport properly?
 
-33. **Export page**: Review `lib/spectabas_web/live/dashboard/export_live.ex`. Date inputs + download buttons on mobile.
+33. **Journeys page**: Review `lib/spectabas_web/live/dashboard/journeys_live.ex`. Has inline config panel + 3 journey sections with page-type pills and arrow sequences. Check:
+    - Does the inline config panel (two textareas side by side) stack on mobile?
+    - Do journey path pill sequences (Homepage → Listings → Contact) wrap cleanly?
+    - Is the bounce paths table readable?
+
+34. **Bot Traffic page**: Review `lib/spectabas_web/live/dashboard/bot_traffic_live.ex`. Has trend chart + stat cards + UA detail modal. Check trend chart height and modal on mobile.
+
+35. **Ecommerce dashboard**: Review `lib/spectabas_web/live/dashboard/ecommerce_live.ex`. Has stat cards + recent orders table. Layout on mobile?
+
+36. **Reports page**: Review `lib/spectabas_web/live/dashboard/reports_live.ex`. Check mobile layout.
+
+37. **Export page**: Review `lib/spectabas_web/live/dashboard/export_live.ex`. Date inputs + download buttons on mobile.
 
 ### H. Performance on Mobile
 
-34. **LiveView payload size**: Are LiveView diffs efficient? Large tables with many rows could cause slow updates over mobile connections. Check if any pages load excessive data on mount.
+38. **LiveView payload size**: Are LiveView diffs efficient? Large tables with many rows could cause slow updates over mobile connections. Check if any pages load excessive data on mount. The progressive deferred-card rendering on the main dashboard helps — verify cards appear incrementally on slow connections.
 
-35. **Image/asset loading**: Are there any large images or unoptimized assets that would slow mobile loading?
+39. **Image/asset loading**: Are there any large images or unoptimized assets that would slow mobile loading?
 
-36. **Touch scroll performance**: Do any elements use heavy CSS (shadows, blur, gradients) that could cause jank during scroll on older phones?
+40. **Touch scroll performance**: Do any elements use heavy CSS (shadows, blur, gradients) that could cause jank during scroll on older phones?
 
 ### I. Accessibility on Mobile
 
-37. **Screen reader compatibility**: Are mobile navigation elements properly labeled with `aria-label`? Do icons have accessible names?
+41. **Screen reader compatibility**: Are mobile navigation elements properly labeled with `aria-label`? Do icons have accessible names?
 
-38. **Landscape orientation**: Do pages work in landscape mode on phones? Some users rotate their phone to see wide tables better.
+42. **Landscape orientation**: Do pages work in landscape mode on phones? Some users rotate their phone to see wide tables better.
 
-39. **Zoom/pinch**: Is the viewport meta tag set correctly? `user-scalable=no` should NOT be set — users need to be able to zoom.
+43. **Zoom/pinch**: Is the viewport meta tag set correctly? `user-scalable=no` should NOT be set — users need to be able to zoom.
 
-40. **Color contrast**: Do small text elements (text-xs text-gray-400/500) meet WCAG AA contrast ratios (4.5:1 for small text) on mobile? Check stat labels, chart legends, and table headers.
+44. **Color contrast**: Do small text elements (text-xs text-gray-400/500) meet WCAG AA contrast ratios (4.5:1 for small text) on mobile? Check stat labels, chart legends, and table headers.
 
 ---
 

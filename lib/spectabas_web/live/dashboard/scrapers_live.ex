@@ -130,7 +130,7 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
       live_visitors={0}
     >
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center justify-between flex-wrap gap-3 mb-6">
           <div>
             <h1 class="text-2xl font-bold text-gray-900">Scraper Detection</h1>
             <p class="text-sm text-gray-500 mt-1">
@@ -265,10 +265,10 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
                 <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                   IPs
                 </th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
                   Network
                 </th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
                   Location
                 </th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -325,10 +325,10 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
                 <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
                   {to_num(c["visitor_ip_count"])}
                 </td>
-                <td class="px-4 py-3 text-xs text-gray-600 truncate max-w-xs">
+                <td class="px-4 py-3 text-xs text-gray-600 truncate max-w-xs hidden md:table-cell">
                   {blank_to_dash(c["asn"])}
                 </td>
-                <td class="px-4 py-3 text-xs text-gray-600">
+                <td class="px-4 py-3 text-xs text-gray-600 hidden md:table-cell">
                   {[c["city"], c["country"]]
                   |> Enum.reject(&(&1 == "" || is_nil(&1)))
                   |> Enum.join(", ")}
@@ -355,7 +355,7 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
             <button
               type="button"
               phx-click="close_visitor"
-              class="shrink-0 ml-4 text-gray-400 hover:text-gray-700 text-2xl leading-none px-2"
+              class="shrink-0 ml-4 text-gray-400 hover:text-gray-700 text-2xl leading-none p-3"
               aria-label="Close"
             >
               &times;

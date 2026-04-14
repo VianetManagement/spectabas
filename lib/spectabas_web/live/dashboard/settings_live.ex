@@ -660,7 +660,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
         </div>
 
         <div class="border-b border-gray-200 mb-6">
-          <nav class="flex gap-4">
+          <nav class="flex gap-2 sm:gap-4 overflow-x-auto">
             <button
               :for={
                 {key, label} <- [
@@ -673,7 +673,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
               phx-click="switch_tab"
               phx-value-tab={key}
               class={[
-                "pb-3 text-sm font-medium border-b-2 -mb-px",
+                "pb-3 text-sm font-medium border-b-2 -mb-px whitespace-nowrap",
                 if(@settings_tab == key,
                   do: "border-indigo-600 text-indigo-700",
                   else: "border-transparent text-gray-500 hover:text-gray-700"

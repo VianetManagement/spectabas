@@ -439,7 +439,7 @@ defmodule SpectabasWeb.Dashboard.BotTrafficLive do
                     <tr class="text-gray-600 border-b border-gray-200">
                       <th class="text-left py-1 font-medium">IP</th>
                       <th class="text-left py-1 font-medium">Country</th>
-                      <th class="text-left py-1 font-medium">Network</th>
+                      <th class="text-left py-1 font-medium hidden sm:table-cell">Network</th>
                       <th class="text-right py-1 font-medium">Hits</th>
                     </tr>
                   </thead>
@@ -455,7 +455,7 @@ defmodule SpectabasWeb.Dashboard.BotTrafficLive do
                           </.link>
                         </td>
                         <td class="py-1.5 text-gray-700">{blank_to_dash(ip["country"])}</td>
-                        <td class="py-1.5 text-gray-600 truncate max-w-xs">
+                        <td class="py-1.5 text-gray-600 truncate max-w-xs hidden sm:table-cell">
                           {blank_to_dash(ip["asn_org"])}
                         </td>
                         <td class="text-right py-1.5 text-gray-700 tabular-nums">

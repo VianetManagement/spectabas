@@ -190,14 +190,14 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
 
         <%!-- IP Search --%>
         <div class="bg-white rounded-lg shadow p-4 mb-6">
-          <form phx-submit="search_ip" class="flex items-center gap-3">
+          <form phx-submit="search_ip" class="flex flex-wrap items-center gap-3">
             <label class="text-sm font-medium text-gray-700">Search by IP</label>
             <input
               type="text"
               name="ip"
               value={@ip_search}
               placeholder="e.g., 192.168.1.1"
-              class="rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 py-2 px-3 w-48"
+              class="rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 py-2 px-3 w-full sm:w-48"
               inputmode="decimal"
             />
             <button
@@ -315,7 +315,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Visitor
                 </th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">
                   Intent
                 </th>
                 <th
@@ -326,7 +326,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
                   Pages {sort_arrow("pageviews", @sort_by, @sort_dir)}
                 </th>
                 <th
-                  class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-indigo-700 select-none"
+                  class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-indigo-700 select-none hidden sm:table-cell"
                   phx-click="sort"
                   phx-value-col="duration"
                 >
@@ -338,7 +338,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
                   Device
                 </th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden lg:table-cell">
                   Source
                 </th>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
@@ -371,7 +371,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
                     </span>
                   </.link>
                 </td>
-                <td class="px-4 py-3">
+                <td class="px-4 py-3 hidden sm:table-cell">
                   <.link
                     :if={v["intent"] && v["intent"] != ""}
                     navigate={
@@ -388,7 +388,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
                 <td class="px-4 py-3 text-sm text-gray-900 tabular-nums">
                   {format_number(to_num(v["pageviews"]))}
                 </td>
-                <td class="px-4 py-3 text-sm text-gray-500 tabular-nums">
+                <td class="px-4 py-3 text-sm text-gray-500 tabular-nums hidden sm:table-cell">
                   {format_duration(to_int(v["duration"]))}
                 </td>
                 <td class="px-4 py-3 text-sm">
@@ -408,7 +408,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
                   |> Enum.reject(&(&1 == "" || is_nil(&1)))
                   |> Enum.join(" / ")}
                 </td>
-                <td class="px-4 py-3 text-sm truncate max-w-[120px]">
+                <td class="px-4 py-3 text-sm truncate max-w-[120px] hidden lg:table-cell">
                   <.link
                     :if={v["referrer"] && v["referrer"] != ""}
                     navigate={
