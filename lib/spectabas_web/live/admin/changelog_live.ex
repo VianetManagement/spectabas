@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.36.1", "2026-04-14T17:00:00Z",
+       [
+         %{
+           title: "Fix: Dashboard chart blanking out after cards load",
+           description:
+             "The timeseries chart appeared briefly then went blank when deferred results (top pages, sources, etc.) arrived. Each deferred result caused a LV re-render; without phx-update='ignore', morphdom replaced the canvas element and destroyed Chart.js's reference. Added phx-update='ignore' back to the timeseries chart and map divs — safe because these have stable ids. Also fixed bounce rate showing >100% (was sum(is_bounce) on raw events instead of session-grouped countIf(pv=1))."
+         }
+       ]},
       {"v5.36.0", "2026-04-14T16:00:00Z",
        [
          %{
