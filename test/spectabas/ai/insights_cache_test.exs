@@ -88,36 +88,21 @@ defmodule Spectabas.AI.InsightsCacheTest do
       assert InsightsCache.get(site.id) == nil
     end
 
-    test "returns nil for expired entries (older than 24h)", %{site: site} do
+    test "returns old entries (no TTL — persists until regenerated)", %{site: site} do
       {:ok, entry} =
         InsightsCache.put(site.id, "Old insights", "anthropic", "claude-haiku-4-5-20251001")
 
-      # Manually set generated_at to 25 hours ago to simulate expiry
-      expired_at =
-        DateTime.add(DateTime.utc_now(), -25 * 3600, :second) |> DateTime.truncate(:second)
+      # Set generated_at to 7 days ago
+      old_at =
+        DateTime.add(DateTime.utc_now(), -7 * 24 * 3600, :second) |> DateTime.truncate(:second)
 
       entry
-      |> Ecto.Changeset.change(%{generated_at: expired_at})
-      |> Repo.update!()
-
-      assert InsightsCache.get(site.id) == nil
-    end
-
-    test "returns entry that is exactly at the boundary (23h59m ago)", %{site: site} do
-      {:ok, entry} = InsightsCache.put(site.id, "Borderline insights", "openai", "gpt-4o-mini")
-
-      # Set generated_at to 23 hours and 59 minutes ago (still within 24h)
-      almost_expired_at =
-        DateTime.add(DateTime.utc_now(), -(23 * 3600 + 59 * 60), :second)
-        |> DateTime.truncate(:second)
-
-      entry
-      |> Ecto.Changeset.change(%{generated_at: almost_expired_at})
+      |> Ecto.Changeset.change(%{generated_at: old_at})
       |> Repo.update!()
 
       result = InsightsCache.get(site.id)
       assert result != nil
-      assert result.content == "Borderline insights"
+      assert result.content == "Old insights"
     end
 
     test "returns nil for a non-existent site_id" do

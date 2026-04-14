@@ -53,6 +53,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.31.0", "2026-04-14T08:00:00Z",
+       [
+         %{
+           title: "Fix: AI analysis persists across page visits",
+           description:
+             "InsightsCache no longer expires after 24 hours. Generated analyses persist indefinitely until the user clicks Regenerate. The 'cached for 24 hours' message is replaced with 'click Regenerate for fresh data'. Also removed debug logging from insights_live mount."
+         },
+         %{
+           title: "Feat: AI analysis now uses 7 additional data sources",
+           description:
+             "The AI prompt previously sent only traffic summary, GSC overview, revenue, and ad spend. Now includes: engagement metrics (bounce rate, avg duration, pages/session), top 10 pages by pageviews, top 5 traffic sources, top 5 countries, device split (mobile/desktop/tablet %), top 10 search queries with clicks/impressions/position, new keywords discovered this week, and scraper activity summary. System prompt word limit raised from 500 to 800 to accommodate the richer analysis."
+         }
+       ]},
       {"v5.30.0", "2026-04-14T07:00:00Z",
        [
          %{

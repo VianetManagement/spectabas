@@ -33,18 +33,8 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
       grouped = group_anomalies(anomalies)
       summary = build_summary(anomalies)
 
-      # Check for cached AI analysis
       ai_configured = Config.configured?(site)
-
-      # Debug: log AI config state
-      require Logger
-      ai_config = Config.get(site)
-
-      Logger.info(
-        "[Insights] AI configured=#{ai_configured}, provider=#{ai_config["provider"]}, has_key=#{ai_config["api_key"] != nil and ai_config["api_key"] != ""}, encrypted_field=#{site.ai_config_encrypted != nil}"
-      )
-
-      cached_ai = if ai_configured, do: InsightsCache.get(site.id), else: nil
+      cached_ai = InsightsCache.get(site.id)
 
       {:ok,
        socket
@@ -187,7 +177,7 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
                 {Phoenix.HTML.raw(render_markdown(@ai_analysis))}
               </div>
               <p :if={@ai_generated_at} class="text-xs text-gray-400 mt-4 border-t pt-3">
-                Generated {Calendar.strftime(@ai_generated_at, "%Y-%m-%d %H:%M")} UTC — cached for 24 hours
+                Generated {Calendar.strftime(@ai_generated_at, "%Y-%m-%d %H:%M")} UTC — click Regenerate for fresh data
               </p>
             <% end %>
             <%= if !@ai_analysis and !@ai_loading and @ai_configured do %>

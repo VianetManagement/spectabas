@@ -2,8 +2,6 @@ defmodule Spectabas.AI.InsightsCache do
   use Ecto.Schema
   import Ecto.Query
 
-  @max_age_hours 24
-
   schema "ai_insights_cache" do
     field :site_id, :integer
     field :content, :string
@@ -12,12 +10,11 @@ defmodule Spectabas.AI.InsightsCache do
     field :generated_at, :utc_datetime
   end
 
+  @doc "Get the most recent analysis for a site. Persists indefinitely — user regenerates when they want fresh data."
   def get(site_id) do
-    cutoff = DateTime.add(DateTime.utc_now(), -@max_age_hours * 3600, :second)
-
     Spectabas.Repo.one(
       from(c in __MODULE__,
-        where: c.site_id == ^site_id and c.generated_at > ^cutoff
+        where: c.site_id == ^site_id
       )
     )
   end
