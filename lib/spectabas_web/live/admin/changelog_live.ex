@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.38.3", "2026-04-15T04:00:00Z",
+       [
+         %{
+           title: "Diag: /health/test-attribution endpoint for live verification",
+           description:
+             "Admin endpoint that inserts synthetic events + orders into ClickHouse, runs all three attribution models (any/first/last), verifies non-zero revenue, and cleans up. Returns a JSON pass/fail report with per-model row counts, revenue totals, and source lists."
+         }
+       ]},
       {"v5.38.2", "2026-04-15T03:00:00Z",
        [
          %{

@@ -54,6 +54,7 @@ defmodule SpectabasWeb.Router do
     get "/backfill-geo", HealthController, :backfill_geo
     get "/backfill-asn-flags", HealthController, :backfill_asn_flags
     get "/dedupe-search-console", HealthController, :dedupe_search_console
+    get "/test-attribution", HealthController, :test_attribution
     get "/dashboard-test", HealthController, :test_dashboard
     get "/audit-test", HealthController, :test_audit
     get "/optimize-ad-spend", HealthController, :optimize_ad_spend

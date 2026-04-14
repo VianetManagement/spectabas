@@ -320,6 +320,143 @@ defmodule SpectabasWeb.HealthController do
     })
   end
 
+  def test_attribution(conn, _params) do
+    site_id = 999_998
+    today = Date.utc_today() |> Date.to_iso8601()
+
+    # Insert test data
+    events = [
+      %{
+        site_id: site_id,
+        visitor_id: "v-test-a",
+        session_id: "s-ta1",
+        event_type: "pageview",
+        url_path: "/test",
+        referrer_domain: "google.com",
+        utm_source: "",
+        utm_medium: "",
+        utm_campaign: "",
+        click_id: "",
+        click_id_type: "",
+        ip_is_bot: 0,
+        timestamp: "#{today} 12:00:00"
+      },
+      %{
+        site_id: site_id,
+        visitor_id: "v-test-a",
+        session_id: "s-ta2",
+        event_type: "pageview",
+        url_path: "/test2",
+        referrer_domain: "facebook.com",
+        utm_source: "",
+        utm_medium: "",
+        utm_campaign: "",
+        click_id: "",
+        click_id_type: "",
+        ip_is_bot: 0,
+        timestamp: "#{today} 14:00:00"
+      },
+      %{
+        site_id: site_id,
+        visitor_id: "v-test-b",
+        session_id: "s-tb1",
+        event_type: "pageview",
+        url_path: "/test3",
+        referrer_domain: "",
+        utm_source: "newsletter",
+        utm_medium: "email",
+        utm_campaign: "weekly",
+        click_id: "",
+        click_id_type: "",
+        ip_is_bot: 0,
+        timestamp: "#{today} 13:00:00"
+      }
+    ]
+
+    ecommerce = [
+      %{
+        site_id: site_id,
+        visitor_id: "v-test-a",
+        session_id: "s-ta2",
+        order_id: "test-order-a",
+        revenue: 99.99,
+        timestamp: "#{today} 14:30:00"
+      },
+      %{
+        site_id: site_id,
+        visitor_id: "v-test-b",
+        session_id: "s-tb1",
+        order_id: "test-order-b",
+        revenue: 49.99,
+        timestamp: "#{today} 13:30:00"
+      }
+    ]
+
+    Spectabas.ClickHouse.insert("events", events)
+    Spectabas.ClickHouse.insert("ecommerce_events", ecommerce)
+
+    # Query all three models
+    site = %Spectabas.Sites.Site{id: site_id, domain: "b.test-attrib.com"}
+    user = %Spectabas.Accounts.User{id: 1, role: :platform_admin}
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    range = %{from: DateTime.add(now, -1, :day), to: now}
+
+    any_result = Spectabas.Analytics.revenue_by_source(site, user, range, touch: "any")
+    first_result = Spectabas.Analytics.revenue_by_source(site, user, range, touch: "first")
+    last_result = Spectabas.Analytics.revenue_by_source(site, user, range, touch: "last")
+
+    # Cleanup
+    for table <- ~w(events ecommerce_events) do
+      Spectabas.ClickHouse.execute(
+        "ALTER TABLE #{table} DELETE WHERE site_id = #{site_id} SETTINGS mutations_sync = 2"
+      )
+    end
+
+    # Build report
+    fmt = fn
+      {:ok, rows} ->
+        %{
+          ok: true,
+          rows: length(rows),
+          revenue: sum_rev(rows),
+          sources: Enum.map(rows, & &1["source"])
+        }
+
+      {:error, e} ->
+        %{ok: false, error: inspect(e) |> String.slice(0, 300)}
+    end
+
+    any = fmt.(any_result)
+    first = fmt.(first_result)
+    last = fmt.(last_result)
+
+    passed =
+      any.ok and first.ok and last.ok and
+        any[:revenue] > 0 and first[:revenue] > 0 and last[:revenue] > 0
+
+    json(conn, %{
+      passed: passed,
+      any_touch: any,
+      first_touch: first,
+      last_touch: last,
+      expected: %{
+        any: "google.com + facebook.com + newsletter all credited, revenue >= 149.98",
+        first: "google.com credited for visitor A (earliest), newsletter for B",
+        last: "facebook.com credited for visitor A (latest), newsletter for B"
+      }
+    })
+  end
+
+  defp sum_rev(rows) do
+    Enum.reduce(rows, 0.0, fn r, acc ->
+      acc +
+        case Float.parse(r["total_revenue"] || "0") do
+          {f, _} -> f
+          :error -> 0.0
+        end
+    end)
+  end
+
   def backfill_asn_flags(conn, _params) do
     {dc, vpn, tor} = Spectabas.IPEnricher.ASNBlocklist.sizes()
 
