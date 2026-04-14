@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.28.1", "2026-04-14T04:00:00Z",
+       [
+         %{
+           title: "Fix: Bot UA modal close (×) button",
+           description:
+             "The close button wasn't firing clicks — the modal used a `pointer-events-none` wrapper with a `pointer-events-auto` inner card to enable backdrop-click-to-close. Some browsers treat that trick inconsistently. Simplified: backdrop and modal card are now separate top-level fixed-positioned elements with no pointer-events gymnastics. × button now works reliably, and backdrop click still closes. Also made the close button bigger and gave the header sticky positioning so it stays visible when scrolling through long UA details."
+         }
+       ]},
       {"v5.28.0", "2026-04-14T03:30:00Z",
        [
          %{

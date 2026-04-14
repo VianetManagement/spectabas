@@ -260,164 +260,167 @@ defmodule SpectabasWeb.Dashboard.BotTrafficLive do
 
       <%!-- User Agent details modal --%>
       <%= if @modal_ua do %>
+        <%!-- Backdrop: clicks outside the card close the modal. --%>
         <div
           class="fixed inset-0 bg-gray-900/50 z-40"
           phx-click="close_ua"
           aria-hidden="true"
         >
         </div>
-        <div class="fixed inset-0 z-50 flex items-start justify-center pt-10 pb-10 px-4 overflow-y-auto pointer-events-none">
-          <div class="bg-white rounded-lg shadow-2xl max-w-3xl w-full pointer-events-auto">
-            <div class="px-6 py-4 border-b border-gray-200 flex items-start justify-between">
-              <div>
-                <h3 class="text-lg font-semibold text-gray-900">User Agent Details</h3>
-                <p class="text-xs text-gray-500 mt-0.5">
-                  Bot traffic details for the selected signature in the {@date_range} window.
-                </p>
+        <%!-- Modal card: absolute-positioned above the backdrop. No
+        pointer-events trickery — the card just sits on top. The × button
+        has its own phx-click binding which fires directly on the element. --%>
+        <div class="fixed left-1/2 -translate-x-1/2 top-10 bottom-10 z-50 w-[calc(100%-2rem)] max-w-3xl bg-white rounded-lg shadow-2xl overflow-y-auto flex flex-col">
+          <div class="px-6 py-4 border-b border-gray-200 flex items-start justify-between sticky top-0 bg-white rounded-t-lg">
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900">User Agent Details</h3>
+              <p class="text-xs text-gray-500 mt-0.5">
+                Bot traffic details for the selected signature in the {@date_range} window.
+              </p>
+            </div>
+            <button
+              type="button"
+              phx-click="close_ua"
+              class="shrink-0 ml-4 text-gray-400 hover:text-gray-700 text-2xl leading-none px-2"
+              aria-label="Close"
+            >
+              &times;
+            </button>
+          </div>
+
+          <div class="px-6 py-4 space-y-5">
+            <%!-- Full UA string --%>
+            <div>
+              <h4 class="text-xs font-semibold text-gray-500 uppercase mb-1">User Agent</h4>
+              <div class="bg-gray-50 border border-gray-200 rounded p-3 text-xs font-mono text-gray-800 break-all">
+                {@modal_ua}
               </div>
-              <button
-                phx-click="close_ua"
-                class="shrink-0 text-gray-400 hover:text-gray-700 text-xl"
-                aria-label="Close"
-              >
-                &times;
-              </button>
             </div>
 
-            <div class="px-6 py-4 space-y-5">
-              <%!-- Full UA string --%>
+            <%!-- Summary grid --%>
+            <% s = @modal_details[:summary] || %{} %>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div>
-                <h4 class="text-xs font-semibold text-gray-500 uppercase mb-1">User Agent</h4>
-                <div class="bg-gray-50 border border-gray-200 rounded p-3 text-xs font-mono text-gray-800 break-all">
-                  {@modal_ua}
+                <div class="text-xs text-gray-500">Hits</div>
+                <div class="text-lg font-semibold text-gray-900">
+                  {format_number(to_num(s["hits"]))}
                 </div>
               </div>
-
-              <%!-- Summary grid --%>
-              <% s = @modal_details[:summary] || %{} %>
-              <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <div>
-                  <div class="text-xs text-gray-500">Hits</div>
-                  <div class="text-lg font-semibold text-gray-900">
-                    {format_number(to_num(s["hits"]))}
-                  </div>
-                </div>
-                <div>
-                  <div class="text-xs text-gray-500">Unique Visitors</div>
-                  <div class="text-lg font-semibold text-gray-900">
-                    {format_number(to_num(s["unique_visitors"]))}
-                  </div>
-                </div>
-                <div>
-                  <div class="text-xs text-gray-500">Unique IPs</div>
-                  <div class="text-lg font-semibold text-gray-900">
-                    {format_number(to_num(s["unique_ips"]))}
-                  </div>
-                </div>
-                <div>
-                  <div class="text-xs text-gray-500">Browser</div>
-                  <div class="text-sm text-gray-800">
-                    {blank_to_dash(s["browser"])}
-                  </div>
-                </div>
-                <div>
-                  <div class="text-xs text-gray-500">OS</div>
-                  <div class="text-sm text-gray-800">
-                    {blank_to_dash(s["os"])}
-                  </div>
-                </div>
-                <div>
-                  <div class="text-xs text-gray-500">Device Type</div>
-                  <div class="text-sm text-gray-800">
-                    {blank_to_dash(s["device_type"])}
-                  </div>
-                </div>
-                <div class="col-span-2 sm:col-span-3">
-                  <div class="text-xs text-gray-500">Network</div>
-                  <div class="text-sm text-gray-800">
-                    {blank_to_dash(s["asn_org"])}
-                  </div>
-                </div>
-                <div>
-                  <div class="text-xs text-gray-500">First Seen</div>
-                  <div class="text-sm text-gray-800">{blank_to_dash(s["first_seen"])}</div>
-                </div>
-                <div>
-                  <div class="text-xs text-gray-500">Last Seen</div>
-                  <div class="text-sm text-gray-800">{blank_to_dash(s["last_seen"])}</div>
+              <div>
+                <div class="text-xs text-gray-500">Unique Visitors</div>
+                <div class="text-lg font-semibold text-gray-900">
+                  {format_number(to_num(s["unique_visitors"]))}
                 </div>
               </div>
-
-              <%!-- Top pages --%>
               <div>
-                <h4 class="text-xs font-semibold text-gray-500 uppercase mb-2">
-                  Top Pages Targeted
-                </h4>
-                <%= if @modal_details[:pages] == [] do %>
-                  <p class="text-sm text-gray-500 italic">No pageviews recorded for this UA.</p>
-                <% else %>
-                  <table class="w-full text-sm">
-                    <thead>
-                      <tr class="text-gray-600 border-b border-gray-200">
-                        <th class="text-left py-1 font-medium">Page</th>
-                        <th class="text-right py-1 font-medium">Hits</th>
+                <div class="text-xs text-gray-500">Unique IPs</div>
+                <div class="text-lg font-semibold text-gray-900">
+                  {format_number(to_num(s["unique_ips"]))}
+                </div>
+              </div>
+              <div>
+                <div class="text-xs text-gray-500">Browser</div>
+                <div class="text-sm text-gray-800">
+                  {blank_to_dash(s["browser"])}
+                </div>
+              </div>
+              <div>
+                <div class="text-xs text-gray-500">OS</div>
+                <div class="text-sm text-gray-800">
+                  {blank_to_dash(s["os"])}
+                </div>
+              </div>
+              <div>
+                <div class="text-xs text-gray-500">Device Type</div>
+                <div class="text-sm text-gray-800">
+                  {blank_to_dash(s["device_type"])}
+                </div>
+              </div>
+              <div class="col-span-2 sm:col-span-3">
+                <div class="text-xs text-gray-500">Network</div>
+                <div class="text-sm text-gray-800">
+                  {blank_to_dash(s["asn_org"])}
+                </div>
+              </div>
+              <div>
+                <div class="text-xs text-gray-500">First Seen</div>
+                <div class="text-sm text-gray-800">{blank_to_dash(s["first_seen"])}</div>
+              </div>
+              <div>
+                <div class="text-xs text-gray-500">Last Seen</div>
+                <div class="text-sm text-gray-800">{blank_to_dash(s["last_seen"])}</div>
+              </div>
+            </div>
+
+            <%!-- Top pages --%>
+            <div>
+              <h4 class="text-xs font-semibold text-gray-500 uppercase mb-2">
+                Top Pages Targeted
+              </h4>
+              <%= if @modal_details[:pages] == [] do %>
+                <p class="text-sm text-gray-500 italic">No pageviews recorded for this UA.</p>
+              <% else %>
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr class="text-gray-600 border-b border-gray-200">
+                      <th class="text-left py-1 font-medium">Page</th>
+                      <th class="text-right py-1 font-medium">Hits</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <%= for p <- @modal_details[:pages] do %>
+                      <tr class="border-b border-gray-50">
+                        <td class="py-1.5 text-indigo-700 font-mono truncate max-w-md">
+                          {p["url_path"]}
+                        </td>
+                        <td class="text-right py-1.5 text-gray-700 tabular-nums">
+                          {format_number(to_num(p["hits"]))}
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      <%= for p <- @modal_details[:pages] do %>
-                        <tr class="border-b border-gray-50">
-                          <td class="py-1.5 text-indigo-700 font-mono truncate max-w-md">
-                            {p["url_path"]}
-                          </td>
-                          <td class="text-right py-1.5 text-gray-700 tabular-nums">
-                            {format_number(to_num(p["hits"]))}
-                          </td>
-                        </tr>
-                      <% end %>
-                    </tbody>
-                  </table>
-                <% end %>
-              </div>
+                    <% end %>
+                  </tbody>
+                </table>
+              <% end %>
+            </div>
 
-              <%!-- Top IPs --%>
-              <div>
-                <h4 class="text-xs font-semibold text-gray-500 uppercase mb-2">Top IPs</h4>
-                <%= if @modal_details[:ips] == [] do %>
-                  <p class="text-sm text-gray-500 italic">No IP data.</p>
-                <% else %>
-                  <table class="w-full text-sm">
-                    <thead>
-                      <tr class="text-gray-600 border-b border-gray-200">
-                        <th class="text-left py-1 font-medium">IP</th>
-                        <th class="text-left py-1 font-medium">Country</th>
-                        <th class="text-left py-1 font-medium">Network</th>
-                        <th class="text-right py-1 font-medium">Hits</th>
+            <%!-- Top IPs --%>
+            <div>
+              <h4 class="text-xs font-semibold text-gray-500 uppercase mb-2">Top IPs</h4>
+              <%= if @modal_details[:ips] == [] do %>
+                <p class="text-sm text-gray-500 italic">No IP data.</p>
+              <% else %>
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr class="text-gray-600 border-b border-gray-200">
+                      <th class="text-left py-1 font-medium">IP</th>
+                      <th class="text-left py-1 font-medium">Country</th>
+                      <th class="text-left py-1 font-medium">Network</th>
+                      <th class="text-right py-1 font-medium">Hits</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <%= for ip <- @modal_details[:ips] do %>
+                      <tr class="border-b border-gray-50">
+                        <td class="py-1.5 font-mono text-xs">
+                          <.link
+                            navigate={~p"/dashboard/sites/#{@site.id}/ip/#{ip["ip_address"]}"}
+                            class="text-indigo-600 hover:text-indigo-800"
+                          >
+                            {ip["ip_address"]}
+                          </.link>
+                        </td>
+                        <td class="py-1.5 text-gray-700">{blank_to_dash(ip["country"])}</td>
+                        <td class="py-1.5 text-gray-600 truncate max-w-xs">
+                          {blank_to_dash(ip["asn_org"])}
+                        </td>
+                        <td class="text-right py-1.5 text-gray-700 tabular-nums">
+                          {format_number(to_num(ip["hits"]))}
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      <%= for ip <- @modal_details[:ips] do %>
-                        <tr class="border-b border-gray-50">
-                          <td class="py-1.5 font-mono text-xs">
-                            <.link
-                              navigate={~p"/dashboard/sites/#{@site.id}/ip/#{ip["ip_address"]}"}
-                              class="text-indigo-600 hover:text-indigo-800"
-                            >
-                              {ip["ip_address"]}
-                            </.link>
-                          </td>
-                          <td class="py-1.5 text-gray-700">{blank_to_dash(ip["country"])}</td>
-                          <td class="py-1.5 text-gray-600 truncate max-w-xs">
-                            {blank_to_dash(ip["asn_org"])}
-                          </td>
-                          <td class="text-right py-1.5 text-gray-700 tabular-nums">
-                            {format_number(to_num(ip["hits"]))}
-                          </td>
-                        </tr>
-                      <% end %>
-                    </tbody>
-                  </table>
-                <% end %>
-              </div>
+                    <% end %>
+                  </tbody>
+                </table>
+              <% end %>
             </div>
           </div>
         </div>
