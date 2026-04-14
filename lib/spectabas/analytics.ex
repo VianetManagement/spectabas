@@ -109,19 +109,30 @@ defmodule Spectabas.Analytics do
         native_result =
           if native_range do
             # Single raw-events query — reverted from UNION ALL rollup approach
-            # pending instrumentation results on what's actually slow.
+            # Uses a session subquery for accurate bounce rate — `sum(is_bounce)`
+            # on raw events was overcounting because is_bounce defaults to 1 on
+            # every event row (resulted in bounce rates >100%).
             sql = """
             SELECT
-              countIf(event_type = 'pageview') AS pageviews,
-              uniq(visitor_id) AS unique_visitors,
-              uniq(session_id) AS total_sessions,
-              round(sum(is_bounce) / greatest(uniq(session_id), 1) * 100, 1) AS bounce_rate,
-              round(avgIf(duration_s, event_type = 'duration' AND duration_s > 0), 0) AS avg_duration
-            FROM events
-            WHERE site_id = #{ClickHouse.param(site.id)}
-              AND timestamp >= #{ClickHouse.param(format_datetime(native_range.from))}
-              AND timestamp <= #{ClickHouse.param(format_datetime(native_range.to))}
-              AND ip_is_bot = 0
+              sum(pv) AS pageviews,
+              uniqExact(visitor_id) AS unique_visitors,
+              count() AS total_sessions,
+              round(countIf(pv = 1) / greatest(count(), 1) * 100, 1) AS bounce_rate,
+              round(avgIf(dur, dur > 0), 0) AS avg_duration
+            FROM (
+              SELECT
+                session_id,
+                any(visitor_id) AS visitor_id,
+                countIf(event_type = 'pageview') AS pv,
+                maxIf(duration_s, event_type = 'duration' AND duration_s > 0) AS dur
+              FROM events
+              WHERE site_id = #{ClickHouse.param(site.id)}
+                AND timestamp >= #{ClickHouse.param(format_datetime(native_range.from))}
+                AND timestamp <= #{ClickHouse.param(format_datetime(native_range.to))}
+                AND ip_is_bot = 0
+              GROUP BY session_id
+              HAVING pv > 0
+            )
             """
 
             case ClickHouse.query(sql) do
