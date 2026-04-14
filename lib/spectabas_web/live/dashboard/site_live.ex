@@ -108,14 +108,12 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         if pending == 0 do
           socket
           |> assign(:deferred_loaded, true)
-          # Defensive final re-push so any chart hook that missed an
-          # earlier push (e.g. mounted after the critical-path event fired)
-          # gets a clean, complete dataset. Cheap — three push_event calls.
-          |> push_chart_data(
-            socket.assigns.timeseries,
-            socket.assigns[:locations] || [],
-            socket.assigns[:timezones] || []
-          )
+          # Push map + bar data now that locations/timezones have arrived.
+          # Do NOT re-push timeseries — it was already pushed from
+          # load_critical_stats, and re-pushing causes Chart.js to
+          # re-animate the same data (visible as a flicker/redraw).
+          |> push_map_data(socket.assigns[:locations] || [])
+          |> push_tz_data(socket.assigns[:timezones] || [])
           |> cache_stats(for_cache_key)
         else
           socket
