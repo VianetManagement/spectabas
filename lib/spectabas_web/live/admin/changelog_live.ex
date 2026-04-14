@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.36.4", "2026-04-14T20:00:00Z",
+       [
+         %{
+           title: "Perf: Insights page loads instantly with async anomaly detection",
+           description:
+             "The Insights page was blocking in mount while AnomalyDetector ran multiple ClickHouse comparison queries (7d vs prior 7d across traffic, SEO, revenue, ads). Now loads async — the cached AI analysis shows immediately, anomalies load in background with a spinner. Same pattern as all other dashboard pages."
+         }
+       ]},
       {"v5.36.3", "2026-04-14T19:00:00Z",
        [
          %{

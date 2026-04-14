@@ -24,31 +24,31 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
     unless Accounts.can_access_site?(user, site) do
       {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
     else
-      anomalies =
-        case AnomalyDetector.detect(site, user) do
-          {:ok, results} -> results
-          _ -> []
-        end
-
-      grouped = group_anomalies(anomalies)
-      summary = build_summary(anomalies)
-
+      # AI cache is a cheap Postgres lookup — do it in mount.
       ai_configured = Config.configured?(site)
       cached_ai = InsightsCache.get(site.id)
 
-      {:ok,
-       socket
-       |> assign(:page_title, "Weekly Insights - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:user, user)
-       |> assign(:anomalies, anomalies)
-       |> assign(:grouped, grouped)
-       |> assign(:summary, summary)
-       |> assign(:ai_configured, ai_configured)
-       |> assign(:ai_analysis, if(cached_ai, do: cached_ai.content, else: nil))
-       |> assign(:ai_generated_at, if(cached_ai, do: cached_ai.generated_at, else: nil))
-       |> assign(:ai_loading, false)
-       |> assign(:ai_error, nil)}
+      socket =
+        socket
+        |> assign(:page_title, "Weekly Insights - #{site.name}")
+        |> assign(:site, site)
+        |> assign(:user, user)
+        |> assign(:loading, true)
+        |> assign(:anomalies, [])
+        |> assign(:grouped, [])
+        |> assign(:summary, %{alerts: 0, warnings: 0, seo_items: 0, opportunities: 0})
+        |> assign(:ai_configured, ai_configured)
+        |> assign(:ai_analysis, if(cached_ai, do: cached_ai.content, else: nil))
+        |> assign(:ai_generated_at, if(cached_ai, do: cached_ai.generated_at, else: nil))
+        |> assign(:ai_loading, false)
+        |> assign(:ai_error, nil)
+
+      # AnomalyDetector.detect runs multiple ClickHouse comparison queries —
+      # load it async so the page renders immediately with the cached AI
+      # analysis visible while anomalies load in the background.
+      if connected?(socket), do: send(self(), :load_anomalies)
+
+      {:ok, socket}
     end
   end
 
@@ -64,6 +64,21 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
   end
 
   @impl true
+  def handle_info(:load_anomalies, socket) do
+    anomalies =
+      case AnomalyDetector.detect(socket.assigns.site, socket.assigns.user) do
+        {:ok, results} -> results
+        _ -> []
+      end
+
+    {:noreply,
+     socket
+     |> assign(:anomalies, anomalies)
+     |> assign(:grouped, group_anomalies(anomalies))
+     |> assign(:summary, build_summary(anomalies))
+     |> assign(:loading, false)}
+  end
+
   def handle_info({:run_ai_analysis, site, user}, socket) do
     prompt = Spectabas.AI.InsightsPrompt.build(site, user)
     system = Spectabas.AI.InsightsPrompt.system_prompt()
@@ -110,7 +125,7 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
       live_visitors={0}
     >
       <div class="max-w-4xl mx-auto px-3 sm:px-6 lg:px-8 py-6">
-        <%!-- Summary cards --%>
+        <%!-- Summary cards (show zeros while loading, then update) --%>
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <div class="bg-white rounded-lg shadow p-4 border-l-4 border-red-400">
             <div class="text-2xl font-bold text-red-700">{@summary.alerts}</div>
@@ -194,59 +209,84 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
           </div>
         </div>
 
-        <%= if @anomalies == [] do %>
-          <div class="bg-white rounded-lg shadow p-8 text-center">
-            <div class="text-4xl mb-3">&#10003;</div>
-            <h3 class="text-lg font-semibold text-gray-900">All Clear</h3>
-            <p class="text-sm text-gray-500 mt-1">
-              No significant changes detected in the last 7 days compared to the week before.
-            </p>
+        <%= if @loading do %>
+          <div class="bg-white rounded-lg shadow p-12 text-center">
+            <div class="inline-flex items-center gap-3 text-gray-600">
+              <svg class="animate-spin h-5 w-5 text-indigo-600" viewBox="0 0 24 24" fill="none">
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              <span class="text-sm">
+                Detecting anomalies across traffic, SEO, revenue, and ads...
+              </span>
+            </div>
           </div>
         <% else %>
-          <%!-- Grouped sections --%>
-          <%= for {title, items, description} <- @grouped do %>
-            <%= if items != [] do %>
-              <div class="mb-8">
-                <h2 class="text-lg font-semibold text-gray-900 mb-1">{title}</h2>
-                <p class="text-xs text-gray-500 mb-4">{description}</p>
-                <div class="space-y-3">
-                  <div
-                    :for={anomaly <- items}
-                    class={[
-                      "bg-white rounded-lg shadow overflow-hidden border-l-4",
-                      severity_border(anomaly.severity)
-                    ]}
-                  >
-                    <div class="p-4 sm:p-5">
-                      <div class="flex items-start gap-3">
-                        <span class={[
-                          "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium shrink-0 mt-0.5",
-                          severity_badge(anomaly.severity)
-                        ]}>
-                          {severity_label(anomaly.severity)}
-                        </span>
-                        <div class="min-w-0 flex-1">
-                          <p class="text-sm font-medium text-gray-900">{anomaly.message}</p>
-                          <p class="text-sm text-indigo-700 mt-1 bg-indigo-50 rounded px-2 py-1 inline-block">
-                            {anomaly.action}
-                          </p>
-                          <div class="flex items-center gap-4 mt-2 text-xs text-gray-400">
-                            <span class={"px-1.5 py-0.5 rounded " <> category_badge(anomaly.category)}>
-                              {anomaly.category}
-                            </span>
-                            <span :if={anomaly.change_pct}>
-                              {if anomaly.change_pct > 0, do: "+", else: ""}{anomaly.change_pct}%
-                            </span>
-                            <span :if={anomaly.previous}>
-                              {anomaly.previous} → {anomaly.current}
-                            </span>
+          <%= if @anomalies == [] do %>
+            <div class="bg-white rounded-lg shadow p-8 text-center">
+              <div class="text-4xl mb-3">&#10003;</div>
+              <h3 class="text-lg font-semibold text-gray-900">All Clear</h3>
+              <p class="text-sm text-gray-500 mt-1">
+                No significant changes detected in the last 7 days compared to the week before.
+              </p>
+            </div>
+          <% else %>
+            <%!-- Grouped sections --%>
+            <%= for {title, items, description} <- @grouped do %>
+              <%= if items != [] do %>
+                <div class="mb-8">
+                  <h2 class="text-lg font-semibold text-gray-900 mb-1">{title}</h2>
+                  <p class="text-xs text-gray-500 mb-4">{description}</p>
+                  <div class="space-y-3">
+                    <div
+                      :for={anomaly <- items}
+                      class={[
+                        "bg-white rounded-lg shadow overflow-hidden border-l-4",
+                        severity_border(anomaly.severity)
+                      ]}
+                    >
+                      <div class="p-4 sm:p-5">
+                        <div class="flex items-start gap-3">
+                          <span class={[
+                            "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium shrink-0 mt-0.5",
+                            severity_badge(anomaly.severity)
+                          ]}>
+                            {severity_label(anomaly.severity)}
+                          </span>
+                          <div class="min-w-0 flex-1">
+                            <p class="text-sm font-medium text-gray-900">{anomaly.message}</p>
+                            <p class="text-sm text-indigo-700 mt-1 bg-indigo-50 rounded px-2 py-1 inline-block">
+                              {anomaly.action}
+                            </p>
+                            <div class="flex items-center gap-4 mt-2 text-xs text-gray-400">
+                              <span class={"px-1.5 py-0.5 rounded " <> category_badge(anomaly.category)}>
+                                {anomaly.category}
+                              </span>
+                              <span :if={anomaly.change_pct}>
+                                {if anomaly.change_pct > 0, do: "+", else: ""}{anomaly.change_pct}%
+                              </span>
+                              <span :if={anomaly.previous}>
+                                {anomaly.previous} → {anomaly.current}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              <% end %>
             <% end %>
           <% end %>
         <% end %>
