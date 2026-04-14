@@ -395,15 +395,23 @@ defmodule SpectabasWeb.HealthController do
     Spectabas.ClickHouse.insert("events", events)
     Spectabas.ClickHouse.insert("ecommerce_events", ecommerce)
 
-    # Query all three models
-    site = %Spectabas.Sites.Site{id: site_id, domain: "b.test-attrib.com"}
-    user = %Spectabas.Accounts.User{id: 1, role: :platform_admin}
+    # Query all three models — struct/1 ensures all schema fields get defaults
+    site = struct(Spectabas.Sites.Site, %{id: site_id, domain: "b.test-attrib.com"})
+    user = struct(Spectabas.Accounts.User, %{id: 1, role: :platform_admin, account_id: nil})
     now = DateTime.utc_now() |> DateTime.truncate(:second)
     range = %{from: DateTime.add(now, -1, :day), to: now}
 
-    any_result = Spectabas.Analytics.revenue_by_source(site, user, range, touch: "any")
-    first_result = Spectabas.Analytics.revenue_by_source(site, user, range, touch: "first")
-    last_result = Spectabas.Analytics.revenue_by_source(site, user, range, touch: "last")
+    {any_result, first_result, last_result} =
+      try do
+        a = Spectabas.Analytics.revenue_by_source(site, user, range, touch: "any")
+        f = Spectabas.Analytics.revenue_by_source(site, user, range, touch: "first")
+        l = Spectabas.Analytics.revenue_by_source(site, user, range, touch: "last")
+        {a, f, l}
+      rescue
+        e ->
+          err = {:error, Exception.message(e)}
+          {err, err, err}
+      end
 
     # Cleanup
     for table <- ~w(events ecommerce_events) do
@@ -431,8 +439,8 @@ defmodule SpectabasWeb.HealthController do
     last = fmt.(last_result)
 
     passed =
-      any.ok and first.ok and last.ok and
-        any[:revenue] > 0 and first[:revenue] > 0 and last[:revenue] > 0
+      any[:ok] == true and first[:ok] == true and last[:ok] == true and
+        (any[:revenue] || 0) > 0 and (first[:revenue] || 0) > 0 and (last[:revenue] || 0) > 0
 
     json(conn, %{
       passed: passed,
