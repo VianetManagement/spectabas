@@ -61,25 +61,29 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
   end
 
   def handle_event("create_funnel", _params, socket) do
-    params = %{
-      "name" => socket.assigns.form_name,
-      "steps" => socket.assigns.form_steps
-    }
+    if !Accounts.can_write?(socket.assigns.current_scope.user) do
+      {:noreply, put_flash(socket, :error, "Viewers have read-only access.")}
+    else
+      params = %{
+        "name" => socket.assigns.form_name,
+        "steps" => socket.assigns.form_steps
+      }
 
-    case Goals.create_funnel(socket.assigns.site, params) do
-      {:ok, _funnel} ->
-        funnels = Goals.list_funnels(socket.assigns.site)
+      case Goals.create_funnel(socket.assigns.site, params) do
+        {:ok, _funnel} ->
+          funnels = Goals.list_funnels(socket.assigns.site)
 
-        {:noreply,
-         socket
-         |> put_flash(:info, "Funnel created.")
-         |> assign(:funnels, funnels)
-         |> assign(:show_form, false)
-         |> assign(:form_name, "")
-         |> assign(:form_steps, [%{name: "", type: "pageview", value: ""}])}
+          {:noreply,
+           socket
+           |> put_flash(:info, "Funnel created.")
+           |> assign(:funnels, funnels)
+           |> assign(:show_form, false)
+           |> assign(:form_name, "")
+           |> assign(:form_steps, [%{name: "", type: "pageview", value: ""}])}
 
-      {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Failed to create funnel.")}
+        {:error, _changeset} ->
+          {:noreply, put_flash(socket, :error, "Failed to create funnel.")}
+      end
     end
   end
 

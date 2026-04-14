@@ -20,6 +20,7 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
   import Spectabas.TypeHelpers
 
   @ranges ~w(7d 30d 90d)
+  @write_events ~w(create_campaign save_detected)
 
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
@@ -29,6 +30,19 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
     unless Accounts.can_access_site?(user, site) do
       {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
     else
+      socket =
+        if !Accounts.can_write?(user) do
+          attach_hook(socket, :viewer_guard, :handle_event, fn
+            event, _params, sock when event in @write_events ->
+              {:halt, put_flash(sock, :error, "Viewers have read-only access.")}
+
+            _event, _params, sock ->
+              {:cont, sock}
+          end)
+        else
+          socket
+        end
+
       {:ok,
        socket
        |> assign(:page_title, "Campaigns - #{site.name}")

@@ -185,8 +185,8 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 | platform_admin | Global | NULL | All accounts, sites, users. Creates accounts, invites superadmins. |
 | superadmin | Account | set | Own account's sites/users. Can invite any role including superadmin. |
 | admin | Account | set | Own account's sites. Cannot manage users. |
-| analyst | Account+Site | set | Only explicitly-permitted sites within account. |
-| viewer | Account+Site | set | Read-only on permitted sites within account. |
+| analyst | Account+Site | set | Only explicitly-permitted sites within account. Can create goals/funnels/campaigns but cannot modify site settings or integrations. |
+| viewer | Account+Site | set | Read-only on permitted sites within account. Cannot create or modify any resources — browse-only access. |
 
 ### Route Tiers
 - `/platform/*` — platform_admin only (accounts management, spam filter, API logs, competitive)
@@ -277,7 +277,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Mobile responsiveness** — scrollable tables, collapsible mobile nav bar
 - **Accessible top nav** — WCAG AA contrast compliance
 - **Documentation pages** — docs split into `/docs` (index), `/docs/getting-started`, `/docs/dashboard`, `/docs/conversions`, `/docs/api`, `/docs/admin` with cross-category search. Requires login (behind :require_authenticated_user). Public pages: `/privacy`, `/terms`, homepage.
-- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.29.1)
+- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.30.0)
 - **Legal** — Privacy Policy at `/privacy` and Terms of Service at `/terms` (public, no auth required). Entity: Spectabas, Kent County MI. Contact: howdy@spectabas.com. Arbitration clause (AAA, Kent County). 18+ age restriction.
 
 ## Important Patterns

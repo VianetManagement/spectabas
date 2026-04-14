@@ -249,17 +249,21 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         socket
       )
       when name != "" do
-    %{user: user, site: site, segment: segment} = socket.assigns
+    if !Accounts.can_write?(socket.assigns.current_scope.user) do
+      {:noreply, put_flash(socket, :error, "Viewers have read-only access.")}
+    else
+      %{user: user, site: site, segment: segment} = socket.assigns
 
-    case Segments.save_segment(user, site, name, segment) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> assign(:saved_segments, Segments.list_saved_segments(user, site))
-         |> assign(:show_save_input, false)}
+      case Segments.save_segment(user, site, name, segment) do
+        {:ok, _} ->
+          {:noreply,
+           socket
+           |> assign(:saved_segments, Segments.list_saved_segments(user, site))
+           |> assign(:show_save_input, false)}
 
-      _ ->
-        {:noreply, assign(socket, :show_save_input, false)}
+        _ ->
+          {:noreply, assign(socket, :show_save_input, false)}
+      end
     end
   end
 
@@ -271,10 +275,14 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   end
 
   def handle_event("update_segment", %{"action" => "delete_saved", "segment_id" => id}, socket) do
-    %{user: user, site: site} = socket.assigns
-    Segments.delete_segment(user, id)
+    if !Accounts.can_write?(socket.assigns.current_scope.user) do
+      {:noreply, put_flash(socket, :error, "Viewers have read-only access.")}
+    else
+      %{user: user, site: site} = socket.assigns
+      Segments.delete_segment(user, id)
 
-    {:noreply, assign(socket, :saved_segments, Segments.list_saved_segments(user, site))}
+      {:noreply, assign(socket, :saved_segments, Segments.list_saved_segments(user, site))}
+    end
   end
 
   def handle_event("update_segment", _params, socket), do: {:noreply, socket}

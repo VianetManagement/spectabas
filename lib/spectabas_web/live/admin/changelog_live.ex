@@ -53,6 +53,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.30.0", "2026-04-14T07:00:00Z",
+       [
+         %{
+           title: "Security: Role-based write restrictions for viewers and analysts",
+           description:
+             "Viewers are now fully read-only across all dashboard pages — they can browse any permitted site but cannot create goals, funnels, campaigns, email report subscriptions, save segments, or modify any settings. Analysts can do all of those but cannot modify site settings (integrations, GDPR mode, timezone, tracking config, credentials, sync triggers, backfills). Implemented via LiveView attach_hook on :handle_event that halts write events before they reach the handler. Settings has 12 guarded events, plus 6 other pages (goals, funnels, campaigns, site segments, email reports, reports). Exports and AI generation remain accessible to all roles."
+         },
+         %{
+           title: "Chore: Deduplicate shared helpers",
+           description:
+             "Moved blank_to_dash/1 and sort_arrow/3 into TypeHelpers (was copy-pasted across 4 files). Removed local format_number/1 from search_keywords_live (now uses TypeHelpers). Removed local to_int/1 from application.ex. Consolidated two startup backfill tasks into one."
+         }
+       ]},
       {"v5.29.1", "2026-04-14T05:30:00Z",
        [
          %{

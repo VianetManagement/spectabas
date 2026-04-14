@@ -36,19 +36,23 @@ defmodule SpectabasWeb.Dashboard.ReportsLive do
   end
 
   def handle_event("create_report", %{"report" => params}, socket) do
-    case Reports.create_report(socket.assigns.site, socket.assigns.user, params) do
-      {:ok, _report} ->
-        reports = Reports.list_reports(socket.assigns.site)
+    if !Accounts.can_write?(socket.assigns.current_scope.user) do
+      {:noreply, put_flash(socket, :error, "Viewers have read-only access.")}
+    else
+      case Reports.create_report(socket.assigns.site, socket.assigns.user, params) do
+        {:ok, _report} ->
+          reports = Reports.list_reports(socket.assigns.site)
 
-        {:noreply,
-         socket
-         |> put_flash(:info, "Report created.")
-         |> assign(:reports, reports)
-         |> assign(:show_form, false)
-         |> assign(:form, to_form(report_changeset()))}
+          {:noreply,
+           socket
+           |> put_flash(:info, "Report created.")
+           |> assign(:reports, reports)
+           |> assign(:show_form, false)
+           |> assign(:form, to_form(report_changeset()))}
 
-      {:error, changeset} ->
-        {:noreply, assign(socket, :form, to_form(changeset))}
+        {:error, changeset} ->
+          {:noreply, assign(socket, :form, to_form(changeset))}
+      end
     end
   end
 

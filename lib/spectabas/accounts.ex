@@ -47,6 +47,16 @@ defmodule Spectabas.Accounts do
 
   def can_access_site?(_, _), do: false
 
+  @doc "Can the user perform write operations (create goals, campaigns, etc.)? Viewers cannot."
+  def can_write?(%User{role: :viewer}), do: false
+  def can_write?(%User{}), do: true
+  def can_write?(_), do: false
+
+  @doc "Can the user manage site settings and integrations? Viewers and analysts cannot."
+  def can_manage_settings?(%User{role: r}) when r in [:viewer, :analyst], do: false
+  def can_manage_settings?(%User{}), do: true
+  def can_manage_settings?(_), do: false
+
   ## Database getters
 
   @doc """

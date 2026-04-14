@@ -7,6 +7,12 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   alias Spectabas.{Accounts, Sites}
   import SpectabasWeb.Dashboard.SidebarComponent
 
+  # Events that modify site state. Viewers and analysts are blocked from
+  # these via an attach_hook in mount — no per-handler guards needed.
+  @settings_write_events ~w(save save_ai_config save_intent_config register_render_domain
+    disconnect_ad backfill_payment_data backfill_search_console sync_ad_now
+    save_ad_credentials clear_payment_data update_sync_frequency verify_dns)
+
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
     user = socket.assigns.current_scope.user
@@ -20,18 +26,37 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
     else
       changeset = Sites.Site.changeset(site, %{})
 
-      {:ok,
-       socket
-       |> assign(:page_title, "Settings - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:user, user)
-       |> assign(:user_tz, user.timezone || "America/New_York")
-       |> assign(:form, to_form(changeset))
-       |> assign(:snippet, Sites.snippet_code(site))
-       |> assign(:proxy_snippet, Sites.proxy_snippet_code(site))
-       |> assign(:render_domain_status, check_render_domain(site.domain))
-       |> assign(:ad_integrations, ensure_integrations(site))
-       |> assign(:configuring_platform, nil)}
+      socket =
+        socket
+        |> assign(:page_title, "Settings - #{site.name}")
+        |> assign(:site, site)
+        |> assign(:user, user)
+        |> assign(:user_tz, user.timezone || "America/New_York")
+        |> assign(:form, to_form(changeset))
+        |> assign(:snippet, Sites.snippet_code(site))
+        |> assign(:proxy_snippet, Sites.proxy_snippet_code(site))
+        |> assign(:render_domain_status, check_render_domain(site.domain))
+        |> assign(:ad_integrations, ensure_integrations(site))
+        |> assign(:configuring_platform, nil)
+
+      # Block write events for viewers/analysts at the hook level — halts
+      # event propagation before any handle_event clause runs.
+      socket =
+        if Accounts.can_manage_settings?(user) do
+          socket
+        else
+          attach_hook(socket, :settings_guard, :handle_event, fn
+            event, _params, sock ->
+              if event in @settings_write_events do
+                label = if user.role == :viewer, do: "Viewers", else: "Analysts"
+                {:halt, put_flash(sock, :error, "#{label} cannot modify site settings.")}
+              else
+                {:cont, sock}
+              end
+          end)
+        end
+
+      {:ok, socket}
     end
   end
 

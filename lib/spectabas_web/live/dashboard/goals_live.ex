@@ -6,6 +6,8 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
   alias Spectabas.{Accounts, Sites, Goals, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
 
+  @write_events ~w(create_goal delete_goal)
+
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
     user = socket.assigns.current_scope.user
@@ -17,6 +19,19 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
        |> put_flash(:error, "Unauthorized")
        |> redirect(to: ~p"/")}
     else
+      socket =
+        if !Accounts.can_write?(user) do
+          attach_hook(socket, :viewer_guard, :handle_event, fn
+            event, _params, sock when event in @write_events ->
+              {:halt, put_flash(sock, :error, "Viewers have read-only access.")}
+
+            _event, _params, sock ->
+              {:cont, sock}
+          end)
+        else
+          socket
+        end
+
       goals = Goals.list_goals(site)
 
       completions =
