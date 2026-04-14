@@ -14,19 +14,30 @@ defmodule SpectabasWeb.Dashboard.RevenueCohortLive do
     unless Accounts.can_access_site?(user, site) do
       {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
     else
-      {:ok,
-       socket
-       |> assign(:page_title, "Revenue Cohorts - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:user, user)
-       |> assign(:date_range, "90d")
-       |> load_data()}
+      socket =
+        socket
+        |> assign(:page_title, "Revenue Cohorts - #{site.name}")
+        |> assign(:site, site)
+        |> assign(:user, user)
+        |> assign(:date_range, "90d")
+        |> assign(:loading, true)
+        |> assign(:cohorts, [])
+        |> assign(:max_week, 0)
+
+      if connected?(socket), do: send(self(), :load_data)
+      {:ok, socket}
     end
   end
 
   @impl true
+  def handle_info(:load_data, socket) do
+    {:noreply, socket |> load_data() |> assign(:loading, false)}
+  end
+
+  @impl true
   def handle_event("change_range", %{"range" => range}, socket) do
-    {:noreply, socket |> assign(:date_range, range) |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:date_range, range) |> assign(:loading, true)}
   end
 
   defp load_data(socket) do
@@ -107,56 +118,62 @@ defmodule SpectabasWeb.Dashboard.RevenueCohortLive do
           </nav>
         </div>
 
-        <div :if={@cohorts == []} class="bg-white rounded-lg shadow p-8 text-center text-gray-500">
-          No cohort data yet. Revenue cohorts appear after customers make purchases.
+        <div :if={@loading} class="flex items-center justify-center py-12">
+          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
         </div>
 
-        <div :if={@cohorts != []} class="bg-white rounded-lg shadow overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase sticky left-0 bg-gray-50">
-                  Cohort
-                </th>
-                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Total
-                </th>
-                <th
-                  :for={w <- 0..@max_week}
-                  class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase"
-                >
-                  Wk {w}
-                </th>
-              </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
-              <tr :for={cohort <- @cohorts} class="hover:bg-gray-50">
-                <td class="px-4 py-3 text-sm font-medium text-gray-900 sticky left-0 bg-white whitespace-nowrap">
-                  {cohort.cohort_week}
-                </td>
-                <td class="px-4 py-3 text-sm font-medium text-green-600 text-right tabular-nums">
-                  {Spectabas.Currency.format(cohort.total_revenue, @site.currency)}
-                </td>
-                <td :for={w <- 0..@max_week} class="px-3 py-3 text-center text-xs tabular-nums">
-                  <% week_data = Enum.find(cohort.weeks, &(&1.week == w)) %>
-                  <span
-                    :if={week_data}
-                    class="text-gray-900"
-                    title={"#{week_data.customers} customers"}
+        <div :if={!@loading}>
+          <div :if={@cohorts == []} class="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+            No cohort data yet. Revenue cohorts appear after customers make purchases.
+          </div>
+
+          <div :if={@cohorts != []} class="bg-white rounded-lg shadow overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase sticky left-0 bg-gray-50">
+                    Cohort
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Total
+                  </th>
+                  <th
+                    :for={w <- 0..@max_week}
+                    class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase"
                   >
-                    {week_data.rpc}
-                  </span>
-                  <span :if={!week_data} class="text-gray-300">-</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                    Wk {w}
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr :for={cohort <- @cohorts} class="hover:bg-gray-50">
+                  <td class="px-4 py-3 text-sm font-medium text-gray-900 sticky left-0 bg-white whitespace-nowrap">
+                    {cohort.cohort_week}
+                  </td>
+                  <td class="px-4 py-3 text-sm font-medium text-green-600 text-right tabular-nums">
+                    {Spectabas.Currency.format(cohort.total_revenue, @site.currency)}
+                  </td>
+                  <td :for={w <- 0..@max_week} class="px-3 py-3 text-center text-xs tabular-nums">
+                    <% week_data = Enum.find(cohort.weeks, &(&1.week == w)) %>
+                    <span
+                      :if={week_data}
+                      class="text-gray-900"
+                      title={"#{week_data.customers} customers"}
+                    >
+                      {week_data.rpc}
+                    </span>
+                    <span :if={!week_data} class="text-gray-300">-</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p :if={@cohorts != []} class="text-xs text-gray-500 mt-2">
+            Each cell shows revenue per customer. Hover for customer count.
+            Cohorts are grouped by the week of each customer's first purchase — a new row appears each week as new customers buy for the first time.
+            Columns track how much those same customers spend in subsequent weeks, showing retention and lifetime value over time.
+          </p>
         </div>
-        <p :if={@cohorts != []} class="text-xs text-gray-500 mt-2">
-          Each cell shows revenue per customer. Hover for customer count.
-          Cohorts are grouped by the week of each customer's first purchase — a new row appears each week as new customers buy for the first time.
-          Columns track how much those same customers spend in subsequent weeks, showing retention and lifetime value over time.
-        </p>
       </div>
     </.dashboard_layout>
     """

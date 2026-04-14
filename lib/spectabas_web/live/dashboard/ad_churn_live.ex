@@ -16,24 +16,34 @@ defmodule SpectabasWeb.Dashboard.AdChurnLive do
     unless Accounts.can_access_site?(user, site) do
       {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
     else
-      {:ok,
-       socket
-       |> assign(:page_title, "Ad-to-Churn - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:user, user)
-       |> assign(:date_range, "90d")
-       |> assign(:group_by, "platform")
-       |> load_data()}
+      socket =
+        socket
+        |> assign(:page_title, "Ad-to-Churn - #{site.name}")
+        |> assign(:site, site)
+        |> assign(:user, user)
+        |> assign(:date_range, "90d")
+        |> assign(:group_by, "platform")
+        |> assign(:loading, true)
+
+      if connected?(socket), do: send(self(), :load_data)
+      {:ok, socket}
     end
   end
 
   @impl true
   def handle_event("change_range", %{"range" => range}, socket) do
-    {:noreply, socket |> assign(:date_range, range) |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:date_range, range) |> assign(:loading, true)}
   end
 
   def handle_event("change_group", %{"group" => group}, socket) do
-    {:noreply, socket |> assign(:group_by, group) |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:group_by, group) |> assign(:loading, true)}
+  end
+
+  @impl true
+  def handle_info(:load_data, socket) do
+    {:noreply, socket |> load_data() |> assign(:loading, false)}
   end
 
   defp load_data(socket) do
@@ -112,99 +122,122 @@ defmodule SpectabasWeb.Dashboard.AdChurnLive do
           </div>
         </div>
 
-        <div :if={!@has_data} class="bg-white rounded-lg shadow p-12 text-center">
-          <p class="text-gray-500">
-            Not enough data yet. Churn analysis requires ad visitors with repeat sessions over at least 28 days.
-          </p>
-        </div>
-
-        <div :if={@has_data}>
-          <%!-- Comparison cards --%>
-          <div class="grid grid-cols-2 gap-4 mb-6">
-            <div class="bg-white rounded-lg shadow p-5">
-              <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">Ad Traffic Churn</h3>
-              <dd class={"text-3xl font-bold #{churn_color(parse_float(@ad_summary["churn_rate"]))}"}>
-                {@ad_summary["churn_rate"] || "0"}%
-              </dd>
-              <dd class="text-xs text-gray-400 mt-1">
-                {format_number(to_num(@ad_summary["churned"]))} of {format_number(
-                  to_num(@ad_summary["total_visitors"])
-                )} visitors
-              </dd>
-            </div>
-            <div class="bg-white rounded-lg shadow p-5">
-              <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">
-                Organic Traffic Churn
-              </h3>
-              <dd class={"text-3xl font-bold #{churn_color(parse_float(@organic_summary["churn_rate"]))}"}>
-                {@organic_summary["churn_rate"] || "0"}%
-              </dd>
-              <dd class="text-xs text-gray-400 mt-1">
-                {format_number(to_num(@organic_summary["churned"]))} of {format_number(
-                  to_num(@organic_summary["total_visitors"])
-                )} visitors
-              </dd>
+        <%= if @loading do %>
+          <div class="bg-white rounded-lg shadow p-12 text-center">
+            <div class="inline-flex items-center gap-3 text-gray-600">
+              <svg class="animate-spin h-5 w-5 text-indigo-600" viewBox="0 0 24 24" fill="none">
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              <span class="text-sm">Loading...</span>
             </div>
           </div>
-
-          <%!-- Campaign table --%>
-          <div class="bg-white rounded-lg shadow overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-              <thead class="bg-gray-50">
-                <tr>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    {if @group_by == "platform", do: "Platform", else: "Campaign"}
-                  </th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Visitors
-                  </th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Churned
-                  </th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Retained
-                  </th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Purchased
-                  </th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Churn Rate
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100">
-                <tr :for={row <- @rows} class="hover:bg-gray-50">
-                  <td class="px-4 py-3 text-sm font-medium text-gray-900">
-                    {if @group_by == "platform",
-                      do: platform_label(row["platform"]),
-                      else: row["campaign"] || row["platform"] || "(none)"}
-                  </td>
-                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
-                    {format_number(to_num(row["total_visitors"]))}
-                  </td>
-                  <td class="px-4 py-3 text-sm text-red-600 text-right tabular-nums">
-                    {format_number(to_num(row["churned"]))}
-                  </td>
-                  <td class="px-4 py-3 text-sm text-green-600 text-right tabular-nums">
-                    {format_number(to_num(row["retained"]))}
-                  </td>
-                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
-                    {format_number(to_num(row["purchased"]))}
-                  </td>
-                  <td class="px-4 py-3 text-right">
-                    <span class={"text-sm font-bold tabular-nums #{churn_color(parse_float(row["churn_rate"]))}"}>
-                      {row["churn_rate"]}%
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+        <% else %>
+          <div :if={!@has_data} class="bg-white rounded-lg shadow p-12 text-center">
+            <p class="text-gray-500">
+              Not enough data yet. Churn analysis requires ad visitors with repeat sessions over at least 28 days.
+            </p>
           </div>
 
-          <p class="text-xs text-gray-500 mt-3">
-            Churn = 50%+ decline in sessions over a 14-day window. Compares the most recent 14 days to the prior 14 days for each visitor who had activity in both periods. Lower churn rate = stickier customers.
-          </p>
-        </div>
+          <div :if={@has_data}>
+            <%!-- Comparison cards --%>
+            <div class="grid grid-cols-2 gap-4 mb-6">
+              <div class="bg-white rounded-lg shadow p-5">
+                <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">Ad Traffic Churn</h3>
+                <dd class={"text-3xl font-bold #{churn_color(parse_float(@ad_summary["churn_rate"]))}"}>
+                  {@ad_summary["churn_rate"] || "0"}%
+                </dd>
+                <dd class="text-xs text-gray-400 mt-1">
+                  {format_number(to_num(@ad_summary["churned"]))} of {format_number(
+                    to_num(@ad_summary["total_visitors"])
+                  )} visitors
+                </dd>
+              </div>
+              <div class="bg-white rounded-lg shadow p-5">
+                <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">
+                  Organic Traffic Churn
+                </h3>
+                <dd class={"text-3xl font-bold #{churn_color(parse_float(@organic_summary["churn_rate"]))}"}>
+                  {@organic_summary["churn_rate"] || "0"}%
+                </dd>
+                <dd class="text-xs text-gray-400 mt-1">
+                  {format_number(to_num(@organic_summary["churned"]))} of {format_number(
+                    to_num(@organic_summary["total_visitors"])
+                  )} visitors
+                </dd>
+              </div>
+            </div>
+
+            <%!-- Campaign table --%>
+            <div class="bg-white rounded-lg shadow overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      {if @group_by == "platform", do: "Platform", else: "Campaign"}
+                    </th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Visitors
+                    </th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Churned
+                    </th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Retained
+                    </th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Purchased
+                    </th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Churn Rate
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                  <tr :for={row <- @rows} class="hover:bg-gray-50">
+                    <td class="px-4 py-3 text-sm font-medium text-gray-900">
+                      {if @group_by == "platform",
+                        do: platform_label(row["platform"]),
+                        else: row["campaign"] || row["platform"] || "(none)"}
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
+                      {format_number(to_num(row["total_visitors"]))}
+                    </td>
+                    <td class="px-4 py-3 text-sm text-red-600 text-right tabular-nums">
+                      {format_number(to_num(row["churned"]))}
+                    </td>
+                    <td class="px-4 py-3 text-sm text-green-600 text-right tabular-nums">
+                      {format_number(to_num(row["retained"]))}
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
+                      {format_number(to_num(row["purchased"]))}
+                    </td>
+                    <td class="px-4 py-3 text-right">
+                      <span class={"text-sm font-bold tabular-nums #{churn_color(parse_float(row["churn_rate"]))}"}>
+                        {row["churn_rate"]}%
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p class="text-xs text-gray-500 mt-3">
+              Churn = 50%+ decline in sessions over a 14-day window. Compares the most recent 14 days to the prior 14 days for each visitor who had activity in both periods. Lower churn rate = stickier customers.
+            </p>
+          </div>
+        <% end %>
       </div>
     </.dashboard_layout>
     """

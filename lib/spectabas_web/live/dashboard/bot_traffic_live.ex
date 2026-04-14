@@ -16,21 +16,25 @@ defmodule SpectabasWeb.Dashboard.BotTrafficLive do
     unless Accounts.can_access_site?(user, site) do
       {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
     else
-      {:ok,
-       socket
-       |> assign(:page_title, "Bot Traffic - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:user, user)
-       |> assign(:date_range, "7d")
-       |> assign(:modal_ua, nil)
-       |> assign(:modal_details, nil)
-       |> load_data()}
+      socket =
+        socket
+        |> assign(:page_title, "Bot Traffic - #{site.name}")
+        |> assign(:site, site)
+        |> assign(:user, user)
+        |> assign(:date_range, "7d")
+        |> assign(:modal_ua, nil)
+        |> assign(:modal_details, nil)
+        |> assign(:loading, true)
+
+      if connected?(socket), do: send(self(), :load_data)
+      {:ok, socket}
     end
   end
 
   @impl true
   def handle_event("change_range", %{"range" => range}, socket) do
-    {:noreply, socket |> assign(:date_range, range) |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:date_range, range) |> assign(:loading, true)}
   end
 
   # Open the UA details modal. UA strings are looked up from the current
@@ -71,6 +75,11 @@ defmodule SpectabasWeb.Dashboard.BotTrafficLive do
 
   def handle_event("close_ua", _params, socket) do
     {:noreply, socket |> assign(:modal_ua, nil) |> assign(:modal_details, nil)}
+  end
+
+  @impl true
+  def handle_info(:load_data, socket) do
+    {:noreply, socket |> load_data() |> assign(:loading, false)}
   end
 
   defp load_data(socket) do
@@ -153,154 +162,177 @@ defmodule SpectabasWeb.Dashboard.BotTrafficLive do
           </nav>
         </div>
 
-        <%!-- Overview Stats --%>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div class="bg-white rounded-lg shadow p-5">
-            <div class="text-xs font-medium text-gray-500 uppercase">Bot Events</div>
-            <div class="text-2xl font-bold text-red-600 mt-1">
-              {format_number(to_num(@stats["bot_events"]))}
-            </div>
-            <div class="text-xs text-gray-500 mt-1">
-              {to_num(@stats["bot_pct"])}% of all traffic
-            </div>
-          </div>
-          <div class="bg-white rounded-lg shadow p-5">
-            <div class="text-xs font-medium text-gray-500 uppercase">Bot Visitors</div>
-            <div class="text-2xl font-bold text-red-600 mt-1">
-              {format_number(to_num(@stats["bot_visitors"]))}
-            </div>
-            <div class="text-xs text-gray-500 mt-1">
-              vs {format_number(to_num(@stats["human_visitors"]))} human
-            </div>
-          </div>
-          <div class="bg-white rounded-lg shadow p-5">
-            <div class="text-xs font-medium text-gray-500 uppercase">Human Events</div>
-            <div class="text-2xl font-bold text-green-600 mt-1">
-              {format_number(to_num(@stats["human_events"]))}
-            </div>
-            <div class="text-xs text-gray-500 mt-1">
-              {100 - to_num(@stats["bot_pct"])}% of all traffic
+        <%= if @loading do %>
+          <div class="bg-white rounded-lg shadow p-12 text-center">
+            <div class="inline-flex items-center gap-3 text-gray-600">
+              <svg class="animate-spin h-5 w-5 text-indigo-600" viewBox="0 0 24 24" fill="none">
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              <span class="text-sm">Loading...</span>
             </div>
           </div>
-          <div class="bg-white rounded-lg shadow p-5">
-            <div class="text-xs font-medium text-gray-500 uppercase">Bot Types</div>
-            <div class="mt-2 space-y-1">
-              <div class="flex justify-between text-sm">
-                <span class="text-gray-600">Datacenter</span>
-                <span class="font-medium">{format_number(to_num(@stats["datacenter_bots"]))}</span>
+        <% else %>
+          <%!-- Overview Stats --%>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-white rounded-lg shadow p-5">
+              <div class="text-xs font-medium text-gray-500 uppercase">Bot Events</div>
+              <div class="text-2xl font-bold text-red-600 mt-1">
+                {format_number(to_num(@stats["bot_events"]))}
               </div>
-              <div class="flex justify-between text-sm">
-                <span class="text-gray-600">VPN</span>
-                <span class="font-medium">{format_number(to_num(@stats["vpn_bots"]))}</span>
-              </div>
-              <div class="flex justify-between text-sm">
-                <span class="text-gray-600">Tor</span>
-                <span class="font-medium">{format_number(to_num(@stats["tor_bots"]))}</span>
+              <div class="text-xs text-gray-500 mt-1">
+                {to_num(@stats["bot_pct"])}% of all traffic
               </div>
             </div>
-          </div>
-        </div>
-
-        <%!-- Bot vs Human trend chart --%>
-        <div class="bg-white rounded-lg shadow p-6 mb-8">
-          <h3 class="text-sm font-semibold text-gray-700 mb-3">Bot vs Human Traffic</h3>
-          <div
-            id={"bot-trend-" <> @chart_key}
-            phx-hook="SearchChart"
-            data-chart={@trend_chart_json}
-            class="h-48 relative"
-          >
-            <canvas></canvas>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <%!-- Top Bot Pages --%>
-          <div class="bg-white rounded-lg shadow overflow-x-auto">
-            <div class="px-6 py-4 border-b border-gray-100">
-              <h3 class="font-semibold text-gray-900">Most Targeted Pages</h3>
-              <p class="text-xs text-gray-500 mt-0.5">Pages bots hit most frequently</p>
+            <div class="bg-white rounded-lg shadow p-5">
+              <div class="text-xs font-medium text-gray-500 uppercase">Bot Visitors</div>
+              <div class="text-2xl font-bold text-red-600 mt-1">
+                {format_number(to_num(@stats["bot_visitors"]))}
+              </div>
+              <div class="text-xs text-gray-500 mt-1">
+                vs {format_number(to_num(@stats["human_visitors"]))} human
+              </div>
             </div>
-            <table class="min-w-full divide-y divide-gray-200">
-              <thead class="bg-gray-50">
-                <tr>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Page
-                  </th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Hits
-                  </th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Bots
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100">
-                <tr :if={@top_pages == []}>
-                  <td colspan="3" class="px-6 py-8 text-center text-gray-500">
-                    No bot pageviews detected.
-                  </td>
-                </tr>
-                <tr :for={p <- @top_pages} class="hover:bg-gray-50">
-                  <td class="px-6 py-3 text-sm text-indigo-600 font-mono truncate max-w-xs">
-                    {p["url_path"]}
-                  </td>
-                  <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
-                    {format_number(to_num(p["hits"]))}
-                  </td>
-                  <td class="px-6 py-3 text-sm text-gray-500 text-right tabular-nums">
-                    {format_number(to_num(p["bots"]))}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            <div class="bg-white rounded-lg shadow p-5">
+              <div class="text-xs font-medium text-gray-500 uppercase">Human Events</div>
+              <div class="text-2xl font-bold text-green-600 mt-1">
+                {format_number(to_num(@stats["human_events"]))}
+              </div>
+              <div class="text-xs text-gray-500 mt-1">
+                {100 - to_num(@stats["bot_pct"])}% of all traffic
+              </div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-5">
+              <div class="text-xs font-medium text-gray-500 uppercase">Bot Types</div>
+              <div class="mt-2 space-y-1">
+                <div class="flex justify-between text-sm">
+                  <span class="text-gray-600">Datacenter</span>
+                  <span class="font-medium">{format_number(to_num(@stats["datacenter_bots"]))}</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                  <span class="text-gray-600">VPN</span>
+                  <span class="font-medium">{format_number(to_num(@stats["vpn_bots"]))}</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                  <span class="text-gray-600">Tor</span>
+                  <span class="font-medium">{format_number(to_num(@stats["tor_bots"]))}</span>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <%!-- Top Bot User Agents --%>
-          <div class="bg-white rounded-lg shadow overflow-x-auto">
-            <div class="px-6 py-4 border-b border-gray-100">
-              <h3 class="font-semibold text-gray-900">Top Bot User Agents</h3>
-              <p class="text-xs text-gray-500 mt-0.5">
-                Click a row to see full user agent and targeting details.
-              </p>
+          <%!-- Bot vs Human trend chart --%>
+          <div class="bg-white rounded-lg shadow p-6 mb-8">
+            <h3 class="text-sm font-semibold text-gray-700 mb-3">Bot vs Human Traffic</h3>
+            <div
+              id={"bot-trend-" <> @chart_key}
+              phx-hook="SearchChart"
+              data-chart={@trend_chart_json}
+              class="h-48 relative"
+            >
+              <canvas></canvas>
             </div>
-            <table class="min-w-full divide-y divide-gray-200">
-              <thead class="bg-gray-50">
-                <tr>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    User Agent
-                  </th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Hits
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100">
-                <tr :if={@top_uas == []}>
-                  <td colspan="2" class="px-6 py-8 text-center text-gray-500">
-                    No bot user agents detected.
-                  </td>
-                </tr>
-                <tr
-                  :for={{ua, idx} <- Enum.with_index(@top_uas)}
-                  class="hover:bg-indigo-50 cursor-pointer"
-                  phx-click="open_ua"
-                  phx-value-idx={idx}
-                >
-                  <td
-                    class="px-6 py-3 text-xs text-gray-700 font-mono truncate max-w-sm"
-                    title={ua["user_agent"]}
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <%!-- Top Bot Pages --%>
+            <div class="bg-white rounded-lg shadow overflow-x-auto">
+              <div class="px-6 py-4 border-b border-gray-100">
+                <h3 class="font-semibold text-gray-900">Most Targeted Pages</h3>
+                <p class="text-xs text-gray-500 mt-0.5">Pages bots hit most frequently</p>
+              </div>
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Page
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Hits
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Bots
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                  <tr :if={@top_pages == []}>
+                    <td colspan="3" class="px-6 py-8 text-center text-gray-500">
+                      No bot pageviews detected.
+                    </td>
+                  </tr>
+                  <tr :for={p <- @top_pages} class="hover:bg-gray-50">
+                    <td class="px-6 py-3 text-sm text-indigo-600 font-mono truncate max-w-xs">
+                      {p["url_path"]}
+                    </td>
+                    <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
+                      {format_number(to_num(p["hits"]))}
+                    </td>
+                    <td class="px-6 py-3 text-sm text-gray-500 text-right tabular-nums">
+                      {format_number(to_num(p["bots"]))}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <%!-- Top Bot User Agents --%>
+            <div class="bg-white rounded-lg shadow overflow-x-auto">
+              <div class="px-6 py-4 border-b border-gray-100">
+                <h3 class="font-semibold text-gray-900">Top Bot User Agents</h3>
+                <p class="text-xs text-gray-500 mt-0.5">
+                  Click a row to see full user agent and targeting details.
+                </p>
+              </div>
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      User Agent
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Hits
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                  <tr :if={@top_uas == []}>
+                    <td colspan="2" class="px-6 py-8 text-center text-gray-500">
+                      No bot user agents detected.
+                    </td>
+                  </tr>
+                  <tr
+                    :for={{ua, idx} <- Enum.with_index(@top_uas)}
+                    class="hover:bg-indigo-50 cursor-pointer"
+                    phx-click="open_ua"
+                    phx-value-idx={idx}
                   >
-                    {String.slice(ua["user_agent"] || "", 0, 80)}
-                  </td>
-                  <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
-                    {format_number(to_num(ua["hits"]))}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                    <td
+                      class="px-6 py-3 text-xs text-gray-700 font-mono truncate max-w-sm"
+                      title={ua["user_agent"]}
+                    >
+                      {String.slice(ua["user_agent"] || "", 0, 80)}
+                    </td>
+                    <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
+                      {format_number(to_num(ua["hits"]))}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        <% end %>
       </div>
 
       <%!-- User Agent details modal --%>

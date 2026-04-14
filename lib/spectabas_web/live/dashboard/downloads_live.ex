@@ -16,19 +16,28 @@ defmodule SpectabasWeb.Dashboard.DownloadsLive do
     unless Accounts.can_access_site?(user, site) do
       {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
     else
-      {:ok,
-       socket
-       |> assign(:page_title, "Downloads - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:user, user)
-       |> assign(:date_range, "30d")
-       |> load_data()}
+      socket =
+        socket
+        |> assign(:page_title, "Downloads - #{site.name}")
+        |> assign(:site, site)
+        |> assign(:user, user)
+        |> assign(:date_range, "30d")
+        |> assign(:loading, true)
+
+      if connected?(socket), do: send(self(), :load_data)
+      {:ok, socket}
     end
   end
 
   @impl true
   def handle_event("change_range", %{"range" => range}, socket) do
-    {:noreply, socket |> assign(:date_range, range) |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:date_range, range) |> assign(:loading, true)}
+  end
+
+  @impl true
+  def handle_info(:load_data, socket) do
+    {:noreply, socket |> load_data() |> assign(:loading, false)}
   end
 
   defp load_data(socket) do
@@ -77,46 +86,69 @@ defmodule SpectabasWeb.Dashboard.DownloadsLive do
           </nav>
         </div>
 
-        <div class="bg-white rounded-lg shadow overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Filename
-                </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  URL
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Hits
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Visitors
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-200">
-              <tr :if={@downloads == []}>
-                <td colspan="4" class="px-6 py-8 text-center text-gray-500">
-                  No file downloads found. Downloads are automatically tracked when visitors click links
-                  to files with common extensions (PDF, ZIP, DOC, XLS, CSV, MP3, MP4, etc.).
-                </td>
-              </tr>
-              <tr :for={dl <- @downloads} class="hover:bg-gray-50">
-                <td class="px-6 py-4 text-sm font-medium text-gray-900">{dl["filename"]}</td>
-                <td class="px-6 py-4 text-sm text-gray-600 truncate max-w-xs" title={dl["url"]}>
-                  {dl["url"]}
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {format_number(to_num(dl["hits"]))}
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {format_number(to_num(dl["visitors"]))}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <%= if @loading do %>
+          <div class="bg-white rounded-lg shadow p-12 text-center">
+            <div class="inline-flex items-center gap-3 text-gray-600">
+              <svg class="animate-spin h-5 w-5 text-indigo-600" viewBox="0 0 24 24" fill="none">
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              <span class="text-sm">Loading...</span>
+            </div>
+          </div>
+        <% else %>
+          <div class="bg-white rounded-lg shadow overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Filename
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    URL
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Hits
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Visitors
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                <tr :if={@downloads == []}>
+                  <td colspan="4" class="px-6 py-8 text-center text-gray-500">
+                    No file downloads found. Downloads are automatically tracked when visitors click links
+                    to files with common extensions (PDF, ZIP, DOC, XLS, CSV, MP3, MP4, etc.).
+                  </td>
+                </tr>
+                <tr :for={dl <- @downloads} class="hover:bg-gray-50">
+                  <td class="px-6 py-4 text-sm font-medium text-gray-900">{dl["filename"]}</td>
+                  <td class="px-6 py-4 text-sm text-gray-600 truncate max-w-xs" title={dl["url"]}>
+                    {dl["url"]}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                    {format_number(to_num(dl["hits"]))}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                    {format_number(to_num(dl["visitors"]))}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        <% end %>
       </div>
     </.dashboard_layout>
     """

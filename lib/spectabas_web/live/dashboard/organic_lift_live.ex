@@ -16,19 +16,28 @@ defmodule SpectabasWeb.Dashboard.OrganicLiftLive do
     unless Accounts.can_access_site?(user, site) do
       {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
     else
-      {:ok,
-       socket
-       |> assign(:page_title, "Organic Lift - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:user, user)
-       |> assign(:date_range, "90d")
-       |> load_data()}
+      socket =
+        socket
+        |> assign(:page_title, "Organic Lift - #{site.name}")
+        |> assign(:site, site)
+        |> assign(:user, user)
+        |> assign(:date_range, "90d")
+        |> assign(:loading, true)
+
+      if connected?(socket), do: send(self(), :load_data)
+      {:ok, socket}
     end
   end
 
   @impl true
   def handle_event("change_range", %{"range" => range}, socket) do
-    {:noreply, socket |> assign(:date_range, range) |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:date_range, range) |> assign(:loading, true)}
+  end
+
+  @impl true
+  def handle_info(:load_data, socket) do
+    {:noreply, socket |> load_data() |> assign(:loading, false)}
   end
 
   defp load_data(socket) do
@@ -112,152 +121,175 @@ defmodule SpectabasWeb.Dashboard.OrganicLiftLive do
           </nav>
         </div>
 
-        <div :if={!@has_data} class="bg-white rounded-lg shadow p-12 text-center">
-          <p class="text-gray-500">
-            Needs ad spend data to compare with organic traffic. Connect an ad platform and wait for spend data to sync.
-          </p>
-        </div>
-
-        <div :if={@has_data}>
-          <%!-- Lift insight --%>
-          <div
-            :if={@organic_lift}
-            class={[
-              "rounded-lg shadow p-5 mb-6",
-              if(@organic_lift > 0, do: "bg-green-50", else: "bg-yellow-50")
-            ]}
-          >
-            <p class={[
-              "text-lg font-bold",
-              if(@organic_lift > 0, do: "text-green-800", else: "text-yellow-800")
-            ]}>
-              Organic traffic is {@organic_lift}% {if @organic_lift > 0, do: "higher", else: "lower"} on high-spend days
-            </p>
-            <p class="text-sm text-gray-600 mt-1">
-              Comparing days with above-median ad spend vs below-median. Correlation, not causation — but a positive lift suggests ads have a halo effect on organic discovery.
+        <%= if @loading do %>
+          <div class="bg-white rounded-lg shadow p-12 text-center">
+            <div class="inline-flex items-center gap-3 text-gray-600">
+              <svg class="animate-spin h-5 w-5 text-indigo-600" viewBox="0 0 24 24" fill="none">
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              <span class="text-sm">Loading...</span>
+            </div>
+          </div>
+        <% else %>
+          <div :if={!@has_data} class="bg-white rounded-lg shadow p-12 text-center">
+            <p class="text-gray-500">
+              Needs ad spend data to compare with organic traffic. Connect an ad platform and wait for spend data to sync.
             </p>
           </div>
 
-          <%!-- Comparison cards --%>
-          <div class="grid grid-cols-2 gap-4 mb-6">
-            <div class="bg-white rounded-lg shadow p-5">
-              <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">High Spend Days</h3>
-              <div class="space-y-2 text-sm">
-                <div class="flex justify-between">
-                  <span class="text-gray-500">Days</span>
-                  <span class="font-bold text-gray-900">{@high_spend["days"] || 0}</span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-gray-500">Avg Daily Spend</span>
-                  <span class="font-bold text-gray-900">
-                    {Spectabas.Currency.format(@high_spend["avg_daily_spend"], @site.currency)}
-                  </span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-gray-500">Avg Organic Visitors</span>
-                  <span class="font-bold text-green-600">
-                    {@high_spend["avg_organic_visitors"] || 0}
-                  </span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-gray-500">Avg Direct Visitors</span>
-                  <span class="font-bold text-indigo-600">
-                    {@high_spend["avg_direct_visitors"] || 0}
-                  </span>
-                </div>
-              </div>
+          <div :if={@has_data}>
+            <%!-- Lift insight --%>
+            <div
+              :if={@organic_lift}
+              class={[
+                "rounded-lg shadow p-5 mb-6",
+                if(@organic_lift > 0, do: "bg-green-50", else: "bg-yellow-50")
+              ]}
+            >
+              <p class={[
+                "text-lg font-bold",
+                if(@organic_lift > 0, do: "text-green-800", else: "text-yellow-800")
+              ]}>
+                Organic traffic is {@organic_lift}% {if @organic_lift > 0, do: "higher", else: "lower"} on high-spend days
+              </p>
+              <p class="text-sm text-gray-600 mt-1">
+                Comparing days with above-median ad spend vs below-median. Correlation, not causation — but a positive lift suggests ads have a halo effect on organic discovery.
+              </p>
             </div>
-            <div class="bg-white rounded-lg shadow p-5">
-              <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">Low Spend Days</h3>
-              <div class="space-y-2 text-sm">
-                <div class="flex justify-between">
-                  <span class="text-gray-500">Days</span>
-                  <span class="font-bold text-gray-900">{@low_spend["days"] || 0}</span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-gray-500">Avg Daily Spend</span>
-                  <span class="font-bold text-gray-900">
-                    {Spectabas.Currency.format(@low_spend["avg_daily_spend"], @site.currency)}
-                  </span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-gray-500">Avg Organic Visitors</span>
-                  <span class="font-bold text-green-600">
-                    {@low_spend["avg_organic_visitors"] || 0}
-                  </span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-gray-500">Avg Direct Visitors</span>
-                  <span class="font-bold text-indigo-600">
-                    {@low_spend["avg_direct_visitors"] || 0}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
 
-          <%!-- Daily timeseries table --%>
-          <div class="bg-white rounded-lg shadow overflow-x-auto">
-            <div class="px-5 py-4 border-b border-gray-100">
-              <h3 class="text-sm font-semibold text-gray-700">Daily Breakdown</h3>
-            </div>
-            <table class="min-w-full divide-y divide-gray-200">
-              <thead class="bg-gray-50">
-                <tr>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Date
-                  </th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Ad Spend
-                  </th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Organic Visitors
-                  </th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Direct Visitors
-                  </th>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Spend Level
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100">
-                <tr :for={d <- @timeseries} class="hover:bg-gray-50">
-                  <td class="px-4 py-2 text-sm text-gray-500">{d["day"]}</td>
-                  <td class="px-4 py-2 text-sm text-gray-900 text-right tabular-nums">
-                    {if parse_float(d["ad_spend"]) > 0,
-                      do: Spectabas.Currency.format(d["ad_spend"], @site.currency),
-                      else: "--"}
-                  </td>
-                  <td class="px-4 py-2 text-sm text-green-600 text-right tabular-nums font-medium">
-                    {format_number(to_num(d["organic_visitors"]))}
-                  </td>
-                  <td class="px-4 py-2 text-sm text-indigo-600 text-right tabular-nums">
-                    {format_number(to_num(d["direct_visitors"]))}
-                  </td>
-                  <td class="px-4 py-2">
-                    <span
-                      :if={parse_float(d["ad_spend"]) > 0}
-                      class={[
-                        "px-2 py-0.5 rounded text-[10px] font-medium",
-                        if(parse_float(d["ad_spend"]) >= @max_spend * 0.5,
-                          do: "bg-violet-100 text-violet-700",
-                          else: "bg-gray-100 text-gray-500"
-                        )
-                      ]}
-                    >
-                      {if parse_float(d["ad_spend"]) >= @max_spend * 0.5, do: "High", else: "Low"}
+            <%!-- Comparison cards --%>
+            <div class="grid grid-cols-2 gap-4 mb-6">
+              <div class="bg-white rounded-lg shadow p-5">
+                <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">High Spend Days</h3>
+                <div class="space-y-2 text-sm">
+                  <div class="flex justify-between">
+                    <span class="text-gray-500">Days</span>
+                    <span class="font-bold text-gray-900">{@high_spend["days"] || 0}</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-gray-500">Avg Daily Spend</span>
+                    <span class="font-bold text-gray-900">
+                      {Spectabas.Currency.format(@high_spend["avg_daily_spend"], @site.currency)}
                     </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-gray-500">Avg Organic Visitors</span>
+                    <span class="font-bold text-green-600">
+                      {@high_spend["avg_organic_visitors"] || 0}
+                    </span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-gray-500">Avg Direct Visitors</span>
+                    <span class="font-bold text-indigo-600">
+                      {@high_spend["avg_direct_visitors"] || 0}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div class="bg-white rounded-lg shadow p-5">
+                <h3 class="text-xs font-semibold text-gray-500 uppercase mb-2">Low Spend Days</h3>
+                <div class="space-y-2 text-sm">
+                  <div class="flex justify-between">
+                    <span class="text-gray-500">Days</span>
+                    <span class="font-bold text-gray-900">{@low_spend["days"] || 0}</span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-gray-500">Avg Daily Spend</span>
+                    <span class="font-bold text-gray-900">
+                      {Spectabas.Currency.format(@low_spend["avg_daily_spend"], @site.currency)}
+                    </span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-gray-500">Avg Organic Visitors</span>
+                    <span class="font-bold text-green-600">
+                      {@low_spend["avg_organic_visitors"] || 0}
+                    </span>
+                  </div>
+                  <div class="flex justify-between">
+                    <span class="text-gray-500">Avg Direct Visitors</span>
+                    <span class="font-bold text-indigo-600">
+                      {@low_spend["avg_direct_visitors"] || 0}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-          <p class="text-xs text-gray-500 mt-3">
-            Organic visitors = arrived via search engine referrer without ad click IDs. Direct visitors = no referrer and no ad click. High/low split at median daily spend.
-          </p>
-        </div>
+            <%!-- Daily timeseries table --%>
+            <div class="bg-white rounded-lg shadow overflow-x-auto">
+              <div class="px-5 py-4 border-b border-gray-100">
+                <h3 class="text-sm font-semibold text-gray-700">Daily Breakdown</h3>
+              </div>
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Date
+                    </th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Ad Spend
+                    </th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Organic Visitors
+                    </th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Direct Visitors
+                    </th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Spend Level
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                  <tr :for={d <- @timeseries} class="hover:bg-gray-50">
+                    <td class="px-4 py-2 text-sm text-gray-500">{d["day"]}</td>
+                    <td class="px-4 py-2 text-sm text-gray-900 text-right tabular-nums">
+                      {if parse_float(d["ad_spend"]) > 0,
+                        do: Spectabas.Currency.format(d["ad_spend"], @site.currency),
+                        else: "--"}
+                    </td>
+                    <td class="px-4 py-2 text-sm text-green-600 text-right tabular-nums font-medium">
+                      {format_number(to_num(d["organic_visitors"]))}
+                    </td>
+                    <td class="px-4 py-2 text-sm text-indigo-600 text-right tabular-nums">
+                      {format_number(to_num(d["direct_visitors"]))}
+                    </td>
+                    <td class="px-4 py-2">
+                      <span
+                        :if={parse_float(d["ad_spend"]) > 0}
+                        class={[
+                          "px-2 py-0.5 rounded text-[10px] font-medium",
+                          if(parse_float(d["ad_spend"]) >= @max_spend * 0.5,
+                            do: "bg-violet-100 text-violet-700",
+                            else: "bg-gray-100 text-gray-500"
+                          )
+                        ]}
+                      >
+                        {if parse_float(d["ad_spend"]) >= @max_spend * 0.5, do: "High", else: "Low"}
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p class="text-xs text-gray-500 mt-3">
+              Organic visitors = arrived via search engine referrer without ad click IDs. Direct visitors = no referrer and no ad click. High/low split at median daily spend.
+            </p>
+          </div>
+        <% end %>
       </div>
     </.dashboard_layout>
     """

@@ -16,19 +16,28 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
     unless Accounts.can_access_site?(user, site) do
       {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
     else
-      {:ok,
-       socket
-       |> assign(:page_title, "Performance - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:user, user)
-       |> assign(:date_range, "7d")
-       |> load_data()}
+      socket =
+        socket
+        |> assign(:page_title, "Performance - #{site.name}")
+        |> assign(:site, site)
+        |> assign(:user, user)
+        |> assign(:date_range, "7d")
+        |> assign(:loading, true)
+
+      if connected?(socket), do: send(self(), :load_data)
+      {:ok, socket}
     end
   end
 
   @impl true
   def handle_event("change_range", %{"range" => range}, socket) do
-    {:noreply, socket |> assign(:date_range, range) |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:date_range, range) |> assign(:loading, true)}
+  end
+
+  @impl true
+  def handle_info(:load_data, socket) do
+    {:noreply, socket |> load_data() |> assign(:loading, false)}
   end
 
   defp load_data(socket) do
@@ -77,157 +86,195 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
               {elem(r, 1)}
             </button>
           </nav>
-          <span class="text-xs text-gray-500">
+          <span :if={!@loading} class="text-xs text-gray-500">
             {to_num(@overview["samples"])} samples
           </span>
         </div>
 
-        <%!-- Core Web Vitals --%>
-        <div class="bg-white rounded-lg shadow p-5 mb-6">
-          <h3 class="font-semibold text-gray-900 mb-4">Core Web Vitals</h3>
-          <div :if={to_num(@vitals["samples"]) == 0} class="text-sm text-gray-500 text-center py-4">
-            No Core Web Vitals data yet. Data will appear after visitors load your site.
+        <%= if @loading do %>
+          <div class="bg-white rounded-lg shadow p-12 text-center">
+            <div class="inline-flex items-center gap-3 text-gray-600">
+              <svg class="animate-spin h-5 w-5 text-indigo-600" viewBox="0 0 24 24" fill="none">
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              <span class="text-sm">Loading...</span>
+            </div>
           </div>
-          <div :if={to_num(@vitals["samples"]) > 0} class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <.vital_card
-              label="Largest Contentful Paint"
-              abbrev="LCP"
-              median={to_num(@vitals["median_lcp"])}
-              p75={to_num(@vitals["p75_lcp"])}
-              unit="ms"
-              good={2500}
-              poor={4000}
-            />
-            <.vital_card
-              label="Cumulative Layout Shift"
-              abbrev="CLS"
-              median={to_float(@vitals["median_cls"])}
-              p75={to_float(@vitals["p75_cls"])}
-              unit=""
-              good={0.1}
-              poor={0.25}
-            />
-            <.vital_card
-              label="First Input Delay"
-              abbrev="FID"
-              median={to_num(@vitals["median_fid"])}
-              p75={to_num(@vitals["p75_fid"])}
-              unit="ms"
-              good={100}
-              poor={300}
-            />
+        <% else %>
+          <%!-- Core Web Vitals --%>
+          <div class="bg-white rounded-lg shadow p-5 mb-6">
+            <h3 class="font-semibold text-gray-900 mb-4">Core Web Vitals</h3>
+            <div :if={to_num(@vitals["samples"]) == 0} class="text-sm text-gray-500 text-center py-4">
+              No Core Web Vitals data yet. Data will appear after visitors load your site.
+            </div>
+            <div :if={to_num(@vitals["samples"]) > 0} class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <.vital_card
+                label="Largest Contentful Paint"
+                abbrev="LCP"
+                median={to_num(@vitals["median_lcp"])}
+                p75={to_num(@vitals["p75_lcp"])}
+                unit="ms"
+                good={2500}
+                poor={4000}
+              />
+              <.vital_card
+                label="Cumulative Layout Shift"
+                abbrev="CLS"
+                median={to_float(@vitals["median_cls"])}
+                p75={to_float(@vitals["p75_cls"])}
+                unit=""
+                good={0.1}
+                poor={0.25}
+              />
+              <.vital_card
+                label="First Input Delay"
+                abbrev="FID"
+                median={to_num(@vitals["median_fid"])}
+                p75={to_num(@vitals["p75_fid"])}
+                unit="ms"
+                good={100}
+                poor={300}
+              />
+            </div>
           </div>
-        </div>
 
-        <%!-- Page Load Breakdown --%>
-        <div class="bg-white rounded-lg shadow p-5 mb-6">
-          <h3 class="font-semibold text-gray-900 mb-4">Page Load Timing (median)</h3>
-          <div :if={to_num(@overview["samples"]) == 0} class="text-sm text-gray-500 text-center py-4">
-            No performance data yet.
+          <%!-- Page Load Breakdown --%>
+          <div class="bg-white rounded-lg shadow p-5 mb-6">
+            <h3 class="font-semibold text-gray-900 mb-4">Page Load Timing (median)</h3>
+            <div
+              :if={to_num(@overview["samples"]) == 0}
+              class="text-sm text-gray-500 text-center py-4"
+            >
+              No performance data yet.
+            </div>
+            <div :if={to_num(@overview["samples"]) > 0} class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <.timing_card label="TTFB" value={to_num(@overview["median_ttfb"])} unit="ms" />
+              <.timing_card label="First Paint" value={to_num(@overview["median_fcp"])} unit="ms" />
+              <.timing_card label="DOM Ready" value={to_num(@overview["median_dom"])} unit="ms" />
+              <.timing_card label="Full Load" value={to_num(@overview["median_page_load"])} unit="ms" />
+            </div>
           </div>
-          <div :if={to_num(@overview["samples"]) > 0} class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <.timing_card label="TTFB" value={to_num(@overview["median_ttfb"])} unit="ms" />
-            <.timing_card label="First Paint" value={to_num(@overview["median_fcp"])} unit="ms" />
-            <.timing_card label="DOM Ready" value={to_num(@overview["median_dom"])} unit="ms" />
-            <.timing_card label="Full Load" value={to_num(@overview["median_page_load"])} unit="ms" />
-          </div>
-        </div>
 
-        <%!-- Performance by Device --%>
-        <div :if={@by_device != []} class="bg-white rounded-lg shadow overflow-x-auto mb-6">
-          <div class="px-5 py-4 border-b border-gray-100">
-            <h3 class="font-semibold text-gray-900">Performance by Device</h3>
+          <%!-- Performance by Device --%>
+          <div :if={@by_device != []} class="bg-white rounded-lg shadow overflow-x-auto mb-6">
+            <div class="px-5 py-4 border-b border-gray-100">
+              <h3 class="font-semibold text-gray-900">Performance by Device</h3>
+            </div>
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Device
+                  </th>
+                  <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Median Load
+                  </th>
+                  <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    P75 Load
+                  </th>
+                  <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Median FCP
+                  </th>
+                  <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Samples
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <tr :for={d <- @by_device} class="hover:bg-gray-50">
+                  <td class="px-5 py-3 text-sm font-medium text-gray-900 capitalize">
+                    {d["device_type"]}
+                  </td>
+                  <td class="px-5 py-3 text-sm text-right tabular-nums">
+                    {format_ms(d["median_load"])}
+                  </td>
+                  <td class="px-5 py-3 text-sm text-right tabular-nums">
+                    {format_ms(d["p75_load"])}
+                  </td>
+                  <td class="px-5 py-3 text-sm text-right tabular-nums">
+                    {format_ms(d["median_fcp"])}
+                  </td>
+                  <td class="px-5 py-3 text-sm text-right tabular-nums text-gray-500">
+                    {format_number(to_num(d["samples"]))}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-          <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Device
-                </th>
-                <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Median Load
-                </th>
-                <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  P75 Load
-                </th>
-                <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Median FCP
-                </th>
-                <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Samples
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100">
-              <tr :for={d <- @by_device} class="hover:bg-gray-50">
-                <td class="px-5 py-3 text-sm font-medium text-gray-900 capitalize">
-                  {d["device_type"]}
-                </td>
-                <td class="px-5 py-3 text-sm text-right tabular-nums">
-                  {format_ms(d["median_load"])}
-                </td>
-                <td class="px-5 py-3 text-sm text-right tabular-nums">{format_ms(d["p75_load"])}</td>
-                <td class="px-5 py-3 text-sm text-right tabular-nums">
-                  {format_ms(d["median_fcp"])}
-                </td>
-                <td class="px-5 py-3 text-sm text-right tabular-nums text-gray-500">
-                  {format_number(to_num(d["samples"]))}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
 
-        <%!-- Slowest Pages --%>
-        <div :if={@by_page != []} class="bg-white rounded-lg shadow overflow-x-auto">
-          <div class="px-5 py-4 border-b border-gray-100">
-            <h3 class="font-semibold text-gray-900">Slowest Pages</h3>
-            <p class="text-xs text-gray-500 mt-0.5">
-              Pages ranked by median load time (slowest first)
-            </p>
+          <%!-- Slowest Pages --%>
+          <div :if={@by_page != []} class="bg-white rounded-lg shadow overflow-x-auto">
+            <div class="px-5 py-4 border-b border-gray-100">
+              <h3 class="font-semibold text-gray-900">Slowest Pages</h3>
+              <p class="text-xs text-gray-500 mt-0.5">
+                Pages ranked by median load time (slowest first)
+              </p>
+            </div>
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Page
+                  </th>
+                  <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Median
+                  </th>
+                  <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    P75
+                  </th>
+                  <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    TTFB
+                  </th>
+                  <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Size
+                  </th>
+                  <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Samples
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <tr :for={p <- @by_page} class="hover:bg-gray-50">
+                  <td class="px-5 py-3 text-sm">
+                    <.link
+                      navigate={~p"/dashboard/sites/#{@site.id}/transitions?page=#{p["url_path"]}"}
+                      class="text-indigo-600 hover:text-indigo-800 font-mono text-xs"
+                    >
+                      {p["url_path"]}
+                    </.link>
+                  </td>
+                  <td class={"px-5 py-3 text-sm text-right tabular-nums font-medium " <> load_color(p["median_load"])}>
+                    {format_ms(p["median_load"])}
+                  </td>
+                  <td class="px-5 py-3 text-sm text-right tabular-nums">
+                    {format_ms(p["p75_load"])}
+                  </td>
+                  <td class="px-5 py-3 text-sm text-right tabular-nums">
+                    {format_ms(p["median_ttfb"])}
+                  </td>
+                  <td class="px-5 py-3 text-sm text-right tabular-nums text-gray-500">
+                    {format_bytes(p["avg_size"])}
+                  </td>
+                  <td class="px-5 py-3 text-sm text-right tabular-nums text-gray-500">
+                    {format_number(to_num(p["samples"]))}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-          <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">Page</th>
-                <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Median
-                </th>
-                <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase">P75</th>
-                <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase">TTFB</th>
-                <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase">Size</th>
-                <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Samples
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100">
-              <tr :for={p <- @by_page} class="hover:bg-gray-50">
-                <td class="px-5 py-3 text-sm">
-                  <.link
-                    navigate={~p"/dashboard/sites/#{@site.id}/transitions?page=#{p["url_path"]}"}
-                    class="text-indigo-600 hover:text-indigo-800 font-mono text-xs"
-                  >
-                    {p["url_path"]}
-                  </.link>
-                </td>
-                <td class={"px-5 py-3 text-sm text-right tabular-nums font-medium " <> load_color(p["median_load"])}>
-                  {format_ms(p["median_load"])}
-                </td>
-                <td class="px-5 py-3 text-sm text-right tabular-nums">{format_ms(p["p75_load"])}</td>
-                <td class="px-5 py-3 text-sm text-right tabular-nums">
-                  {format_ms(p["median_ttfb"])}
-                </td>
-                <td class="px-5 py-3 text-sm text-right tabular-nums text-gray-500">
-                  {format_bytes(p["avg_size"])}
-                </td>
-                <td class="px-5 py-3 text-sm text-right tabular-nums text-gray-500">
-                  {format_number(to_num(p["samples"]))}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <% end %>
       </div>
     </.dashboard_layout>
     """

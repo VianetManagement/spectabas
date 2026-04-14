@@ -16,24 +16,33 @@ defmodule SpectabasWeb.Dashboard.AdVisitorPathsLive do
     unless Accounts.can_access_site?(user, site) do
       {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
     else
-      {:ok,
-       socket
-       |> assign(:page_title, "Ad Visitor Paths - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:user, user)
-       |> assign(:date_range, "30d")
-       |> assign(:view, "all")
-       |> load_data()}
+      socket =
+        socket
+        |> assign(:page_title, "Ad Visitor Paths - #{site.name}")
+        |> assign(:site, site)
+        |> assign(:user, user)
+        |> assign(:date_range, "30d")
+        |> assign(:view, "all")
+        |> assign(:loading, true)
+
+      if connected?(socket), do: send(self(), :load_data)
+      {:ok, socket}
     end
   end
 
   @impl true
   def handle_event("change_range", %{"range" => range}, socket) do
-    {:noreply, socket |> assign(:date_range, range) |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:date_range, range) |> assign(:loading, true)}
   end
 
   def handle_event("change_view", %{"view" => view}, socket) do
     {:noreply, assign(socket, :view, view)}
+  end
+
+  @impl true
+  def handle_info(:load_data, socket) do
+    {:noreply, socket |> load_data() |> assign(:loading, false)}
   end
 
   defp load_data(socket) do
@@ -115,109 +124,134 @@ defmodule SpectabasWeb.Dashboard.AdVisitorPathsLive do
           </div>
         </div>
 
-        <div :if={!@has_data} class="bg-white rounded-lg shadow p-12 text-center">
-          <p class="text-gray-500">
-            No ad visitor path data yet. Paths will appear as visitors arrive from ad clicks.
-          </p>
-        </div>
-
-        <div :if={@has_data}>
-          <div class="grid grid-cols-3 gap-4 mb-6">
-            <div class="bg-white rounded-lg shadow p-4">
-              <dt class="text-xs font-medium text-gray-500">Ad Sessions</dt>
-              <dd class="mt-1 text-2xl font-bold text-gray-900">{format_number(@total_sessions)}</dd>
-            </div>
-            <div class="bg-white rounded-lg shadow p-4">
-              <dt class="text-xs font-medium text-gray-500">Converted</dt>
-              <dd class="mt-1 text-2xl font-bold text-green-600">
-                {format_number(@total_converters)}
-              </dd>
-              <dd :if={@total_sessions > 0} class="text-xs text-gray-400">
-                {Float.round(@total_converters / @total_sessions * 100, 1)}%
-              </dd>
-            </div>
-            <div class="bg-white rounded-lg shadow p-4">
-              <dt class="text-xs font-medium text-gray-500">Bounced</dt>
-              <dd class="mt-1 text-2xl font-bold text-red-500">{format_number(@total_bounces)}</dd>
+        <%= if @loading do %>
+          <div class="bg-white rounded-lg shadow p-12 text-center">
+            <div class="inline-flex items-center gap-3 text-gray-600">
+              <svg class="animate-spin h-5 w-5 text-indigo-600" viewBox="0 0 24 24" fill="none">
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              <span class="text-sm">Loading...</span>
             </div>
           </div>
-
-          <%!-- Page Paths --%>
-          <div :if={@view == "all"} class="bg-white rounded-lg shadow overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-              <thead class="bg-gray-50">
-                <tr>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Page Path
-                  </th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Visitors
-                  </th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Converted
-                  </th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Conv Rate
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100">
-                <tr :for={path <- @paths} class="hover:bg-gray-50">
-                  <td class="px-4 py-3 text-sm text-gray-900 font-mono">
-                    <span class="text-xs">{path["journey"]}</span>
-                  </td>
-                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
-                    {format_number(to_num(path["visitors"]))}
-                  </td>
-                  <td class="px-4 py-3 text-sm text-green-600 text-right tabular-nums">
-                    {format_number(to_num(path["converters"]))}
-                  </td>
-                  <td class="px-4 py-3 text-sm text-right tabular-nums">
-                    <span class={
-                      if parse_float(path["conversion_rate"]) > 5,
-                        do: "text-green-600 font-bold",
-                        else: "text-gray-600"
-                    }>
-                      {path["conversion_rate"]}%
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+        <% else %>
+          <div :if={!@has_data} class="bg-white rounded-lg shadow p-12 text-center">
+            <p class="text-gray-500">
+              No ad visitor path data yet. Paths will appear as visitors arrive from ad clicks.
+            </p>
           </div>
 
-          <%!-- Bounce Pages --%>
-          <div :if={@view == "bounces"} class="bg-white rounded-lg shadow overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-              <thead class="bg-gray-50">
-                <tr>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Landing Page
-                  </th>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Platform
-                  </th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Bounces
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100">
-                <tr :for={b <- @bounces} class="hover:bg-gray-50">
-                  <td class="px-4 py-3 text-sm font-mono text-gray-900">{b["landing_page"]}</td>
-                  <td class="px-4 py-3 text-sm text-gray-600">{platform_label(b["platform"])}</td>
-                  <td class="px-4 py-3 text-sm text-red-600 text-right tabular-nums font-bold">
-                    {format_number(to_num(b["bounces"]))}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <div :if={@has_data}>
+            <div class="grid grid-cols-3 gap-4 mb-6">
+              <div class="bg-white rounded-lg shadow p-4">
+                <dt class="text-xs font-medium text-gray-500">Ad Sessions</dt>
+                <dd class="mt-1 text-2xl font-bold text-gray-900">
+                  {format_number(@total_sessions)}
+                </dd>
+              </div>
+              <div class="bg-white rounded-lg shadow p-4">
+                <dt class="text-xs font-medium text-gray-500">Converted</dt>
+                <dd class="mt-1 text-2xl font-bold text-green-600">
+                  {format_number(@total_converters)}
+                </dd>
+                <dd :if={@total_sessions > 0} class="text-xs text-gray-400">
+                  {Float.round(@total_converters / @total_sessions * 100, 1)}%
+                </dd>
+              </div>
+              <div class="bg-white rounded-lg shadow p-4">
+                <dt class="text-xs font-medium text-gray-500">Bounced</dt>
+                <dd class="mt-1 text-2xl font-bold text-red-500">{format_number(@total_bounces)}</dd>
+              </div>
+            </div>
 
-          <p class="text-xs text-gray-500 mt-3">
-            Shows the most common page sequences (first 5 pages) for visitors who arrived via ad clicks. Compare converting vs bouncing paths to optimize landing pages.
-          </p>
-        </div>
+            <%!-- Page Paths --%>
+            <div :if={@view == "all"} class="bg-white rounded-lg shadow overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Page Path
+                    </th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Visitors
+                    </th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Converted
+                    </th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Conv Rate
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                  <tr :for={path <- @paths} class="hover:bg-gray-50">
+                    <td class="px-4 py-3 text-sm text-gray-900 font-mono">
+                      <span class="text-xs">{path["journey"]}</span>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
+                      {format_number(to_num(path["visitors"]))}
+                    </td>
+                    <td class="px-4 py-3 text-sm text-green-600 text-right tabular-nums">
+                      {format_number(to_num(path["converters"]))}
+                    </td>
+                    <td class="px-4 py-3 text-sm text-right tabular-nums">
+                      <span class={
+                        if parse_float(path["conversion_rate"]) > 5,
+                          do: "text-green-600 font-bold",
+                          else: "text-gray-600"
+                      }>
+                        {path["conversion_rate"]}%
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <%!-- Bounce Pages --%>
+            <div :if={@view == "bounces"} class="bg-white rounded-lg shadow overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Landing Page
+                    </th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Platform
+                    </th>
+                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Bounces
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                  <tr :for={b <- @bounces} class="hover:bg-gray-50">
+                    <td class="px-4 py-3 text-sm font-mono text-gray-900">{b["landing_page"]}</td>
+                    <td class="px-4 py-3 text-sm text-gray-600">{platform_label(b["platform"])}</td>
+                    <td class="px-4 py-3 text-sm text-red-600 text-right tabular-nums font-bold">
+                      {format_number(to_num(b["bounces"]))}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p class="text-xs text-gray-500 mt-3">
+              Shows the most common page sequences (first 5 pages) for visitors who arrived via ad clicks. Compare converting vs bouncing paths to optimize landing pages.
+            </p>
+          </div>
+        <% end %>
       </div>
     </.dashboard_layout>
     """

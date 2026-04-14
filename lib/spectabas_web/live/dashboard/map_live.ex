@@ -16,25 +16,34 @@ defmodule SpectabasWeb.Dashboard.MapLive do
     unless Accounts.can_access_site?(user, site) do
       {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
     else
-      {:ok,
-       socket
-       |> assign(:page_title, "Visitor Map - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:user, user)
-       |> assign(:date_range, "7d")
-       |> load_data()}
+      socket =
+        socket
+        |> assign(:page_title, "Visitor Map - #{site.name}")
+        |> assign(:site, site)
+        |> assign(:user, user)
+        |> assign(:date_range, "7d")
+        |> assign(:loading, true)
+
+      if connected?(socket), do: send(self(), :load_data)
+      {:ok, socket}
     end
   end
 
   @impl true
   def handle_event("change_range", %{"range" => range}, socket) do
-    {:noreply, socket |> assign(:date_range, range) |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:date_range, range) |> assign(:loading, true)}
   end
 
   def handle_event("zoom_map", %{"region" => region}, socket) do
     # Only push the zoom event — don't assign to avoid re-rendering which
     # destroys the chart hooks and loses their data
     {:noreply, push_event(socket, "map-zoom", %{region: region})}
+  end
+
+  @impl true
+  def handle_info(:load_data, socket) do
+    {:noreply, socket |> load_data() |> assign(:loading, false)}
   end
 
   defp load_data(socket) do
@@ -116,81 +125,104 @@ defmodule SpectabasWeb.Dashboard.MapLive do
           </nav>
         </div>
 
-        <%!-- Visitor Map --%>
-        <div class="bg-white rounded-lg shadow p-5 mb-6">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="text-sm font-medium text-gray-500">Visitor Locations</h3>
-            <div class="flex gap-1 flex-wrap">
-              <button
-                :for={
-                  {id, label} <- [
-                    {"world", "World"},
-                    {"north_america", "N. America"},
-                    {"south_america", "S. America"},
-                    {"europe", "Europe"},
-                    {"asia", "Asia"},
-                    {"africa", "Africa"},
-                    {"oceania", "Oceania"},
-                    {"us", "USA"}
-                  ]
-                }
-                phx-click="zoom_map"
-                phx-value-region={id}
-                id={"map-btn-#{id}"}
-                class="px-2 py-1 text-xs rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200 map-zoom-btn"
-              >
-                {label}
-              </button>
+        <%= if @loading do %>
+          <div class="bg-white rounded-lg shadow p-12 text-center">
+            <div class="inline-flex items-center gap-3 text-gray-600">
+              <svg class="animate-spin h-5 w-5 text-indigo-600" viewBox="0 0 24 24" fill="none">
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              <span class="text-sm">Loading...</span>
             </div>
           </div>
-          <div id="fullpage-map-hook" phx-hook="BubbleMap">
-            <div class="h-[250px] sm:h-[350px] lg:h-[450px]" style="position: relative;">
-              <canvas></canvas>
+        <% else %>
+          <%!-- Visitor Map --%>
+          <div class="bg-white rounded-lg shadow p-5 mb-6">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-sm font-medium text-gray-500">Visitor Locations</h3>
+              <div class="flex gap-1 flex-wrap">
+                <button
+                  :for={
+                    {id, label} <- [
+                      {"world", "World"},
+                      {"north_america", "N. America"},
+                      {"south_america", "S. America"},
+                      {"europe", "Europe"},
+                      {"asia", "Asia"},
+                      {"africa", "Africa"},
+                      {"oceania", "Oceania"},
+                      {"us", "USA"}
+                    ]
+                  }
+                  phx-click="zoom_map"
+                  phx-value-region={id}
+                  id={"map-btn-#{id}"}
+                  class="px-2 py-1 text-xs rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200 map-zoom-btn"
+                >
+                  {label}
+                </button>
+              </div>
+            </div>
+            <div id="fullpage-map-hook" phx-hook="BubbleMap">
+              <div class="h-[250px] sm:h-[350px] lg:h-[450px]" style="position: relative;">
+                <canvas></canvas>
+              </div>
             </div>
           </div>
-        </div>
 
-        <%!-- Timezone Distribution --%>
-        <div class="bg-white rounded-lg shadow p-5 mb-6">
-          <h3 class="text-sm font-medium text-gray-500 mb-4">Timezone Distribution</h3>
-          <div id="fullpage-tz-hook" phx-hook="BarChart">
-            <div style={"height: #{max(length(@timezones) * 32, 100)}px; position: relative;"}>
-              <canvas></canvas>
+          <%!-- Timezone Distribution --%>
+          <div class="bg-white rounded-lg shadow p-5 mb-6">
+            <h3 class="text-sm font-medium text-gray-500 mb-4">Timezone Distribution</h3>
+            <div id="fullpage-tz-hook" phx-hook="BarChart">
+              <div style={"height: #{max(length(@timezones) * 32, 100)}px; position: relative;"}>
+                <canvas></canvas>
+              </div>
             </div>
           </div>
-        </div>
 
-        <%!-- Location Table --%>
-        <div class="bg-white rounded-lg shadow overflow-x-auto">
-          <div class="px-5 py-4 border-b border-gray-100">
-            <h3 class="font-semibold text-gray-900">Top Locations</h3>
+          <%!-- Location Table --%>
+          <div class="bg-white rounded-lg shadow overflow-x-auto">
+            <div class="px-5 py-4 border-b border-gray-100">
+              <h3 class="font-semibold text-gray-900">Top Locations</h3>
+            </div>
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Location
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Visitors
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                <tr :if={@locations == []}>
+                  <td colspan="2" class="px-6 py-8 text-center text-gray-500">
+                    No location data yet.
+                  </td>
+                </tr>
+                <tr :for={loc <- Enum.take(@locations, 30)} class="hover:bg-gray-50">
+                  <td class="px-6 py-3 text-sm text-gray-900">{location_name(loc)}</td>
+                  <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
+                    {format_number(to_num(loc["visitors"]))}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-          <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Location
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Visitors
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-200">
-              <tr :if={@locations == []}>
-                <td colspan="2" class="px-6 py-8 text-center text-gray-500">
-                  No location data yet.
-                </td>
-              </tr>
-              <tr :for={loc <- Enum.take(@locations, 30)} class="hover:bg-gray-50">
-                <td class="px-6 py-3 text-sm text-gray-900">{location_name(loc)}</td>
-                <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
-                  {format_number(to_num(loc["visitors"]))}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <% end %>
       </div>
     </.dashboard_layout>
     """

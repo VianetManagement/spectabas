@@ -18,28 +18,41 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
     else
       page = params["page"] || "/"
 
-      {:ok,
-       socket
-       |> assign(:page_title, "Page Transitions - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:user, user)
-       |> assign(:date_range, "7d")
-       |> assign(:current_page, page)
-       |> load_data()}
+      socket =
+        socket
+        |> assign(:page_title, "Page Transitions - #{site.name}")
+        |> assign(:site, site)
+        |> assign(:user, user)
+        |> assign(:date_range, "7d")
+        |> assign(:current_page, page)
+        |> assign(:loading, true)
+        |> assign(:transitions, %{previous: [], next: [], totals: %{}})
+        |> assign(:page_perf, %{})
+
+      if connected?(socket), do: send(self(), :load_data)
+      {:ok, socket}
     end
   end
 
   @impl true
+  def handle_info(:load_data, socket) do
+    {:noreply, socket |> load_data() |> assign(:loading, false)}
+  end
+
+  @impl true
   def handle_event("change_range", %{"range" => range}, socket) do
-    {:noreply, socket |> assign(:date_range, range) |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:date_range, range) |> assign(:loading, true)}
   end
 
   def handle_event("change_page", %{"page" => page}, socket) do
-    {:noreply, socket |> assign(:current_page, page) |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:current_page, page) |> assign(:loading, true)}
   end
 
   def handle_event("navigate_page", %{"path" => path}, socket) do
-    {:noreply, socket |> assign(:current_page, path) |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:current_page, path) |> assign(:loading, true)}
   end
 
   defp load_data(socket) do
@@ -115,81 +128,87 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
           </form>
         </div>
 
-        <%!-- Current page stats --%>
-        <div class="bg-indigo-50 rounded-lg p-5 mb-6 text-center">
-          <p class="text-sm text-indigo-600 font-medium">Current Page</p>
-          <p class="text-2xl font-bold text-indigo-900 font-mono mt-1">{@current_page}</p>
-          <div class="flex justify-center gap-8 mt-3 text-sm text-indigo-700">
-            <span>{format_number(to_num(@transitions.totals["total_views"]))} views</span>
-            <span>{format_number(to_num(@transitions.totals["unique_visitors"]))} visitors</span>
-            <span>{format_number(to_num(@transitions.totals["sessions"]))} sessions</span>
-          </div>
-          <div
-            :if={to_num(@page_perf["samples"]) > 0}
-            class="flex justify-center gap-6 mt-3 pt-3 border-t border-indigo-200"
-          >
-            <.perf_stat label="Load" value={to_num(@page_perf["page_load"])} unit="ms" />
-            <.perf_stat label="LCP" value={to_num(@page_perf["lcp"])} unit="ms" />
-            <.perf_stat label="FCP" value={to_num(@page_perf["fcp"])} unit="ms" />
-            <span class="text-xs text-indigo-400 self-end">
-              {to_num(@page_perf["samples"])} RUM samples
-            </span>
-          </div>
+        <div :if={@loading} class="flex items-center justify-center py-12">
+          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
         </div>
 
-        <%!-- Transition flow --%>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <%!-- Previous pages --%>
-          <div class="bg-white rounded-lg shadow overflow-x-auto">
-            <div class="px-5 py-4 border-b border-gray-100">
-              <h3 class="font-semibold text-gray-900">Came from</h3>
-              <p class="text-xs text-gray-500">Pages visitors viewed before this one</p>
+        <div :if={!@loading}>
+          <%!-- Current page stats --%>
+          <div class="bg-indigo-50 rounded-lg p-5 mb-6 text-center">
+            <p class="text-sm text-indigo-600 font-medium">Current Page</p>
+            <p class="text-2xl font-bold text-indigo-900 font-mono mt-1">{@current_page}</p>
+            <div class="flex justify-center gap-8 mt-3 text-sm text-indigo-700">
+              <span>{format_number(to_num(@transitions.totals["total_views"]))} views</span>
+              <span>{format_number(to_num(@transitions.totals["unique_visitors"]))} visitors</span>
+              <span>{format_number(to_num(@transitions.totals["sessions"]))} sessions</span>
             </div>
-            <div class="divide-y divide-gray-50">
-              <div
-                :if={@transitions.previous == []}
-                class="px-5 py-8 text-center text-sm text-gray-500"
-              >
-                No previous pages (entry point)
-              </div>
-              <div
-                :for={row <- @transitions.previous}
-                class="px-5 py-3 flex items-center justify-between hover:bg-gray-50 cursor-pointer"
-                phx-click="navigate_page"
-                phx-value-path={row["prev_page"]}
-              >
-                <span class="text-sm text-indigo-600 font-mono truncate mr-4">
-                  {row["prev_page"]}
-                </span>
-                <span class="text-sm font-medium text-gray-600 tabular-nums">
-                  {format_number(to_num(row["transitions"]))}
-                </span>
-              </div>
+            <div
+              :if={to_num(@page_perf["samples"]) > 0}
+              class="flex justify-center gap-6 mt-3 pt-3 border-t border-indigo-200"
+            >
+              <.perf_stat label="Load" value={to_num(@page_perf["page_load"])} unit="ms" />
+              <.perf_stat label="LCP" value={to_num(@page_perf["lcp"])} unit="ms" />
+              <.perf_stat label="FCP" value={to_num(@page_perf["fcp"])} unit="ms" />
+              <span class="text-xs text-indigo-400 self-end">
+                {to_num(@page_perf["samples"])} RUM samples
+              </span>
             </div>
           </div>
 
-          <%!-- Next pages --%>
-          <div class="bg-white rounded-lg shadow overflow-x-auto">
-            <div class="px-5 py-4 border-b border-gray-100">
-              <h3 class="font-semibold text-gray-900">Went to</h3>
-              <p class="text-xs text-gray-500">Pages visitors viewed after this one</p>
-            </div>
-            <div class="divide-y divide-gray-50">
-              <div :if={@transitions.next == []} class="px-5 py-8 text-center text-sm text-gray-500">
-                No next pages (exit point)
+          <%!-- Transition flow --%>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <%!-- Previous pages --%>
+            <div class="bg-white rounded-lg shadow overflow-x-auto">
+              <div class="px-5 py-4 border-b border-gray-100">
+                <h3 class="font-semibold text-gray-900">Came from</h3>
+                <p class="text-xs text-gray-500">Pages visitors viewed before this one</p>
               </div>
-              <div
-                :for={row <- @transitions.next}
-                class="px-5 py-3 flex items-center justify-between hover:bg-gray-50 cursor-pointer"
-                phx-click="navigate_page"
-                phx-value-path={row["next_page"]}
-              >
-                <span class="text-sm text-indigo-600 font-mono truncate mr-4">
-                  {row["next_page"]}
-                </span>
-                <span class="text-sm font-medium text-gray-600 tabular-nums">
-                  {format_number(to_num(row["transitions"]))}
-                </span>
+              <div class="divide-y divide-gray-50">
+                <div
+                  :if={@transitions.previous == []}
+                  class="px-5 py-8 text-center text-sm text-gray-500"
+                >
+                  No previous pages (entry point)
+                </div>
+                <div
+                  :for={row <- @transitions.previous}
+                  class="px-5 py-3 flex items-center justify-between hover:bg-gray-50 cursor-pointer"
+                  phx-click="navigate_page"
+                  phx-value-path={row["prev_page"]}
+                >
+                  <span class="text-sm text-indigo-600 font-mono truncate mr-4">
+                    {row["prev_page"]}
+                  </span>
+                  <span class="text-sm font-medium text-gray-600 tabular-nums">
+                    {format_number(to_num(row["transitions"]))}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <%!-- Next pages --%>
+            <div class="bg-white rounded-lg shadow overflow-x-auto">
+              <div class="px-5 py-4 border-b border-gray-100">
+                <h3 class="font-semibold text-gray-900">Went to</h3>
+                <p class="text-xs text-gray-500">Pages visitors viewed after this one</p>
+              </div>
+              <div class="divide-y divide-gray-50">
+                <div :if={@transitions.next == []} class="px-5 py-8 text-center text-sm text-gray-500">
+                  No next pages (exit point)
+                </div>
+                <div
+                  :for={row <- @transitions.next}
+                  class="px-5 py-3 flex items-center justify-between hover:bg-gray-50 cursor-pointer"
+                  phx-click="navigate_page"
+                  phx-value-path={row["next_page"]}
+                >
+                  <span class="text-sm text-indigo-600 font-mono truncate mr-4">
+                    {row["next_page"]}
+                  </span>
+                  <span class="text-sm font-medium text-gray-600 tabular-nums">
+                    {format_number(to_num(row["transitions"]))}
+                  </span>
+                </div>
               </div>
             </div>
           </div>

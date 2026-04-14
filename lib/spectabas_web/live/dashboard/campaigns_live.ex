@@ -43,21 +43,29 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
           socket
         end
 
-      {:ok,
-       socket
-       |> assign(:page_title, "Campaigns - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:user, user)
-       |> assign(:range, "30d")
-       |> assign(:show_form, false)
-       |> assign(:form, to_form(blank_changeset()))
-       |> load_data()}
+      socket =
+        socket
+        |> assign(:page_title, "Campaigns - #{site.name}")
+        |> assign(:site, site)
+        |> assign(:user, user)
+        |> assign(:range, "30d")
+        |> assign(:show_form, false)
+        |> assign(:form, to_form(blank_changeset()))
+        |> assign(:loading, true)
+        |> assign(:rows, [])
+        |> assign(:detected_count, 0)
+        |> assign(:saved_count, 0)
+        |> assign(:total_visitors, 0)
+
+      if connected?(socket), do: send(self(), :load_data)
+      {:ok, socket}
     end
   end
 
   @impl true
   def handle_event("change_range", %{"range" => r}, socket) when r in @ranges do
-    {:noreply, socket |> assign(:range, r) |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:range, r) |> assign(:loading, true)}
   end
 
   def handle_event("change_range", _, socket), do: {:noreply, socket}
@@ -69,12 +77,14 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
   def handle_event("create_campaign", %{"campaign" => params}, socket) do
     case Campaigns.create_campaign(socket.assigns.site, params) do
       {:ok, _campaign} ->
+        send(self(), :load_data)
+
         {:noreply,
          socket
          |> put_flash(:info, "Campaign saved.")
          |> assign(:show_form, false)
          |> assign(:form, to_form(blank_changeset()))
-         |> load_data()}
+         |> assign(:loading, true)}
 
       {:error, changeset} ->
         {:noreply, assign(socket, :form, to_form(changeset))}
@@ -107,10 +117,12 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
 
     case Campaigns.create_campaign(socket.assigns.site, attrs) do
       {:ok, _} ->
+        send(self(), :load_data)
+
         {:noreply,
          socket
          |> put_flash(:info, "Saved \"#{utm_campaign}\" to the Builder.")
-         |> load_data()}
+         |> assign(:loading, true)}
 
       {:error, cs} ->
         msg =
@@ -120,6 +132,11 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
 
         {:noreply, put_flash(socket, :error, "Couldn't save: #{msg}")}
     end
+  end
+
+  @impl true
+  def handle_info(:load_data, socket) do
+    {:noreply, socket |> load_data() |> assign(:loading, false)}
   end
 
   # ---------------- Data merge ----------------
@@ -255,206 +272,229 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
           </div>
         </div>
 
-        <%!-- UTM URL builder form --%>
-        <div :if={@show_form} class="bg-white rounded-lg shadow p-6 mb-6">
-          <h2 class="text-lg font-semibold text-gray-900 mb-4">UTM Campaign Builder</h2>
-          <p class="text-xs text-gray-500 mb-4">
-            Use this to pre-define a campaign and generate a tagged destination URL. Any traffic
-            matching these UTM parameters will be auto-grouped under this saved campaign's name.
-          </p>
-          <.form
-            for={@form}
-            phx-submit="create_campaign"
-            phx-change="validate_campaign"
-            class="space-y-4"
-          >
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700">Campaign Name</label>
-                <input
-                  type="text"
-                  name="campaign[name]"
-                  value={@form[:name].value}
-                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
-                  placeholder="e.g. Spring Sale 2026"
-                  required
+        <%= if @loading do %>
+          <div class="bg-white rounded-lg shadow p-12 text-center">
+            <div class="inline-flex items-center gap-3 text-gray-600">
+              <svg class="animate-spin h-5 w-5 text-indigo-600" viewBox="0 0 24 24" fill="none">
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
                 />
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700">Destination URL</label>
-                <input
-                  type="url"
-                  name="campaign[destination_url]"
-                  value={@form[:destination_url].value}
-                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
-                  placeholder="https://example.com/landing-page"
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
                 />
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700">UTM Source</label>
-                <input
-                  type="text"
-                  name="campaign[utm_source]"
-                  value={@form[:utm_source].value}
-                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
-                  placeholder="google, newsletter, facebook"
-                />
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700">UTM Medium</label>
-                <input
-                  type="text"
-                  name="campaign[utm_medium]"
-                  value={@form[:utm_medium].value}
-                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
-                  placeholder="cpc, email, social, banner"
-                />
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700">UTM Campaign</label>
-                <input
-                  type="text"
-                  name="campaign[utm_campaign]"
-                  value={@form[:utm_campaign].value}
-                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
-                  placeholder="spring_sale, product_launch"
-                />
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700">
-                  UTM Term <span class="text-gray-500">(optional)</span>
-                </label>
-                <input
-                  type="text"
-                  name="campaign[utm_term]"
-                  value={@form[:utm_term].value}
-                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
-                  placeholder="paid search keywords"
-                />
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700">
-                  UTM Content <span class="text-gray-500">(optional)</span>
-                </label>
-                <input
-                  type="text"
-                  name="campaign[utm_content]"
-                  value={@form[:utm_content].value}
-                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
-                  placeholder="header_banner, sidebar_cta"
-                />
-              </div>
+              </svg>
+              <span class="text-sm">Loading...</span>
             </div>
-            <div class="flex justify-end">
-              <button
-                type="submit"
-                class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
-              >
-                Save Campaign
-              </button>
-            </div>
-          </.form>
-        </div>
+          </div>
+        <% else %>
+          <%!-- UTM URL builder form --%>
+          <div :if={@show_form} class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">UTM Campaign Builder</h2>
+            <p class="text-xs text-gray-500 mb-4">
+              Use this to pre-define a campaign and generate a tagged destination URL. Any traffic
+              matching these UTM parameters will be auto-grouped under this saved campaign's name.
+            </p>
+            <.form
+              for={@form}
+              phx-submit="create_campaign"
+              phx-change="validate_campaign"
+              class="space-y-4"
+            >
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700">Campaign Name</label>
+                  <input
+                    type="text"
+                    name="campaign[name]"
+                    value={@form[:name].value}
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
+                    placeholder="e.g. Spring Sale 2026"
+                    required
+                  />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700">Destination URL</label>
+                  <input
+                    type="url"
+                    name="campaign[destination_url]"
+                    value={@form[:destination_url].value}
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
+                    placeholder="https://example.com/landing-page"
+                  />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700">UTM Source</label>
+                  <input
+                    type="text"
+                    name="campaign[utm_source]"
+                    value={@form[:utm_source].value}
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
+                    placeholder="google, newsletter, facebook"
+                  />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700">UTM Medium</label>
+                  <input
+                    type="text"
+                    name="campaign[utm_medium]"
+                    value={@form[:utm_medium].value}
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
+                    placeholder="cpc, email, social, banner"
+                  />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700">UTM Campaign</label>
+                  <input
+                    type="text"
+                    name="campaign[utm_campaign]"
+                    value={@form[:utm_campaign].value}
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
+                    placeholder="spring_sale, product_launch"
+                  />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700">
+                    UTM Term <span class="text-gray-500">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="campaign[utm_term]"
+                    value={@form[:utm_term].value}
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
+                    placeholder="paid search keywords"
+                  />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700">
+                    UTM Content <span class="text-gray-500">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="campaign[utm_content]"
+                    value={@form[:utm_content].value}
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
+                    placeholder="header_banner, sidebar_cta"
+                  />
+                </div>
+              </div>
+              <div class="flex justify-end">
+                <button
+                  type="submit"
+                  class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
+                >
+                  Save Campaign
+                </button>
+              </div>
+            </.form>
+          </div>
 
-        <%!-- Campaign list --%>
-        <div class="bg-white rounded-lg shadow overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Campaign
-                </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Source / Medium
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Visitors
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Sessions
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Bounce
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase"></th>
-              </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-100">
-              <tr :if={@rows == []}>
-                <td colspan="6" class="px-6 py-12 text-center text-gray-500">
-                  No UTM-tagged traffic in this range, and no saved campaigns. Tag your links with
-                  utm_source / utm_medium / utm_campaign to see them here — or use the Build URL
-                  button above to generate a tagged URL.
-                </td>
-              </tr>
-              <tr
-                :for={row <- @rows}
-                class={if(row.source == :saved_only, do: "opacity-60", else: "hover:bg-gray-50")}
-              >
-                <td class="px-6 py-3 text-sm">
-                  <div class="font-medium text-gray-900 truncate max-w-xs">
-                    <%= if row.saved do %>
-                      {row.saved.name}
-                      <span class="text-xs text-gray-500 font-normal">({row.campaign})</span>
-                    <% else %>
-                      {row.campaign}
+          <%!-- Campaign list --%>
+          <div class="bg-white rounded-lg shadow overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Campaign
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Source / Medium
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Visitors
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Sessions
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Bounce
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase"></th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-100">
+                <tr :if={@rows == []}>
+                  <td colspan="6" class="px-6 py-12 text-center text-gray-500">
+                    No UTM-tagged traffic in this range, and no saved campaigns. Tag your links with
+                    utm_source / utm_medium / utm_campaign to see them here — or use the Build URL
+                    button above to generate a tagged URL.
+                  </td>
+                </tr>
+                <tr
+                  :for={row <- @rows}
+                  class={if(row.source == :saved_only, do: "opacity-60", else: "hover:bg-gray-50")}
+                >
+                  <td class="px-6 py-3 text-sm">
+                    <div class="font-medium text-gray-900 truncate max-w-xs">
+                      <%= if row.saved do %>
+                        {row.saved.name}
+                        <span class="text-xs text-gray-500 font-normal">({row.campaign})</span>
+                      <% else %>
+                        {row.campaign}
+                      <% end %>
+                    </div>
+                  </td>
+                  <td class="px-6 py-3 text-sm text-gray-600">
+                    {row.utm_source} / {row.utm_medium}
+                  </td>
+                  <td class="px-6 py-3 text-right text-sm text-gray-900 tabular-nums">
+                    {format_number(row.visitors)}
+                  </td>
+                  <td class="px-6 py-3 text-right text-sm text-gray-600 tabular-nums">
+                    {format_number(row.sessions)}
+                  </td>
+                  <td class="px-6 py-3 text-right text-sm text-gray-600 tabular-nums">
+                    {if row.bounce_rate, do: "#{row.bounce_rate}%", else: "—"}
+                  </td>
+                  <td class="px-6 py-3 text-right text-sm">
+                    <%= cond do %>
+                      <% row.source == :saved_only -> %>
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
+                          No traffic
+                        </span>
+                      <% row.saved -> %>
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                          Saved
+                        </span>
+                      <% true -> %>
+                        <button
+                          phx-click="save_detected"
+                          phx-value-campaign={row.campaign}
+                          phx-value-source={row.utm_source}
+                          phx-value-medium={row.utm_medium}
+                          class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                        >
+                          + Save to Builder
+                        </button>
                     <% end %>
-                  </div>
-                </td>
-                <td class="px-6 py-3 text-sm text-gray-600">
-                  {row.utm_source} / {row.utm_medium}
-                </td>
-                <td class="px-6 py-3 text-right text-sm text-gray-900 tabular-nums">
-                  {format_number(row.visitors)}
-                </td>
-                <td class="px-6 py-3 text-right text-sm text-gray-600 tabular-nums">
-                  {format_number(row.sessions)}
-                </td>
-                <td class="px-6 py-3 text-right text-sm text-gray-600 tabular-nums">
-                  {if row.bounce_rate, do: "#{row.bounce_rate}%", else: "—"}
-                </td>
-                <td class="px-6 py-3 text-right text-sm">
-                  <%= cond do %>
-                    <% row.source == :saved_only -> %>
-                      <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
-                        No traffic
-                      </span>
-                    <% row.saved -> %>
-                      <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                        Saved
-                      </span>
-                    <% true -> %>
-                      <button
-                        phx-click="save_detected"
-                        phx-value-campaign={row.campaign}
-                        phx-value-source={row.utm_source}
-                        phx-value-medium={row.utm_medium}
-                        class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
-                      >
-                        + Save to Builder
-                      </button>
-                  <% end %>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
-        <%!-- Help --%>
-        <div class="mt-6 bg-indigo-50 border border-indigo-100 rounded-lg p-5 text-sm text-indigo-900">
-          <p class="font-semibold mb-2">How it works</p>
-          <p class="mb-2">
-            Every session with <code class="bg-white px-1 rounded">utm_campaign</code> is grouped
-            above automatically. You don't need to create campaigns ahead of time — tag your links
-            and they'll appear.
-          </p>
-          <p>
-            Use <strong>Build URL</strong>
-            to pre-define a campaign and generate a pre-tagged destination
-            URL. Saved campaigns get a "nice name" in place of the raw utm value and stay visible
-            here even when they have no traffic yet.
-          </p>
-        </div>
+          <%!-- Help --%>
+          <div class="mt-6 bg-indigo-50 border border-indigo-100 rounded-lg p-5 text-sm text-indigo-900">
+            <p class="font-semibold mb-2">How it works</p>
+            <p class="mb-2">
+              Every session with <code class="bg-white px-1 rounded">utm_campaign</code> is grouped
+              above automatically. You don't need to create campaigns ahead of time — tag your links
+              and they'll appear.
+            </p>
+            <p>
+              Use <strong>Build URL</strong>
+              to pre-define a campaign and generate a pre-tagged destination
+              URL. Saved campaigns get a "nice name" in place of the raw utm value and stay visible
+              here even when they have no traffic yet.
+            </p>
+          </div>
+        <% end %>
       </div>
     </.dashboard_layout>
     """

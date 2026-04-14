@@ -31,30 +31,41 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
 
       ip_search = params["ip"] || ""
 
-      {:ok,
-       socket
-       |> assign(:page_title, "Visitor Log - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:user, user)
-       |> assign(:date_range, "7d")
-       |> assign(:page, 0)
-       |> assign(:sort_by, "last_seen")
-       |> assign(:sort_dir, "desc")
-       |> assign(:segment, segment)
-       |> assign(:ip_search, ip_search)
-       |> assign(:ip_results, nil)
-       |> assign(:ip_info, nil)
-       |> load_data()}
+      socket =
+        socket
+        |> assign(:page_title, "Visitor Log - #{site.name}")
+        |> assign(:site, site)
+        |> assign(:user, user)
+        |> assign(:date_range, "7d")
+        |> assign(:page, 0)
+        |> assign(:sort_by, "last_seen")
+        |> assign(:sort_dir, "desc")
+        |> assign(:segment, segment)
+        |> assign(:ip_search, ip_search)
+        |> assign(:ip_results, nil)
+        |> assign(:ip_info, nil)
+        |> assign(:loading, true)
+        |> assign(:visitors, [])
+
+      if connected?(socket), do: send(self(), :load_data)
+      {:ok, socket}
     end
   end
 
   @impl true
+  def handle_info(:load_data, socket) do
+    {:noreply, socket |> load_data() |> assign(:loading, false)}
+  end
+
+  @impl true
   def handle_event("change_range", %{"range" => range}, socket) do
+    send(self(), :load_data)
+
     {:noreply,
      socket
      |> assign(:date_range, range)
      |> assign(:page, 0)
-     |> load_data()}
+     |> assign(:loading, true)}
   end
 
   def handle_event("sort", %{"col" => col}, socket) when col in @sortable_cols do
@@ -68,22 +79,26 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
         true -> "desc"
       end
 
+    send(self(), :load_data)
+
     {:noreply,
      socket
      |> assign(:sort_by, col)
      |> assign(:sort_dir, new_dir)
      |> assign(:page, 0)
-     |> load_data()}
+     |> assign(:loading, true)}
   end
 
   def handle_event("sort", _params, socket), do: {:noreply, socket}
 
   def handle_event("next_page", _params, socket) do
-    {:noreply, socket |> assign(:page, socket.assigns.page + 1) |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:page, socket.assigns.page + 1) |> assign(:loading, true)}
   end
 
   def handle_event("prev_page", _params, socket) do
-    {:noreply, socket |> assign(:page, max(socket.assigns.page - 1, 0)) |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:page, max(socket.assigns.page - 1, 0)) |> assign(:loading, true)}
   end
 
   def handle_event("search_ip", %{"ip" => ip}, socket) do
@@ -308,154 +323,160 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
         </div>
 
         <%!-- Main Visitor Log --%>
-        <div class="bg-white rounded-lg shadow overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Visitor
-                </th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">
-                  Intent
-                </th>
-                <th
-                  class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-indigo-700 select-none"
-                  phx-click="sort"
-                  phx-value-col="pageviews"
-                >
-                  Pages {sort_arrow("pageviews", @sort_by, @sort_dir)}
-                </th>
-                <th
-                  class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-indigo-700 select-none hidden sm:table-cell"
-                  phx-click="sort"
-                  phx-value-col="duration"
-                >
-                  Duration {sort_arrow("duration", @sort_by, @sort_dir)}
-                </th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Location
-                </th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
-                  Device
-                </th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden lg:table-cell">
-                  Source
-                </th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
-                  Entry
-                </th>
-                <th
-                  class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-indigo-700 select-none"
-                  phx-click="sort"
-                  phx-value-col="last_seen"
-                >
-                  Last Seen {sort_arrow("last_seen", @sort_by, @sort_dir)}
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-200">
-              <tr :if={@visitors == []}>
-                <td colspan="9" class="px-4 py-8 text-center text-gray-500">
-                  No visitors for this period.
-                </td>
-              </tr>
-              <tr :for={v <- @visitors} class="hover:bg-gray-50">
-                <td class="px-4 py-3 text-sm">
-                  <.link
-                    navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{v["visitor_id"]}"}
-                    class="text-indigo-600 hover:text-indigo-800 text-xs"
-                  >
-                    <span :if={v["email"]} class="font-medium">{v["email"]}</span>
-                    <span :if={!v["email"]} class="font-mono">
-                      {String.slice(v["visitor_id"] || "", 0, 8)}...
-                    </span>
-                  </.link>
-                </td>
-                <td class="px-4 py-3 hidden sm:table-cell">
-                  <.link
-                    :if={v["intent"] && v["intent"] != ""}
-                    navigate={
-                      ~p"/dashboard/sites/#{@site.id}/visitor-log?filter_field=visitor_intent&filter_value=#{v["intent"]}"
-                    }
-                    class={[
-                      "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
-                      intent_pill(v["intent"])
-                    ]}
-                  >
-                    {v["intent"]}
-                  </.link>
-                </td>
-                <td class="px-4 py-3 text-sm text-gray-900 tabular-nums">
-                  {format_number(to_num(v["pageviews"]))}
-                </td>
-                <td class="px-4 py-3 text-sm text-gray-500 tabular-nums hidden sm:table-cell">
-                  {format_duration(to_int(v["duration"]))}
-                </td>
-                <td class="px-4 py-3 text-sm">
-                  <.link
-                    :if={v["country"] && v["country"] != ""}
-                    navigate={~p"/dashboard/sites/#{@site.id}/geo"}
-                    class="text-indigo-600 hover:text-indigo-800"
-                  >
-                    {[v["city"], v["region"], v["country"]]
-                    |> Enum.reject(&(&1 == "" || is_nil(&1)))
-                    |> Enum.join(", ")}
-                  </.link>
-                  <span :if={!v["country"] || v["country"] == ""} class="text-gray-500">-</span>
-                </td>
-                <td class="px-4 py-3 text-sm text-gray-500 hidden md:table-cell">
-                  {[v["browser"], v["os"]]
-                  |> Enum.reject(&(&1 == "" || is_nil(&1)))
-                  |> Enum.join(" / ")}
-                </td>
-                <td class="px-4 py-3 text-sm truncate max-w-[120px] hidden lg:table-cell">
-                  <.link
-                    :if={v["referrer"] && v["referrer"] != ""}
-                    navigate={
-                      ~p"/dashboard/sites/#{@site.id}/visitor-log?filter_field=referrer_domain&filter_value=#{v["referrer"]}"
-                    }
-                    class="text-indigo-600 hover:text-indigo-800"
-                  >
-                    {v["referrer"]}
-                  </.link>
-                  <span :if={!v["referrer"] || v["referrer"] == ""} class="text-gray-500">
-                    Direct
-                  </span>
-                </td>
-                <td class="px-4 py-3 text-sm truncate max-w-[150px] hidden md:table-cell">
-                  <.link
-                    :if={v["entry_page"] && v["entry_page"] != ""}
-                    navigate={~p"/dashboard/sites/#{@site.id}/transitions?page=#{v["entry_page"]}"}
-                    class="text-indigo-600 hover:text-indigo-800 font-mono"
-                  >
-                    {v["entry_page"]}
-                  </.link>
-                </td>
-                <td class="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
-                  {v["last_seen"]}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div :if={@loading} class="flex items-center justify-center py-12">
+          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
         </div>
 
-        <div class="flex items-center justify-between mt-4">
-          <button
-            :if={@page > 0}
-            phx-click="prev_page"
-            class="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-          >
-            &larr; Previous
-          </button>
-          <span :if={@page == 0}></span>
-          <span class="text-xs text-gray-500">Page {@page + 1}</span>
-          <button
-            :if={length(@visitors) == 30}
-            phx-click="next_page"
-            class="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-          >
-            Next &rarr;
-          </button>
+        <div :if={!@loading}>
+          <div class="bg-white rounded-lg shadow overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Visitor
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">
+                    Intent
+                  </th>
+                  <th
+                    class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-indigo-700 select-none"
+                    phx-click="sort"
+                    phx-value-col="pageviews"
+                  >
+                    Pages {sort_arrow("pageviews", @sort_by, @sort_dir)}
+                  </th>
+                  <th
+                    class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-indigo-700 select-none hidden sm:table-cell"
+                    phx-click="sort"
+                    phx-value-col="duration"
+                  >
+                    Duration {sort_arrow("duration", @sort_by, @sort_dir)}
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Location
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
+                    Device
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden lg:table-cell">
+                    Source
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
+                    Entry
+                  </th>
+                  <th
+                    class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-indigo-700 select-none"
+                    phx-click="sort"
+                    phx-value-col="last_seen"
+                  >
+                    Last Seen {sort_arrow("last_seen", @sort_by, @sort_dir)}
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                <tr :if={@visitors == []}>
+                  <td colspan="9" class="px-4 py-8 text-center text-gray-500">
+                    No visitors for this period.
+                  </td>
+                </tr>
+                <tr :for={v <- @visitors} class="hover:bg-gray-50">
+                  <td class="px-4 py-3 text-sm">
+                    <.link
+                      navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{v["visitor_id"]}"}
+                      class="text-indigo-600 hover:text-indigo-800 text-xs"
+                    >
+                      <span :if={v["email"]} class="font-medium">{v["email"]}</span>
+                      <span :if={!v["email"]} class="font-mono">
+                        {String.slice(v["visitor_id"] || "", 0, 8)}...
+                      </span>
+                    </.link>
+                  </td>
+                  <td class="px-4 py-3 hidden sm:table-cell">
+                    <.link
+                      :if={v["intent"] && v["intent"] != ""}
+                      navigate={
+                        ~p"/dashboard/sites/#{@site.id}/visitor-log?filter_field=visitor_intent&filter_value=#{v["intent"]}"
+                      }
+                      class={[
+                        "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
+                        intent_pill(v["intent"])
+                      ]}
+                    >
+                      {v["intent"]}
+                    </.link>
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-900 tabular-nums">
+                    {format_number(to_num(v["pageviews"]))}
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-500 tabular-nums hidden sm:table-cell">
+                    {format_duration(to_int(v["duration"]))}
+                  </td>
+                  <td class="px-4 py-3 text-sm">
+                    <.link
+                      :if={v["country"] && v["country"] != ""}
+                      navigate={~p"/dashboard/sites/#{@site.id}/geo"}
+                      class="text-indigo-600 hover:text-indigo-800"
+                    >
+                      {[v["city"], v["region"], v["country"]]
+                      |> Enum.reject(&(&1 == "" || is_nil(&1)))
+                      |> Enum.join(", ")}
+                    </.link>
+                    <span :if={!v["country"] || v["country"] == ""} class="text-gray-500">-</span>
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-500 hidden md:table-cell">
+                    {[v["browser"], v["os"]]
+                    |> Enum.reject(&(&1 == "" || is_nil(&1)))
+                    |> Enum.join(" / ")}
+                  </td>
+                  <td class="px-4 py-3 text-sm truncate max-w-[120px] hidden lg:table-cell">
+                    <.link
+                      :if={v["referrer"] && v["referrer"] != ""}
+                      navigate={
+                        ~p"/dashboard/sites/#{@site.id}/visitor-log?filter_field=referrer_domain&filter_value=#{v["referrer"]}"
+                      }
+                      class="text-indigo-600 hover:text-indigo-800"
+                    >
+                      {v["referrer"]}
+                    </.link>
+                    <span :if={!v["referrer"] || v["referrer"] == ""} class="text-gray-500">
+                      Direct
+                    </span>
+                  </td>
+                  <td class="px-4 py-3 text-sm truncate max-w-[150px] hidden md:table-cell">
+                    <.link
+                      :if={v["entry_page"] && v["entry_page"] != ""}
+                      navigate={~p"/dashboard/sites/#{@site.id}/transitions?page=#{v["entry_page"]}"}
+                      class="text-indigo-600 hover:text-indigo-800 font-mono"
+                    >
+                      {v["entry_page"]}
+                    </.link>
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
+                    {v["last_seen"]}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="flex items-center justify-between mt-4">
+            <button
+              :if={@page > 0}
+              phx-click="prev_page"
+              class="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+            >
+              &larr; Previous
+            </button>
+            <span :if={@page == 0}></span>
+            <span class="text-xs text-gray-500">Page {@page + 1}</span>
+            <button
+              :if={length(@visitors) == 30}
+              phx-click="next_page"
+              class="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+            >
+              Next &rarr;
+            </button>
+          </div>
         </div>
       </div>
     </.dashboard_layout>

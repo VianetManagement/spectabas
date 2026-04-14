@@ -26,46 +26,61 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
     unless Accounts.can_access_site?(user, site) do
       {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
     else
-      {:ok,
-       socket
-       |> assign(:page_title, "Acquisition - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:user, user)
-       |> assign(:date_range, "7d")
-       |> assign(:view, "channels")
-       |> assign(:tab, "referrers")
-       |> assign(:selected_channel, nil)
-       |> assign(:utm_tabs, @utm_tabs)
-       |> load_data()}
+      socket =
+        socket
+        |> assign(:page_title, "Acquisition - #{site.name}")
+        |> assign(:site, site)
+        |> assign(:user, user)
+        |> assign(:date_range, "7d")
+        |> assign(:view, "channels")
+        |> assign(:tab, "referrers")
+        |> assign(:selected_channel, nil)
+        |> assign(:utm_tabs, @utm_tabs)
+        |> assign(:loading, true)
+
+      if connected?(socket), do: send(self(), :load_data)
+      {:ok, socket}
     end
   end
 
   @impl true
   def handle_params(_params, _uri, %{assigns: %{live_action: :sources}} = socket) do
-    {:noreply, socket |> assign(:view, "sources") |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:view, "sources") |> assign(:loading, true)}
   end
 
   def handle_params(_params, _uri, socket), do: {:noreply, socket}
 
   @impl true
   def handle_event("change_range", %{"range" => range}, socket) do
-    {:noreply, socket |> assign(:date_range, range) |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:date_range, range) |> assign(:loading, true)}
   end
 
   def handle_event("switch_view", %{"view" => view}, socket) do
-    {:noreply, socket |> assign(:view, view) |> assign(:selected_channel, nil) |> load_data()}
+    send(self(), :load_data)
+
+    {:noreply,
+     socket |> assign(:view, view) |> assign(:selected_channel, nil) |> assign(:loading, true)}
   end
 
   def handle_event("change_tab", %{"tab" => tab}, socket) do
-    {:noreply, socket |> assign(:tab, tab) |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:tab, tab) |> assign(:loading, true)}
   end
 
   def handle_event("select_channel", %{"channel" => channel}, socket) do
-    {:noreply, socket |> assign(:selected_channel, channel) |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:selected_channel, channel) |> assign(:loading, true)}
   end
 
   def handle_event("back_to_channels", _params, socket) do
     {:noreply, socket |> assign(:selected_channel, nil)}
+  end
+
+  @impl true
+  def handle_info(:load_data, socket) do
+    {:noreply, socket |> load_data() |> assign(:loading, false)}
   end
 
   defp load_data(socket) do
@@ -165,25 +180,183 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
           </div>
         </div>
 
-        <%!-- Channels View --%>
-        <div :if={@view == "channels"}>
-          <%!-- Channel Detail (drill-down) --%>
-          <div :if={@selected_channel}>
-            <button
-              phx-click="back_to_channels"
-              class="text-sm text-indigo-600 hover:text-indigo-800 mb-4 inline-flex items-center gap-1"
-            >
-              &larr; All Channels
-            </button>
-            <h2 class="text-lg font-semibold text-gray-900 mb-4">
-              <span class={[
-                "inline-block px-2.5 py-0.5 rounded-full text-xs font-medium mr-2",
-                ChannelClassifier.channel_color(@selected_channel)
-              ]}>
-                {@selected_channel}
-              </span>
-              Sources
-            </h2>
+        <%= if @loading do %>
+          <div class="bg-white rounded-lg shadow p-12 text-center">
+            <div class="inline-flex items-center gap-3 text-gray-600">
+              <svg class="animate-spin h-5 w-5 text-indigo-600" viewBox="0 0 24 24" fill="none">
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              <span class="text-sm">Loading...</span>
+            </div>
+          </div>
+        <% else %>
+          <%!-- Channels View --%>
+          <div :if={@view == "channels"}>
+            <%!-- Channel Detail (drill-down) --%>
+            <div :if={@selected_channel}>
+              <button
+                phx-click="back_to_channels"
+                class="text-sm text-indigo-600 hover:text-indigo-800 mb-4 inline-flex items-center gap-1"
+              >
+                &larr; All Channels
+              </button>
+              <h2 class="text-lg font-semibold text-gray-900 mb-4">
+                <span class={[
+                  "inline-block px-2.5 py-0.5 rounded-full text-xs font-medium mr-2",
+                  ChannelClassifier.channel_color(@selected_channel)
+                ]}>
+                  {@selected_channel}
+                </span>
+                Sources
+              </h2>
+              <div class="bg-white rounded-lg shadow overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                  <thead class="bg-gray-50">
+                    <tr>
+                      <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Source
+                      </th>
+                      <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Pageviews
+                      </th>
+                      <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Visitors
+                      </th>
+                      <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Sessions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-100">
+                    <tr :if={@channel_detail == []}>
+                      <td colspan="4" class="px-6 py-8 text-center text-gray-500">
+                        No sources for this channel.
+                      </td>
+                    </tr>
+                    <tr :for={src <- @channel_detail} class="hover:bg-gray-50">
+                      <td class="px-6 py-4 text-sm text-indigo-600 font-medium">{src["source"]}</td>
+                      <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                        {format_number(to_num(src["pageviews"]))}
+                      </td>
+                      <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                        {format_number(to_num(src["visitors"]))}
+                      </td>
+                      <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                        {format_number(to_num(src["sessions"]))}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <%!-- Channel Overview --%>
+            <div :if={!@selected_channel} class="bg-white rounded-lg shadow overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Channel
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Visitors
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Sessions
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Pageviews
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Bounce Rate
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Avg Duration
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Pages/Session
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                  <tr :if={@channels == []}>
+                    <td colspan="7" class="px-6 py-8 text-center text-gray-500">
+                      No data for this period.
+                    </td>
+                  </tr>
+                  <tr
+                    :for={ch <- @channels}
+                    class="hover:bg-gray-50 cursor-pointer"
+                    phx-click="select_channel"
+                    phx-value-channel={ch["channel"]}
+                  >
+                    <td class="px-6 py-4 text-sm">
+                      <span class={[
+                        "inline-block px-2.5 py-0.5 rounded-full text-xs font-medium",
+                        ChannelClassifier.channel_color(ch["channel"])
+                      ]}>
+                        {ch["channel"]}
+                      </span>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                      {format_number(to_num(ch["visitors"]))}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                      {format_number(to_num(ch["sessions"]))}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                      {format_number(to_num(ch["pageviews"]))}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                      {ch["bounce_rate"]}%
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                      {format_duration(to_num(ch["avg_duration"]))}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                      {ch["pages_per_session"]}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p :if={!@selected_channel && @channels != []} class="text-xs text-gray-500 mt-2">
+              Click a channel to see individual sources within it.
+            </p>
+          </div>
+
+          <%!-- Sources View --%>
+          <div :if={@view == "sources"}>
+            <div class="mb-6 flex flex-wrap gap-2">
+              <button
+                :for={{id, label} <- @utm_tabs}
+                phx-click="change_tab"
+                phx-value-tab={id}
+                class={[
+                  "px-4 py-2 text-sm font-medium rounded-md",
+                  if(@tab == id,
+                    do: "bg-indigo-600 text-white",
+                    else: "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  )
+                ]}
+              >
+                {label}
+              </button>
+            </div>
+
             <div class="bg-white rounded-lg shadow overflow-x-auto">
               <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
@@ -195,172 +368,37 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
                       Pageviews
                     </th>
                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Visitors
-                    </th>
-                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                       Sessions
                     </th>
                   </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-100">
-                  <tr :if={@channel_detail == []}>
-                    <td colspan="4" class="px-6 py-8 text-center text-gray-500">
-                      No sources for this channel.
+                <tbody class="bg-white divide-y divide-gray-200">
+                  <tr :if={@sources == []}>
+                    <td colspan="3" class="px-6 py-8 text-center text-gray-500">
+                      No data for this period.
                     </td>
                   </tr>
-                  <tr :for={src <- @channel_detail} class="hover:bg-gray-50">
-                    <td class="px-6 py-4 text-sm text-indigo-600 font-medium">{src["source"]}</td>
-                    <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                      {format_number(to_num(src["pageviews"]))}
+                  <tr :for={source <- @sources} class="hover:bg-gray-50">
+                    <td class="px-6 py-4 text-sm">
+                      <.link
+                        navigate={source_link(@site.id, source, @tab)}
+                        class="text-indigo-600 hover:text-indigo-800"
+                      >
+                        {source_name(source, @tab)}
+                      </.link>
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                      {format_number(to_num(src["visitors"]))}
+                      {format_number(to_num(Map.get(source, "pageviews", 0)))}
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                      {format_number(to_num(src["sessions"]))}
+                      {format_number(to_num(Map.get(source, "sessions", 0)))}
                     </td>
                   </tr>
                 </tbody>
               </table>
             </div>
           </div>
-
-          <%!-- Channel Overview --%>
-          <div :if={!@selected_channel} class="bg-white rounded-lg shadow overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-              <thead class="bg-gray-50">
-                <tr>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Channel
-                  </th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Visitors
-                  </th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Sessions
-                  </th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Pageviews
-                  </th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Bounce Rate
-                  </th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Avg Duration
-                  </th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Pages/Session
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100">
-                <tr :if={@channels == []}>
-                  <td colspan="7" class="px-6 py-8 text-center text-gray-500">
-                    No data for this period.
-                  </td>
-                </tr>
-                <tr
-                  :for={ch <- @channels}
-                  class="hover:bg-gray-50 cursor-pointer"
-                  phx-click="select_channel"
-                  phx-value-channel={ch["channel"]}
-                >
-                  <td class="px-6 py-4 text-sm">
-                    <span class={[
-                      "inline-block px-2.5 py-0.5 rounded-full text-xs font-medium",
-                      ChannelClassifier.channel_color(ch["channel"])
-                    ]}>
-                      {ch["channel"]}
-                    </span>
-                  </td>
-                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                    {format_number(to_num(ch["visitors"]))}
-                  </td>
-                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                    {format_number(to_num(ch["sessions"]))}
-                  </td>
-                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                    {format_number(to_num(ch["pageviews"]))}
-                  </td>
-                  <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
-                    {ch["bounce_rate"]}%
-                  </td>
-                  <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
-                    {format_duration(to_num(ch["avg_duration"]))}
-                  </td>
-                  <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
-                    {ch["pages_per_session"]}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <p :if={!@selected_channel && @channels != []} class="text-xs text-gray-500 mt-2">
-            Click a channel to see individual sources within it.
-          </p>
-        </div>
-
-        <%!-- Sources View --%>
-        <div :if={@view == "sources"}>
-          <div class="mb-6 flex flex-wrap gap-2">
-            <button
-              :for={{id, label} <- @utm_tabs}
-              phx-click="change_tab"
-              phx-value-tab={id}
-              class={[
-                "px-4 py-2 text-sm font-medium rounded-md",
-                if(@tab == id,
-                  do: "bg-indigo-600 text-white",
-                  else: "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                )
-              ]}
-            >
-              {label}
-            </button>
-          </div>
-
-          <div class="bg-white rounded-lg shadow overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-              <thead class="bg-gray-50">
-                <tr>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Source
-                  </th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Pageviews
-                  </th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Sessions
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="bg-white divide-y divide-gray-200">
-                <tr :if={@sources == []}>
-                  <td colspan="3" class="px-6 py-8 text-center text-gray-500">
-                    No data for this period.
-                  </td>
-                </tr>
-                <tr :for={source <- @sources} class="hover:bg-gray-50">
-                  <td class="px-6 py-4 text-sm">
-                    <.link
-                      navigate={source_link(@site.id, source, @tab)}
-                      class="text-indigo-600 hover:text-indigo-800"
-                    >
-                      {source_name(source, @tab)}
-                    </.link>
-                  </td>
-                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                    {format_number(to_num(Map.get(source, "pageviews", 0)))}
-                  </td>
-                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                    {format_number(to_num(Map.get(source, "sessions", 0)))}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <% end %>
       </div>
     </.dashboard_layout>
     """

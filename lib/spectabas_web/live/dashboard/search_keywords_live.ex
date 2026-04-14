@@ -43,13 +43,34 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
         |> assign(:drawer_position_json, "{}")
         |> assign(:drawer_loading, false)
         |> assign(:expanded_cannibalization, nil)
-        |> load_data()
+        |> assign(:loading, true)
+        |> assign(:stats, %{})
+        |> assign(:queries, [])
+        |> assign(:pages, [])
+        |> assign(:ranking_changes, [])
+        |> assign(:opportunity_queue, [])
+        |> assign(:new_keywords, [])
+        |> assign(:lost_keywords, [])
+        |> assign(:pos_dist, %{})
+        |> assign(:cannibalization, [])
+        |> assign(:daily_trends, [])
+        |> assign(:query_sparklines, %{})
+        |> assign(:chart_key, "")
+        |> assign(:chart_clicks_impressions_json, "{}")
+        |> assign(:chart_ctr_json, "{}")
+        |> assign(:chart_position_json, "{}")
+        |> assign(:has_data, false)
 
+      if connected?(socket), do: send(self(), :load_data)
       {:ok, socket}
     end
   end
 
   @impl true
+  def handle_info(:load_data, socket) do
+    {:noreply, socket |> load_data() |> assign(:loading, false)}
+  end
+
   def handle_info({:load_drawer, query}, socket) do
     # Only apply if the user hasn't navigated away since clicking.
     if socket.assigns.drawer_query == query do
@@ -61,11 +82,13 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
 
   @impl true
   def handle_event("change_range", %{"range" => range}, socket) do
-    {:noreply, socket |> assign(:date_range, range) |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:date_range, range) |> assign(:loading, true)}
   end
 
   def handle_event("change_source", %{"source" => source}, socket) do
-    {:noreply, socket |> assign(:source_filter, source) |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:source_filter, source) |> assign(:loading, true)}
   end
 
   def handle_event("sort", %{"col" => col}, socket) when col in @allowed_sort_cols do
@@ -77,7 +100,10 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
       end
 
     safe_dir = if new_dir in @allowed_sort_dirs, do: new_dir, else: "desc"
-    {:noreply, socket |> assign(:sort_by, col) |> assign(:sort_dir, safe_dir) |> load_data()}
+    send(self(), :load_data)
+
+    {:noreply,
+     socket |> assign(:sort_by, col) |> assign(:sort_dir, safe_dir) |> assign(:loading, true)}
   end
 
   def handle_event("sort", _params, socket), do: {:noreply, socket}
@@ -872,439 +898,214 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
           </div>
         </div>
 
-        <%= if !@has_data do %>
-          <div class="bg-white rounded-lg shadow p-10 text-center">
-            <h2 class="text-lg font-semibold text-gray-900 mb-2">No search data yet</h2>
-            <p class="text-sm text-gray-600 max-w-md mx-auto mb-4">
-              Connect Google Search Console or Bing Webmaster from <.link
-                navigate={~p"/dashboard/sites/#{@site.id}/settings"}
-                class="text-indigo-600 underline"
-              >Site Settings</.link>. Data syncs daily with a 2-3 day delay.
-            </p>
+        <%= if @loading do %>
+          <div class="flex items-center justify-center py-12">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
           </div>
         <% else %>
-          <%!-- Stats cards --%>
-          <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-            <div class="bg-white rounded-lg shadow p-5 border-t-4 border-indigo-500">
-              <dt class="text-sm font-medium text-gray-500 mb-1">Clicks</dt>
-              <dd class="text-3xl font-bold text-indigo-700">
-                {format_number(to_num(@stats["total_clicks"] || "0"))}
-              </dd>
+          <%= if !@has_data do %>
+            <div class="bg-white rounded-lg shadow p-10 text-center">
+              <h2 class="text-lg font-semibold text-gray-900 mb-2">No search data yet</h2>
+              <p class="text-sm text-gray-600 max-w-md mx-auto mb-4">
+                Connect Google Search Console or Bing Webmaster from <.link
+                  navigate={~p"/dashboard/sites/#{@site.id}/settings"}
+                  class="text-indigo-600 underline"
+                >Site Settings</.link>. Data syncs daily with a 2-3 day delay.
+              </p>
             </div>
-            <div class="bg-white rounded-lg shadow p-5">
-              <dt class="text-sm font-medium text-gray-500 mb-1">Impressions</dt>
-              <dd class="text-3xl font-bold text-gray-900">
-                {format_number(to_num(@stats["total_impressions"] || "0"))}
-              </dd>
+          <% else %>
+            <%!-- Stats cards --%>
+            <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+              <div class="bg-white rounded-lg shadow p-5 border-t-4 border-indigo-500">
+                <dt class="text-sm font-medium text-gray-500 mb-1">Clicks</dt>
+                <dd class="text-3xl font-bold text-indigo-700">
+                  {format_number(to_num(@stats["total_clicks"] || "0"))}
+                </dd>
+              </div>
+              <div class="bg-white rounded-lg shadow p-5">
+                <dt class="text-sm font-medium text-gray-500 mb-1">Impressions</dt>
+                <dd class="text-3xl font-bold text-gray-900">
+                  {format_number(to_num(@stats["total_impressions"] || "0"))}
+                </dd>
+              </div>
+              <div class="bg-white rounded-lg shadow p-5">
+                <dt class="text-sm font-medium text-gray-500 mb-1">Avg CTR</dt>
+                <dd class="text-3xl font-bold text-gray-900">{@stats["avg_ctr"] || "0"}%</dd>
+              </div>
+              <div class="bg-white rounded-lg shadow p-5">
+                <dt class="text-sm font-medium text-gray-500 mb-1">Avg Position</dt>
+                <dd class="text-3xl font-bold text-gray-900">{@stats["avg_position"] || "0"}</dd>
+              </div>
+              <div class="bg-white rounded-lg shadow p-5">
+                <dt class="text-sm font-medium text-gray-500 mb-1">Unique Queries</dt>
+                <dd class="text-3xl font-bold text-gray-900">
+                  {format_number(to_num(@stats["unique_queries"] || "0"))}
+                </dd>
+              </div>
             </div>
-            <div class="bg-white rounded-lg shadow p-5">
-              <dt class="text-sm font-medium text-gray-500 mb-1">Avg CTR</dt>
-              <dd class="text-3xl font-bold text-gray-900">{@stats["avg_ctr"] || "0"}%</dd>
-            </div>
-            <div class="bg-white rounded-lg shadow p-5">
-              <dt class="text-sm font-medium text-gray-500 mb-1">Avg Position</dt>
-              <dd class="text-3xl font-bold text-gray-900">{@stats["avg_position"] || "0"}</dd>
-            </div>
-            <div class="bg-white rounded-lg shadow p-5">
-              <dt class="text-sm font-medium text-gray-500 mb-1">Unique Queries</dt>
-              <dd class="text-3xl font-bold text-gray-900">
-                {format_number(to_num(@stats["unique_queries"] || "0"))}
-              </dd>
-            </div>
-          </div>
 
-          <%!-- Trend charts (data in data-chart attr; id changes each reload so the
+            <%!-- Trend charts (data in data-chart attr; id changes each reload so the
           element is replaced on range change and hook remounts fresh) --%>
-          <div class="bg-white rounded-lg shadow p-6 mb-4">
-            <h2 class="text-sm font-semibold text-gray-700 mb-3">Clicks &amp; Impressions</h2>
-            <div
-              id={"chart-clicks-impressions-" <> @chart_key}
-              phx-hook="SearchChart"
-              data-chart={@chart_clicks_impressions_json}
-              class="h-64 relative"
-            >
-              <canvas></canvas>
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
-            <div class="bg-white rounded-lg shadow p-6">
-              <h2 class="text-sm font-semibold text-gray-700 mb-3">Avg CTR</h2>
+            <div class="bg-white rounded-lg shadow p-6 mb-4">
+              <h2 class="text-sm font-semibold text-gray-700 mb-3">Clicks &amp; Impressions</h2>
               <div
-                id={"chart-ctr-" <> @chart_key}
+                id={"chart-clicks-impressions-" <> @chart_key}
                 phx-hook="SearchChart"
-                data-chart={@chart_ctr_json}
-                class="h-48 relative"
+                data-chart={@chart_clicks_impressions_json}
+                class="h-64 relative"
               >
                 <canvas></canvas>
               </div>
             </div>
-            <div class="bg-white rounded-lg shadow p-6">
-              <h2 class="text-sm font-semibold text-gray-700 mb-3">
-                Avg Position <span class="text-xs font-normal text-gray-500">(lower is better)</span>
-              </h2>
-              <div
-                id={"chart-position-" <> @chart_key}
-                phx-hook="SearchChart"
-                data-chart={@chart_position_json}
-                class="h-48 relative"
-              >
-                <canvas></canvas>
-              </div>
-            </div>
-          </div>
 
-          <%!-- Top Queries with sparklines --%>
-          <div class="bg-white rounded-lg shadow p-6 mb-8">
-            <h2 class="text-lg font-semibold text-gray-900 mb-1">Top Search Queries</h2>
-            <p class="text-xs text-gray-500 mb-4">
-              Click a row to see per-query history, ranking pages, device and country breakdowns.
-            </p>
-            <div class="overflow-x-auto">
-              <table class="w-full">
-                <thead>
-                  <tr class="border-b-2 border-gray-200">
-                    <th class="text-left py-3 text-sm font-semibold text-gray-700">Query</th>
-                    <th class="text-left py-3 text-sm font-semibold text-gray-700 w-28">Trend</th>
-                    <th
-                      class="text-right py-3 text-sm font-semibold text-gray-700 cursor-pointer hover:text-indigo-600"
-                      phx-click="sort"
-                      phx-value-col="total_clicks"
-                    >
-                      Clicks {sort_arrow("total_clicks", @sort_by, @sort_dir)}
-                    </th>
-                    <th
-                      class="text-right py-3 text-sm font-semibold text-gray-700 cursor-pointer hover:text-indigo-600"
-                      phx-click="sort"
-                      phx-value-col="total_impressions"
-                    >
-                      Impressions {sort_arrow("total_impressions", @sort_by, @sort_dir)}
-                    </th>
-                    <th
-                      class="text-right py-3 text-sm font-semibold text-gray-700 cursor-pointer hover:text-indigo-600"
-                      phx-click="sort"
-                      phx-value-col="ctr"
-                    >
-                      CTR {sort_arrow("ctr", @sort_by, @sort_dir)}
-                    </th>
-                    <th
-                      class="text-right py-3 text-sm font-semibold text-gray-700 cursor-pointer hover:text-indigo-600"
-                      phx-click="sort"
-                      phx-value-col="avg_pos"
-                    >
-                      Position {sort_arrow("avg_pos", @sort_by, @sort_dir)}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <%= for {q, idx} <- Enum.with_index(@queries) do %>
-                    <tr
-                      class="border-b border-gray-100 hover:bg-indigo-50 cursor-pointer"
-                      phx-click="open_query"
-                      phx-value-query={q["query"]}
-                    >
-                      <td class="py-3 text-sm font-medium text-gray-900 max-w-md truncate">
-                        {q["query"]}
-                      </td>
-                      <td class="py-2">
-                        <%= if idx < 20 do %>
-                          <div
-                            id={query_sparkline_id(q["query"]) <> "-" <> @chart_key}
-                            phx-hook="Sparkline"
-                            data-spark={query_sparkline_json(@query_sparklines, q["query"])}
-                            class="w-24 h-8"
-                          >
-                            <canvas></canvas>
-                          </div>
-                        <% end %>
-                      </td>
-                      <td class="text-right py-3 text-sm font-semibold">
-                        {format_number(to_num(q["total_clicks"]))}
-                      </td>
-                      <td class="text-right py-3 text-sm text-gray-600">
-                        {format_number(to_num(q["total_impressions"]))}
-                      </td>
-                      <td class="text-right py-3 text-sm text-gray-600">{q["ctr"]}%</td>
-                      <td class="text-right py-3 text-sm">
-                        <span class={"font-medium " <> position_color(to_float(q["avg_pos"]))}>
-                          {q["avg_pos"]}
-                        </span>
-                      </td>
-                    </tr>
-                  <% end %>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <%!-- Opportunity Queue --%>
-          <%= if @opportunity_queue != [] do %>
-            <div class="bg-white rounded-lg shadow p-6 mb-8">
-              <h2 class="text-lg font-semibold text-gray-900 mb-1">Opportunity Queue</h2>
-              <p class="text-xs text-gray-500 mb-4">
-                Queries ranking 8-20 with significant impressions — ordered by projected extra clicks
-                if moved to the top 3.
-              </p>
-              <table class="w-full">
-                <thead>
-                  <tr class="border-b-2 border-gray-200">
-                    <th class="text-left py-2 text-sm font-semibold text-gray-700">Query</th>
-                    <th class="text-right py-2 text-sm font-semibold text-gray-700">Impressions</th>
-                    <th class="text-right py-2 text-sm font-semibold text-gray-700">Current CTR</th>
-                    <th class="text-right py-2 text-sm font-semibold text-gray-700">Position</th>
-                    <th class="text-right py-2 text-sm font-semibold text-emerald-700">
-                      Projected Extra Clicks
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <%= for r <- @opportunity_queue do %>
-                    <tr
-                      class="border-b border-gray-100 hover:bg-emerald-50 cursor-pointer"
-                      phx-click="open_query"
-                      phx-value-query={r["query"]}
-                    >
-                      <td class="py-2 text-sm text-gray-900 max-w-xs truncate">{r["query"]}</td>
-                      <td class="text-right py-2 text-sm">
-                        {format_number(to_num(r["total_impressions"]))}
-                      </td>
-                      <td class="text-right py-2 text-sm text-gray-600">{r["ctr"]}%</td>
-                      <td class={"text-right py-2 text-sm " <> position_color(to_float(r["avg_pos"]))}>
-                        {r["avg_pos"]}
-                      </td>
-                      <td class="text-right py-2 text-sm font-bold text-emerald-600">
-                        +{format_number(to_num(r["projected_gain"]))}
-                      </td>
-                    </tr>
-                  <% end %>
-                </tbody>
-              </table>
-            </div>
-          <% end %>
-
-          <%!-- Cannibalization --%>
-          <%= if @cannibalization != [] do %>
-            <div class="bg-white rounded-lg shadow p-6 mb-8">
-              <h2 class="text-lg font-semibold text-gray-900 mb-1">Keyword Cannibalization</h2>
-              <p class="text-xs text-gray-500 mb-4">
-                Queries where 3+ pages compete in the top 30 — usually a duplicate-content
-                or internal-linking signal. Click a row to see which pages are fighting.
-              </p>
-              <table class="w-full">
-                <thead>
-                  <tr class="border-b-2 border-gray-200">
-                    <th class="text-left py-2 text-sm font-semibold text-gray-700">Query</th>
-                    <th class="text-right py-2 text-sm font-semibold text-gray-700">Pages</th>
-                    <th class="text-right py-2 text-sm font-semibold text-gray-700">Impressions</th>
-                    <th class="text-right py-2 text-sm font-semibold text-gray-700">Clicks</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <%= for c <- @cannibalization do %>
-                    <tr
-                      class="border-b border-gray-100 hover:bg-amber-50 cursor-pointer"
-                      phx-click="toggle_cannibalization"
-                      phx-value-query={c["query"]}
-                    >
-                      <td class="py-2 text-sm text-gray-900 max-w-xs truncate">
-                        {c["query"]}
-                      </td>
-                      <td class="text-right py-2 text-sm font-semibold text-amber-600">
-                        {c["page_count"]}
-                      </td>
-                      <td class="text-right py-2 text-sm">
-                        {format_number(to_num(c["total_impressions"]))}
-                      </td>
-                      <td class="text-right py-2 text-sm">
-                        {format_number(to_num(c["total_clicks"]))}
-                      </td>
-                    </tr>
-                    <%= if @expanded_cannibalization == c["query"] do %>
-                      <tr class="bg-amber-50/50">
-                        <td colspan="4" class="px-4 py-3">
-                          <table class="w-full text-xs">
-                            <thead>
-                              <tr class="text-gray-600">
-                                <th class="text-left pb-1">Page</th>
-                                <th class="text-right pb-1">Position</th>
-                                <th class="text-right pb-1">Impressions</th>
-                                <th class="text-right pb-1">Clicks</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              <%= for {page, pos, imps, clicks} <- c["pages_zip"] do %>
-                                <tr>
-                                  <td class="py-0.5 text-indigo-700 truncate max-w-lg">
-                                    {extract_path(page)}
-                                  </td>
-                                  <td class={"text-right py-0.5 " <> position_color(to_float(pos))}>
-                                    {pos}
-                                  </td>
-                                  <td class="text-right py-0.5 text-gray-700">
-                                    {format_number(to_num(imps))}
-                                  </td>
-                                  <td class="text-right py-0.5 text-gray-700">
-                                    {format_number(to_num(clicks))}
-                                  </td>
-                                </tr>
-                              <% end %>
-                            </tbody>
-                          </table>
-                        </td>
-                      </tr>
-                    <% end %>
-                  <% end %>
-                </tbody>
-              </table>
-            </div>
-          <% end %>
-
-          <%!-- Top Pages --%>
-          <div class="bg-white rounded-lg shadow p-6 mb-8">
-            <h2 class="text-lg font-semibold text-gray-900 mb-4">Top Pages by Search</h2>
-            <div class="overflow-x-auto">
-              <table class="w-full">
-                <thead>
-                  <tr class="border-b-2 border-gray-200">
-                    <th class="text-left py-3 text-sm font-semibold text-gray-700">Page</th>
-                    <th class="text-right py-3 text-sm font-semibold text-gray-700">Clicks</th>
-                    <th class="text-right py-3 text-sm font-semibold text-gray-700">Impressions</th>
-                    <th class="text-right py-3 text-sm font-semibold text-gray-700">CTR</th>
-                    <th class="text-right py-3 text-sm font-semibold text-gray-700">Avg Position</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <%= for p <- @pages do %>
-                    <tr class="border-b border-gray-100 hover:bg-gray-50">
-                      <td class="py-3 text-sm text-indigo-600 max-w-md truncate">
-                        {extract_path(p["page"])}
-                      </td>
-                      <td class="text-right py-3 text-sm font-semibold">
-                        {format_number(to_num(p["total_clicks"]))}
-                      </td>
-                      <td class="text-right py-3 text-sm text-gray-600">
-                        {format_number(to_num(p["total_impressions"]))}
-                      </td>
-                      <td class="text-right py-3 text-sm text-gray-600">{p["ctr"]}%</td>
-                      <td class="text-right py-3 text-sm">
-                        <span class={"font-medium " <> position_color(to_float(p["avg_pos"]))}>
-                          {p["avg_pos"]}
-                        </span>
-                      </td>
-                    </tr>
-                  <% end %>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <%!-- Position Distribution --%>
-          <%= if @pos_dist != %{} do %>
-            <div class="bg-white rounded-lg shadow p-6 mb-8">
-              <h2 class="text-lg font-semibold text-gray-900 mb-4">Position Distribution</h2>
-              <div class="grid grid-cols-4 gap-4">
-                <div class="text-center p-3 bg-green-50 rounded-lg">
-                  <div class="text-2xl font-bold text-green-700">
-                    {format_number(to_num(@pos_dist["top3"] || "0"))}
-                  </div>
-                  <div class="text-xs text-green-600 mt-1">Top 3</div>
-                </div>
-                <div class="text-center p-3 bg-blue-50 rounded-lg">
-                  <div class="text-2xl font-bold text-blue-700">
-                    {format_number(to_num(@pos_dist["top10"] || "0"))}
-                  </div>
-                  <div class="text-xs text-blue-600 mt-1">4-10</div>
-                </div>
-                <div class="text-center p-3 bg-amber-50 rounded-lg">
-                  <div class="text-2xl font-bold text-amber-700">
-                    {format_number(to_num(@pos_dist["top20"] || "0"))}
-                  </div>
-                  <div class="text-xs text-amber-600 mt-1">11-20</div>
-                </div>
-                <div class="text-center p-3 bg-red-50 rounded-lg">
-                  <div class="text-2xl font-bold text-red-700">
-                    {format_number(to_num(@pos_dist["beyond20"] || "0"))}
-                  </div>
-                  <div class="text-xs text-red-600 mt-1">20+</div>
-                </div>
-              </div>
-            </div>
-          <% end %>
-
-          <%!-- Ranking Changes --%>
-          <%= if @ranking_changes != [] do %>
-            <div class="bg-white rounded-lg shadow p-6 mb-8">
-              <h2 class="text-lg font-semibold text-gray-900 mb-1">Ranking Changes</h2>
-              <p class="text-xs text-gray-500 mb-4">
-                Keywords with significant position changes (last 7 days vs prior 7 days)
-              </p>
-              <table class="w-full">
-                <thead>
-                  <tr class="border-b-2 border-gray-200">
-                    <th class="text-left py-2 text-sm font-semibold text-gray-700">Query</th>
-                    <th class="text-right py-2 text-sm font-semibold text-gray-700">Clicks</th>
-                    <th class="text-right py-2 text-sm font-semibold text-gray-700">Position</th>
-                    <th class="text-right py-2 text-sm font-semibold text-gray-700">Was</th>
-                    <th class="text-right py-2 text-sm font-semibold text-gray-700">Change</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <%= for r <- @ranking_changes do %>
-                    <% change = to_float(r["pos_change"]) %>
-                    <tr
-                      class="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
-                      phx-click="open_query"
-                      phx-value-query={r["query"]}
-                    >
-                      <td class="py-2 text-sm text-gray-900 max-w-xs truncate">{r["query"]}</td>
-                      <td class="text-right py-2 text-sm">
-                        {format_number(to_num(r["current_clicks"]))}
-                      </td>
-                      <td class={"text-right py-2 text-sm font-medium " <> position_color(to_float(r["current_pos"]))}>
-                        {r["current_pos"]}
-                      </td>
-                      <td class="text-right py-2 text-sm text-gray-500">{r["previous_pos"]}</td>
-                      <td class={"text-right py-2 text-sm font-bold " <> if(change > 0, do: "text-green-600", else: "text-red-600")}>
-                        {if change > 0, do: "+#{r["pos_change"]}", else: r["pos_change"]}
-                      </td>
-                    </tr>
-                  <% end %>
-                </tbody>
-              </table>
-            </div>
-          <% end %>
-
-          <%!-- New & Lost Keywords --%>
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-            <%= if @new_keywords != [] do %>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
               <div class="bg-white rounded-lg shadow p-6">
-                <h2 class="text-lg font-semibold text-green-700 mb-1">New Keywords</h2>
-                <p class="text-xs text-gray-500 mb-4">
-                  Appeared in last 7 days, not seen in prior 7 days
-                </p>
+                <h2 class="text-sm font-semibold text-gray-700 mb-3">Avg CTR</h2>
+                <div
+                  id={"chart-ctr-" <> @chart_key}
+                  phx-hook="SearchChart"
+                  data-chart={@chart_ctr_json}
+                  class="h-48 relative"
+                >
+                  <canvas></canvas>
+                </div>
+              </div>
+              <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-sm font-semibold text-gray-700 mb-3">
+                  Avg Position
+                  <span class="text-xs font-normal text-gray-500">(lower is better)</span>
+                </h2>
+                <div
+                  id={"chart-position-" <> @chart_key}
+                  phx-hook="SearchChart"
+                  data-chart={@chart_position_json}
+                  class="h-48 relative"
+                >
+                  <canvas></canvas>
+                </div>
+              </div>
+            </div>
+
+            <%!-- Top Queries with sparklines --%>
+            <div class="bg-white rounded-lg shadow p-6 mb-8">
+              <h2 class="text-lg font-semibold text-gray-900 mb-1">Top Search Queries</h2>
+              <p class="text-xs text-gray-500 mb-4">
+                Click a row to see per-query history, ranking pages, device and country breakdowns.
+              </p>
+              <div class="overflow-x-auto">
                 <table class="w-full">
                   <thead>
-                    <tr class="border-b border-gray-200">
-                      <th class="text-left py-2 text-sm font-semibold text-gray-700">Query</th>
-                      <th class="text-right py-2 text-sm font-semibold text-gray-700">Clicks</th>
-                      <th class="text-right py-2 text-sm font-semibold text-gray-700">Pos</th>
+                    <tr class="border-b-2 border-gray-200">
+                      <th class="text-left py-3 text-sm font-semibold text-gray-700">Query</th>
+                      <th class="text-left py-3 text-sm font-semibold text-gray-700 w-28">Trend</th>
+                      <th
+                        class="text-right py-3 text-sm font-semibold text-gray-700 cursor-pointer hover:text-indigo-600"
+                        phx-click="sort"
+                        phx-value-col="total_clicks"
+                      >
+                        Clicks {sort_arrow("total_clicks", @sort_by, @sort_dir)}
+                      </th>
+                      <th
+                        class="text-right py-3 text-sm font-semibold text-gray-700 cursor-pointer hover:text-indigo-600"
+                        phx-click="sort"
+                        phx-value-col="total_impressions"
+                      >
+                        Impressions {sort_arrow("total_impressions", @sort_by, @sort_dir)}
+                      </th>
+                      <th
+                        class="text-right py-3 text-sm font-semibold text-gray-700 cursor-pointer hover:text-indigo-600"
+                        phx-click="sort"
+                        phx-value-col="ctr"
+                      >
+                        CTR {sort_arrow("ctr", @sort_by, @sort_dir)}
+                      </th>
+                      <th
+                        class="text-right py-3 text-sm font-semibold text-gray-700 cursor-pointer hover:text-indigo-600"
+                        phx-click="sort"
+                        phx-value-col="avg_pos"
+                      >
+                        Position {sort_arrow("avg_pos", @sort_by, @sort_dir)}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    <%= for r <- @new_keywords do %>
+                    <%= for {q, idx} <- Enum.with_index(@queries) do %>
                       <tr
-                        class="border-b border-gray-100 cursor-pointer hover:bg-green-50"
+                        class="border-b border-gray-100 hover:bg-indigo-50 cursor-pointer"
+                        phx-click="open_query"
+                        phx-value-query={q["query"]}
+                      >
+                        <td class="py-3 text-sm font-medium text-gray-900 max-w-md truncate">
+                          {q["query"]}
+                        </td>
+                        <td class="py-2">
+                          <%= if idx < 20 do %>
+                            <div
+                              id={query_sparkline_id(q["query"]) <> "-" <> @chart_key}
+                              phx-hook="Sparkline"
+                              data-spark={query_sparkline_json(@query_sparklines, q["query"])}
+                              class="w-24 h-8"
+                            >
+                              <canvas></canvas>
+                            </div>
+                          <% end %>
+                        </td>
+                        <td class="text-right py-3 text-sm font-semibold">
+                          {format_number(to_num(q["total_clicks"]))}
+                        </td>
+                        <td class="text-right py-3 text-sm text-gray-600">
+                          {format_number(to_num(q["total_impressions"]))}
+                        </td>
+                        <td class="text-right py-3 text-sm text-gray-600">{q["ctr"]}%</td>
+                        <td class="text-right py-3 text-sm">
+                          <span class={"font-medium " <> position_color(to_float(q["avg_pos"]))}>
+                            {q["avg_pos"]}
+                          </span>
+                        </td>
+                      </tr>
+                    <% end %>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <%!-- Opportunity Queue --%>
+            <%= if @opportunity_queue != [] do %>
+              <div class="bg-white rounded-lg shadow p-6 mb-8">
+                <h2 class="text-lg font-semibold text-gray-900 mb-1">Opportunity Queue</h2>
+                <p class="text-xs text-gray-500 mb-4">
+                  Queries ranking 8-20 with significant impressions — ordered by projected extra clicks
+                  if moved to the top 3.
+                </p>
+                <table class="w-full">
+                  <thead>
+                    <tr class="border-b-2 border-gray-200">
+                      <th class="text-left py-2 text-sm font-semibold text-gray-700">Query</th>
+                      <th class="text-right py-2 text-sm font-semibold text-gray-700">Impressions</th>
+                      <th class="text-right py-2 text-sm font-semibold text-gray-700">Current CTR</th>
+                      <th class="text-right py-2 text-sm font-semibold text-gray-700">Position</th>
+                      <th class="text-right py-2 text-sm font-semibold text-emerald-700">
+                        Projected Extra Clicks
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <%= for r <- @opportunity_queue do %>
+                      <tr
+                        class="border-b border-gray-100 hover:bg-emerald-50 cursor-pointer"
                         phx-click="open_query"
                         phx-value-query={r["query"]}
                       >
-                        <td class="py-2 text-sm text-gray-900 max-w-[200px] truncate">
-                          {r["query"]}
+                        <td class="py-2 text-sm text-gray-900 max-w-xs truncate">{r["query"]}</td>
+                        <td class="text-right py-2 text-sm">
+                          {format_number(to_num(r["total_impressions"]))}
                         </td>
-                        <td class="text-right py-2 text-sm font-medium text-green-600">
-                          {format_number(to_num(r["clicks"]))}
-                        </td>
+                        <td class="text-right py-2 text-sm text-gray-600">{r["ctr"]}%</td>
                         <td class={"text-right py-2 text-sm " <> position_color(to_float(r["avg_pos"]))}>
                           {r["avg_pos"]}
+                        </td>
+                        <td class="text-right py-2 text-sm font-bold text-emerald-600">
+                          +{format_number(to_num(r["projected_gain"]))}
                         </td>
                       </tr>
                     <% end %>
@@ -1312,31 +1113,193 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                 </table>
               </div>
             <% end %>
-            <%= if @lost_keywords != [] do %>
-              <div class="bg-white rounded-lg shadow p-6">
-                <h2 class="text-lg font-semibold text-red-700 mb-1">Lost Keywords</h2>
+
+            <%!-- Cannibalization --%>
+            <%= if @cannibalization != [] do %>
+              <div class="bg-white rounded-lg shadow p-6 mb-8">
+                <h2 class="text-lg font-semibold text-gray-900 mb-1">Keyword Cannibalization</h2>
                 <p class="text-xs text-gray-500 mb-4">
-                  In prior 7 days but disappeared from last 7 days
+                  Queries where 3+ pages compete in the top 30 — usually a duplicate-content
+                  or internal-linking signal. Click a row to see which pages are fighting.
                 </p>
                 <table class="w-full">
                   <thead>
-                    <tr class="border-b border-gray-200">
+                    <tr class="border-b-2 border-gray-200">
                       <th class="text-left py-2 text-sm font-semibold text-gray-700">Query</th>
+                      <th class="text-right py-2 text-sm font-semibold text-gray-700">Pages</th>
+                      <th class="text-right py-2 text-sm font-semibold text-gray-700">Impressions</th>
                       <th class="text-right py-2 text-sm font-semibold text-gray-700">Clicks</th>
-                      <th class="text-right py-2 text-sm font-semibold text-gray-700">Pos</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <%= for r <- @lost_keywords do %>
-                      <tr class="border-b border-gray-100">
-                        <td class="py-2 text-sm text-gray-900 max-w-[200px] truncate">
-                          {r["query"]}
+                    <%= for c <- @cannibalization do %>
+                      <tr
+                        class="border-b border-gray-100 hover:bg-amber-50 cursor-pointer"
+                        phx-click="toggle_cannibalization"
+                        phx-value-query={c["query"]}
+                      >
+                        <td class="py-2 text-sm text-gray-900 max-w-xs truncate">
+                          {c["query"]}
                         </td>
-                        <td class="text-right py-2 text-sm font-medium text-red-600">
-                          {format_number(to_num(r["clicks"]))}
+                        <td class="text-right py-2 text-sm font-semibold text-amber-600">
+                          {c["page_count"]}
                         </td>
-                        <td class={"text-right py-2 text-sm " <> position_color(to_float(r["avg_pos"]))}>
-                          {r["avg_pos"]}
+                        <td class="text-right py-2 text-sm">
+                          {format_number(to_num(c["total_impressions"]))}
+                        </td>
+                        <td class="text-right py-2 text-sm">
+                          {format_number(to_num(c["total_clicks"]))}
+                        </td>
+                      </tr>
+                      <%= if @expanded_cannibalization == c["query"] do %>
+                        <tr class="bg-amber-50/50">
+                          <td colspan="4" class="px-4 py-3">
+                            <table class="w-full text-xs">
+                              <thead>
+                                <tr class="text-gray-600">
+                                  <th class="text-left pb-1">Page</th>
+                                  <th class="text-right pb-1">Position</th>
+                                  <th class="text-right pb-1">Impressions</th>
+                                  <th class="text-right pb-1">Clicks</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <%= for {page, pos, imps, clicks} <- c["pages_zip"] do %>
+                                  <tr>
+                                    <td class="py-0.5 text-indigo-700 truncate max-w-lg">
+                                      {extract_path(page)}
+                                    </td>
+                                    <td class={"text-right py-0.5 " <> position_color(to_float(pos))}>
+                                      {pos}
+                                    </td>
+                                    <td class="text-right py-0.5 text-gray-700">
+                                      {format_number(to_num(imps))}
+                                    </td>
+                                    <td class="text-right py-0.5 text-gray-700">
+                                      {format_number(to_num(clicks))}
+                                    </td>
+                                  </tr>
+                                <% end %>
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      <% end %>
+                    <% end %>
+                  </tbody>
+                </table>
+              </div>
+            <% end %>
+
+            <%!-- Top Pages --%>
+            <div class="bg-white rounded-lg shadow p-6 mb-8">
+              <h2 class="text-lg font-semibold text-gray-900 mb-4">Top Pages by Search</h2>
+              <div class="overflow-x-auto">
+                <table class="w-full">
+                  <thead>
+                    <tr class="border-b-2 border-gray-200">
+                      <th class="text-left py-3 text-sm font-semibold text-gray-700">Page</th>
+                      <th class="text-right py-3 text-sm font-semibold text-gray-700">Clicks</th>
+                      <th class="text-right py-3 text-sm font-semibold text-gray-700">Impressions</th>
+                      <th class="text-right py-3 text-sm font-semibold text-gray-700">CTR</th>
+                      <th class="text-right py-3 text-sm font-semibold text-gray-700">
+                        Avg Position
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <%= for p <- @pages do %>
+                      <tr class="border-b border-gray-100 hover:bg-gray-50">
+                        <td class="py-3 text-sm text-indigo-600 max-w-md truncate">
+                          {extract_path(p["page"])}
+                        </td>
+                        <td class="text-right py-3 text-sm font-semibold">
+                          {format_number(to_num(p["total_clicks"]))}
+                        </td>
+                        <td class="text-right py-3 text-sm text-gray-600">
+                          {format_number(to_num(p["total_impressions"]))}
+                        </td>
+                        <td class="text-right py-3 text-sm text-gray-600">{p["ctr"]}%</td>
+                        <td class="text-right py-3 text-sm">
+                          <span class={"font-medium " <> position_color(to_float(p["avg_pos"]))}>
+                            {p["avg_pos"]}
+                          </span>
+                        </td>
+                      </tr>
+                    <% end %>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <%!-- Position Distribution --%>
+            <%= if @pos_dist != %{} do %>
+              <div class="bg-white rounded-lg shadow p-6 mb-8">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">Position Distribution</h2>
+                <div class="grid grid-cols-4 gap-4">
+                  <div class="text-center p-3 bg-green-50 rounded-lg">
+                    <div class="text-2xl font-bold text-green-700">
+                      {format_number(to_num(@pos_dist["top3"] || "0"))}
+                    </div>
+                    <div class="text-xs text-green-600 mt-1">Top 3</div>
+                  </div>
+                  <div class="text-center p-3 bg-blue-50 rounded-lg">
+                    <div class="text-2xl font-bold text-blue-700">
+                      {format_number(to_num(@pos_dist["top10"] || "0"))}
+                    </div>
+                    <div class="text-xs text-blue-600 mt-1">4-10</div>
+                  </div>
+                  <div class="text-center p-3 bg-amber-50 rounded-lg">
+                    <div class="text-2xl font-bold text-amber-700">
+                      {format_number(to_num(@pos_dist["top20"] || "0"))}
+                    </div>
+                    <div class="text-xs text-amber-600 mt-1">11-20</div>
+                  </div>
+                  <div class="text-center p-3 bg-red-50 rounded-lg">
+                    <div class="text-2xl font-bold text-red-700">
+                      {format_number(to_num(@pos_dist["beyond20"] || "0"))}
+                    </div>
+                    <div class="text-xs text-red-600 mt-1">20+</div>
+                  </div>
+                </div>
+              </div>
+            <% end %>
+
+            <%!-- Ranking Changes --%>
+            <%= if @ranking_changes != [] do %>
+              <div class="bg-white rounded-lg shadow p-6 mb-8">
+                <h2 class="text-lg font-semibold text-gray-900 mb-1">Ranking Changes</h2>
+                <p class="text-xs text-gray-500 mb-4">
+                  Keywords with significant position changes (last 7 days vs prior 7 days)
+                </p>
+                <table class="w-full">
+                  <thead>
+                    <tr class="border-b-2 border-gray-200">
+                      <th class="text-left py-2 text-sm font-semibold text-gray-700">Query</th>
+                      <th class="text-right py-2 text-sm font-semibold text-gray-700">Clicks</th>
+                      <th class="text-right py-2 text-sm font-semibold text-gray-700">Position</th>
+                      <th class="text-right py-2 text-sm font-semibold text-gray-700">Was</th>
+                      <th class="text-right py-2 text-sm font-semibold text-gray-700">Change</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <%= for r <- @ranking_changes do %>
+                      <% change = to_float(r["pos_change"]) %>
+                      <tr
+                        class="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                        phx-click="open_query"
+                        phx-value-query={r["query"]}
+                      >
+                        <td class="py-2 text-sm text-gray-900 max-w-xs truncate">{r["query"]}</td>
+                        <td class="text-right py-2 text-sm">
+                          {format_number(to_num(r["current_clicks"]))}
+                        </td>
+                        <td class={"text-right py-2 text-sm font-medium " <> position_color(to_float(r["current_pos"]))}>
+                          {r["current_pos"]}
+                        </td>
+                        <td class="text-right py-2 text-sm text-gray-500">{r["previous_pos"]}</td>
+                        <td class={"text-right py-2 text-sm font-bold " <> if(change > 0, do: "text-green-600", else: "text-red-600")}>
+                          {if change > 0, do: "+#{r["pos_change"]}", else: r["pos_change"]}
                         </td>
                       </tr>
                     <% end %>
@@ -1344,7 +1307,79 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                 </table>
               </div>
             <% end %>
-          </div>
+
+            <%!-- New & Lost Keywords --%>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+              <%= if @new_keywords != [] do %>
+                <div class="bg-white rounded-lg shadow p-6">
+                  <h2 class="text-lg font-semibold text-green-700 mb-1">New Keywords</h2>
+                  <p class="text-xs text-gray-500 mb-4">
+                    Appeared in last 7 days, not seen in prior 7 days
+                  </p>
+                  <table class="w-full">
+                    <thead>
+                      <tr class="border-b border-gray-200">
+                        <th class="text-left py-2 text-sm font-semibold text-gray-700">Query</th>
+                        <th class="text-right py-2 text-sm font-semibold text-gray-700">Clicks</th>
+                        <th class="text-right py-2 text-sm font-semibold text-gray-700">Pos</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <%= for r <- @new_keywords do %>
+                        <tr
+                          class="border-b border-gray-100 cursor-pointer hover:bg-green-50"
+                          phx-click="open_query"
+                          phx-value-query={r["query"]}
+                        >
+                          <td class="py-2 text-sm text-gray-900 max-w-[200px] truncate">
+                            {r["query"]}
+                          </td>
+                          <td class="text-right py-2 text-sm font-medium text-green-600">
+                            {format_number(to_num(r["clicks"]))}
+                          </td>
+                          <td class={"text-right py-2 text-sm " <> position_color(to_float(r["avg_pos"]))}>
+                            {r["avg_pos"]}
+                          </td>
+                        </tr>
+                      <% end %>
+                    </tbody>
+                  </table>
+                </div>
+              <% end %>
+              <%= if @lost_keywords != [] do %>
+                <div class="bg-white rounded-lg shadow p-6">
+                  <h2 class="text-lg font-semibold text-red-700 mb-1">Lost Keywords</h2>
+                  <p class="text-xs text-gray-500 mb-4">
+                    In prior 7 days but disappeared from last 7 days
+                  </p>
+                  <table class="w-full">
+                    <thead>
+                      <tr class="border-b border-gray-200">
+                        <th class="text-left py-2 text-sm font-semibold text-gray-700">Query</th>
+                        <th class="text-right py-2 text-sm font-semibold text-gray-700">Clicks</th>
+                        <th class="text-right py-2 text-sm font-semibold text-gray-700">Pos</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <%= for r <- @lost_keywords do %>
+                        <tr class="border-b border-gray-100">
+                          <td class="py-2 text-sm text-gray-900 max-w-[200px] truncate">
+                            {r["query"]}
+                          </td>
+                          <td class="text-right py-2 text-sm font-medium text-red-600">
+                            {format_number(to_num(r["clicks"]))}
+                          </td>
+                          <td class={"text-right py-2 text-sm " <> position_color(to_float(r["avg_pos"]))}>
+                            {r["avg_pos"]}
+                          </td>
+                        </tr>
+                      <% end %>
+                    </tbody>
+                  </table>
+                </div>
+              <% end %>
+            </div>
+          <% end %>
         <% end %>
       </div>
 

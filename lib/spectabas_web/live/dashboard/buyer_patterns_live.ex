@@ -14,19 +14,28 @@ defmodule SpectabasWeb.Dashboard.BuyerPatternsLive do
     unless Accounts.can_access_site?(user, site) do
       {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
     else
-      {:ok,
-       socket
-       |> assign(:page_title, "Buyer Patterns - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:user, user)
-       |> assign(:date_range, "30d")
-       |> load_data()}
+      socket =
+        socket
+        |> assign(:page_title, "Buyer Patterns - #{site.name}")
+        |> assign(:site, site)
+        |> assign(:user, user)
+        |> assign(:date_range, "30d")
+        |> assign(:loading, true)
+
+      if connected?(socket), do: send(self(), :load_data)
+      {:ok, socket}
     end
   end
 
   @impl true
   def handle_event("change_range", %{"range" => range}, socket) do
-    {:noreply, socket |> assign(:date_range, range) |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:date_range, range) |> assign(:loading, true)}
+  end
+
+  @impl true
+  def handle_info(:load_data, socket) do
+    {:noreply, socket |> load_data() |> assign(:loading, false)}
   end
 
   defp load_data(socket) do
@@ -86,125 +95,152 @@ defmodule SpectabasWeb.Dashboard.BuyerPatternsLive do
           </nav>
         </div>
 
-        <%!-- Buyer vs Non-Buyer Comparison --%>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          <div class="bg-white rounded-lg shadow p-6">
-            <h3 class="text-sm font-semibold text-green-600 uppercase mb-4">Buyers</h3>
-            <dl class="grid grid-cols-3 gap-4">
-              <div>
-                <dt class="text-xs text-gray-500">Avg Sessions</dt>
-                <dd class="text-2xl font-bold text-gray-900">
-                  {@buyer_stats["avg_sessions"] || "0"}
-                </dd>
-              </div>
-              <div>
-                <dt class="text-xs text-gray-500">Avg Pages</dt>
-                <dd class="text-2xl font-bold text-gray-900">
-                  {@buyer_stats["avg_pages"] || "0"}
-                </dd>
-              </div>
-              <div>
-                <dt class="text-xs text-gray-500">Avg Duration</dt>
-                <dd class="text-2xl font-bold text-gray-900">
-                  {format_duration(to_num(@buyer_stats["avg_duration"]))}
-                </dd>
-              </div>
-            </dl>
+        <%= if @loading do %>
+          <div class="bg-white rounded-lg shadow p-12 text-center">
+            <div class="inline-flex items-center gap-3 text-gray-600">
+              <svg class="animate-spin h-5 w-5 text-indigo-600" viewBox="0 0 24 24" fill="none">
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              <span class="text-sm">Loading...</span>
+            </div>
           </div>
-          <div class="bg-white rounded-lg shadow p-6">
-            <h3 class="text-sm font-semibold text-gray-500 uppercase mb-4">Non-Buyers</h3>
-            <dl class="grid grid-cols-3 gap-4">
-              <div>
-                <dt class="text-xs text-gray-500">Avg Sessions</dt>
-                <dd class="text-2xl font-bold text-gray-900">
-                  {@nonbuyer_stats["avg_sessions"] || "0"}
-                </dd>
-              </div>
-              <div>
-                <dt class="text-xs text-gray-500">Avg Pages</dt>
-                <dd class="text-2xl font-bold text-gray-900">
-                  {@nonbuyer_stats["avg_pages"] || "0"}
-                </dd>
-              </div>
-              <div>
-                <dt class="text-xs text-gray-500">Avg Duration</dt>
-                <dd class="text-2xl font-bold text-gray-900">
-                  {format_duration(to_num(@nonbuyer_stats["avg_duration"]))}
-                </dd>
-              </div>
-            </dl>
+        <% else %>
+          <%!-- Buyer vs Non-Buyer Comparison --%>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div class="bg-white rounded-lg shadow p-6">
+              <h3 class="text-sm font-semibold text-green-600 uppercase mb-4">Buyers</h3>
+              <dl class="grid grid-cols-3 gap-4">
+                <div>
+                  <dt class="text-xs text-gray-500">Avg Sessions</dt>
+                  <dd class="text-2xl font-bold text-gray-900">
+                    {@buyer_stats["avg_sessions"] || "0"}
+                  </dd>
+                </div>
+                <div>
+                  <dt class="text-xs text-gray-500">Avg Pages</dt>
+                  <dd class="text-2xl font-bold text-gray-900">
+                    {@buyer_stats["avg_pages"] || "0"}
+                  </dd>
+                </div>
+                <div>
+                  <dt class="text-xs text-gray-500">Avg Duration</dt>
+                  <dd class="text-2xl font-bold text-gray-900">
+                    {format_duration(to_num(@buyer_stats["avg_duration"]))}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+            <div class="bg-white rounded-lg shadow p-6">
+              <h3 class="text-sm font-semibold text-gray-500 uppercase mb-4">Non-Buyers</h3>
+              <dl class="grid grid-cols-3 gap-4">
+                <div>
+                  <dt class="text-xs text-gray-500">Avg Sessions</dt>
+                  <dd class="text-2xl font-bold text-gray-900">
+                    {@nonbuyer_stats["avg_sessions"] || "0"}
+                  </dd>
+                </div>
+                <div>
+                  <dt class="text-xs text-gray-500">Avg Pages</dt>
+                  <dd class="text-2xl font-bold text-gray-900">
+                    {@nonbuyer_stats["avg_pages"] || "0"}
+                  </dd>
+                </div>
+                <div>
+                  <dt class="text-xs text-gray-500">Avg Duration</dt>
+                  <dd class="text-2xl font-bold text-gray-900">
+                    {format_duration(to_num(@nonbuyer_stats["avg_duration"]))}
+                  </dd>
+                </div>
+              </dl>
+            </div>
           </div>
-        </div>
 
-        <%!-- Page Lift Analysis --%>
-        <div class="bg-white rounded-lg shadow overflow-x-auto">
-          <div class="px-6 py-4 border-b border-gray-200">
-            <h2 class="text-lg font-semibold text-gray-900">Pages Where Buyers Over-Index</h2>
-            <p class="text-sm text-gray-500 mt-1">
-              "Lift" shows how much more likely buyers are to visit this page compared to non-buyers.
-            </p>
-          </div>
-          <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Page</th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Buyer Visitors
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Non-Buyer Visitors
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Lift</th>
-              </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
-              <tr :if={@patterns == []}>
-                <td colspan="4" class="px-6 py-8 text-center text-gray-500">
-                  Not enough buyer data for pattern analysis.
-                </td>
-              </tr>
-              <tr :for={row <- @patterns} class="hover:bg-gray-50">
-                <td class="px-6 py-4 text-sm font-mono text-gray-900">
-                  <a
-                    href={"https://www.#{parent_domain(@site.domain)}#{row["url_path"]}"}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="text-indigo-600 hover:text-indigo-800 hover:underline inline-flex items-center gap-1"
-                  >
-                    {row["url_path"]}
-                    <svg
-                      class="w-3 h-3 shrink-0"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
+          <%!-- Page Lift Analysis --%>
+          <div class="bg-white rounded-lg shadow overflow-x-auto">
+            <div class="px-6 py-4 border-b border-gray-200">
+              <h2 class="text-lg font-semibold text-gray-900">Pages Where Buyers Over-Index</h2>
+              <p class="text-sm text-gray-500 mt-1">
+                "Lift" shows how much more likely buyers are to visit this page compared to non-buyers.
+              </p>
+            </div>
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Page
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Buyer Visitors
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Non-Buyer Visitors
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Lift
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr :if={@patterns == []}>
+                  <td colspan="4" class="px-6 py-8 text-center text-gray-500">
+                    Not enough buyer data for pattern analysis.
+                  </td>
+                </tr>
+                <tr :for={row <- @patterns} class="hover:bg-gray-50">
+                  <td class="px-6 py-4 text-sm font-mono text-gray-900">
+                    <a
+                      href={"https://www.#{parent_domain(@site.domain)}#{row["url_path"]}"}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="text-indigo-600 hover:text-indigo-800 hover:underline inline-flex items-center gap-1"
                     >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                      />
-                    </svg>
-                  </a>
-                </td>
-                <td class="px-6 py-4 text-sm text-green-600 text-right tabular-nums font-medium">
-                  {format_number(to_num(row["buyer_visitors"]))}
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
-                  {format_number(to_num(row["nonbuyer_visitors"]))}
-                </td>
-                <td class="px-6 py-4 text-right">
-                  <span class={[
-                    "inline-flex items-center px-2 py-0.5 rounded text-xs font-bold",
-                    lift_color(row["lift"])
-                  ]}>
-                    {row["lift"]}x
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+                      {row["url_path"]}
+                      <svg
+                        class="w-3 h-3 shrink-0"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                        />
+                      </svg>
+                    </a>
+                  </td>
+                  <td class="px-6 py-4 text-sm text-green-600 text-right tabular-nums font-medium">
+                    {format_number(to_num(row["buyer_visitors"]))}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                    {format_number(to_num(row["nonbuyer_visitors"]))}
+                  </td>
+                  <td class="px-6 py-4 text-right">
+                    <span class={[
+                      "inline-flex items-center px-2 py-0.5 rounded text-xs font-bold",
+                      lift_color(row["lift"])
+                    ]}>
+                      {row["lift"]}x
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        <% end %>
       </div>
     </.dashboard_layout>
     """

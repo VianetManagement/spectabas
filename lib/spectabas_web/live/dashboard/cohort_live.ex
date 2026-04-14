@@ -15,19 +15,28 @@ defmodule SpectabasWeb.Dashboard.CohortLive do
     unless Accounts.can_access_site?(user, site) do
       {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
     else
-      {:ok,
-       socket
-       |> assign(:page_title, "Cohort Retention - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:user, user)
-       |> assign(:date_range, "90d")
-       |> load_data()}
+      socket =
+        socket
+        |> assign(:page_title, "Cohort Retention - #{site.name}")
+        |> assign(:site, site)
+        |> assign(:user, user)
+        |> assign(:date_range, "90d")
+        |> assign(:loading, true)
+
+      if connected?(socket), do: send(self(), :load_data)
+      {:ok, socket}
     end
   end
 
   @impl true
   def handle_event("change_range", %{"range" => range}, socket) do
-    {:noreply, socket |> assign(:date_range, range) |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:date_range, range) |> assign(:loading, true)}
+  end
+
+  @impl true
+  def handle_info(:load_data, socket) do
+    {:noreply, socket |> load_data() |> assign(:loading, false)}
   end
 
   defp load_data(socket) do
@@ -114,54 +123,77 @@ defmodule SpectabasWeb.Dashboard.CohortLive do
           </nav>
         </div>
 
-        <div class="bg-white rounded-lg shadow overflow-x-auto">
-          <table class="min-w-full">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase sticky left-0 bg-gray-50">
-                  Cohort
-                </th>
-                <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                  Size
-                </th>
-                <th
-                  :for={w <- 0..min(@max_week, 12)}
-                  class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase"
-                >
-                  {if w == 0, do: "Week 0", else: "+#{w}w"}
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100">
-              <tr :if={@cohort_weeks == []}>
-                <td colspan={@max_week + 3} class="px-4 py-8 text-center text-gray-500">
-                  Not enough data for cohort analysis yet.
-                </td>
-              </tr>
-              <tr :for={week <- @cohort_weeks}>
-                <td class="px-4 py-2 text-xs text-gray-700 font-medium whitespace-nowrap sticky left-0 bg-white">
-                  {format_week(week)}
-                </td>
-                <td class="px-4 py-2 text-xs text-gray-500 text-center tabular-nums">
-                  {cohort_size(@cohort_grid, week)}
-                </td>
-                <td
-                  :for={w <- 0..min(@max_week, 12)}
-                  class="px-4 py-2 text-center"
-                >
-                  <% cell = get_in(@cohort_grid, [week, w]) %>
-                  <span
-                    :if={cell}
-                    class="inline-block px-2 py-1 rounded text-xs tabular-nums font-medium"
-                    style={"background-color: #{retention_color(cell.pct)}; color: #{if cell.pct > 50, do: "white", else: "#374151"}"}
+        <%= if @loading do %>
+          <div class="bg-white rounded-lg shadow p-12 text-center">
+            <div class="inline-flex items-center gap-3 text-gray-600">
+              <svg class="animate-spin h-5 w-5 text-indigo-600" viewBox="0 0 24 24" fill="none">
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              <span class="text-sm">Loading...</span>
+            </div>
+          </div>
+        <% else %>
+          <div class="bg-white rounded-lg shadow overflow-x-auto">
+            <table class="min-w-full">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase sticky left-0 bg-gray-50">
+                    Cohort
+                  </th>
+                  <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                    Size
+                  </th>
+                  <th
+                    :for={w <- 0..min(@max_week, 12)}
+                    class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase"
                   >
-                    {cell.pct}%
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+                    {if w == 0, do: "Week 0", else: "+#{w}w"}
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <tr :if={@cohort_weeks == []}>
+                  <td colspan={@max_week + 3} class="px-4 py-8 text-center text-gray-500">
+                    Not enough data for cohort analysis yet.
+                  </td>
+                </tr>
+                <tr :for={week <- @cohort_weeks}>
+                  <td class="px-4 py-2 text-xs text-gray-700 font-medium whitespace-nowrap sticky left-0 bg-white">
+                    {format_week(week)}
+                  </td>
+                  <td class="px-4 py-2 text-xs text-gray-500 text-center tabular-nums">
+                    {cohort_size(@cohort_grid, week)}
+                  </td>
+                  <td
+                    :for={w <- 0..min(@max_week, 12)}
+                    class="px-4 py-2 text-center"
+                  >
+                    <% cell = get_in(@cohort_grid, [week, w]) %>
+                    <span
+                      :if={cell}
+                      class="inline-block px-2 py-1 rounded text-xs tabular-nums font-medium"
+                      style={"background-color: #{retention_color(cell.pct)}; color: #{if cell.pct > 50, do: "white", else: "#374151"}"}
+                    >
+                      {cell.pct}%
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        <% end %>
       </div>
     </.dashboard_layout>
     """

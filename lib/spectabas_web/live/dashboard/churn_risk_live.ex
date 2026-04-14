@@ -13,13 +13,21 @@ defmodule SpectabasWeb.Dashboard.ChurnRiskLive do
     unless Accounts.can_access_site?(user, site) do
       {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
     else
-      {:ok,
-       socket
-       |> assign(:page_title, "Churn Risk - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:user, user)
-       |> load_data()}
+      socket =
+        socket
+        |> assign(:page_title, "Churn Risk - #{site.name}")
+        |> assign(:site, site)
+        |> assign(:user, user)
+        |> assign(:loading, true)
+
+      if connected?(socket), do: send(self(), :load_data)
+      {:ok, socket}
     end
+  end
+
+  @impl true
+  def handle_info(:load_data, socket) do
+    {:noreply, socket |> load_data() |> assign(:loading, false)}
   end
 
   defp load_data(socket) do
@@ -71,97 +79,120 @@ defmodule SpectabasWeb.Dashboard.ChurnRiskLive do
           </p>
         </div>
 
-        <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-          <div class="bg-white rounded-lg shadow p-4">
-            <dt class="text-xs font-medium text-gray-500 uppercase">At-Risk Customers</dt>
-            <dd class="mt-1 text-3xl font-bold text-red-600">{@at_risk_count}</dd>
+        <%= if @loading do %>
+          <div class="bg-white rounded-lg shadow p-12 text-center">
+            <div class="inline-flex items-center gap-3 text-gray-600">
+              <svg class="animate-spin h-5 w-5 text-indigo-600" viewBox="0 0 24 24" fill="none">
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              <span class="text-sm">Loading...</span>
+            </div>
           </div>
-          <div class="bg-white rounded-lg shadow p-4">
-            <dt class="text-xs font-medium text-gray-500 uppercase">Identified (have email)</dt>
-            <dd class="mt-1 text-3xl font-bold text-indigo-600">{@identified_count}</dd>
+        <% else %>
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+            <div class="bg-white rounded-lg shadow p-4">
+              <dt class="text-xs font-medium text-gray-500 uppercase">At-Risk Customers</dt>
+              <dd class="mt-1 text-3xl font-bold text-red-600">{@at_risk_count}</dd>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+              <dt class="text-xs font-medium text-gray-500 uppercase">Identified (have email)</dt>
+              <dd class="mt-1 text-3xl font-bold text-indigo-600">{@identified_count}</dd>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+              <dt class="text-xs font-medium text-gray-500 uppercase">Anonymous</dt>
+              <dd class="mt-1 text-3xl font-bold text-gray-600">
+                {@at_risk_count - @identified_count}
+              </dd>
+            </div>
           </div>
-          <div class="bg-white rounded-lg shadow p-4">
-            <dt class="text-xs font-medium text-gray-500 uppercase">Anonymous</dt>
-            <dd class="mt-1 text-3xl font-bold text-gray-600">
-              {@at_risk_count - @identified_count}
-            </dd>
-          </div>
-        </div>
 
-        <div class="bg-white rounded-lg shadow overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Customer
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Prior Sessions
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Recent Sessions
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Session Decline
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Prior Pages
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Recent Pages
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Risk
-                </th>
-              </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
-              <tr :if={@rows == []}>
-                <td colspan="7" class="px-6 py-8 text-center text-gray-500">
-                  No at-risk customers detected. This is good!
-                </td>
-              </tr>
-              <tr :for={row <- @rows} class="hover:bg-gray-50">
-                <td class="px-6 py-4 text-sm">
-                  <.link
-                    navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{row["visitor_id"]}"}
-                    class="text-indigo-600 hover:text-indigo-800"
-                  >
-                    <span :if={row["email"]} class="font-medium">{row["email"]}</span>
-                    <span :if={!row["email"]} class="font-mono text-xs">
-                      {String.slice(row["visitor_id"] || "", 0, 10)}...
+          <div class="bg-white rounded-lg shadow overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Customer
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Prior Sessions
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Recent Sessions
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Session Decline
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Prior Pages
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Recent Pages
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Risk
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr :if={@rows == []}>
+                  <td colspan="7" class="px-6 py-8 text-center text-gray-500">
+                    No at-risk customers detected. This is good!
+                  </td>
+                </tr>
+                <tr :for={row <- @rows} class="hover:bg-gray-50">
+                  <td class="px-6 py-4 text-sm">
+                    <.link
+                      navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{row["visitor_id"]}"}
+                      class="text-indigo-600 hover:text-indigo-800"
+                    >
+                      <span :if={row["email"]} class="font-medium">{row["email"]}</span>
+                      <span :if={!row["email"]} class="font-mono text-xs">
+                        {String.slice(row["visitor_id"] || "", 0, 10)}...
+                      </span>
+                    </.link>
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                    {to_num(row["prior_sessions"])}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                    {to_num(row["recent_sessions"])}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-right tabular-nums">
+                    <span class={decline_color(row["session_decline_pct"])}>
+                      {row["session_decline_pct"]}%
                     </span>
-                  </.link>
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {to_num(row["prior_sessions"])}
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {to_num(row["recent_sessions"])}
-                </td>
-                <td class="px-6 py-4 text-sm text-right tabular-nums">
-                  <span class={decline_color(row["session_decline_pct"])}>
-                    {row["session_decline_pct"]}%
-                  </span>
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {to_num(row["prior_pages"])}
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {to_num(row["recent_pages"])}
-                </td>
-                <td class="px-6 py-4 text-right">
-                  <span class={[
-                    "inline-flex items-center px-2 py-0.5 rounded text-xs font-bold",
-                    risk_level(row["session_decline_pct"])
-                  ]}>
-                    {risk_label(row["session_decline_pct"])}
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                    {to_num(row["prior_pages"])}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                    {to_num(row["recent_pages"])}
+                  </td>
+                  <td class="px-6 py-4 text-right">
+                    <span class={[
+                      "inline-flex items-center px-2 py-0.5 rounded text-xs font-bold",
+                      risk_level(row["session_decline_pct"])
+                    ]}>
+                      {risk_label(row["session_decline_pct"])}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        <% end %>
       </div>
     </.dashboard_layout>
     """

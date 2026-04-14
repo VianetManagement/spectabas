@@ -19,30 +19,34 @@ defmodule SpectabasWeb.Dashboard.EntryExitLive do
        |> put_flash(:error, "Unauthorized")
        |> redirect(to: ~p"/")}
     else
-      {:ok,
-       socket
-       |> assign(:page_title, "Entry & Exit Pages - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:user, user)
-       |> assign(:date_range, "7d")
-       |> assign(:tab, "entry")
-       |> load_data()}
+      socket =
+        socket
+        |> assign(:page_title, "Entry & Exit Pages - #{site.name}")
+        |> assign(:site, site)
+        |> assign(:user, user)
+        |> assign(:date_range, "7d")
+        |> assign(:tab, "entry")
+        |> assign(:loading, true)
+
+      if connected?(socket), do: send(self(), :load_data)
+      {:ok, socket}
     end
   end
 
   @impl true
   def handle_event("change_range", %{"range" => range}, socket) do
-    {:noreply,
-     socket
-     |> assign(:date_range, range)
-     |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:date_range, range) |> assign(:loading, true)}
   end
 
   def handle_event("change_tab", %{"tab" => tab}, socket) do
-    {:noreply,
-     socket
-     |> assign(:tab, tab)
-     |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:tab, tab) |> assign(:loading, true)}
+  end
+
+  @impl true
+  def handle_info(:load_data, socket) do
+    {:noreply, socket |> load_data() |> assign(:loading, false)}
   end
 
   defp load_data(socket) do
@@ -107,79 +111,102 @@ defmodule SpectabasWeb.Dashboard.EntryExitLive do
           </nav>
         </div>
 
-        <div class="flex gap-1 bg-gray-100 rounded-lg p-1 mb-6 w-fit">
-          <button
-            :for={{id, label} <- [{"entry", "Entry Pages"}, {"exit", "Exit Pages"}]}
-            phx-click="change_tab"
-            phx-value-tab={id}
-            class={[
-              "px-4 py-2 text-sm font-medium rounded-md",
-              if(@tab == id,
-                do: "bg-white shadow text-gray-900",
-                else: "text-gray-600 hover:text-gray-900"
-              )
-            ]}
-          >
-            {label}
-          </button>
-        </div>
+        <%= if @loading do %>
+          <div class="bg-white rounded-lg shadow p-12 text-center">
+            <div class="inline-flex items-center gap-3 text-gray-600">
+              <svg class="animate-spin h-5 w-5 text-indigo-600" viewBox="0 0 24 24" fill="none">
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              <span class="text-sm">Loading...</span>
+            </div>
+          </div>
+        <% else %>
+          <div class="flex gap-1 bg-gray-100 rounded-lg p-1 mb-6 w-fit">
+            <button
+              :for={{id, label} <- [{"entry", "Entry Pages"}, {"exit", "Exit Pages"}]}
+              phx-click="change_tab"
+              phx-value-tab={id}
+              class={[
+                "px-4 py-2 text-sm font-medium rounded-md",
+                if(@tab == id,
+                  do: "bg-white shadow text-gray-900",
+                  else: "text-gray-600 hover:text-gray-900"
+                )
+              ]}
+            >
+              {label}
+            </button>
+          </div>
 
-        <div class="bg-white rounded-lg shadow overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Page
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Visitors
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {if @tab == "entry", do: "Entries", else: "Exits"}
-                </th>
-                <th
-                  :if={@tab == "entry"}
-                  class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  Bounce Rate
-                </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Avg Duration
-                </th>
-              </tr>
-            </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
-              <tr :if={@data == []}>
-                <td
-                  colspan={if @tab == "entry", do: "5", else: "4"}
-                  class="px-6 py-8 text-center text-gray-500"
-                >
-                  No data for this period.
-                </td>
-              </tr>
-              <tr :for={row <- @data} class="hover:bg-gray-50">
-                <td class="px-6 py-4 text-sm text-gray-900 font-mono">
-                  {row["url_path"]}
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {format_number(to_num(row["unique_visitors"]))}
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {format_number(to_num(row[count_key(@tab)]))}
-                </td>
-                <td
-                  :if={@tab == "entry"}
-                  class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums"
-                >
-                  {row["bounce_rate"]}%
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
-                  {format_duration(to_num(row["avg_duration"]))}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+          <div class="bg-white rounded-lg shadow overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Page
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Visitors
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    {if @tab == "entry", do: "Entries", else: "Exits"}
+                  </th>
+                  <th
+                    :if={@tab == "entry"}
+                    class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Bounce Rate
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Avg Duration
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr :if={@data == []}>
+                  <td
+                    colspan={if @tab == "entry", do: "5", else: "4"}
+                    class="px-6 py-8 text-center text-gray-500"
+                  >
+                    No data for this period.
+                  </td>
+                </tr>
+                <tr :for={row <- @data} class="hover:bg-gray-50">
+                  <td class="px-6 py-4 text-sm text-gray-900 font-mono">
+                    {row["url_path"]}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                    {format_number(to_num(row["unique_visitors"]))}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                    {format_number(to_num(row[count_key(@tab)]))}
+                  </td>
+                  <td
+                    :if={@tab == "entry"}
+                    class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums"
+                  >
+                    {row["bounce_rate"]}%
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                    {format_duration(to_num(row["avg_duration"]))}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        <% end %>
       </div>
     </.dashboard_layout>
     """
