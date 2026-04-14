@@ -12,6 +12,16 @@ Chart.defaults.plugins.legend.display = false
 export const TimeseriesChart = {
   mounted() {
     this.chart = null
+
+    // Initial data from data-chart attribute (race-free — in the DOM by
+    // the time mounted() runs). Fixes the push_event timing race where the
+    // server pushes before this hook registers handleEvent.
+    const raw = this.el.dataset.chart
+    if (raw) {
+      try { this.setData(JSON.parse(raw)) } catch (e) { /* empty data is fine */ }
+    }
+
+    // Subsequent updates via push_event (metric switch, range change, refresh).
     this.handleEvent("timeseries-data", (data) => this.setData(data))
   },
   setData(data) {

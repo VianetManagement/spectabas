@@ -50,6 +50,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
        |> assign(:stats, empty_overview())
        |> assign(:prev_stats, nil)
        |> assign(:timeseries, [])
+       |> assign(:timeseries_json, "{}")
        |> assign(:top_pages, nil)
        |> assign(:top_sources, nil)
        |> assign(:top_regions, nil)
@@ -483,11 +484,24 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     |> assign(:timeseries, timeseries)
     |> assign(:live_visitors, live_visitors)
     |> assign_new(:chart_metric, fn -> "visitors" end)
-    # Push only the timeseries chart now — map and timezone bar are pushed
-    # individually by handle_info as their deferred results arrive. Pushing
-    # empty map/bar data here would briefly clear those charts during the
-    # 3-7 seconds before their queries finish.
+    # Build timeseries JSON for the data-chart attribute (race-free initial
+    # render). Also push via push_event for updates (metric switch, refresh).
+    |> assign(
+      :timeseries_json,
+      build_timeseries_json(timeseries, socket.assigns[:chart_metric] || "visitors")
+    )
     |> push_timeseries_data(timeseries)
+  end
+
+  defp build_timeseries_json(timeseries, metric) do
+    Jason.encode!(%{
+      labels: Enum.map(timeseries, & &1["label"]),
+      pageviews: Enum.map(timeseries, &to_num(&1["pageviews"])),
+      visitors: Enum.map(timeseries, &to_num(&1["visitors"])),
+      metric: metric
+    })
+  rescue
+    _ -> "{}"
   end
 
   defp push_timeseries_data(socket, timeseries) do
@@ -1031,6 +1045,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           <div
             id="timeseries-hook"
             phx-hook="TimeseriesChart"
+            data-chart={@timeseries_json}
             class="h-48 sm:h-[280px] relative"
           >
             <canvas></canvas>
