@@ -1428,6 +1428,33 @@ defmodule SpectabasWeb.DocsLive do
             Bot detection uses multiple signals: UA-based detection (UAInspector), client-side signals (`navigator.webdriver`, headless browser), datacenter IP detection (ASN blocklists), and the `_bot` flag from the tracker.
 
             This page intentionally shows bot-only data. All other analytics pages (dashboard, channels, sources, geography, etc.) automatically exclude bot traffic from their counts.
+
+            **Click any user agent row** to open a details modal showing the full UA string, parsed browser/OS/device, hit counts, unique IPs, top pages targeted, and top IPs (each linking to the IP profile).
+            """
+          },
+          %{
+            id: "scrapers",
+            title: "Scraper Detection",
+            body: """
+            Identifies likely scraper visitors using a weighted-signal scoring model. Each visitor is scored 0-100 based on multiple signals:
+
+            - **Datacenter ASN (+35)** — visitor's IP belongs to a known hosting provider (OVH, AWS, Hetzner, DigitalOcean, etc.)
+            - **Spoofed Mobile UA (+20)** — mobile user agent string coming from a datacenter IP
+            - **IP Rotation (+20)** — same cookie/visitor ID seen from 3+ distinct IPs
+            - **Very High Pageviews (+20)** — 200+ pageviews in the period
+            - **High Pageviews (+10)** — 50-199 pageviews
+            - **Systematic Crawl (+15)** — over 80% of visited pages match your configured content path prefixes
+            - **Robotic Timing (+10)** — request interval standard deviation under 300ms (evenly paced, programmatic)
+            - **No Referrer (+5)** — direct entry with no referrer
+            - **Emulator Resolution (+5)** — screen resolution matches a known headless browser default
+
+            **Verdicts:** Normal (score below 60), Suspicious (60-84), Near-certain scraper (85+).
+
+            **Configure content prefixes** in Site Settings to enable the systematic-crawl signal. Add URL path prefixes like `/listings` or `/profiles` that represent your valuable content pages. Without this, the systematic-crawl signal will not fire but all other signals still work.
+
+            **Click any row** to see full details including the complete user agent string, all visited page paths, signal explanations, and a link to the full visitor profile.
+
+            Scraper detection runs retroactively on past traffic. It scores visitors at query time from stored event data, not at ingest time.
             """
           },
           %{
