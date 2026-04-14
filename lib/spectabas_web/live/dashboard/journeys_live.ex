@@ -25,6 +25,7 @@ defmodule SpectabasWeb.Dashboard.JourneysLive do
         |> assign(:date_range, "7d")
         |> assign(:loading, true)
         |> assign(:data, nil)
+        |> assign(:show_config, false)
 
       if connected?(socket), do: send(self(), :load_data)
 
@@ -33,14 +34,49 @@ defmodule SpectabasWeb.Dashboard.JourneysLive do
   end
 
   @impl true
-  def handle_info(:load_data, socket) do
-    {:noreply, load_data(socket)}
-  end
-
-  @impl true
   def handle_event("change_range", %{"range" => range}, socket) do
     send(self(), :load_data)
     {:noreply, socket |> assign(:date_range, range) |> assign(:loading, true)}
+  end
+
+  def handle_event("toggle_config", _params, socket) do
+    {:noreply, assign(socket, :show_config, !socket.assigns.show_config)}
+  end
+
+  def handle_event(
+        "save_config",
+        %{"prefixes" => prefixes_text, "conversions" => conv_text},
+        socket
+      ) do
+    if !Accounts.can_manage_settings?(socket.assigns.current_scope.user) do
+      {:noreply, put_flash(socket, :error, "Insufficient permissions.")}
+    else
+      prefixes = parse_lines(prefixes_text)
+      conversions = parse_lines(conv_text)
+
+      case Sites.update_site(socket.assigns.site, %{
+             scraper_content_prefixes: prefixes,
+             journey_conversion_pages: conversions
+           }) do
+        {:ok, site} ->
+          send(self(), :load_data)
+
+          {:noreply,
+           socket
+           |> assign(:site, site)
+           |> assign(:loading, true)
+           |> assign(:show_config, false)
+           |> put_flash(:info, "Configuration saved. Reloading journeys...")}
+
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, "Failed to save configuration.")}
+      end
+    end
+  end
+
+  @impl true
+  def handle_info(:load_data, socket) do
+    {:noreply, load_data(socket)}
   end
 
   defp load_data(socket) do
@@ -95,29 +131,76 @@ defmodule SpectabasWeb.Dashboard.JourneysLive do
           </nav>
         </div>
 
-        <%!-- Configuration hints --%>
-        <%= if Enum.empty?(@site.scraper_content_prefixes || []) do %>
-          <div class="bg-amber-50 border border-amber-200 text-amber-900 rounded-lg p-4 mb-6 text-sm">
-            <span class="font-semibold">Configure content prefixes</span>
-            in
-            <.link navigate={~p"/dashboard/sites/#{@site.id}/settings"} class="underline">
-              Site Settings
-            </.link>
-            to group URLs by page type (e.g. <span class="font-mono">/listings</span>
-            → "Listings").
-            Without this, individual URLs are used and patterns are harder to see.
-          </div>
-        <% end %>
-        <%= if Enum.empty?(@site.journey_conversion_pages || []) do %>
-          <div class="bg-blue-50 border border-blue-200 text-blue-900 rounded-lg p-4 mb-6 text-sm">
-            <span class="font-semibold">Configure conversion pages</span>
-            in
-            <.link navigate={~p"/dashboard/sites/#{@site.id}/settings"} class="underline">
-              Site Settings → Visitor Journeys
-            </.link>
-            to see which paths lead to conversions (e.g. <span class="font-mono">/contact</span>).
-          </div>
-        <% end %>
+        <%!-- Inline config panel --%>
+        <div class="mb-6">
+          <button
+            phx-click="toggle_config"
+            class="text-sm text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+          >
+            <span>
+              {if @show_config, do: "Hide", else: "Configure"} page grouping &amp; conversion pages
+            </span>
+            <span class="text-xs">{if @show_config, do: "▲", else: "▼"}</span>
+          </button>
+
+          <%= if @show_config do %>
+            <form phx-submit="save_config" class="bg-white rounded-lg shadow p-5 mt-3 space-y-4">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">
+                    Content path prefixes
+                  </label>
+                  <p class="text-xs text-gray-500 mb-2">
+                    URLs matching these prefixes get grouped by type
+                    (e.g. <span class="font-mono">/listings</span> → "Listings").
+                    One per line.
+                  </p>
+                  <textarea
+                    name="prefixes"
+                    rows="4"
+                    class="block w-full rounded-md border-gray-300 shadow-sm text-xs font-mono"
+                    placeholder="/listings&#10;/premier&#10;/breeds"
+                  ><%= Enum.join(@site.scraper_content_prefixes || [], "\n") %></textarea>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">
+                    Conversion pages
+                  </label>
+                  <p class="text-xs text-gray-500 mb-2">
+                    Pages that count as a conversion. Matched as prefixes
+                    (e.g. <span class="font-mono">/contact</span>
+                    matches <span class="font-mono">/contact/thank-you</span>). One per line.
+                  </p>
+                  <textarea
+                    name="conversions"
+                    rows="4"
+                    class="block w-full rounded-md border-gray-300 shadow-sm text-xs font-mono"
+                    placeholder="/contact&#10;/checkout&#10;/signup"
+                  ><%= Enum.join(@site.journey_conversion_pages || [], "\n") %></textarea>
+                </div>
+              </div>
+              <div class="flex justify-end">
+                <button
+                  type="submit"
+                  class="px-4 py-2 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700"
+                >
+                  Save &amp; Reload
+                </button>
+              </div>
+            </form>
+          <% end %>
+
+          <%= if !@show_config and (Enum.empty?(@site.scraper_content_prefixes || []) or Enum.empty?(@site.journey_conversion_pages || [])) do %>
+            <p class="text-xs text-amber-600 mt-1">
+              <%= if Enum.empty?(@site.scraper_content_prefixes || []) do %>
+                Content prefixes not set — URLs won't be grouped.
+              <% end %>
+              <%= if Enum.empty?(@site.journey_conversion_pages || []) do %>
+                Conversion pages not set — converter journeys won't appear.
+              <% end %>
+            </p>
+          <% end %>
+        </div>
 
         <%= if @loading do %>
           <div class="bg-white rounded-lg shadow p-12 text-center">
@@ -302,4 +385,10 @@ defmodule SpectabasWeb.Dashboard.JourneysLive do
     </div>
     """
   end
+
+  defp parse_lines(text) when is_binary(text) do
+    text |> String.split(~r/[,\n]/) |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == ""))
+  end
+
+  defp parse_lines(_), do: []
 end

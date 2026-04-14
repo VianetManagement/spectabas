@@ -5,6 +5,7 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
 
   alias Spectabas.{Accounts, Sites, Goals, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
+  import Spectabas.TypeHelpers
 
   @write_events ~w(create_goal delete_goal)
 
@@ -40,6 +41,9 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
           _ -> %{}
         end
 
+      # Load top 3 sources per goal in parallel
+      source_attribution = load_source_attribution(goals, site, user)
+
       {:ok,
        socket
        |> assign(:page_title, "Goals - #{site.name}")
@@ -47,6 +51,7 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
        |> assign(:user, user)
        |> assign(:goals, goals)
        |> assign(:completions, completions)
+       |> assign(:source_attribution, source_attribution)
        |> assign(:show_form, false)
        |> assign(:form, to_form(goal_changeset()))
        |> assign(:goal_type, "pageview")}
@@ -66,11 +71,13 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
     case Goals.create_goal(socket.assigns.site, params) do
       {:ok, _goal} ->
         goals = Goals.list_goals(socket.assigns.site)
+        sources = load_source_attribution(goals, socket.assigns.site, socket.assigns.user)
 
         {:noreply,
          socket
          |> put_flash(:info, "Goal created.")
          |> assign(:goals, goals)
+         |> assign(:source_attribution, sources)
          |> assign(:show_form, false)
          |> assign(:form, to_form(goal_changeset()))}
 
@@ -103,6 +110,21 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
 
   defp goal_changeset do
     Goals.Goal.changeset(%Goals.Goal{}, %{})
+  end
+
+  defp load_source_attribution(goals, site, user) do
+    tasks =
+      Enum.map(goals, fn goal ->
+        Task.async(fn ->
+          {goal.id,
+           safe_query(fn -> Analytics.goal_source_attribution(site, user, goal, :week) end)
+           |> Enum.take(3)}
+        end)
+      end)
+
+    tasks
+    |> Task.await_many(10_000)
+    |> Map.new()
   end
 
   @impl true
@@ -226,7 +248,23 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
                 <td colspan="7" class="px-6 py-8 text-center text-gray-500">No goals configured.</td>
               </tr>
               <tr :for={goal <- @goals} class="hover:bg-gray-50">
-                <td class="px-6 py-4 text-sm font-medium text-gray-900">{goal.name}</td>
+                <td class="px-6 py-4">
+                  <div class="text-sm font-medium text-gray-900">{goal.name}</div>
+                  <div
+                    :if={Map.get(@source_attribution, goal.id, []) != []}
+                    class="mt-1 text-xs text-gray-500"
+                  >
+                    Top sources:
+                    <span
+                      :for={{src, i} <- Enum.with_index(Map.get(@source_attribution, goal.id, []))}
+                      class="inline"
+                    >
+                      <span :if={i > 0}>, </span>
+                      <span class="font-medium text-gray-600">{src["source"]}</span>
+                      <span class="text-gray-400">({format_number(to_num(src["completers"]))})</span>
+                    </span>
+                  </div>
+                </td>
                 <td class="px-6 py-4">
                   <span class={[
                     "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",

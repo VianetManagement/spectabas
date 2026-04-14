@@ -38,6 +38,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
         |> assign(:render_domain_status, check_render_domain(site.domain))
         |> assign(:ad_integrations, ensure_integrations(site))
         |> assign(:configuring_platform, nil)
+        |> assign(:settings_tab, "general")
 
       # Block write events for viewers/analysts at the hook level — halts
       # event propagation before any handle_event clause runs.
@@ -61,6 +62,11 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   end
 
   @impl true
+  def handle_event("switch_tab", %{"tab" => tab}, socket)
+      when tab in ~w(general content integrations advanced) do
+    {:noreply, assign(socket, :settings_tab, tab)}
+  end
+
   def handle_event("validate", %{"site" => params}, socket) do
     changeset =
       socket.assigns.site
@@ -653,8 +659,34 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
           <h1 class="text-2xl font-bold text-gray-900 mt-2">Site Settings</h1>
         </div>
 
+        <div class="border-b border-gray-200 mb-6">
+          <nav class="flex gap-4">
+            <button
+              :for={
+                {key, label} <- [
+                  {"general", "General"},
+                  {"content", "Content"},
+                  {"integrations", "Integrations"},
+                  {"advanced", "Advanced"}
+                ]
+              }
+              phx-click="switch_tab"
+              phx-value-tab={key}
+              class={[
+                "pb-3 text-sm font-medium border-b-2 -mb-px",
+                if(@settings_tab == key,
+                  do: "border-indigo-600 text-indigo-700",
+                  else: "border-transparent text-gray-500 hover:text-gray-700"
+                )
+              ]}
+            >
+              {label}
+            </button>
+          </nav>
+        </div>
+
         <%!-- Tracking Snippet --%>
-        <div class="bg-white rounded-lg shadow p-6 mb-8">
+        <div :if={@settings_tab == "advanced"} class="bg-white rounded-lg shadow p-6 mb-8">
           <h2 class="text-lg font-semibold text-gray-900 mb-4">Tracking Snippet</h2>
 
           <div class="mb-5">
@@ -717,10 +749,10 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
         </div>
 
         <%!-- Settings Form --%>
-        <div class="bg-white rounded-lg shadow p-6">
+        <div :if={@settings_tab != "integrations"} class="bg-white rounded-lg shadow p-6">
           <h2 class="text-lg font-semibold text-gray-900 mb-6">Configuration</h2>
           <.form for={@form} phx-submit="save" phx-change="validate" class="space-y-6">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div :if={@settings_tab == "general"} class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label class="block text-sm font-medium text-gray-700">Site Name</label>
                 <input
@@ -814,7 +846,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
               </div>
             </div>
 
-            <div class="border-t border-gray-200 pt-6">
+            <div :if={@settings_tab == "general"} class="border-t border-gray-200 pt-6">
               <h3 class="text-base font-medium text-gray-900 mb-4">Privacy</h3>
               <div class="space-y-4">
                 <div class="flex items-center gap-3">
@@ -851,7 +883,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
               </div>
             </div>
 
-            <div class="border-t border-gray-200 pt-6">
+            <div :if={@settings_tab == "general"} class="border-t border-gray-200 pt-6">
               <h3 class="text-base font-medium text-gray-900 mb-4">
                 Allowed Domains &amp; Cross-Domain Tracking
               </h3>
@@ -900,7 +932,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
               </div>
             </div>
 
-            <div class="border-t border-gray-200 pt-6">
+            <div :if={@settings_tab == "advanced"} class="border-t border-gray-200 pt-6">
               <h3 class="text-base font-medium text-gray-900 mb-4">IP Filtering</h3>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -928,7 +960,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
               </div>
             </div>
 
-            <div class="border-t border-gray-200 pt-6">
+            <div :if={@settings_tab == "content"} class="border-t border-gray-200 pt-6">
               <h3 class="text-base font-medium text-gray-900 mb-2">Scraper Detection</h3>
               <p class="text-xs text-gray-500 mb-3">
                 URL path prefixes that identify "content" on your site. Drives the
@@ -950,7 +982,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
               </div>
             </div>
 
-            <div class="border-t border-gray-200 pt-6">
+            <div :if={@settings_tab == "content"} class="border-t border-gray-200 pt-6">
               <h3 class="text-base font-medium text-gray-900 mb-2">Visitor Journeys</h3>
               <p class="text-xs text-gray-500 mb-3">
                 Pages that count as conversions for the <.link
@@ -974,7 +1006,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
               </div>
             </div>
 
-            <div class="border-t border-gray-200 pt-6">
+            <div :if={@settings_tab == "advanced"} class="border-t border-gray-200 pt-6">
               <h3 class="text-base font-medium text-gray-900 mb-4">Ecommerce</h3>
               <div class="flex items-center gap-3">
                 <input type="hidden" name="site[ecommerce_enabled]" value="false" />
@@ -1024,7 +1056,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
         </div>
 
         <%!-- AI Provider Configuration --%>
-        <div class="bg-white rounded-lg shadow p-6 mt-6">
+        <div :if={@settings_tab == "content"} class="bg-white rounded-lg shadow p-6 mt-6">
           <h2 class="text-lg font-semibold text-gray-900 mb-1">AI Analysis</h2>
           <p class="text-sm text-gray-500 mb-4">
             Configure an AI provider for automated insights and weekly analysis emails.
@@ -1084,7 +1116,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
         </div>
 
         <%!-- Visitor Intent Configuration --%>
-        <div class="bg-white rounded-lg shadow p-6 mt-6">
+        <div :if={@settings_tab == "content"} class="bg-white rounded-lg shadow p-6 mt-6">
           <h2 class="text-lg font-semibold text-gray-900 mb-1">Visitor Intent Classification</h2>
           <p class="text-sm text-gray-500 mb-4">
             Customize which URL paths trigger each intent badge. One path fragment per line (matches anywhere in the URL).
@@ -1153,7 +1185,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
         </div>
 
         <%!-- Ad Integrations --%>
-        <div class="bg-white rounded-lg shadow p-6 mt-6">
+        <div :if={@settings_tab == "integrations"} class="bg-white rounded-lg shadow p-6 mt-6">
           <div class="flex items-center justify-between mb-3">
             <h2 class="text-lg font-semibold text-gray-900">Integrations</h2>
             <.link

@@ -22,13 +22,49 @@ defmodule SpectabasWeb.Dashboard.EventsLive do
        |> assign(:site, site)
        |> assign(:user, user)
        |> assign(:date_range, "30d")
+       |> assign(:expanded_event, nil)
+       |> assign(:event_properties, [])
        |> load_data()}
     end
   end
 
   @impl true
   def handle_event("change_range", %{"range" => range}, socket) do
-    {:noreply, socket |> assign(:date_range, range) |> load_data()}
+    {:noreply,
+     socket
+     |> assign(:date_range, range)
+     |> assign(:expanded_event, nil)
+     |> assign(:event_properties, [])
+     |> load_data()}
+  end
+
+  def handle_event("expand_event", %{"event" => event_name}, socket) do
+    if socket.assigns.expanded_event == event_name do
+      {:noreply, socket |> assign(:expanded_event, nil) |> assign(:event_properties, [])}
+    else
+      %{site: site, user: user, date_range: range} = socket.assigns
+
+      props =
+        safe_query(fn ->
+          Analytics.event_properties(site, user, event_name, range_to_period(range))
+        end)
+
+      # Group by prop_key -> list of {prop_value, occurrences}
+      grouped =
+        props
+        |> Enum.group_by(& &1["prop_key"])
+        |> Enum.map(fn {key, vals} ->
+          top_vals =
+            Enum.map(vals, fn v -> %{value: v["prop_value"], count: to_num(v["occurrences"])} end)
+            |> Enum.take(10)
+
+          %{key: key, values: top_vals}
+        end)
+        |> Enum.sort_by(& &1.key)
+
+      {:noreply,
+       socket |> assign(:expanded_event, event_name) |> assign(:event_properties, grouped)}
+    end
   end
 
   defp load_data(socket) do
@@ -109,21 +145,65 @@ defmodule SpectabasWeb.Dashboard.EventsLive do
                   to send custom events from your site.
                 </td>
               </tr>
-              <tr :for={ev <- @events} class="hover:bg-gray-50">
-                <td class="px-6 py-4 text-sm font-medium text-gray-900">{ev["event_name"]}</td>
-                <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {format_number(to_num(ev["hits"]))}
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                  {format_number(to_num(ev["visitors"]))}
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
-                  {format_number(to_num(ev["sessions"]))}
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
-                  {ev["avg_per_visitor"]}
-                </td>
-              </tr>
+              <%= for ev <- @events do %>
+                <tr
+                  phx-click="expand_event"
+                  phx-value-event={ev["event_name"]}
+                  class={[
+                    "hover:bg-gray-50 cursor-pointer",
+                    @expanded_event == ev["event_name"] && "bg-indigo-50"
+                  ]}
+                >
+                  <td class="px-6 py-4 text-sm font-medium text-gray-900">
+                    <div class="flex items-center gap-2">
+                      <.icon
+                        name={
+                          if @expanded_event == ev["event_name"],
+                            do: "hero-chevron-down",
+                            else: "hero-chevron-right"
+                        }
+                        class="w-4 h-4 text-gray-400"
+                      />
+                      {ev["event_name"]}
+                    </div>
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                    {format_number(to_num(ev["hits"]))}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                    {format_number(to_num(ev["visitors"]))}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                    {format_number(to_num(ev["sessions"]))}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                    {ev["avg_per_visitor"]}
+                  </td>
+                </tr>
+                <tr :if={@expanded_event == ev["event_name"]} class="bg-gray-50">
+                  <td colspan="5" class="px-6 py-4">
+                    <div :if={@event_properties == []} class="text-sm text-gray-500 italic">
+                      No properties found for this event.
+                    </div>
+                    <div :if={@event_properties != []} class="space-y-4">
+                      <div :for={prop <- @event_properties}>
+                        <h4 class="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">
+                          {prop.key}
+                        </h4>
+                        <div class="flex flex-wrap gap-2">
+                          <div
+                            :for={v <- prop.values}
+                            class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-xs"
+                          >
+                            <span class="text-gray-800 font-medium">{v.value}</span>
+                            <span class="text-gray-400">{format_number(v.count)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              <% end %>
             </tbody>
           </table>
         </div>

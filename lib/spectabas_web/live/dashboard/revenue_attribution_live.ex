@@ -269,6 +269,7 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
                   {id, label} <- [
                     {"first", "First Touch"},
                     {"last", "Last Touch"},
+                    {"first_ever", "First Click"},
                     {"any", "Any Touch"}
                   ]
                 }
@@ -655,13 +656,18 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
 
   defp touch_label("first"), do: "First-touch"
   defp touch_label("last"), do: "Last-touch"
+  defp touch_label("first_ever"), do: "First-click"
   defp touch_label("any"), do: "Any-touch"
 
   defp touch_description("first"),
-    do: "revenue is credited to the first traffic source the customer came from."
+    do: "revenue is credited to the first traffic source in the converting session."
 
   defp touch_description("last"),
     do: "revenue is credited to the most recent traffic source before purchasing."
+
+  defp touch_description("first_ever"),
+    do:
+      "revenue is credited to the very first traffic source that ever introduced this customer to your site, regardless of which session they purchased in."
 
   defp touch_description("any"),
     do:

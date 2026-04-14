@@ -8,6 +8,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
   import Spectabas.TypeHelpers
 
   alias Spectabas.{Accounts, Sites, Analytics, Segments}
+  alias Spectabas.Analytics.AnomalyBadges
 
   @refresh_interval_ms 60_000
 
@@ -63,6 +64,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
        |> assign(:stats_cache, %{})
        |> assign(:deferred_loaded, false)
        |> assign(:deferred_pending, 0)
+       |> assign(:anomaly_categories, %{})
        |> load_critical_stats()
        |> then(fn s ->
          if connected?(s), do: send(self(), :load_deferred)
@@ -343,7 +345,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
 
   @cached_assigns ~w(stats prev_stats timeseries live_visitors top_pages top_sources
                      top_regions top_browsers top_os entry_pages locations timezones
-                     intents ecommerce identified_users)a
+                     intents ecommerce identified_users anomaly_categories)a
 
   # Full reload — checks cache first, falls back to queries.
   # On cache miss, critical stats load synchronously (fast: stats_fast + rollup)
@@ -642,6 +644,18 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         jobs
       end
 
+    # Anomaly badges — only compute once per dashboard load (not cached per date range)
+    jobs =
+      jobs ++
+        [
+          {:anomaly_categories, %{},
+           fn ->
+             timed("anomaly_badges", site.id, days_in_range, fn ->
+               AnomalyBadges.compute(site, user)
+             end)
+           end}
+        ]
+
     # Spawn each job. Results are sent back as {:deferred_result, key, value, cache_key}.
     # Unlinked Task.start so a crash doesn't take the LiveView down.
     Enum.each(jobs, fn {key, fallback, fun} ->
@@ -844,6 +858,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
       live_visitors={@live_visitors}
       page_title="Dashboard"
       page_description="Overview of your site's traffic, visitors, and engagement metrics."
+      anomaly_categories={@anomaly_categories}
     >
       <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
         <%!-- Time Period + Compare --%>

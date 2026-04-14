@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.33.0", "2026-04-14T12:00:00Z",
+       [
+         %{
+           title: "Feat: 9 dashboard improvements from feature audit",
+           description:
+             "Settings broken into 4 tabs (General, Content, Integrations, Advanced). Journeys page has inline config panel for content prefixes + conversion pages. Goals show top 3 traffic sources per goal. Events are clickable to see property key/value breakdown. Bot Traffic has a daily trend chart (bot vs human). Sidebar shows anomaly badges (red/amber dots) on sections with detected anomalies. Realtime page has visitor filter (by email/IP/country). Pages table shows device split column (Desktop/Mobile/Tablet %). Revenue Attribution adds First Click model (visitor's first-ever referrer, not just first in converting session)."
+         }
+       ]},
       {"v5.32.0", "2026-04-14T09:00:00Z",
        [
          %{

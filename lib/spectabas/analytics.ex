@@ -906,6 +906,27 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  def page_device_split(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT url_path, device_type, countIf(event_type = 'pageview') AS pv
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+        AND device_type != ''
+      GROUP BY url_path, device_type
+      ORDER BY pv DESC
+      LIMIT 500
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
   @doc """
   Top traffic sources: referrer_domain with unique session counts.
   Uses raw events table with uniq(session_id) to avoid overcounting.
@@ -1547,6 +1568,27 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  def bot_daily_trend(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        toString(toDate(timestamp)) AS bucket,
+        countIf(ip_is_bot = 1) AS bot_events,
+        countIf(ip_is_bot = 0) AS human_events
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      GROUP BY toDate(timestamp)
+      ORDER BY toDate(timestamp) ASC
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
   @doc """
   Top bot sources: which user agents, IPs, and pages bots hit most.
   """
@@ -1879,132 +1921,207 @@ defmodule Spectabas.Analytics do
 
         ClickHouse.query(sql)
       else
-        # First/last touch: two parallel flat queries to avoid timeout.
-        # Filter to events WITH a signal (referrer, UTM, click ID) to avoid
-        # scanning the full events table — visitors with no signal are "Direct"
-        # and not useful in attribution. This matches the "any" touch approach.
-        agg_fn = if touch == "last", do: "argMax", else: "argMin"
-        site_p = ClickHouse.param(site.id)
-        from_p = ClickHouse.param(format_datetime(date_range.from))
-        to_p = ClickHouse.param(format_datetime(date_range.to))
+        if touch == "first_ever" do
+          # First-click: find each converting visitor's very first-ever traffic
+          # source across ALL their history, not just the date range. Answers
+          # "what originally introduced this customer to us?"
+          site_p = ClickHouse.param(site.id)
+          from_p = ClickHouse.param(format_datetime(date_range.from))
+          to_p = ClickHouse.param(format_datetime(date_range.to))
 
-        visitors_sql = """
-        SELECT source, ad_platform, count() AS visitors
-        FROM (
-          SELECT visitor_id,
-            #{agg_fn}(#{source_expr}, timestamp) AS source,
-            #{agg_fn}(click_id_type, timestamp) AS ad_platform
-          FROM events
-          WHERE site_id = #{site_p}
-            AND event_type = 'pageview' AND ip_is_bot = 0
-            AND #{has_signal}
-            AND timestamp >= #{from_p} AND timestamp <= #{to_p}
-          GROUP BY visitor_id
-        )
-        GROUP BY source, ad_platform
-        """
-
-        revenue_sql = """
-        SELECT source, ad_platform,
-          countDistinct(ec.order_id) AS orders,
-          sum(ec.revenue) AS total_revenue,
-          round(sum(ec.revenue) / greatest(countDistinct(ec.order_id), 1), 2) AS avg_order_value
-        FROM (
-          SELECT visitor_id,
-            #{agg_fn}(#{source_expr}, timestamp) AS source,
-            #{agg_fn}(click_id_type, timestamp) AS ad_platform
-          FROM events
-          WHERE site_id = #{site_p}
-            AND event_type = 'pageview' AND ip_is_bot = 0
-            AND #{has_signal}
-            AND timestamp >= #{from_p} AND timestamp <= #{to_p}
-            AND visitor_id IN (
-              SELECT DISTINCT visitor_id FROM ecommerce_events
-              WHERE site_id = #{site_p}
-                #{ecommerce_source_filter(site)}
-                AND timestamp >= #{from_p} AND timestamp <= #{to_p}
-            )
-          GROUP BY visitor_id
-        ) AS e
-        INNER JOIN (
-          SELECT visitor_id, order_id, revenue
-          FROM ecommerce_events
-          WHERE site_id = #{site_p}
-            #{ecommerce_source_filter(site)}
-            AND timestamp >= #{from_p} AND timestamp <= #{to_p}
-        ) AS ec ON e.visitor_id = ec.visitor_id
-        GROUP BY source, ad_platform
-        """
-
-        visitors_task = Task.async(fn -> ClickHouse.query(visitors_sql) end)
-        revenue_task = Task.async(fn -> ClickHouse.query(revenue_sql) end)
-
-        visitors_result = Task.await(visitors_task, 30_000)
-        revenue_result = Task.await(revenue_task, 30_000)
-
-        visitors_map =
-          case visitors_result do
-            {:ok, rows} ->
-              Map.new(rows, fn r ->
-                {{r["source"], r["ad_platform"]}, to_int(r["visitors"])}
-              end)
-
-            {:error, reason} ->
-              Logger.warning(
-                "[RevAttribution] visitors query failed: #{inspect(reason) |> String.slice(0, 200)}"
+          # Visitors query: for ALL visitors in the date range, find their first-ever source
+          visitors_sql = """
+          SELECT source, ad_platform, count() AS visitors
+          FROM (
+            SELECT visitor_id,
+              argMin(#{source_expr}, timestamp) AS source,
+              argMin(click_id_type, timestamp) AS ad_platform
+            FROM events
+            WHERE site_id = #{site_p}
+              AND event_type = 'pageview' AND ip_is_bot = 0
+              AND #{has_signal}
+              AND visitor_id IN (
+                SELECT DISTINCT visitor_id FROM events
+                WHERE site_id = #{site_p}
+                  AND event_type = 'pageview' AND ip_is_bot = 0
+                  AND timestamp >= #{from_p} AND timestamp <= #{to_p}
               )
-
-              %{}
-          end
-
-        revenue_map =
-          case revenue_result do
-            {:ok, rows} ->
-              Map.new(rows, fn r ->
-                {{r["source"], r["ad_platform"]}, r}
-              end)
-
-            {:error, reason} ->
-              Logger.warning(
-                "[RevAttribution] revenue query failed: #{inspect(reason) |> String.slice(0, 200)}"
-              )
-
-              %{}
-          end
-
-        all_keys =
-          MapSet.union(
-            MapSet.new(Map.keys(visitors_map)),
-            MapSet.new(Map.keys(revenue_map))
+            GROUP BY visitor_id
           )
+          GROUP BY source, ad_platform
+          """
 
-        rows =
-          Enum.map(all_keys, fn {source, ad_platform} = key ->
-            visitors = Map.get(visitors_map, key, 0)
-            rev = Map.get(revenue_map, key, %{})
-            orders = to_int(Map.get(rev, "orders", "0"))
+          # Revenue query: for converting visitors, find their first-ever source
+          revenue_sql = """
+          SELECT source, ad_platform,
+            countDistinct(ec.order_id) AS orders,
+            sum(ec.revenue) AS total_revenue,
+            round(sum(ec.revenue) / greatest(countDistinct(ec.order_id), 1), 2) AS avg_order_value
+          FROM (
+            SELECT visitor_id,
+              argMin(#{source_expr}, timestamp) AS source,
+              argMin(click_id_type, timestamp) AS ad_platform
+            FROM events
+            WHERE site_id = #{site_p}
+              AND event_type = 'pageview' AND ip_is_bot = 0
+              AND #{has_signal}
+              AND visitor_id IN (
+                SELECT DISTINCT visitor_id FROM ecommerce_events
+                WHERE site_id = #{site_p}
+                  #{ecommerce_source_filter(site)}
+                  AND timestamp >= #{from_p} AND timestamp <= #{to_p}
+              )
+            GROUP BY visitor_id
+          ) AS e
+          INNER JOIN (
+            SELECT visitor_id, order_id, revenue
+            FROM ecommerce_events
+            WHERE site_id = #{site_p}
+              #{ecommerce_source_filter(site)}
+              AND timestamp >= #{from_p} AND timestamp <= #{to_p}
+          ) AS ec ON e.visitor_id = ec.visitor_id
+          GROUP BY source, ad_platform
+          """
 
-            %{
-              "source" => source,
-              "ad_platform" => ad_platform,
-              "visitors" => to_string(visitors),
-              "orders" => Map.get(rev, "orders", "0"),
-              "total_revenue" => Map.get(rev, "total_revenue", "0"),
-              "avg_order_value" => Map.get(rev, "avg_order_value", "0"),
-              "conversion_rate" =>
-                if(visitors > 0,
-                  do: to_string(Float.round(orders / visitors * 100, 2)),
-                  else: "0"
-                )
-            }
-          end)
+          visitors_task = Task.async(fn -> ClickHouse.query(visitors_sql) end)
+          revenue_task = Task.async(fn -> ClickHouse.query(revenue_sql) end)
 
-        {:ok,
-         rows
-         |> Enum.sort_by(fn r -> -to_float(r["total_revenue"]) end)
-         |> Enum.take(50)}
+          visitors_result = Task.await(visitors_task, 30_000)
+          revenue_result = Task.await(revenue_task, 30_000)
+
+          merge_visitor_revenue_results(visitors_result, revenue_result)
+        else
+          # First/last touch: two parallel flat queries to avoid timeout.
+          # Filter to events WITH a signal (referrer, UTM, click ID) to avoid
+          # scanning the full events table — visitors with no signal are "Direct"
+          # and not useful in attribution. This matches the "any" touch approach.
+          agg_fn = if touch == "last", do: "argMax", else: "argMin"
+          site_p = ClickHouse.param(site.id)
+          from_p = ClickHouse.param(format_datetime(date_range.from))
+          to_p = ClickHouse.param(format_datetime(date_range.to))
+
+          visitors_sql = """
+          SELECT source, ad_platform, count() AS visitors
+          FROM (
+            SELECT visitor_id,
+              #{agg_fn}(#{source_expr}, timestamp) AS source,
+              #{agg_fn}(click_id_type, timestamp) AS ad_platform
+            FROM events
+            WHERE site_id = #{site_p}
+              AND event_type = 'pageview' AND ip_is_bot = 0
+              AND #{has_signal}
+              AND timestamp >= #{from_p} AND timestamp <= #{to_p}
+            GROUP BY visitor_id
+          )
+          GROUP BY source, ad_platform
+          """
+
+          revenue_sql = """
+          SELECT source, ad_platform,
+            countDistinct(ec.order_id) AS orders,
+            sum(ec.revenue) AS total_revenue,
+            round(sum(ec.revenue) / greatest(countDistinct(ec.order_id), 1), 2) AS avg_order_value
+          FROM (
+            SELECT visitor_id,
+              #{agg_fn}(#{source_expr}, timestamp) AS source,
+              #{agg_fn}(click_id_type, timestamp) AS ad_platform
+            FROM events
+            WHERE site_id = #{site_p}
+              AND event_type = 'pageview' AND ip_is_bot = 0
+              AND #{has_signal}
+              AND timestamp >= #{from_p} AND timestamp <= #{to_p}
+              AND visitor_id IN (
+                SELECT DISTINCT visitor_id FROM ecommerce_events
+                WHERE site_id = #{site_p}
+                  #{ecommerce_source_filter(site)}
+                  AND timestamp >= #{from_p} AND timestamp <= #{to_p}
+              )
+            GROUP BY visitor_id
+          ) AS e
+          INNER JOIN (
+            SELECT visitor_id, order_id, revenue
+            FROM ecommerce_events
+            WHERE site_id = #{site_p}
+              #{ecommerce_source_filter(site)}
+              AND timestamp >= #{from_p} AND timestamp <= #{to_p}
+          ) AS ec ON e.visitor_id = ec.visitor_id
+          GROUP BY source, ad_platform
+          """
+
+          visitors_task = Task.async(fn -> ClickHouse.query(visitors_sql) end)
+          revenue_task = Task.async(fn -> ClickHouse.query(revenue_sql) end)
+
+          visitors_result = Task.await(visitors_task, 30_000)
+          revenue_result = Task.await(revenue_task, 30_000)
+
+          merge_visitor_revenue_results(visitors_result, revenue_result)
+        end
       end
     end
+  end
+
+  defp merge_visitor_revenue_results(visitors_result, revenue_result) do
+    visitors_map =
+      case visitors_result do
+        {:ok, rows} ->
+          Map.new(rows, fn r ->
+            {{r["source"], r["ad_platform"]}, to_int(r["visitors"])}
+          end)
+
+        {:error, reason} ->
+          Logger.warning(
+            "[RevAttribution] visitors query failed: #{inspect(reason) |> String.slice(0, 200)}"
+          )
+
+          %{}
+      end
+
+    revenue_map =
+      case revenue_result do
+        {:ok, rows} ->
+          Map.new(rows, fn r ->
+            {{r["source"], r["ad_platform"]}, r}
+          end)
+
+        {:error, reason} ->
+          Logger.warning(
+            "[RevAttribution] revenue query failed: #{inspect(reason) |> String.slice(0, 200)}"
+          )
+
+          %{}
+      end
+
+    all_keys =
+      MapSet.union(
+        MapSet.new(Map.keys(visitors_map)),
+        MapSet.new(Map.keys(revenue_map))
+      )
+
+    rows =
+      Enum.map(all_keys, fn {source, ad_platform} = key ->
+        visitors = Map.get(visitors_map, key, 0)
+        rev = Map.get(revenue_map, key, %{})
+        orders = to_int(Map.get(rev, "orders", "0"))
+
+        %{
+          "source" => source,
+          "ad_platform" => ad_platform,
+          "visitors" => to_string(visitors),
+          "orders" => Map.get(rev, "orders", "0"),
+          "total_revenue" => Map.get(rev, "total_revenue", "0"),
+          "avg_order_value" => Map.get(rev, "avg_order_value", "0"),
+          "conversion_rate" =>
+            if(visitors > 0,
+              do: to_string(Float.round(orders / visitors * 100, 2)),
+              else: "0"
+            )
+        }
+      end)
+
+    {:ok,
+     rows
+     |> Enum.sort_by(fn r -> -to_float(r["total_revenue"]) end)
+     |> Enum.take(50)}
   end
 
   @doc "Ad spend by campaign for ROAS calculation."
@@ -2059,33 +2176,54 @@ defmodule Spectabas.Analytics do
     touch = Keyword.get(opts, :touch, "last")
 
     visitor_click_subquery =
-      if touch == "any" do
-        """
-        SELECT visitor_id, click_id_type
-        FROM (
+      cond do
+        touch == "any" ->
+          """
           SELECT visitor_id, click_id_type
+          FROM (
+            SELECT visitor_id, click_id_type
+            FROM events
+            WHERE site_id = #{ClickHouse.param(site.id)}
+              AND click_id != '' AND click_id_type != ''
+              AND event_type = 'pageview' AND ip_is_bot = 0
+              AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+              AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+          )
+          GROUP BY visitor_id, click_id_type
+          """
+
+        touch == "first_ever" ->
+          # Look across ALL visitor history for their very first click ID
+          """
+          SELECT visitor_id, argMin(click_id_type, timestamp) AS click_id_type
+          FROM events
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND click_id != '' AND click_id_type != ''
+            AND event_type = 'pageview' AND ip_is_bot = 0
+            AND visitor_id IN (
+              SELECT DISTINCT visitor_id FROM events
+              WHERE site_id = #{ClickHouse.param(site.id)}
+                AND click_id != '' AND click_id_type != ''
+                AND event_type = 'pageview' AND ip_is_bot = 0
+                AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+                AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+            )
+          GROUP BY visitor_id
+          """
+
+        true ->
+          agg_fn = if touch == "last", do: "argMax", else: "argMin"
+
+          """
+          SELECT visitor_id, #{agg_fn}(click_id_type, timestamp) AS click_id_type
           FROM events
           WHERE site_id = #{ClickHouse.param(site.id)}
             AND click_id != '' AND click_id_type != ''
             AND event_type = 'pageview' AND ip_is_bot = 0
             AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
             AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-        )
-        GROUP BY visitor_id, click_id_type
-        """
-      else
-        agg_fn = if touch == "last", do: "argMax", else: "argMin"
-
-        """
-        SELECT visitor_id, #{agg_fn}(click_id_type, timestamp) AS click_id_type
-        FROM events
-        WHERE site_id = #{ClickHouse.param(site.id)}
-          AND click_id != '' AND click_id_type != ''
-          AND event_type = 'pageview' AND ip_is_bot = 0
-          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-        GROUP BY visitor_id
-        """
+          GROUP BY visitor_id
+          """
       end
 
     with :ok <- authorize(site, user) do
@@ -3067,6 +3205,59 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  def goal_source_attribution(%Site{} = site, %User{} = user, goal, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      # Build the subquery to find sessions that completed this goal
+      session_filter =
+        case goal.goal_type do
+          "pageview" ->
+            path_pattern = goal.page_path |> to_string() |> String.replace("*", "%")
+
+            """
+            SELECT DISTINCT session_id FROM events
+            WHERE site_id = #{ClickHouse.param(site.id)}
+              AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+              AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+              AND event_type = 'pageview' AND ip_is_bot = 0
+              AND url_path LIKE #{ClickHouse.param(path_pattern)}
+            """
+
+          "custom_event" ->
+            """
+            SELECT DISTINCT session_id FROM events
+            WHERE site_id = #{ClickHouse.param(site.id)}
+              AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+              AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+              AND event_type = 'custom' AND ip_is_bot = 0
+              AND event_name = #{ClickHouse.param(to_string(goal.event_name))}
+            """
+
+          _ ->
+            "SELECT '' AS session_id WHERE 1 = 0"
+        end
+
+      sql = """
+      SELECT
+        if(referrer_domain != '', referrer_domain, if(utm_source != '', utm_source, 'Direct')) AS source,
+        uniq(visitor_id) AS completers
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+        AND event_type = 'pageview'
+        AND session_id IN (#{session_filter})
+      GROUP BY source
+      ORDER BY completers DESC
+      LIMIT 5
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
   defp goal_condition(goal) do
     case goal.goal_type do
       "pageview" ->
@@ -3923,6 +4114,33 @@ defmodule Spectabas.Analytics do
       GROUP BY event_name
       ORDER BY hits DESC
       LIMIT 50
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  def event_properties(%Site{} = site, %User{} = user, event_name, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        tupleElement(kv, 1) AS prop_key,
+        tupleElement(kv, 2) AS prop_value,
+        count() AS occurrences
+      FROM events
+      ARRAY JOIN JSONExtractKeysAndValues(properties, 'String') AS kv
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND event_type = 'custom'
+        AND event_name = #{ClickHouse.param(event_name)}
+        AND properties != '{}'
+        AND ip_is_bot = 0
+      GROUP BY prop_key, prop_value
+      ORDER BY prop_key ASC, occurrences DESC
+      LIMIT 100
       """
 
       ClickHouse.query(sql)

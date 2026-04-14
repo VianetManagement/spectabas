@@ -15,6 +15,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
   attr :page_title, :string, default: nil
   attr :page_description, :string, default: nil
   attr :flash, :map, default: %{}
+  attr :anomaly_categories, :map, default: %{}
   slot :inner_block, required: true
 
   def dashboard_layout(assigns) do
@@ -96,6 +97,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
             label="Overview"
             color="text-indigo-500"
             to={~p"/dashboard/sites/#{@site.id}/c/overview"}
+            badge={@anomaly_categories["overview"]}
           >
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}"}
@@ -123,6 +125,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
             label="Behavior"
             color="text-blue-500"
             to={~p"/dashboard/sites/#{@site.id}/c/behavior"}
+            badge={@anomaly_categories["behavior"]}
           >
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/pages"}
@@ -170,6 +173,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
             label="Acquisition"
             color="text-emerald-500"
             to={~p"/dashboard/sites/#{@site.id}/c/acquisition"}
+            badge={@anomaly_categories["acquisition"]}
           >
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/acquisition"}
@@ -192,6 +196,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
             label="Audience"
             color="text-amber-500"
             to={~p"/dashboard/sites/#{@site.id}/c/audience"}
+            badge={@anomaly_categories["audience"]}
           >
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/geo"}
@@ -244,6 +249,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
             label="Conversions"
             color="text-rose-500"
             to={~p"/dashboard/sites/#{@site.id}/c/conversions"}
+            badge={@anomaly_categories["conversions"]}
           >
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/goals"}
@@ -286,6 +292,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
             label="Ad Effectiveness"
             color="text-violet-500"
             to={~p"/dashboard/sites/#{@site.id}/c/ad-effectiveness"}
+            badge={@anomaly_categories["ad_effectiveness"]}
           >
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/visitor-quality"}
@@ -577,26 +584,48 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
   end
 
   defp nav_section(assigns) do
-    assigns = assigns |> Map.put_new(:color, "text-gray-400") |> Map.put_new(:to, nil)
+    assigns =
+      assigns
+      |> Map.put_new(:color, "text-gray-400")
+      |> Map.put_new(:to, nil)
+      |> Map.put_new(:badge, nil)
 
     ~H"""
     <div class="pt-4 first:pt-0">
       <%= if @to do %>
         <.link
           navigate={@to}
-          class={["px-2 text-[10px] font-bold uppercase tracking-wider mb-1 hover:underline", @color]}
+          class={[
+            "px-2 text-[10px] font-bold uppercase tracking-wider mb-1 hover:underline inline-flex items-center gap-1",
+            @color
+          ]}
         >
           {@label}
+          <span
+            :if={@badge}
+            class={["w-2 h-2 rounded-full inline-block shrink-0", badge_dot_color(@badge)]}
+          />
         </.link>
       <% else %>
-        <p class={["px-2 text-[10px] font-bold uppercase tracking-wider mb-1", @color]}>
+        <p class={[
+          "px-2 text-[10px] font-bold uppercase tracking-wider mb-1 inline-flex items-center gap-1",
+          @color
+        ]}>
           {@label}
+          <span
+            :if={@badge}
+            class={["w-2 h-2 rounded-full inline-block shrink-0", badge_dot_color(@badge)]}
+          />
         </p>
       <% end %>
       {render_slot(@inner_block)}
     </div>
     """
   end
+
+  defp badge_dot_color(:high), do: "bg-red-500"
+  defp badge_dot_color(:medium), do: "bg-amber-500"
+  defp badge_dot_color(_), do: ""
 
   # Breadcrumb: maps active key → category name
   @breadcrumb_map %{

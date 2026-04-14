@@ -101,18 +101,43 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
         {path, r}
       end)
 
+    # Fetch per-page device split
+    device_rows = safe_query(fn -> Analytics.page_device_split(site, user, period) end)
+    device_map = build_device_map(device_rows)
+
     pages =
       Enum.map(pages, fn page ->
         path = (page["url_path"] || "/") |> String.downcase() |> String.trim_trailing("/")
         path = if path == "", do: "/", else: path
         rum = Map.get(vitals_map, path, %{})
+        devices = Map.get(device_map, page["url_path"], %{})
 
         Map.merge(page, %{
-          "page_load" => rum["page_load"]
+          "page_load" => rum["page_load"],
+          "devices" => devices
         })
       end)
 
     assign(socket, :pages, pages)
+  end
+
+  defp build_device_map(rows) do
+    rows
+    |> Enum.group_by(& &1["url_path"])
+    |> Map.new(fn {path, group} ->
+      total = Enum.reduce(group, 0, fn r, acc -> acc + to_num(r["pv"]) end)
+
+      pcts =
+        if total > 0 do
+          Map.new(group, fn r ->
+            {r["device_type"], round(to_num(r["pv"]) / total * 100)}
+          end)
+        else
+          %{}
+        end
+
+      {path, pcts}
+    end)
   end
 
   @impl true
@@ -177,11 +202,14 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
                 <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Load Time
                 </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Devices
+                </th>
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr :if={@pages == []}>
-                <td colspan="5" class="px-6 py-8 text-center text-gray-500">
+                <td colspan="6" class="px-6 py-8 text-center text-gray-500">
                   No data for this period.
                 </td>
               </tr>
@@ -220,9 +248,12 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
                   <td class="px-6 py-4 text-sm text-right tabular-nums">
                     <.speed_pill ms={to_num(page["page_load"])} />
                   </td>
+                  <td class="px-6 py-4 text-sm">
+                    <.device_bar devices={Map.get(page, "devices", %{})} />
+                  </td>
                 </tr>
                 <tr :if={@expanded_row == Map.get(page, "url_path", "/")}>
-                  <td colspan="5" class="px-6 py-4 bg-gray-50">
+                  <td colspan="6" class="px-6 py-4 bg-gray-50">
                     <div class="flex items-center gap-4">
                       <span class="text-sm text-gray-500 font-mono">
                         {Map.get(page, "url_path", "/")}
@@ -259,6 +290,30 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
         {if @sort_dir == "asc", do: raw("&uarr;"), else: raw("&darr;")}
       </span>
     </th>
+    """
+  end
+
+  defp device_bar(assigns) do
+    devices = assigns.devices
+    desktop = Map.get(devices, "Desktop", 0)
+    mobile = Map.get(devices, "Mobile", 0)
+    tablet = Map.get(devices, "Tablet", 0)
+
+    assigns =
+      Map.merge(assigns, %{
+        desktop: desktop,
+        mobile: mobile,
+        tablet: tablet,
+        has_data: desktop + mobile + tablet > 0
+      })
+
+    ~H"""
+    <div :if={@has_data} class="flex items-center gap-1.5 text-xs tabular-nums whitespace-nowrap">
+      <span :if={@desktop > 0} class="text-blue-700" title="Desktop">D {@desktop}%</span>
+      <span :if={@mobile > 0} class="text-green-700" title="Mobile">M {@mobile}%</span>
+      <span :if={@tablet > 0} class="text-amber-700" title="Tablet">T {@tablet}%</span>
+    </div>
+    <span :if={!@has_data} class="text-gray-400 text-xs">—</span>
     """
   end
 

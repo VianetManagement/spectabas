@@ -80,12 +80,44 @@ defmodule SpectabasWeb.Dashboard.BotTrafficLive do
     stats = safe_query(fn -> Analytics.bot_stats(site, user, period) end, %{})
     top_pages = safe_query(fn -> Analytics.bot_top_pages(site, user, period) end)
     top_uas = safe_query(fn -> Analytics.bot_top_user_agents(site, user, period) end)
+    daily_trend = safe_query(fn -> Analytics.bot_daily_trend(site, user, period) end)
+
+    trend_chart_json = build_trend_chart_json(daily_trend)
+    chart_key = "bot-#{range}-#{System.unique_integer([:positive])}"
 
     socket
     |> assign(:stats, stats)
     |> assign(:top_pages, top_pages)
     |> assign(:top_uas, top_uas)
+    |> assign(:daily_trend, daily_trend)
+    |> assign(:trend_chart_json, trend_chart_json)
+    |> assign(:chart_key, chart_key)
   end
+
+  defp build_trend_chart_json(daily_trend) do
+    labels = Enum.map(daily_trend, fn r -> short_date(r["bucket"]) end)
+    bot = Enum.map(daily_trend, fn r -> to_num(r["bot_events"]) end)
+    human = Enum.map(daily_trend, fn r -> to_num(r["human_events"]) end)
+
+    Jason.encode!(%{
+      labels: labels,
+      datasets: [
+        %{label: "Human", data: human, type: "line", color: "#22c55e", fill: true},
+        %{label: "Bot", data: bot, type: "line", color: "#ef4444", fill: true}
+      ]
+    })
+  end
+
+  defp short_date(nil), do: ""
+
+  defp short_date(d) when is_binary(d) do
+    case String.split(d, "-") do
+      [_y, m, day] -> "#{m}/#{day}"
+      _ -> d
+    end
+  end
+
+  defp short_date(d), do: to_string(d)
 
   @impl true
   def render(assigns) do
@@ -166,6 +198,19 @@ defmodule SpectabasWeb.Dashboard.BotTrafficLive do
                 <span class="font-medium">{format_number(to_num(@stats["tor_bots"]))}</span>
               </div>
             </div>
+          </div>
+        </div>
+
+        <%!-- Bot vs Human trend chart --%>
+        <div class="bg-white rounded-lg shadow p-6 mb-8">
+          <h3 class="text-sm font-semibold text-gray-700 mb-3">Bot vs Human Traffic</h3>
+          <div
+            id={"bot-trend-" <> @chart_key}
+            phx-hook="SearchChart"
+            data-chart={@trend_chart_json}
+            class="h-48 relative"
+          >
+            <canvas></canvas>
           </div>
         </div>
 

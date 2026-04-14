@@ -27,6 +27,8 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
        |> assign(:page_title, "Realtime - #{site.name}")
        |> assign(:site, site)
        |> assign(:view, "visitors")
+       |> assign(:filter_text, "")
+       |> assign(:filter_field, "all")
        |> load_data()}
     end
   end
@@ -49,6 +51,14 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
   @impl true
   def handle_event("toggle_view", %{"view" => view}, socket) do
     {:noreply, assign(socket, :view, view)}
+  end
+
+  def handle_event("filter_realtime", %{"q" => q, "field" => field}, socket) do
+    {:noreply, socket |> assign(:filter_text, q) |> assign(:filter_field, field)}
+  end
+
+  def handle_event("clear_filter", _params, socket) do
+    {:noreply, socket |> assign(:filter_text, "") |> assign(:filter_field, "all")}
   end
 
   defp schedule_refresh, do: Process.send_after(self(), :refresh, @refresh_ms)
@@ -180,12 +190,70 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
           </button>
         </div>
 
+        <%!-- Filter bar --%>
+        <form
+          :if={@view == "visitors"}
+          phx-change="filter_realtime"
+          class="flex items-center gap-3 mb-4"
+        >
+          <select name="field" class="text-sm rounded-lg border-gray-300 py-1.5">
+            <option value="all" selected={@filter_field == "all"}>All Fields</option>
+            <option value="email" selected={@filter_field == "email"}>Email</option>
+            <option value="ip" selected={@filter_field == "ip"}>IP</option>
+            <option value="country" selected={@filter_field == "country"}>Country</option>
+          </select>
+          <input
+            type="text"
+            name="q"
+            value={@filter_text}
+            placeholder="Search visitors..."
+            class="rounded-lg border-gray-300 text-sm py-1.5 px-3 w-48"
+          />
+          <button
+            :if={@filter_text != ""}
+            type="button"
+            phx-click="clear_filter"
+            class="text-sm text-gray-500 hover:text-gray-700"
+          >
+            Clear
+          </button>
+        </form>
+
         <%!-- Active Visitors (grouped) --%>
+        <% filtered =
+          if @filter_text == "" do
+            @grouped
+          else
+            q = String.downcase(@filter_text)
+
+            Enum.filter(@grouped, fn v ->
+              case @filter_field do
+                "email" ->
+                  String.contains?(String.downcase(v["email"] || ""), q)
+
+                "ip" ->
+                  String.contains?(String.downcase(v["ip_address"] || ""), q)
+
+                "country" ->
+                  String.contains?(String.downcase(v["country"] || ""), q)
+
+                _ ->
+                  String.contains?(String.downcase(v["email"] || ""), q) ||
+                    String.contains?(String.downcase(v["ip_address"] || ""), q) ||
+                    String.contains?(String.downcase(v["country"] || ""), q) ||
+                    String.contains?(String.downcase(v["city"] || ""), q)
+              end
+            end)
+          end %>
         <div :if={@view == "visitors"} class="bg-white rounded-lg shadow overflow-x-auto">
-          <div :if={@grouped == []} class="px-5 py-8 text-center text-gray-500">
-            No active visitors right now.
+          <div :if={filtered == []} class="px-5 py-8 text-center text-gray-500">
+            <%= if @filter_text != "" do %>
+              No visitors match your filter.
+            <% else %>
+              No active visitors right now.
+            <% end %>
           </div>
-          <table :if={@grouped != []} class="min-w-full divide-y divide-gray-200">
+          <table :if={filtered != []} class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
               <tr>
                 <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -215,7 +283,7 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
-              <tr :for={v <- @grouped} class="hover:bg-gray-50">
+              <tr :for={v <- filtered} class="hover:bg-gray-50">
                 <td class="px-4 py-3 text-sm">
                   <.link
                     navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{v["visitor_id"]}"}
