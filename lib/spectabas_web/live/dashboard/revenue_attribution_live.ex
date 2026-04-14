@@ -97,22 +97,10 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
     %{site: site, user: user, date_range: range, group_by: group, touch: touch} = socket.assigns
     period = range_to_period(range)
 
-    # Use the fast visitor_attribution-backed query for first/last touch on
-    # source/medium/campaign. Fall back to the full scan for any/first_ever
-    # touch or term/content grouping.
-    use_fast = touch in ["first", "last"] and group in ["source", "medium", "campaign"]
-
     rows =
-      if use_fast do
-        case Analytics.revenue_by_source_fast(site, user, period, group_by: group, touch: touch) do
-          {:ok, data} -> data
-          _ -> []
-        end
-      else
-        case Analytics.revenue_by_source(site, user, period, group_by: group, touch: touch) do
-          {:ok, data} -> data
-          _ -> []
-        end
+      case Analytics.revenue_by_source(site, user, period, group_by: group, touch: touch) do
+        {:ok, data} -> data
+        _ -> []
       end
 
     channels =
@@ -306,7 +294,6 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
                   {id, label} <- [
                     {"first", "First Touch"},
                     {"last", "Last Touch"},
-                    {"first_ever", "First Click"},
                     {"any", "Any Touch"}
                   ]
                 }
@@ -706,7 +693,6 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
 
   defp touch_label("first"), do: "First-touch"
   defp touch_label("last"), do: "Last-touch"
-  defp touch_label("first_ever"), do: "First-click"
   defp touch_label("any"), do: "Any-touch"
 
   defp touch_description("first"),
@@ -714,10 +700,6 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
 
   defp touch_description("last"),
     do: "revenue is credited to the most recent traffic source before purchasing."
-
-  defp touch_description("first_ever"),
-    do:
-      "revenue is credited to the very first traffic source that ever introduced this customer to your site, regardless of which session they purchased in."
 
   defp touch_description("any"),
     do:

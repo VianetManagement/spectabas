@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.38.0", "2026-04-15T01:00:00Z",
+       [
+         %{
+           title: "Fix: Revenue Attribution first/last touch now working",
+           description:
+             "Rebuilt first and last touch attribution as single SQL queries (same proven pattern as 'any touch' which always worked). First/last touch use daily_session_facts to find the first/last source per visitor in the date range — fast and reliable. Dropped the broken two-query merge approach and the 'First Click' (first_ever) model that scanned all history. Three models now: Last Touch (default), First Touch, Any Touch."
+         }
+       ]},
       {"v5.37.2", "2026-04-15T00:00:00Z",
        [
          %{

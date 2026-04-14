@@ -2086,302 +2086,99 @@ defmodule Spectabas.Analytics do
       has_signal =
         "(#{ref} != '' OR utm_source != '' OR utm_medium != '' OR utm_campaign != '' OR click_id != '')"
 
-      if touch == "any" do
-        # "Any touch" works fine — has_signal filter keeps the subquery small
-        visitor_source_subquery = """
-        SELECT visitor_id, source, ad_platform
-        FROM (
-          SELECT visitor_id, #{source_expr} AS source, click_id_type AS ad_platform
-          FROM events
-          WHERE site_id = #{ClickHouse.param(site.id)}
-            AND event_type = 'pageview' AND ip_is_bot = 0
-            AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-            AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-            AND #{has_signal}
-        )
-        GROUP BY visitor_id, source, ad_platform
-        """
-
-        sql = """
-        SELECT
-          source,
-          ad_platform,
-          uniq(e.visitor_id) AS visitors,
-          countDistinct(ec.order_id) AS orders,
-          sum(ec.revenue) AS total_revenue,
-          round(sum(ec.revenue) / greatest(countDistinct(ec.order_id), 1), 2) AS avg_order_value,
-          round(countDistinct(ec.order_id) / greatest(uniq(e.visitor_id), 1) * 100, 2) AS conversion_rate
-        FROM (
-          #{visitor_source_subquery}
-        ) AS e
-        LEFT JOIN (
-          SELECT visitor_id, order_id, revenue
-          FROM ecommerce_events
-          WHERE site_id = #{ClickHouse.param(site.id)}
-            #{ecommerce_source_filter(site)}
-            AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-            AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-        ) AS ec ON e.visitor_id = ec.visitor_id
-        GROUP BY source, ad_platform
-        ORDER BY total_revenue DESC
-        LIMIT 50
-        """
-
-        ClickHouse.query(sql)
-      else
-        if touch == "first_ever" do
-          # First-click: find each converting visitor's very first-ever traffic
-          # source across ALL their history, not just the date range. Answers
-          # "what originally introduced this customer to us?"
-          site_p = ClickHouse.param(site.id)
-          from_p = ClickHouse.param(format_datetime(date_range.from))
-          to_p = ClickHouse.param(format_datetime(date_range.to))
-
-          # Visitors query: for ALL visitors in the date range, find their first-ever source
-          visitors_sql = """
-          SELECT source, ad_platform, count() AS visitors
-          FROM (
-            SELECT visitor_id,
-              argMin(#{source_expr}, timestamp) AS source,
-              argMin(click_id_type, timestamp) AS ad_platform
-            FROM events
-            WHERE site_id = #{site_p}
-              AND event_type = 'pageview' AND ip_is_bot = 0
-              AND #{has_signal}
-              AND visitor_id IN (
-                SELECT DISTINCT visitor_id FROM events
-                WHERE site_id = #{site_p}
-                  AND event_type = 'pageview' AND ip_is_bot = 0
-                  AND timestamp >= #{from_p} AND timestamp <= #{to_p}
-              )
-            GROUP BY visitor_id
-          )
-          GROUP BY source, ad_platform
-          """
-
-          # Revenue query: for converting visitors, find their first-ever source
-          revenue_sql = """
-          SELECT source, ad_platform,
-            countDistinct(ec.order_id) AS orders,
-            sum(ec.revenue) AS total_revenue,
-            round(sum(ec.revenue) / greatest(countDistinct(ec.order_id), 1), 2) AS avg_order_value
-          FROM (
-            SELECT visitor_id,
-              argMin(#{source_expr}, timestamp) AS source,
-              argMin(click_id_type, timestamp) AS ad_platform
-            FROM events
-            WHERE site_id = #{site_p}
-              AND event_type = 'pageview' AND ip_is_bot = 0
-              AND #{has_signal}
-              AND visitor_id IN (
-                SELECT DISTINCT visitor_id FROM ecommerce_events
-                WHERE site_id = #{site_p}
-                  #{ecommerce_source_filter(site)}
-                  AND timestamp >= #{from_p} AND timestamp <= #{to_p}
-              )
-            GROUP BY visitor_id
-          ) AS e
-          INNER JOIN (
-            SELECT visitor_id, order_id, revenue
-            FROM ecommerce_events
-            WHERE site_id = #{site_p}
-              #{ecommerce_source_filter(site)}
-              AND timestamp >= #{from_p} AND timestamp <= #{to_p}
-          ) AS ec ON e.visitor_id = ec.visitor_id
-          GROUP BY source, ad_platform
-          """
-
-          visitors_task = Task.async(fn -> ClickHouse.query(visitors_sql) end)
-          revenue_task = Task.async(fn -> ClickHouse.query(revenue_sql) end)
-
-          visitors_result = Task.await(visitors_task, 30_000)
-          revenue_result = Task.await(revenue_task, 30_000)
-
-          merge_visitor_revenue_results(visitors_result, revenue_result)
-        else
-          # First/last touch: two parallel flat queries to avoid timeout.
-          # Filter to events WITH a signal (referrer, UTM, click ID) to avoid
-          # scanning the full events table — visitors with no signal are "Direct"
-          # and not useful in attribution. This matches the "any" touch approach.
-          agg_fn = if touch == "last", do: "argMax", else: "argMin"
-          site_p = ClickHouse.param(site.id)
-          from_p = ClickHouse.param(format_datetime(date_range.from))
-          to_p = ClickHouse.param(format_datetime(date_range.to))
-
-          visitors_sql = """
-          SELECT source, ad_platform, count() AS visitors
-          FROM (
-            SELECT visitor_id,
-              #{agg_fn}(#{source_expr}, timestamp) AS source,
-              #{agg_fn}(click_id_type, timestamp) AS ad_platform
-            FROM events
-            WHERE site_id = #{site_p}
-              AND event_type = 'pageview' AND ip_is_bot = 0
-              AND #{has_signal}
-              AND timestamp >= #{from_p} AND timestamp <= #{to_p}
-            GROUP BY visitor_id
-          )
-          GROUP BY source, ad_platform
-          """
-
-          revenue_sql = """
-          SELECT source, ad_platform,
-            countDistinct(ec.order_id) AS orders,
-            sum(ec.revenue) AS total_revenue,
-            round(sum(ec.revenue) / greatest(countDistinct(ec.order_id), 1), 2) AS avg_order_value
-          FROM (
-            SELECT visitor_id,
-              #{agg_fn}(#{source_expr}, timestamp) AS source,
-              #{agg_fn}(click_id_type, timestamp) AS ad_platform
-            FROM events
-            WHERE site_id = #{site_p}
-              AND event_type = 'pageview' AND ip_is_bot = 0
-              AND #{has_signal}
-              AND timestamp >= #{from_p} AND timestamp <= #{to_p}
-              AND visitor_id IN (
-                SELECT DISTINCT visitor_id FROM ecommerce_events
-                WHERE site_id = #{site_p}
-                  #{ecommerce_source_filter(site)}
-                  AND timestamp >= #{from_p} AND timestamp <= #{to_p}
-              )
-            GROUP BY visitor_id
-          ) AS e
-          INNER JOIN (
-            SELECT visitor_id, order_id, revenue
-            FROM ecommerce_events
-            WHERE site_id = #{site_p}
-              #{ecommerce_source_filter(site)}
-              AND timestamp >= #{from_p} AND timestamp <= #{to_p}
-          ) AS ec ON e.visitor_id = ec.visitor_id
-          GROUP BY source, ad_platform
-          """
-
-          visitors_task = Task.async(fn -> ClickHouse.query(visitors_sql) end)
-          revenue_task = Task.async(fn -> ClickHouse.query(revenue_sql) end)
-
-          visitors_result = Task.await(visitors_task, 30_000)
-          revenue_result = Task.await(revenue_task, 30_000)
-
-          merge_visitor_revenue_results(visitors_result, revenue_result)
-        end
-      end
-    end
-  end
-
-  defp merge_visitor_revenue_results(visitors_result, revenue_result) do
-    visitors_map =
-      case visitors_result do
-        {:ok, rows} ->
-          Map.new(rows, fn r ->
-            {{r["source"], r["ad_platform"]}, to_int(r["visitors"])}
-          end)
-
-        {:error, reason} ->
-          Logger.warning(
-            "[RevAttribution] visitors query failed: #{inspect(reason) |> String.slice(0, 200)}"
-          )
-
-          %{}
-      end
-
-    revenue_map =
-      case revenue_result do
-        {:ok, rows} ->
-          Map.new(rows, fn r ->
-            {{r["source"], r["ad_platform"]}, r}
-          end)
-
-        {:error, reason} ->
-          Logger.warning(
-            "[RevAttribution] revenue query failed: #{inspect(reason) |> String.slice(0, 200)}"
-          )
-
-          %{}
-      end
-
-    all_keys =
-      MapSet.union(
-        MapSet.new(Map.keys(visitors_map)),
-        MapSet.new(Map.keys(revenue_map))
-      )
-
-    rows =
-      Enum.map(all_keys, fn {source, ad_platform} = key ->
-        visitors = Map.get(visitors_map, key, 0)
-        rev = Map.get(revenue_map, key, %{})
-        orders = to_int(Map.get(rev, "orders", "0"))
-
-        %{
-          "source" => source,
-          "ad_platform" => ad_platform,
-          "visitors" => to_string(visitors),
-          "orders" => Map.get(rev, "orders", "0"),
-          "total_revenue" => Map.get(rev, "total_revenue", "0"),
-          "avg_order_value" => Map.get(rev, "avg_order_value", "0"),
-          "conversion_rate" =>
-            if(visitors > 0,
-              do: to_string(Float.round(orders / visitors * 100, 2)),
-              else: "0"
-            )
-        }
-      end)
-
-    {:ok,
-     rows
-     |> Enum.sort_by(fn r -> -to_float(r["total_revenue"]) end)
-     |> Enum.take(50)}
-  end
-
-  def revenue_by_source_fast(%Site{} = site, %User{} = user, date_range, opts \\ []) do
-    date_range = ensure_date_range(date_range)
-    group_by = Keyword.get(opts, :group_by, "source")
-    touch = Keyword.get(opts, :touch, "first")
-
-    with :ok <- authorize(site, user) do
-      source_col =
-        case group_by do
-          "campaign" ->
-            "if(#{touch_col(touch)}_campaign != '', #{touch_col(touch)}_campaign, '(none)')"
-
-          "medium" ->
-            "if(#{touch_col(touch)}_medium != '', #{touch_col(touch)}_medium, '(none)')"
-
-          _ ->
-            "if(#{touch_col(touch)}_source != '', #{touch_col(touch)}_source, 'Direct')"
-        end
-
+      # All three models (any/first/last) use a single SQL query with LEFT JOIN
+      # to ecommerce_events — same proven pattern. The only difference is how
+      # visitors are mapped to sources in the subquery.
       site_p = ClickHouse.param(site.id)
       from_p = ClickHouse.param(format_datetime(date_range.from))
       to_p = ClickHouse.param(format_datetime(date_range.to))
+      ecom_filter = ecommerce_source_filter(site)
+
+      visitor_source_subquery =
+        case touch do
+          "any" ->
+            # Every (visitor, source) pair — a visitor who came from Google AND
+            # Facebook gets credited to both.
+            """
+            SELECT visitor_id, source, ad_platform
+            FROM (
+              SELECT visitor_id, #{source_expr} AS source, click_id_type AS ad_platform
+              FROM events
+              WHERE site_id = #{site_p}
+                AND event_type = 'pageview' AND ip_is_bot = 0
+                AND timestamp >= #{from_p} AND timestamp <= #{to_p}
+                AND #{has_signal}
+            )
+            GROUP BY visitor_id, source, ad_platform
+            """
+
+          "first" ->
+            # First source per visitor in the date range — uses daily_session_facts
+            # for pre-materialized session data (fast), falls back to raw events
+            # for today/yesterday.
+            from_date = date_range.from |> DateTime.to_date() |> Date.to_iso8601()
+            to_date = date_range.to |> DateTime.to_date() |> Date.to_iso8601()
+
+            """
+            SELECT visitor_id,
+              argMin(source, first_seen) AS source,
+              '' AS ad_platform
+            FROM (
+              SELECT visitor_id,
+                #{session_facts_source_expr(group_by)} AS source,
+                date AS first_seen
+              FROM daily_session_facts
+              WHERE site_id = #{site_p}
+                AND date >= #{ClickHouse.param(from_date)}
+                AND date <= #{ClickHouse.param(to_date)}
+                AND #{session_facts_has_signal(group_by)}
+            )
+            GROUP BY visitor_id
+            """
+
+          _ ->
+            # "last" — last source per visitor in the date range
+            from_date = date_range.from |> DateTime.to_date() |> Date.to_iso8601()
+            to_date = date_range.to |> DateTime.to_date() |> Date.to_iso8601()
+
+            """
+            SELECT visitor_id,
+              argMax(source, last_seen) AS source,
+              '' AS ad_platform
+            FROM (
+              SELECT visitor_id,
+                #{session_facts_source_expr(group_by)} AS source,
+                date AS last_seen
+              FROM daily_session_facts
+              WHERE site_id = #{site_p}
+                AND date >= #{ClickHouse.param(from_date)}
+                AND date <= #{ClickHouse.param(to_date)}
+                AND #{session_facts_has_signal(group_by)}
+            )
+            GROUP BY visitor_id
+            """
+        end
 
       sql = """
       SELECT
         source,
-        '' AS ad_platform,
-        uniq(va.visitor_id) AS visitors,
+        ad_platform,
+        uniq(e.visitor_id) AS visitors,
         countDistinct(ec.order_id) AS orders,
         sum(ec.revenue) AS total_revenue,
         round(sum(ec.revenue) / greatest(countDistinct(ec.order_id), 1), 2) AS avg_order_value,
-        round(countDistinct(ec.order_id) / greatest(uniq(va.visitor_id), 1) * 100, 2) AS conversion_rate
+        round(countDistinct(ec.order_id) / greatest(uniq(e.visitor_id), 1) * 100, 2) AS conversion_rate
       FROM (
-        SELECT visitor_id, #{source_col} AS source
-        FROM visitor_attribution FINAL
-        WHERE site_id = #{site_p}
-      ) AS va
+        #{visitor_source_subquery}
+      ) AS e
       LEFT JOIN (
         SELECT visitor_id, order_id, revenue
         FROM ecommerce_events
         WHERE site_id = #{site_p}
-          #{ecommerce_source_filter(site)}
+          #{ecom_filter}
           AND timestamp >= #{from_p} AND timestamp <= #{to_p}
-      ) AS ec ON va.visitor_id = ec.visitor_id
-      WHERE va.visitor_id IN (
-        SELECT DISTINCT visitor_id FROM events
-        WHERE site_id = #{site_p}
-          AND event_type = 'pageview' AND ip_is_bot = 0
-          AND timestamp >= #{from_p} AND timestamp <= #{to_p}
-      )
-      GROUP BY source
+      ) AS ec ON e.visitor_id = ec.visitor_id
+      GROUP BY source, ad_platform
       ORDER BY total_revenue DESC
       LIMIT 50
       """
@@ -2389,9 +2186,6 @@ defmodule Spectabas.Analytics do
       ClickHouse.query(sql)
     end
   end
-
-  defp touch_col("last"), do: "last"
-  defp touch_col(_), do: "first"
 
   @doc "Ad spend by campaign for ROAS calculation."
   def ad_spend_by_campaign(%Site{} = site, %User{} = user, date_range) do
@@ -4819,6 +4613,22 @@ defmodule Spectabas.Analytics do
   # SQL expression that strips self-referrals from referrer_domain.
   # Returns the referrer_domain if it's not the site itself, empty string otherwise.
   # Covers: analytics subdomain (b.example.com), parent (example.com), www.parent
+  # Source expression for daily_session_facts (columns are flat, not nested in events)
+  defp session_facts_source_expr("campaign"), do: "if(utm_campaign != '', utm_campaign, '(none)')"
+  defp session_facts_source_expr("medium"), do: "if(utm_medium != '', utm_medium, '(none)')"
+  defp session_facts_source_expr("term"), do: "'(none)'"
+  defp session_facts_source_expr("content"), do: "'(none)'"
+
+  defp session_facts_source_expr(_),
+    do: "if(referrer_domain != '', referrer_domain, if(utm_source != '', utm_source, 'Direct'))"
+
+  # Signal check for daily_session_facts
+  defp session_facts_has_signal("campaign"), do: "utm_campaign != ''"
+  defp session_facts_has_signal("medium"), do: "utm_medium != ''"
+
+  defp session_facts_has_signal(_),
+    do: "(referrer_domain != '' OR utm_source != '' OR utm_medium != '' OR utm_campaign != '')"
+
   defp clean_referrer_sql(%Site{} = site) do
     domain = site.domain || ""
     parent = parent_domain(domain)
