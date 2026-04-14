@@ -22,21 +22,43 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
     unless Accounts.can_access_site?(user, site) do
       {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
     else
-      {:ok,
-       socket
-       |> assign(:page_title, "Scrapers - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:user, user)
-       |> assign(:date_range, "7d")
-       |> assign(:min_score, 60)
-       |> assign(:modal_visitor, nil)
-       |> load_data()}
+      socket =
+        socket
+        |> assign(:page_title, "Scrapers - #{site.name}")
+        |> assign(:site, site)
+        |> assign(:user, user)
+        |> assign(:date_range, "7d")
+        |> assign(:min_score, 60)
+        |> assign(:modal_visitor, nil)
+        |> assign(:loading, true)
+        |> assign(:candidates, [])
+        |> assign(:summary, %{
+          total: 0,
+          suspicious: 0,
+          certain: 0,
+          datacenter: 0,
+          spoofed: 0,
+          rotating: 0
+        })
+
+      # Load asynchronously — the ClickHouse query can take 10-30s on large
+      # sites. Loading in mount would timeout the LiveView and cause infinite
+      # reconnect loops.
+      if connected?(socket), do: send(self(), :load_data)
+
+      {:ok, socket}
     end
   end
 
   @impl true
+  def handle_info(:load_data, socket) do
+    {:noreply, load_data(socket)}
+  end
+
+  @impl true
   def handle_event("change_range", %{"range" => range}, socket) do
-    {:noreply, socket |> assign(:date_range, range) |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:date_range, range) |> assign(:loading, true)}
   end
 
   def handle_event("change_min_score", %{"min_score" => v}, socket) do
@@ -46,7 +68,8 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
         _ -> 60
       end
 
-    {:noreply, socket |> assign(:min_score, min) |> load_data()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:min_score, min) |> assign(:loading, true)}
   end
 
   def handle_event("open_visitor", %{"idx" => idx_str}, socket) do
@@ -81,6 +104,7 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
     socket
     |> assign(:summary, summary)
     |> assign(:candidates, candidates)
+    |> assign(:loading, false)
   end
 
   defp summarize_candidates(candidates) do
@@ -191,6 +215,35 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
             <div class="text-xs text-gray-500 mt-0.5">all scores &gt; 0</div>
           </div>
         </div>
+
+        <%= if @loading do %>
+          <div class="bg-white rounded-lg shadow p-12 text-center mb-8">
+            <div class="inline-flex items-center gap-3 text-gray-600">
+              <svg
+                class="animate-spin h-5 w-5 text-indigo-600"
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              <span class="text-sm">
+                Scanning visitors for scraper signals... This can take 10-30 seconds on large sites.
+              </span>
+            </div>
+          </div>
+        <% end %>
 
         <%!-- Candidates table --%>
         <div class="bg-white rounded-lg shadow overflow-x-auto">

@@ -204,7 +204,10 @@ defmodule Spectabas.Analytics.ScraperDetector do
 
   defp mobile_ua?(ua) when is_binary(ua) do
     ua_lower = String.downcase(ua)
-    String.contains?(ua_lower, "iphone") or String.contains?(ua_lower, "android")
+
+    String.contains?(ua_lower, "iphone") or
+      String.contains?(ua_lower, "android") or
+      String.contains?(ua_lower, "mobile")
   end
 
   defp mobile_ua?(_), do: false
