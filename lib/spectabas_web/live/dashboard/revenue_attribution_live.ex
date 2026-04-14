@@ -759,10 +759,22 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
   defp platform_label("google_ads"), do: "Google Ads"
   defp platform_label("bing_ads"), do: "Microsoft Ads"
   defp platform_label("meta_ads"), do: "Meta Ads"
+  defp platform_label("pinterest_ads"), do: "Pinterest"
+  defp platform_label("reddit_ads"), do: "Reddit"
+  defp platform_label("tiktok_ads"), do: "TikTok"
+  defp platform_label("twitter_ads"), do: "X / Twitter"
+  defp platform_label("linkedin_ads"), do: "LinkedIn"
+  defp platform_label("snapchat_ads"), do: "Snapchat"
   defp platform_label(p), do: p
 
   defp platform_color("google_ads"), do: "bg-blue-500"
   defp platform_color("bing_ads"), do: "bg-amber-500"
   defp platform_color("meta_ads"), do: "bg-purple-500"
+  defp platform_color("pinterest_ads"), do: "bg-red-500"
+  defp platform_color("reddit_ads"), do: "bg-orange-500"
+  defp platform_color("tiktok_ads"), do: "bg-gray-900"
+  defp platform_color("twitter_ads"), do: "bg-sky-500"
+  defp platform_color("linkedin_ads"), do: "bg-blue-700"
+  defp platform_color("snapchat_ads"), do: "bg-yellow-400"
   defp platform_color(_), do: "bg-gray-400"
 end

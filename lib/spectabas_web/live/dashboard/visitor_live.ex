@@ -735,11 +735,23 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
   defp click_platform_label("google_ads"), do: "Google Ads"
   defp click_platform_label("bing_ads"), do: "Microsoft Ads"
   defp click_platform_label("meta_ads"), do: "Meta Ads"
+  defp click_platform_label("pinterest_ads"), do: "Pinterest"
+  defp click_platform_label("reddit_ads"), do: "Reddit"
+  defp click_platform_label("tiktok_ads"), do: "TikTok"
+  defp click_platform_label("twitter_ads"), do: "X / Twitter"
+  defp click_platform_label("linkedin_ads"), do: "LinkedIn"
+  defp click_platform_label("snapchat_ads"), do: "Snapchat"
   defp click_platform_label(other), do: other || "Unknown"
 
   defp click_platform_class("google_ads"), do: "bg-blue-100 text-blue-800"
   defp click_platform_class("bing_ads"), do: "bg-amber-100 text-amber-800"
   defp click_platform_class("meta_ads"), do: "bg-purple-100 text-purple-800"
+  defp click_platform_class("pinterest_ads"), do: "bg-red-100 text-red-800"
+  defp click_platform_class("reddit_ads"), do: "bg-orange-100 text-orange-800"
+  defp click_platform_class("tiktok_ads"), do: "bg-gray-200 text-gray-900"
+  defp click_platform_class("twitter_ads"), do: "bg-sky-100 text-sky-800"
+  defp click_platform_class("linkedin_ads"), do: "bg-blue-100 text-blue-900"
+  defp click_platform_class("snapchat_ads"), do: "bg-yellow-100 text-yellow-800"
   defp click_platform_class(_), do: "bg-gray-100 text-gray-800"
 
   defp load_visitor_ips(site, visitor_id) do

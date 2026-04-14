@@ -53,6 +53,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.37.0", "2026-04-14T22:00:00Z",
+       [
+         %{
+           title: "Feat: 6 new ad platform click ID tracking",
+           description:
+             "Added click ID capture for Pinterest (epik), Reddit (rdt_cid), TikTok (ttclid), Twitter/X (twclid), LinkedIn (li_fat_id), and Snapchat (ScCid). Click IDs are extracted from landing URLs, persisted in sessionStorage, and stored in ClickHouse for platform-level ROAS attribution. Colored platform pills added across Revenue Attribution, Integration Log, Settings, and all Ad Effectiveness pages."
+         },
+         %{
+           title: "Feat: Acquisition drilldown now shows engagement metrics",
+           description:
+             "The Sources and UTM tabs on the Acquisition page now show Visitors, Bounce Rate, Avg Duration, and Pages/Session alongside pageviews and sessions — matching the Channels overview. Previously these columns were only visible at the channel level, not when drilling into individual sources."
+         }
+       ]},
       {"v5.36.5", "2026-04-14T21:00:00Z",
        [
          %{

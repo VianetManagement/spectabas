@@ -229,32 +229,50 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
                         Source
                       </th>
                       <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                        Pageviews
-                      </th>
-                      <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                         Visitors
                       </th>
                       <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                         Sessions
                       </th>
+                      <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Pageviews
+                      </th>
+                      <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Bounce Rate
+                      </th>
+                      <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Avg Duration
+                      </th>
+                      <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Pages/Session
+                      </th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-gray-100">
                     <tr :if={@channel_detail == []}>
-                      <td colspan="4" class="px-6 py-8 text-center text-gray-500">
+                      <td colspan="7" class="px-6 py-8 text-center text-gray-500">
                         No sources for this channel.
                       </td>
                     </tr>
                     <tr :for={src <- @channel_detail} class="hover:bg-gray-50">
                       <td class="px-6 py-4 text-sm text-indigo-600 font-medium">{src["source"]}</td>
                       <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                        {format_number(to_num(src["pageviews"]))}
-                      </td>
-                      <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
                         {format_number(to_num(src["visitors"]))}
                       </td>
                       <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
                         {format_number(to_num(src["sessions"]))}
+                      </td>
+                      <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                        {format_number(to_num(src["pageviews"]))}
+                      </td>
+                      <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                        {src["bounce_rate"]}%
+                      </td>
+                      <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                        {format_duration(to_num(src["avg_duration"]))}
+                      </td>
+                      <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                        {src["pages_per_session"]}
                       </td>
                     </tr>
                   </tbody>
@@ -365,16 +383,28 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
                       Source
                     </th>
                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Pageviews
+                      Visitors
                     </th>
                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                       Sessions
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Pageviews
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Bounce Rate
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Avg Duration
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Pages/Session
                     </th>
                   </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                   <tr :if={@sources == []}>
-                    <td colspan="3" class="px-6 py-8 text-center text-gray-500">
+                    <td colspan="7" class="px-6 py-8 text-center text-gray-500">
                       No data for this period.
                     </td>
                   </tr>
@@ -388,10 +418,22 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
                       </.link>
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                      {format_number(to_num(Map.get(source, "pageviews", 0)))}
+                      {format_number(to_num(Map.get(source, "visitors", 0)))}
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
                       {format_number(to_num(Map.get(source, "sessions", 0)))}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                      {format_number(to_num(Map.get(source, "pageviews", 0)))}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                      {Map.get(source, "bounce_rate", "0")}%
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                      {format_duration(to_num(Map.get(source, "avg_duration", 0)))}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
+                      {Map.get(source, "pages_per_session", "0")}
                     </td>
                   </tr>
                 </tbody>

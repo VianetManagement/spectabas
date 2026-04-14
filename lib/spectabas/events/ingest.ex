@@ -21,7 +21,8 @@ defmodule Spectabas.Events.Ingest do
   alias Spectabas.Visitors.{Cache, Visitor}
 
   @tracking_params ~w(utm_source utm_medium utm_campaign utm_term utm_content
-                      gclid fbclid msclkid mc_cid mc_eid _ga _gl)
+                      gclid fbclid msclkid epik rdt_cid ttclid twclid li_fat_id ScCid
+                      mc_cid mc_eid _ga _gl)
 
   @doc """
   Process a validated payload and conn into an enriched event map.
@@ -538,7 +539,17 @@ defmodule Spectabas.Events.Ingest do
   end
 
   # Extract ad platform click IDs (gclid, msclkid, fbclid) from payload or URL
-  @click_id_params [{"gclid", "google_ads"}, {"msclkid", "bing_ads"}, {"fbclid", "meta_ads"}]
+  @click_id_params [
+    {"gclid", "google_ads"},
+    {"msclkid", "bing_ads"},
+    {"fbclid", "meta_ads"},
+    {"epik", "pinterest_ads"},
+    {"rdt_cid", "reddit_ads"},
+    {"ttclid", "tiktok_ads"},
+    {"twclid", "twitter_ads"},
+    {"li_fat_id", "linkedin_ads"},
+    {"ScCid", "snapchat_ads"}
+  ]
 
   defp extract_click_id(payload) do
     # Prefer client-sent click ID (persisted in sessionStorage across pages)

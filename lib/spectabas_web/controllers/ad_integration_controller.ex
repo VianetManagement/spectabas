@@ -443,5 +443,11 @@ defmodule SpectabasWeb.AdIntegrationController do
   defp platform_label("google_ads"), do: "Google Ads"
   defp platform_label("bing_ads"), do: "Microsoft Ads"
   defp platform_label("meta_ads"), do: "Meta Ads"
+  defp platform_label("pinterest_ads"), do: "Pinterest"
+  defp platform_label("reddit_ads"), do: "Reddit"
+  defp platform_label("tiktok_ads"), do: "TikTok"
+  defp platform_label("twitter_ads"), do: "X / Twitter"
+  defp platform_label("linkedin_ads"), do: "LinkedIn"
+  defp platform_label("snapchat_ads"), do: "Snapchat"
   defp platform_label(p), do: p
 end
