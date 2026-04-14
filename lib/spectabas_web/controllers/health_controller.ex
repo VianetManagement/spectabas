@@ -321,6 +321,19 @@ defmodule SpectabasWeb.HealthController do
   end
 
   def test_attribution(conn, _params) do
+    try do
+      do_test_attribution(conn)
+    rescue
+      e ->
+        json(conn, %{
+          passed: false,
+          error: Exception.message(e),
+          stacktrace: Exception.format_stacktrace(__STACKTRACE__) |> String.slice(0, 500)
+        })
+    end
+  end
+
+  defp do_test_attribution(conn) do
     site_id = 999_998
     today = Date.utc_today() |> Date.to_iso8601()
 
