@@ -68,21 +68,30 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
     %{site: site, user: user, date_range: range, min_score: min_score} = socket.assigns
     period = range_to_period(range)
 
-    summary =
-      case Analytics.scraper_summary(site, user, period) do
-        {:ok, s} -> s
-        _ -> %{total: 0, suspicious: 0, certain: 0, datacenter: 0, spoofed: 0, rotating: 0}
-      end
-
+    # Single query — summary is computed from the same result set to avoid
+    # running the expensive aggregation twice.
     candidates =
       case Analytics.scraper_candidates(site, user, period, min_score: min_score, limit: 100) do
         {:ok, rows} -> rows
         _ -> []
       end
 
+    summary = summarize_candidates(candidates)
+
     socket
     |> assign(:summary, summary)
     |> assign(:candidates, candidates)
+  end
+
+  defp summarize_candidates(candidates) do
+    %{
+      total: length(candidates),
+      suspicious: Enum.count(candidates, &(&1["verdict"] == :suspicious)),
+      certain: Enum.count(candidates, &(&1["verdict"] == :certain)),
+      datacenter: Enum.count(candidates, &(:datacenter_asn in (&1["signals"] || []))),
+      spoofed: Enum.count(candidates, &(:spoofed_mobile_ua in (&1["signals"] || []))),
+      rotating: Enum.count(candidates, &(:ip_rotation in (&1["signals"] || [])))
+    }
   end
 
   @impl true

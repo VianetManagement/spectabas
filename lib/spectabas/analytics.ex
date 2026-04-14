@@ -3520,7 +3520,7 @@ defmodule Spectabas.Analytics do
   """
   def scraper_candidates(%Site{} = site, %User{} = user, date_range, opts \\ []) do
     date_range = ensure_date_range(date_range)
-    limit = Keyword.get(opts, :limit, 200) |> min(1000)
+    limit = Keyword.get(opts, :limit, 100) |> min(500)
     min_score = Keyword.get(opts, :min_score, 60)
 
     with :ok <- authorize(site, user) do
@@ -3529,37 +3529,44 @@ defmodule Spectabas.Analytics do
       to_p = ClickHouse.param(format_datetime(date_range.to))
       tz = tz_sql(site)
 
-      # One row per visitor with all fields ScraperDetector needs.
-      # `request_intervals_ms` is computed as the ClickHouse `arrayDifference`
-      # of the sorted timestamps-in-ms for that visitor.
+      # groupArray(N) caps array sizes to avoid OOM on high-volume scrapers.
+      # HAVING threshold at 30+ pageviews or 3+ IPs — tight enough to skip
+      # casual visitors, loose enough to catch moderate scrapers.
+      # NOTE: use ip_org (not ip_asn_org) — ip_org stores "AS16276 OVH SAS"
+      # which the ScraperDetector @datacenter_asns list matches against. ip_asn_org
+      # stores just "OVH SAS" (no AS prefix) and would never match.
+      # Also pull max(ip_is_datacenter) for the comprehensive 900-entry blocklist
+      # check from the ASNBlocklist ETS tables.
       sql = """
       SELECT
         visitor_id,
-        any(ip_asn_org) AS asn,
+        any(ip_org) AS asn,
         any(user_agent) AS user_agent,
         uniq(ip_address) AS visitor_ip_count,
         countIf(event_type = 'pageview') AS session_pageviews,
         arrayFilter(p -> p != '',
-          groupArrayIf(url_path, event_type = 'pageview')) AS page_paths,
+          groupArrayIf(50)(url_path, event_type = 'pageview')) AS page_paths,
         any(referrer_domain) AS referrer,
         concat(toString(any(screen_width)), 'x', toString(any(screen_height))) AS screen_resolution,
-        arraySlice(arrayDifference(arraySort(groupArrayIf(toUnixTimestamp(timestamp) * 1000,
-          event_type = 'pageview'))), 2) AS request_intervals_ms,
+        arraySlice(arrayDifference(arraySort(
+          groupArrayIf(100)(toUnixTimestamp(timestamp) * 1000,
+            event_type = 'pageview'))), 2) AS request_intervals_ms,
         toTimezone(min(timestamp), #{tz}) AS first_seen,
         toTimezone(max(timestamp), #{tz}) AS last_seen,
         any(ip_country) AS country,
-        any(ip_city) AS city
+        any(ip_city) AS city,
+        max(ip_is_datacenter) AS is_datacenter
       FROM events
       WHERE site_id = #{site_p}
         AND timestamp >= #{from_p}
         AND timestamp <= #{to_p}
       GROUP BY visitor_id
-      HAVING session_pageviews >= 20 OR visitor_ip_count >= 3
-      ORDER BY session_pageviews DESC
-      LIMIT #{limit * 3}
+      HAVING countIf(event_type = 'pageview') >= 30 OR uniq(ip_address) >= 3
+      ORDER BY countIf(event_type = 'pageview') DESC
+      LIMIT #{limit * 2}
       """
 
-      case ClickHouse.query(sql) do
+      case ClickHouse.query(sql, receive_timeout: 60_000) do
         {:ok, rows} ->
           prefixes = List.wrap(site.scraper_content_prefixes)
 
@@ -3597,38 +3604,11 @@ defmodule Spectabas.Analytics do
       content_path_prefixes: prefixes,
       referrer: row["referrer"],
       screen_resolution: row["screen_resolution"],
-      request_intervals_ms: List.wrap(row["request_intervals_ms"]) |> Enum.map(&to_int/1)
+      request_intervals_ms: List.wrap(row["request_intervals_ms"]) |> Enum.map(&to_int/1),
+      # is_datacenter comes from the 900-entry ASNBlocklist (ip_is_datacenter column).
+      # Also used as a fallback if the 10-entry @datacenter_asns string list misses one.
+      is_datacenter: to_int(row["is_datacenter"]) == 1
     }
-  end
-
-  @doc """
-  Summary counts for the Scrapers dashboard header cards.
-  Computed from the same candidate set as `scraper_candidates/4` — includes
-  every candidate in the range (no limit) so totals are accurate.
-  """
-  def scraper_summary(%Site{} = site, %User{} = user, date_range) do
-    case scraper_candidates(site, user, date_range, limit: 1000, min_score: 0) do
-      {:ok, rows} ->
-        total = length(rows)
-        suspicious = Enum.count(rows, &(&1["verdict"] == :suspicious))
-        certain = Enum.count(rows, &(&1["verdict"] == :certain))
-        datacenter = Enum.count(rows, &(:datacenter_asn in &1["signals"]))
-        spoofed = Enum.count(rows, &(:spoofed_mobile_ua in &1["signals"]))
-        rotating = Enum.count(rows, &(:ip_rotation in &1["signals"]))
-
-        {:ok,
-         %{
-           total: total,
-           suspicious: suspicious,
-           certain: certain,
-           datacenter: datacenter,
-           spoofed: spoofed,
-           rotating: rotating
-         }}
-
-      error ->
-        error
-    end
   end
 
   # ---- Visitor Log ----

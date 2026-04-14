@@ -96,18 +96,23 @@ defmodule Spectabas.Analytics.ScraperDetector do
   # ---------------- Signal helpers ----------------
 
   defp add_datacenter_signal(points, signals, profile) do
-    if datacenter_asn?(profile[:asn]) do
+    # Check BOTH the 10-entry @datacenter_asns string list AND the
+    # caller-supplied `is_datacenter` boolean (from the comprehensive 900-entry
+    # ASNBlocklist). Either match fires the signal.
+    if datacenter_asn?(profile[:asn]) or profile[:is_datacenter] == true do
       {points + 35, [:datacenter_asn | signals]}
     else
       {points, signals}
     end
   end
 
-  # Only fires if we ALSO match the datacenter ASN signal — a mobile UA on a
+  # Only fires if we ALSO match the datacenter signal — a mobile UA on a
   # residential ISP is normal; a mobile UA on an OVH IP is almost certainly
   # spoofed.
   defp add_spoofed_ua_signal(points, signals, profile) do
-    if datacenter_asn?(profile[:asn]) and mobile_ua?(profile[:user_agent]) do
+    dc? = datacenter_asn?(profile[:asn]) or profile[:is_datacenter] == true
+
+    if dc? and mobile_ua?(profile[:user_agent]) do
       {points + 20, [:spoofed_mobile_ua | signals]}
     else
       {points, signals}

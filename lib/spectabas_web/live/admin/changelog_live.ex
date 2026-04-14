@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.29.1", "2026-04-14T05:30:00Z",
+       [
+         %{
+           title: "Fix: Scraper detection perf + datacenter ASN matching",
+           description:
+             "Three fixes: (1) Query was running TWICE (once for summary, once for candidates) — merged into a single query with summary computed in Elixir from the same result. (2) Unbounded groupArray() for page_paths/timestamps caused OOM on high-volume visitors — capped to groupArray(50)/groupArray(100). HAVING threshold raised to 30+ pageviews (was 20). (3) ASN column was ip_asn_org which stores just 'OVH SAS' (no prefix) — the detector's @datacenter_asns matches 'AS16276'. Switched to ip_org which stores the full 'AS16276 OVH SAS' string. Also added is_datacenter fallback from the 900-entry ASNBlocklist so datacenter detection works even for ASNs not in the 10-entry hardcoded list."
+         }
+       ]},
       {"v5.29.0", "2026-04-14T05:00:00Z",
        [
          %{
