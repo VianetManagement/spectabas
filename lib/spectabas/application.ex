@@ -37,7 +37,7 @@ defmodule Spectabas.Application do
 
     # Notify Slack on deploy (async, non-blocking)
     Task.start(fn ->
-      Spectabas.Notifications.Slack.notify(":rocket: *Spectabas deployed* — v5.36.4")
+      Spectabas.Notifications.Slack.notify(deploy_message())
     end)
 
     # One-time backfill checks — delayed so ClickHouse schema is ready.
@@ -104,6 +104,27 @@ defmodule Spectabas.Application do
     e ->
       Logger.warning("[BackfillASNFlags] Startup check skipped: #{inspect(e)}")
       :ok
+  end
+
+  @version "v5.36.5"
+
+  defp deploy_message do
+    # Pull the latest changelog entry to include in the Slack notification.
+    # The changelog is defined in ChangelogLive.entries/0 — the first entry
+    # is always the current version.
+    changes =
+      try do
+        [{_ver, _ts, items} | _] = SpectabasWeb.Admin.ChangelogLive.entries()
+
+        items
+        |> Enum.map(fn %{title: t} -> "• #{t}" end)
+        |> Enum.join("\n")
+      rescue
+        _ -> ""
+      end
+
+    msg = ":rocket: *Spectabas deployed* — #{@version}"
+    if changes != "", do: msg <> "\n\n" <> changes, else: msg
   end
 
   defp maybe_backfill_daily_rollup do

@@ -51,8 +51,16 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
     """
   end
 
-  defp entries do
+  def entries do
     [
+      {"v5.36.5", "2026-04-14T21:00:00Z",
+       [
+         %{
+           title: "Feat: Slack deploy notifications now include changelog",
+           description:
+             "The Slack deploy message now includes the changelog entries for the deployed version. Version moved to a @version module attribute."
+         }
+       ]},
       {"v5.36.4", "2026-04-14T20:00:00Z",
        [
          %{
