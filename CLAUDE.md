@@ -119,13 +119,13 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - Visitor intent breakdown
 
 ### Analytics Pages (sidebar navigation, 39 pages across 7 categories)
-- **Overview**: Dashboard, Insights (8 anomaly types), Journeys, Realtime
-- **Behavior**: Pages, Entry/Exit, Page Transitions, Site Search, Outbound Links, Downloads, Events, Performance (RUM)
-- **Acquisition**: Acquisition (channels with engagement metrics + sources with UTM tabs, consolidated from 3 pages), Campaigns (UTM builder), Search Keywords (GSC + Bing)
-- **Audience**: Geography, Visitor Map, Devices, Network, Bot Traffic, Scrapers, Visitor Log, Cohort Retention, Churn Risk
-- **Conversions**: Goals, Funnels, Ecommerce, Revenue Attribution (sortable, paid/organic split with pills), Revenue Cohorts, Buyer Patterns, MRR & Subscriptions
+- **Overview**: Dashboard, Insights (8 anomaly types), Journeys (page-type grouping via content prefixes, outcome segmentation: converter/engaged/bounce, inline config panel), Realtime (visitor search/filter by email, IP, country)
+- **Behavior**: Pages (device split column: Desktop/Mobile/Tablet %), Entry/Exit, Page Transitions, Site Search, Outbound Links, Downloads, Events (clickable rows show property key/value breakdown via ARRAY JOIN JSONExtractKeysAndValues), Performance (RUM)
+- **Acquisition**: Acquisition (channels with engagement metrics + sources with UTM tabs, consolidated from 3 pages), Campaigns (auto-detects from UTM events, one-click "Save to Builder"), Search Keywords (GSC + Bing)
+- **Audience**: Geography, Visitor Map, Devices, Network, Bot Traffic (daily trend chart: bot vs human, clickable UA rows with detail modal), Scrapers, Visitor Log (sortable columns: Pages, Duration, Last Seen), Cohort Retention, Churn Risk
+- **Conversions**: Goals (top 3 traffic sources per goal: source attribution), Funnels, Ecommerce, Revenue Attribution (sortable, paid/organic split with pills, First Click touch model: visitor's first-ever referrer across all history), Revenue Cohorts, Buyer Patterns, MRR & Subscriptions
 - **Ad Effectiveness**: Visitor Quality (0-100 scoring), Time to Convert, Ad Visitor Paths, Ad-to-Churn, Organic Lift
-- **Tools**: Reports, Email Reports, Exports, Settings
+- **Tools**: Reports, Email Reports, Exports, Settings (4 tabs: General, Content, Integrations, Advanced)
 - Each category has a landing page at `/sites/:id/c/:category` with descriptions for every page
 
 ### Email Reports
@@ -136,7 +136,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - Settings UI on site settings page, admin subscriber view
 
 ### Unique Features
-- **Visitor Intent Detection** — auto-classifies visitors as buying/engaging/researching/comparing/support/returning/browsing/bot. Site-configurable path patterns in Settings (intent_config map on sites table). "engaging" = core app usage (search, listings, messaging).
+- **Visitor Intent Detection** — auto-classifies visitors as buying/engaging/researching/comparing/support/returning/browsing/bot. Site-configurable path patterns in Settings (intent_config map on sites table). "engaging" = core app usage (search, listings, messaging). Also: `journey_conversion_pages` (array of URL path prefixes) defines conversion pages for the Journeys page.
 - **Row Evolution Sparklines** — click any row in the Pages table to see an inline trend chart for that page
 - **Real User Monitoring** — Core Web Vitals (LCP, CLS, FID), page load timing, per-page and per-device performance
 - **Cross-linking** — click any dimension to navigate to filtered views (ASN→visitors, page→transitions, source→visitor log)
@@ -170,6 +170,8 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Click ID Attribution** — Tracker captures gclid (Google), msclkid (Bing), fbclid (Meta) from landing URLs. Stored in ClickHouse `click_id`/`click_id_type` columns. Revenue from visitors with click IDs attributed to the platform for ROAS calculation.
 - **Ad Effectiveness Suite** — 5 pages under new sidebar section: Visitor Quality (engagement scoring 0-100), Time to Convert (days/sessions to purchase), Ad Visitor Paths (page sequences by outcome), Ad-to-Churn (campaign churn correlation), Organic Lift (ad spend vs organic traffic correlation)
 - **Revenue Attribution Enhancements** — sortable columns, paid vs organic row split with colored platform pills (Google/Bing/Meta) across all UTM tabs
+- **Sidebar Anomaly Badges** — red/amber dots on sidebar section labels when `AnomalyDetector` finds issues. Only computed on main dashboard (deferred stats). `AnomalyBadges` module maps anomaly categories to sidebar sections.
+- **Settings Tabs** — Settings page broken into 4 tabs (General, Content, Integrations, Advanced) for reduced cognitive load.
 - **Reverse Proxy (data-proxy)** — tracker supports `data-proxy` attribute for same-origin tracking through main domain, bypasses ad blockers
 
 ## Multi-Tenancy
@@ -298,7 +300,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Click ID capture**: Tracker extracts gclid/msclkid/fbclid from URL, persists in sessionStorage, sends as `_cid`/`_cidt` fields. Ingest validates format (5-256 chars, alphanumeric + `-_=.` only) before storing in `click_id`/`click_id_type` ClickHouse columns. Invalid click IDs silently dropped. Revenue Attribution uses click IDs for platform-level ROAS.
 - **Ad blocker evasion**: Script at `/assets/v1.js`, beacon uses public_key not domain, endpoints obfuscated. `data-proxy` attribute enables reverse proxy through main domain for same-origin tracking. Cookie is always set on the page domain (not the script origin), so no cookie migration needed when switching to proxy mode. Proxy plug MUST go in endpoint.ex before Plug.Parsers (not router.ex). Cloudflare Bot Fight Mode must be disabled or have WAF skip rule for `/t/*` — sendBeacon cannot solve JS challenges.
 - **IP extraction**: Priority: `X-Spectabas-Real-IP` (trusted proxy header) > `X-Forwarded-For` (Render LB) > `CF-Connecting-IP` (Cloudflare fallback) > `conn.remote_ip`. The custom header is set by our reverse proxy plug and survives Render's XFF overwrite on the second hop. Both `ingest.ex` and `collect_rate_limit.ex` use the same priority.
-- **Category landing pages**: `/sites/:id/c/:category` renders hub page with descriptions for each page in the category. Single reusable LiveView (`CategoryLive`) with all 38 page descriptions. Sidebar section labels link to these.
+- **Category landing pages**: `/sites/:id/c/:category` renders hub page with descriptions for each page in the category. Single reusable LiveView (`CategoryLive`) with all 39 page descriptions. Sidebar section labels link to these.
 - **Sidebar layout**: All dashboard pages use `<.dashboard_layout>` from SidebarComponent
 - **Flash messages**: Unified modal toast in top-right corner (defined in SidebarComponent). Info auto-dismisses via AutoDismiss hook; errors persist until closed. Do NOT add inline flash rendering in individual pages — the layout handles it.
 - **Button styling**: All buttons use `rounded-lg`. Primary: `inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm`. Secondary: `px-3 py-1.5` with colored text/bg/border and `rounded-lg`.

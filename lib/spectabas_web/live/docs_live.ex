@@ -1185,6 +1185,10 @@ defmodule SpectabasWeb.DocsLive do
             - **Avg Duration** — average time on page
             - **Load Time** — median page load from Real User Monitoring data, color-coded: green (under 1s), amber (1-3s), red (over 3s). Shows "—" if no RUM data is available for that page yet.
 
+            ### Devices Column
+
+            Each page row includes a Devices column showing the mobile/desktop/tablet split as a compact bar, so you can see which pages are mobile-heavy at a glance.
+
             ### Row Sparklines
 
             Click any row in the Pages table to expand an inline sparkline chart showing that page's pageview trend over the selected time period. Click again to collapse. This lets you quickly spot trending or declining pages without leaving the table view.
@@ -1303,6 +1307,8 @@ defmodule SpectabasWeb.DocsLive do
             Spectabas.track("signup", { plan: "pro" });
             Spectabas.track("add_to_cart", { product: "widget" });
             ```
+
+            Click any event name to expand and see its property key/value breakdown — which products, categories, or values are most common for that event.
             """
           },
           %{
@@ -1362,6 +1368,10 @@ defmodule SpectabasWeb.DocsLive do
             ```
 
             This URL tells Spectabas: "this visitor came from a Google paid ad as part of the spring_sale campaign."
+
+            ### Auto-Detection
+
+            The Campaigns page auto-detects all UTM-tagged traffic from events — you don't need to pre-create campaigns. Any (utm_campaign, utm_source, utm_medium) combination appearing in traffic shows automatically. Click **Save to Builder** to give detected campaigns a friendly name and destination URL.
             """
           },
           %{
@@ -1429,6 +1439,8 @@ defmodule SpectabasWeb.DocsLive do
 
             This page intentionally shows bot-only data. All other analytics pages (dashboard, channels, sources, geography, etc.) automatically exclude bot traffic from their counts.
 
+            A daily trend chart shows bot vs human traffic over time, so you can spot bot spikes or seasonal patterns.
+
             **Click any user agent row** to open a details modal showing the full UA string, parsed browser/OS/device, hit counts, unique IPs, top pages targeted, and top IPs (each linking to the IP profile).
             """
           },
@@ -1470,6 +1482,8 @@ defmodule SpectabasWeb.DocsLive do
             - **Source** — referrer domain
             - **Entry Page** — first page visited
 
+
+            Table columns (Pages, Duration, Last Seen) are now sortable — click a header to sort. Click Pages to see visitors with the most pageviews first.
 
             **Click a visitor ID** to see their full profile. **Click a referrer** to filter by that source. **Click an entry page** to see its transitions.
 
@@ -1531,10 +1545,29 @@ defmodule SpectabasWeb.DocsLive do
             """
           },
           %{
+            id: "journeys",
+            title: "Journeys",
+            body: """
+            Visitor navigation flows — see how people move through your site from entry to exit.
+
+            Pages are grouped by type (e.g., all blog posts become "Blog", all product pages become "Products") based on your configured path prefixes in Settings. This prevents the visualization from being overwhelmed by hundreds of individual URLs.
+
+            ### Outcome Segmentation
+
+            Filter journeys by outcome: **All visitors**, **Converters** (visitors who completed a goal or purchase), or **Bouncers** (single-page sessions). This lets you compare the paths that lead to conversion vs the paths that lead to exit.
+
+            ### Sankey Visualization
+
+            A Sankey-style flow diagram shows the most common page-type transitions, with band width proportional to traffic volume. Click any node to drill into the individual pages within that type.
+            """
+          },
+          %{
             id: "realtime",
             title: "Realtime",
             body: """
             Live feed of visitor activity from the last 5 minutes. Shows event type, page, location, device, and timestamp for each event as it happens.
+
+            Filter the visitor list by email, IP address, or country to find specific visitors in real time.
 
             The dashboard header also shows a live visitor count with a green pulse indicator.
             """
@@ -2031,18 +2064,29 @@ defmodule SpectabasWeb.DocsLive do
             id: "site-settings",
             title: "Site Settings",
             body: """
-            Each site has these configurable options:
+            Settings are organized into four tabs:
 
+            ### General
             - **Name** — display name in the dashboard
-
             - **Domain** — the analytics subdomain (e.g., `b.example.com`)
             - **Timezone** — determines "today" boundaries, chart labels, and date ranges across the entire dashboard (e.g., `America/New_York`)
             - **GDPR Mode** — "on" (fingerprint, no cookies) or "off" (cookies, more accurate)
-            - **Cookie Domain** — for cross-subdomain cookie sharing
             - **Cross-Domain Tracking** — enable and list domains for cross-site visitor tracking
+
+            ### Content
+            - **Intent Classification** — configure path patterns for visitor intent detection (buying, researching, support, etc.)
+            - **Scraper Detection** — set content path prefixes for systematic crawl detection
+            - **Visitor Journeys** — configure journey page-type groupings
+
+            ### Integrations
+            - **Ad Platforms** — Google Ads, Bing Ads, Meta Ads OAuth connections
+            - **Payment Providers** — Stripe, Braintree API key connections
+            - **Search Console** — Google Search Console, Bing Webmaster API connections
+
+            ### Advanced
+            - **Tracking Snippet** — copy your site's embed code
             - **IP Blocklist** — block specific IPs from being tracked
             - **Ecommerce** — enable ecommerce tracking with currency setting
-            - **Email Reports** — configured on a separate page under Tools in the sidebar
 
             ### User Timezone
 
@@ -2128,7 +2172,7 @@ defmodule SpectabasWeb.DocsLive do
             - **Pageview goals** — triggered when a visitor views a specific page (supports wildcards: `/blog/*`)
             - **Custom event goals** — triggered when your JavaScript calls `Spectabas.track("event_name")`
 
-            Goals appear on the Conversions > Goals page with total completions and conversion rate for the selected period.
+            Goals appear on the Conversions > Goals page with total completions and conversion rate for the selected period. Each goal also shows its top 3 traffic sources — which referrers and UTM sources drive the most completions.
 
             ### Funnels
 
@@ -2241,12 +2285,13 @@ defmodule SpectabasWeb.DocsLive do
 
             ### Attribution Models
 
-            Three toggle options control how revenue is credited to sources:
+            Four toggle options control how revenue is credited to sources:
 
             | Model | Behavior | Best For |
             |-------|----------|----------|
-            | **First Touch** | Credits the first source that brought the visitor | Understanding discovery — what channels bring new customers |
             | **Last Touch** (default) | Credits the most recent source before purchase | Evaluating what closes — which touchpoint drove the conversion |
+            | **First Touch** | Credits the first source in the converting session | Understanding what initiated the buying session |
+            | **First Click** | Credits the very first source that EVER introduced this customer | Understanding discovery — what channels bring new customers |
             | **Any Touch** | Credits every source the visitor ever touched | Full journey view — did an ad click appear anywhere in the path |
 
             > **Any Touch note:** A single conversion can appear under multiple sources, so totals may exceed actual revenue. This is expected — it answers "was this source involved?" not "how much credit does it get?"

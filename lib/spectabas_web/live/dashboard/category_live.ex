@@ -32,7 +32,7 @@ defmodule SpectabasWeb.Dashboard.CategoryLive do
           path: "journeys",
           label: "Journeys",
           desc:
-            "Visitor navigation flows — see how people move through your site from entry to exit. Sankey-style visualization of the most common page transitions."
+            "Visitor navigation flows — see how people move through your site from entry to exit. Pages grouped by configurable type (blog, products, etc.) with outcome segmentation (converters vs bouncers). Sankey-style visualization of the most common page transitions."
         },
         %{
           key: "realtime",
@@ -97,7 +97,7 @@ defmodule SpectabasWeb.Dashboard.CategoryLive do
           path: "events",
           label: "Custom Events",
           desc:
-            "Events fired via Spectabas.track() in your JavaScript. Use these for button clicks, form submissions, video plays, or any custom interaction."
+            "Events fired via Spectabas.track() in your JavaScript. Use these for button clicks, form submissions, video plays, or any custom interaction. Click events to see property value distributions."
         },
         %{
           key: "performance",
@@ -171,7 +171,7 @@ defmodule SpectabasWeb.Dashboard.CategoryLive do
           path: "bot-traffic",
           label: "Bot Traffic",
           desc:
-            "Dedicated view of bot-flagged traffic. All other pages exclude bots — this page shows only bots for analysis. Includes UA detection and navigator.webdriver checks."
+            "Dedicated view of bot-flagged traffic. All other pages exclude bots — this page shows only bots for analysis. Includes UA detection and navigator.webdriver checks. Includes daily trend chart (bot vs human) and clickable user agent detail modal."
         },
         %{
           key: "scrapers",
@@ -185,7 +185,7 @@ defmodule SpectabasWeb.Dashboard.CategoryLive do
           path: "visitor-log",
           label: "Visitor Log",
           desc:
-            "Individual visitor records with session count, pages viewed, location, device, and identified email. Click any visitor to see their full profile and event timeline."
+            "Individual visitor records with session count, pages viewed, location, device, and identified email. Click any visitor to see their full profile and event timeline. Sortable by pageviews, duration, and last seen."
         },
         %{
           key: "cohort",
@@ -215,7 +215,7 @@ defmodule SpectabasWeb.Dashboard.CategoryLive do
           path: "goals",
           label: "Goals",
           desc:
-            "Track specific actions: pageview goals (URL match with wildcards) and custom event goals (from Spectabas.track()). See completion count and conversion rate."
+            "Track specific actions: pageview goals (URL match with wildcards) and custom event goals (from Spectabas.track()). See completion count and conversion rate. Each goal shows its top traffic sources."
         },
         %{
           key: "funnels",
@@ -236,7 +236,7 @@ defmodule SpectabasWeb.Dashboard.CategoryLive do
           path: "revenue-attribution",
           label: "Revenue Attribution",
           desc:
-            "Which traffic sources generate paying customers. Sortable table with revenue, AOV, conversion rate, and ROAS. Paid sources show colored platform pills (Google/Bing/Meta). Three attribution models: first-touch, last-touch, any-touch."
+            "Which traffic sources generate paying customers. Sortable table with revenue, AOV, conversion rate, and ROAS. Paid sources show colored platform pills (Google/Bing/Meta). Four attribution models: last-touch, first-touch, first-click, any-touch."
         },
         %{
           key: "revenue-cohorts",
