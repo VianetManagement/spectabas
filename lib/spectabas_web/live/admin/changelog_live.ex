@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.36.3", "2026-04-14T19:00:00Z",
+       [
+         %{
+           title: "Fix: GSC sync now deletes before inserting (prevents stale data accumulation)",
+           description:
+             "The GSC and Bing Webmaster sync was inserting new rows without clearing existing data for the same date. Google revises search data retroactively — queries that drop below thresholds disappear from later API responses but their old rows stayed in our table. Over time (especially with backfill + daily sync overlap), this accumulated stale rows that inflated click/impression totals. Both Google and Bing sync functions now DELETE existing rows for the (site, date, source) before inserting the fresh batch. To fix the April 10-11 hump: re-run the GSC backfill from Site Settings (it will delete-then-insert clean data for each date)."
+         }
+       ]},
       {"v5.36.2", "2026-04-14T18:00:00Z",
        [
          %{

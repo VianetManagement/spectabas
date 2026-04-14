@@ -212,6 +212,12 @@ defmodule Spectabas.AdIntegrations.Platforms.BingWebmaster do
               }
             end)
 
+          date_str = Date.to_iso8601(date)
+
+          ClickHouse.execute(
+            "ALTER TABLE search_console DELETE WHERE site_id = #{ClickHouse.param(site.id)} AND date = #{ClickHouse.param(date_str)} AND source = 'bing' SETTINGS mutations_sync = 2"
+          )
+
           case ClickHouse.insert("search_console", ch_rows) do
             :ok ->
               Logger.info("[Bing] Synced #{length(ch_rows)} rows for #{date}")

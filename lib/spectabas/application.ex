@@ -37,7 +37,7 @@ defmodule Spectabas.Application do
 
     # Notify Slack on deploy (async, non-blocking)
     Task.start(fn ->
-      Spectabas.Notifications.Slack.notify(":rocket: *Spectabas deployed* — v5.36.2")
+      Spectabas.Notifications.Slack.notify(":rocket: *Spectabas deployed* — v5.36.3")
     end)
 
     # One-time backfill checks — delayed so ClickHouse schema is ready.

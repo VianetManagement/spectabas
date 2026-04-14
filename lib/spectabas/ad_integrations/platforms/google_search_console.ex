@@ -202,6 +202,17 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleSearchConsole do
               }
             end)
 
+          # Delete existing rows for this site+date+source BEFORE inserting
+          # fresh data. Google revises search data retroactively — stale rows
+          # from earlier syncs must be purged, not just overwritten by
+          # ReplacingMergeTree (which only deduplicates exact key matches, not
+          # rows that Google dropped from its revised dataset).
+          date_str = Date.to_iso8601(date)
+
+          ClickHouse.execute(
+            "ALTER TABLE search_console DELETE WHERE site_id = #{ClickHouse.param(site.id)} AND date = #{ClickHouse.param(date_str)} AND source = 'google' SETTINGS mutations_sync = 2"
+          )
+
           case ClickHouse.insert("search_console", ch_rows) do
             :ok ->
               Logger.info("[GSC] Synced #{length(ch_rows)} rows for #{date}")

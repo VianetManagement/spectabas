@@ -286,47 +286,38 @@ defmodule SpectabasWeb.HealthController do
   end
 
   def dedupe_search_console(conn, _params) do
-    # Check for duplicates
+    # Show per-date row counts so operator can spot inflated dates.
+    # Also triggers OPTIMIZE FINAL for any remaining key-level duplicates.
+    # For stale rows (keys Google dropped on revision), a re-sync of
+    # affected dates is needed — the sync now DELETE-before-INSERTs.
     diag_sql = """
     SELECT
+      site_id,
       toString(date) AS date,
+      source,
       count() AS total_rows,
-      uniqExact(query, page, country, device, source) AS unique_keys,
-      count() - uniqExact(query, page, country, device, source) AS duplicate_rows
+      sum(clicks) AS total_clicks,
+      sum(impressions) AS total_impressions
     FROM search_console
-    WHERE date >= today() - 90
-    GROUP BY site_id, date
-    HAVING duplicate_rows > 0
-    ORDER BY date ASC
+    WHERE date >= today() - 30
+    GROUP BY site_id, date, source
+    ORDER BY site_id, date ASC
     """
 
-    dupes =
+    rows =
       case Spectabas.ClickHouse.query(diag_sql) do
-        {:ok, rows} -> rows
+        {:ok, r} -> r
         _ -> []
       end
 
-    if dupes == [] do
-      json(conn, %{ok: true, message: "No duplicates found", duplicates: []})
-    else
-      # Force merge to deduplicate ReplacingMergeTree
-      case Spectabas.ClickHouse.execute_admin("OPTIMIZE TABLE search_console FINAL") do
-        :ok ->
-          json(conn, %{
-            ok: true,
-            message:
-              "Found #{length(dupes)} date(s) with duplicates. OPTIMIZE FINAL triggered — duplicates will be merged.",
-            duplicates_before: dupes
-          })
+    Spectabas.ClickHouse.execute_admin("OPTIMIZE TABLE search_console FINAL")
 
-        {:error, e} ->
-          json(conn, %{
-            ok: false,
-            error: inspect(e) |> String.slice(0, 300),
-            duplicates: dupes
-          })
-      end
-    end
+    json(conn, %{
+      ok: true,
+      message:
+        "Per-date row counts below. OPTIMIZE FINAL triggered. To fix stale data from overlapping syncs, re-run the GSC backfill for April 10-11 — the sync now deletes existing rows before inserting fresh data.",
+      dates: rows
+    })
   end
 
   def backfill_asn_flags(conn, _params) do
