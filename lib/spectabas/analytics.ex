@@ -1051,36 +1051,18 @@ defmodule Spectabas.Analytics do
         date_range,
         fn nr ->
           """
-          SELECT
-            referrer_domain,
-            sum(pv) AS pageviews,
-            uniq(visitor_id) AS visitors,
-            count() AS sessions,
-            round(countIf(pv = 1) / greatest(count(), 1) * 100, 1) AS bounce_rate,
-            round(avg(coalesce(dur, 0)), 0) AS avg_duration,
-            round(sum(pv) / greatest(count(), 1), 1) AS pages_per_session
-          FROM (
-            SELECT
-              session_id,
-              any(visitor_id) AS visitor_id,
-              any(referrer_domain) AS referrer_domain,
-              countIf(event_type = 'pageview') AS pv,
-              maxIf(duration_s, event_type = 'duration' AND duration_s > 0) AS dur
-            FROM events
-            WHERE site_id = #{ClickHouse.param(site.id)}
-              AND timestamp >= #{ClickHouse.param(format_datetime(nr.from))}
-              AND timestamp <= #{ClickHouse.param(format_datetime(nr.to))}
-              AND referrer_domain != '' AND ip_is_bot = 0 #{exclude_clause}
-            GROUP BY session_id
-            HAVING pv > 0
-          )
+          SELECT referrer_domain, countIf(event_type = 'pageview') AS pageviews, uniq(session_id) AS sessions
+          FROM events
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND timestamp >= #{ClickHouse.param(format_datetime(nr.from))}
+            AND timestamp <= #{ClickHouse.param(format_datetime(nr.to))}
+            AND referrer_domain != '' AND ip_is_bot = 0 #{exclude_clause}
           GROUP BY referrer_domain ORDER BY pageviews DESC LIMIT 100
           """
         end,
         fn ir ->
           """
-          SELECT referrer_domain, sum(pageviews) AS pageviews, sum(sessions) AS sessions,
-            0 AS visitors, 0 AS bounce_rate, 0 AS avg_duration, 0 AS pages_per_session
+          SELECT referrer_domain, sum(pageviews) AS pageviews, sum(sessions) AS sessions
           FROM imported_sources
           WHERE site_id = #{ClickHouse.param(site.id)}
             AND date >= #{ClickHouse.param(Date.to_iso8601(ir.from))}
@@ -1094,11 +1076,7 @@ defmodule Spectabas.Analytics do
           %{
             "referrer_domain" => List.first(rows)["referrer_domain"],
             "pageviews" => to_string(sum_field(rows, "pageviews")),
-            "visitors" => to_string(sum_field(rows, "visitors")),
-            "sessions" => to_string(sum_field(rows, "sessions")),
-            "bounce_rate" => to_string(first_nonzero(rows, "bounce_rate")),
-            "avg_duration" => to_string(first_nonzero(rows, "avg_duration")),
-            "pages_per_session" => to_string(first_nonzero(rows, "pages_per_session"))
+            "sessions" => to_string(sum_field(rows, "sessions"))
           }
         end
       )
@@ -1140,30 +1118,16 @@ defmodule Spectabas.Analytics do
     with :ok <- authorize(site, user) do
       sql = """
       SELECT
-        value,
-        sum(pv) AS pageviews,
-        uniq(visitor_id) AS visitors,
-        count() AS sessions,
-        round(countIf(pv = 1) / greatest(count(), 1) * 100, 1) AS bounce_rate,
-        round(avg(coalesce(dur, 0)), 0) AS avg_duration,
-        round(sum(pv) / greatest(count(), 1), 1) AS pages_per_session
-      FROM (
-        SELECT
-          session_id,
-          any(visitor_id) AS visitor_id,
-          any(#{dimension}) AS value,
-          countIf(event_type = 'pageview') AS pv,
-          maxIf(duration_s, event_type = 'duration' AND duration_s > 0) AS dur
-        FROM events
-        WHERE site_id = #{ClickHouse.param(site.id)}
-          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-          AND #{dimension} != ''
-          AND ip_is_bot = 0
-        GROUP BY session_id
-        HAVING pv > 0
-      )
-      GROUP BY value
+        #{dimension} AS value,
+        countIf(event_type = 'pageview') AS pageviews,
+        uniq(session_id) AS sessions
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND #{dimension} != ''
+        AND ip_is_bot = 0
+      GROUP BY #{dimension}
       ORDER BY pageviews DESC
       LIMIT 100
       """
@@ -1354,41 +1318,18 @@ defmodule Spectabas.Analytics do
 
       sql = """
       SELECT
-        source,
-        sum(pv) AS pageviews,
+        if(referrer_domain != '', referrer_domain, if(utm_source != '', utm_source, 'Direct')) AS source,
+        countIf(event_type = 'pageview') AS pageviews,
         uniq(visitor_id) AS visitors,
-        count() AS sessions,
-        round(countIf(pv = 1) / greatest(count(), 1) * 100, 1) AS bounce_rate,
-        round(avg(coalesce(dur, 0)), 0) AS avg_duration,
-        round(sum(pv) / greatest(count(), 1), 1) AS pages_per_session
-      FROM (
-        SELECT
-          session_id,
-          any(visitor_id) AS visitor_id,
-          any(if(referrer_domain != '', referrer_domain, if(utm_source != '', utm_source, 'Direct'))) AS source,
-          any(channel) AS channel,
-          countIf(event_type = 'pageview') AS pv,
-          maxIf(duration_s, event_type = 'duration' AND duration_s > 0) AS dur
-        FROM (
-          SELECT
-            session_id,
-            visitor_id,
-            referrer_domain,
-            utm_source,
-            event_type,
-            duration_s,
-            (#{channel_sql}) AS channel
-          FROM events
-          WHERE site_id = #{ClickHouse.param(site.id)}
-            AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-            AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-            AND ip_is_bot = 0
-            #{exclude_clause}
-        )
-        WHERE channel = #{ClickHouse.param(channel_name)}
-        GROUP BY session_id
-        HAVING pv > 0
-      )
+        uniq(session_id) AS sessions
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+        AND event_type = 'pageview'
+        AND (#{channel_sql}) = #{ClickHouse.param(channel_name)}
+        #{exclude_clause}
       GROUP BY source
       ORDER BY pageviews DESC
       LIMIT 50
@@ -4883,14 +4824,6 @@ defmodule Spectabas.Analytics do
   # Sum numeric string fields across multiple rows
   defp sum_field(rows, field) do
     Enum.reduce(rows, 0, fn row, acc -> acc + to_int(row[field]) end)
-  end
-
-  # Return the first non-zero value for a field (engagement metrics come from native only)
-  defp first_nonzero(rows, field) do
-    Enum.find_value(rows, 0, fn row ->
-      val = to_float(row[field])
-      if val != 0.0, do: val
-    end)
   end
 
   # Split a date range into native and imported portions based on site's import dates.

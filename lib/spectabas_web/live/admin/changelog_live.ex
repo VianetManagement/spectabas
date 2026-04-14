@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.37.1", "2026-04-14T23:00:00Z",
+       [
+         %{
+           title: "Fix: Revert acquisition query rewrites that caused blank results",
+           description:
+             "The session-level subquery rewrites for top_sources, top_utm_dimension, and channel_detail were causing blank results on the Acquisition drilldown and Revenue Attribution campaign tab. Reverted to the original flat GROUP BY queries. Engagement metrics (bounce rate, duration, pages/session) on drilldowns will be added via a separate lightweight query in a follow-up rather than rewriting the core queries."
+         }
+       ]},
       {"v5.37.0", "2026-04-14T22:00:00Z",
        [
          %{
