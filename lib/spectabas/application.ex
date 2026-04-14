@@ -46,6 +46,8 @@ defmodule Spectabas.Application do
       Process.sleep(60_000)
       maybe_backfill_daily_rollup()
       maybe_backfill_asn_flags()
+      Spectabas.Workers.SessionFactsRollup.maybe_backfill()
+      Spectabas.Workers.VisitorAttributionRollup.maybe_backfill()
     end)
 
     result
@@ -108,11 +110,11 @@ defmodule Spectabas.Application do
     cfg = Application.get_env(:spectabas, Spectabas.ClickHouse, [])
 
     if cfg[:url] && cfg[:url] != "" && !String.contains?(cfg[:url], "placeholder") do
-      # Check all 5 rollup tables — if ANY is empty, backfill kicks in.
+      # Check all 6 rollup tables — if ANY is empty, backfill kicks in.
       # Backfill is idempotent (DELETE then INSERT per table), so running it
       # even when only one dimension rollup is empty is safe.
       tables =
-        ~w(daily_rollup daily_page_rollup daily_source_rollup daily_geo_rollup daily_device_rollup)
+        ~w(daily_rollup daily_page_rollup daily_source_rollup daily_geo_rollup daily_device_rollup daily_campaign_rollup)
 
       any_empty? =
         Enum.any?(tables, fn table ->

@@ -407,6 +407,65 @@ defmodule Spectabas.ClickHouse do
       ORDER BY (site_id, date, device_type, browser, os)
       SETTINGS index_granularity = 8192
       """,
+      # Pre-aggregated campaign rollup for campaign_performance queries.
+      """
+      CREATE TABLE IF NOT EXISTS #{db}.daily_campaign_rollup (
+        site_id UInt64,
+        date Date,
+        utm_campaign String,
+        utm_source String,
+        utm_medium String,
+        pv_state AggregateFunction(countIf, UInt8, UInt8),
+        vis_state AggregateFunction(uniqExactIf, String, UInt8),
+        sess_state AggregateFunction(uniqExactIf, String, UInt8)
+      ) ENGINE = AggregatingMergeTree()
+      PARTITION BY toYYYYMM(date)
+      ORDER BY (site_id, date, utm_campaign, utm_source, utm_medium)
+      SETTINGS index_granularity = 8192
+      """,
+      # Pre-computed per-session facts for entry/exit pages and channel breakdown.
+      """
+      CREATE TABLE IF NOT EXISTS #{db}.daily_session_facts (
+        site_id UInt64,
+        date Date,
+        session_id String,
+        visitor_id String,
+        entry_page String,
+        exit_page String,
+        pageview_count UInt32,
+        duration_s UInt32,
+        referrer_domain String,
+        utm_source String,
+        utm_medium String,
+        utm_campaign String,
+        device_type LowCardinality(String),
+        browser LowCardinality(String),
+        ip_country LowCardinality(String),
+        is_bounce UInt8
+      ) ENGINE = ReplacingMergeTree()
+      PARTITION BY toYYYYMM(date)
+      ORDER BY (site_id, date, session_id)
+      SETTINGS index_granularity = 8192
+      """,
+      # Pre-computed first/last source per visitor for revenue attribution.
+      """
+      CREATE TABLE IF NOT EXISTS #{db}.visitor_attribution (
+        site_id UInt64,
+        visitor_id String,
+        first_source String,
+        first_medium String,
+        first_campaign String,
+        last_source String,
+        last_medium String,
+        last_campaign String,
+        first_seen DateTime,
+        last_seen DateTime,
+        updated_at DateTime DEFAULT now()
+      ) ENGINE = ReplacingMergeTree(updated_at)
+      PARTITION BY intDiv(cityHash64(visitor_id), 1000000)
+      ORDER BY (site_id, visitor_id)
+      SETTINGS index_granularity = 8192
+      """,
       # Schema migrations — add columns that may not exist on older tables
       "ALTER TABLE #{db}.ecommerce_events ADD COLUMN IF NOT EXISTS refund_amount Decimal(12, 2) DEFAULT 0",
       "ALTER TABLE #{db}.ecommerce_events ADD COLUMN IF NOT EXISTS import_source LowCardinality(String) DEFAULT ''",
@@ -414,7 +473,10 @@ defmodule Spectabas.ClickHouse do
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_event_type event_type TYPE bloom_filter GRANULARITY 4",
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_event_name event_name TYPE bloom_filter GRANULARITY 4",
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_url_path url_path TYPE bloom_filter GRANULARITY 4",
-      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_click_id click_id TYPE bloom_filter GRANULARITY 4"
+      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_click_id click_id TYPE bloom_filter GRANULARITY 4",
+      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_utm_source utm_source TYPE bloom_filter GRANULARITY 4",
+      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_utm_medium utm_medium TYPE bloom_filter GRANULARITY 4",
+      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_utm_campaign utm_campaign TYPE bloom_filter GRANULARITY 4"
     ]
 
     if connected do
@@ -610,7 +672,7 @@ defmodule Spectabas.ClickHouse do
     "'#{e}'"
   end
 
-  @allowed_tables ~w(events daily_stats daily_rollup daily_page_rollup daily_source_rollup daily_geo_rollup daily_device_rollup source_stats country_stats device_stats network_stats ecommerce_events subscription_events search_console imported_daily_stats imported_pages imported_sources imported_countries imported_devices ad_spend)
+  @allowed_tables ~w(events daily_stats daily_rollup daily_page_rollup daily_source_rollup daily_geo_rollup daily_device_rollup daily_campaign_rollup daily_session_facts visitor_attribution source_stats country_stats device_stats network_stats ecommerce_events subscription_events search_console imported_daily_stats imported_pages imported_sources imported_countries imported_devices ad_spend)
   defp sanitize_table(t) when t in @allowed_tables, do: t
   defp sanitize_table(t), do: raise(ArgumentError, "Unknown ClickHouse table: #{t}")
 

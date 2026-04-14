@@ -852,6 +852,96 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  def entry_pages_fast(%Site{} = site, %User{} = user, date_range) do
+    with :ok <- authorize(site, user) do
+      {from_date, to_date, raw_cutoff} = rollup_date_bounds(date_range, site)
+      site_id = ClickHouse.param(site.id)
+
+      sql = """
+      SELECT
+        entry_page AS url_path,
+        count() AS entries,
+        uniq(visitor_id) AS unique_visitors,
+        round(countIf(is_bounce = 1) / greatest(count(), 1) * 100, 1) AS bounce_rate,
+        round(avg(duration_s), 0) AS avg_duration
+      FROM (
+        SELECT entry_page, visitor_id, is_bounce, duration_s
+        FROM daily_session_facts FINAL
+        WHERE site_id = #{site_id}
+          AND date >= #{ClickHouse.param(from_date)}
+          AND date <= #{ClickHouse.param(to_date)}
+          AND date < #{ClickHouse.param(raw_cutoff)}
+          AND entry_page != ''
+
+        UNION ALL
+
+        SELECT
+          argMinIf(url_path, timestamp, event_type = 'pageview') AS entry_page,
+          any(visitor_id) AS visitor_id,
+          if(countIf(event_type = 'pageview') = 1, 1, 0) AS is_bounce,
+          maxIf(duration_s, event_type = 'duration' AND duration_s > 0) AS duration_s
+        FROM events
+        WHERE site_id = #{site_id}
+          AND ip_is_bot = 0
+          AND toDate(timestamp) >= #{ClickHouse.param(raw_cutoff)}
+          AND toDate(timestamp) >= #{ClickHouse.param(from_date)}
+          AND toDate(timestamp) <= #{ClickHouse.param(to_date)}
+        GROUP BY session_id
+        HAVING countIf(event_type = 'pageview') > 0
+      )
+      GROUP BY url_path
+      ORDER BY entries DESC
+      LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  def exit_pages_fast(%Site{} = site, %User{} = user, date_range) do
+    with :ok <- authorize(site, user) do
+      {from_date, to_date, raw_cutoff} = rollup_date_bounds(date_range, site)
+      site_id = ClickHouse.param(site.id)
+
+      sql = """
+      SELECT
+        exit_page AS url_path,
+        count() AS exits,
+        uniq(visitor_id) AS unique_visitors,
+        round(avg(duration_s), 0) AS avg_duration
+      FROM (
+        SELECT exit_page, visitor_id, duration_s
+        FROM daily_session_facts FINAL
+        WHERE site_id = #{site_id}
+          AND date >= #{ClickHouse.param(from_date)}
+          AND date <= #{ClickHouse.param(to_date)}
+          AND date < #{ClickHouse.param(raw_cutoff)}
+          AND exit_page != ''
+
+        UNION ALL
+
+        SELECT
+          argMaxIf(url_path, timestamp, event_type = 'pageview') AS exit_page,
+          any(visitor_id) AS visitor_id,
+          maxIf(duration_s, event_type = 'duration' AND duration_s > 0) AS duration_s
+        FROM events
+        WHERE site_id = #{site_id}
+          AND ip_is_bot = 0
+          AND toDate(timestamp) >= #{ClickHouse.param(raw_cutoff)}
+          AND toDate(timestamp) >= #{ClickHouse.param(from_date)}
+          AND toDate(timestamp) <= #{ClickHouse.param(to_date)}
+        GROUP BY session_id
+        HAVING countIf(event_type = 'pageview') > 0
+      )
+      GROUP BY url_path
+      ORDER BY exits DESC
+      LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
   @doc """
   Top pages by pageviews from events table.
   """
@@ -1072,6 +1162,57 @@ defmodule Spectabas.Analytics do
           AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
         GROUP BY session_id
         HAVING pv > 0
+      )
+      GROUP BY campaign, source, medium
+      ORDER BY visitors DESC
+      LIMIT 200
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  def campaign_performance_fast(%Site{} = site, %User{} = user, date_range) do
+    with :ok <- authorize(site, user) do
+      {from_date, to_date, raw_cutoff} = rollup_date_bounds(date_range, site)
+      site_id = ClickHouse.param(site.id)
+
+      sql = """
+      SELECT
+        campaign,
+        source,
+        medium,
+        countIfMerge(pv_s) AS pageviews,
+        uniqExactIfMerge(vis_s) AS visitors,
+        uniqExactIfMerge(sess_s) AS sessions,
+        0 AS bounce_rate,
+        0 AS avg_duration
+      FROM (
+        SELECT utm_campaign AS campaign, utm_source AS source, utm_medium AS medium,
+          pv_state AS pv_s, vis_state AS vis_s, sess_state AS sess_s
+        FROM daily_campaign_rollup
+        WHERE site_id = #{site_id}
+          AND date >= #{ClickHouse.param(from_date)}
+          AND date <= #{ClickHouse.param(to_date)}
+          AND date < #{ClickHouse.param(raw_cutoff)}
+
+        UNION ALL
+
+        SELECT
+          utm_campaign AS campaign,
+          utm_source AS source,
+          utm_medium AS medium,
+          countIfState(event_type = 'pageview' AND ip_is_bot = 0) AS pv_s,
+          uniqExactIfState(visitor_id, event_type = 'pageview' AND ip_is_bot = 0) AS vis_s,
+          uniqExactIfState(session_id, event_type = 'pageview' AND ip_is_bot = 0) AS sess_s
+        FROM events
+        WHERE site_id = #{site_id}
+          AND toDate(timestamp) >= #{ClickHouse.param(raw_cutoff)}
+          AND toDate(timestamp) >= #{ClickHouse.param(from_date)}
+          AND toDate(timestamp) <= #{ClickHouse.param(to_date)}
+          AND utm_campaign != ''
+          AND ip_is_bot = 0
+        GROUP BY campaign, source, medium
       )
       GROUP BY campaign, source, medium
       ORDER BY visitors DESC
@@ -2123,6 +2264,67 @@ defmodule Spectabas.Analytics do
      |> Enum.sort_by(fn r -> -to_float(r["total_revenue"]) end)
      |> Enum.take(50)}
   end
+
+  def revenue_by_source_fast(%Site{} = site, %User{} = user, date_range, opts \\ []) do
+    date_range = ensure_date_range(date_range)
+    group_by = Keyword.get(opts, :group_by, "source")
+    touch = Keyword.get(opts, :touch, "first")
+
+    with :ok <- authorize(site, user) do
+      source_col =
+        case group_by do
+          "campaign" ->
+            "if(#{touch_col(touch)}_campaign != '', #{touch_col(touch)}_campaign, '(none)')"
+
+          "medium" ->
+            "if(#{touch_col(touch)}_medium != '', #{touch_col(touch)}_medium, '(none)')"
+
+          _ ->
+            "if(#{touch_col(touch)}_source != '', #{touch_col(touch)}_source, 'Direct')"
+        end
+
+      site_p = ClickHouse.param(site.id)
+      from_p = ClickHouse.param(format_datetime(date_range.from))
+      to_p = ClickHouse.param(format_datetime(date_range.to))
+
+      sql = """
+      SELECT
+        source,
+        '' AS ad_platform,
+        uniq(va.visitor_id) AS visitors,
+        countDistinct(ec.order_id) AS orders,
+        sum(ec.revenue) AS total_revenue,
+        round(sum(ec.revenue) / greatest(countDistinct(ec.order_id), 1), 2) AS avg_order_value,
+        round(countDistinct(ec.order_id) / greatest(uniq(va.visitor_id), 1) * 100, 2) AS conversion_rate
+      FROM (
+        SELECT visitor_id, #{source_col} AS source
+        FROM visitor_attribution FINAL
+        WHERE site_id = #{site_p}
+      ) AS va
+      LEFT JOIN (
+        SELECT visitor_id, order_id, revenue
+        FROM ecommerce_events
+        WHERE site_id = #{site_p}
+          #{ecommerce_source_filter(site)}
+          AND timestamp >= #{from_p} AND timestamp <= #{to_p}
+      ) AS ec ON va.visitor_id = ec.visitor_id
+      WHERE va.visitor_id IN (
+        SELECT DISTINCT visitor_id FROM events
+        WHERE site_id = #{site_p}
+          AND event_type = 'pageview' AND ip_is_bot = 0
+          AND timestamp >= #{from_p} AND timestamp <= #{to_p}
+      )
+      GROUP BY source
+      ORDER BY total_revenue DESC
+      LIMIT 50
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  defp touch_col("last"), do: "last"
+  defp touch_col(_), do: "first"
 
   @doc "Ad spend by campaign for ROAS calculation."
   def ad_spend_by_campaign(%Site{} = site, %User{} = user, date_range) do
@@ -3806,6 +4008,8 @@ defmodule Spectabas.Analytics do
 
   @doc """
   Recent visitors with summary: pages viewed, duration, location, device.
+  Supports seek-based (keyset) pagination via cursor option for stable, fast paging.
+  Returns `{:ok, rows, next_cursor}` where next_cursor is nil when no more pages.
   """
   def visitor_log(site, user, date_range, opts \\ [])
 
@@ -3816,7 +4020,7 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
     seg = segment_sql(opts)
     per_page = opts |> Keyword.get(:per_page, 50) |> min(200) |> max(1)
-    page = opts |> Keyword.get(:page, 0) |> max(0) |> min(1000)
+    cursor = Keyword.get(opts, :cursor, nil)
 
     sort_by =
       case Keyword.get(opts, :sort_by, "last_seen") do
@@ -3832,7 +4036,9 @@ defmodule Spectabas.Analytics do
 
     with :ok <- authorize(site, user) do
       tz = tz_sql(site)
-      offset = page * per_page
+      dir_up = String.upcase(sort_dir)
+
+      cursor_clause = visitor_log_cursor_clause(cursor, sort_by, sort_dir, tz)
 
       # Tie-break on visitor_id DESC so page boundaries are deterministic
       # across sort changes (and identical values).
@@ -3860,16 +4066,58 @@ defmodule Spectabas.Analytics do
         AND ip_is_bot = 0
         #{seg}
       GROUP BY visitor_id
-      ORDER BY #{sort_by} #{String.upcase(sort_dir)}, visitor_id DESC
-      LIMIT #{per_page} OFFSET #{offset}
+      #{cursor_clause}
+      ORDER BY #{sort_by} #{dir_up}, visitor_id DESC
+      LIMIT #{per_page}
       """
 
       case ClickHouse.query(sql) do
-        {:ok, rows} -> {:ok, rows}
-        error -> error
+        {:ok, rows} ->
+          next_cursor = build_visitor_log_cursor(rows, per_page, sort_by)
+          {:ok, rows, next_cursor}
+
+        error ->
+          error
       end
     end
   end
+
+  defp visitor_log_cursor_clause(nil, _sort_by, _sort_dir, _tz), do: ""
+
+  defp visitor_log_cursor_clause(%{"value" => val, "vid" => vid}, sort_by, sort_dir, tz) do
+    cmp = if sort_dir == "desc", do: "<", else: ">"
+
+    col_expr =
+      case sort_by do
+        "last_seen" -> "toTimezone(max(timestamp), #{tz})"
+        "first_seen" -> "toTimezone(min(timestamp), #{tz})"
+        "pageviews" -> "countIf(event_type = 'pageview')"
+        "duration" -> "maxIf(duration_s, event_type = 'duration')"
+        _ -> "toTimezone(max(timestamp), #{tz})"
+      end
+
+    "HAVING (#{col_expr}, visitor_id) #{cmp} (#{ClickHouse.param(val)}, #{ClickHouse.param(vid)})"
+  end
+
+  defp visitor_log_cursor_clause(_invalid, _sort_by, _sort_dir, _tz), do: ""
+
+  defp build_visitor_log_cursor(rows, per_page, sort_by) when length(rows) >= per_page do
+    last = List.last(rows)
+    vid = last["visitor_id"]
+
+    val =
+      case sort_by do
+        "last_seen" -> last["last_seen"]
+        "first_seen" -> last["first_seen"]
+        "pageviews" -> last["pageviews"]
+        "duration" -> last["duration"]
+        _ -> last["last_seen"]
+      end
+
+    %{"value" => val, "vid" => vid}
+  end
+
+  defp build_visitor_log_cursor(_rows, _per_page, _sort_by), do: nil
 
   # ---- Page Transitions ----
 

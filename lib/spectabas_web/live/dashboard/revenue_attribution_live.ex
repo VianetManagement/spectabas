@@ -97,10 +97,22 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
     %{site: site, user: user, date_range: range, group_by: group, touch: touch} = socket.assigns
     period = range_to_period(range)
 
+    # Use the fast visitor_attribution-backed query for first/last touch on
+    # source/medium/campaign. Fall back to the full scan for any/first_ever
+    # touch or term/content grouping.
+    use_fast = touch in ["first", "last"] and group in ["source", "medium", "campaign"]
+
     rows =
-      case Analytics.revenue_by_source(site, user, period, group_by: group, touch: touch) do
-        {:ok, data} -> data
-        _ -> []
+      if use_fast do
+        case Analytics.revenue_by_source_fast(site, user, period, group_by: group, touch: touch) do
+          {:ok, data} -> data
+          _ -> []
+        end
+      else
+        case Analytics.revenue_by_source(site, user, period, group_by: group, touch: touch) do
+          {:ok, data} -> data
+          _ -> []
+        end
       end
 
     channels =

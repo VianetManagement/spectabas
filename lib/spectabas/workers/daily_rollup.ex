@@ -25,7 +25,7 @@ defmodule Spectabas.Workers.DailyRollup do
   require Logger
   alias Spectabas.ClickHouse
 
-  @rollup_tables ~w(daily_rollup daily_page_rollup daily_source_rollup daily_geo_rollup daily_device_rollup)
+  @rollup_tables ~w(daily_rollup daily_page_rollup daily_source_rollup daily_geo_rollup daily_device_rollup daily_campaign_rollup)
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"backfill" => true}}) do
@@ -189,6 +189,24 @@ defmodule Spectabas.Workers.DailyRollup do
     FROM events
     WHERE #{where_range} AND (device_type != '' OR browser != '' OR os != '')
     GROUP BY site_id, date, device_type, browser, os
+    """
+  end
+
+  defp build_insert_sql("daily_campaign_rollup", where_range) do
+    """
+    INSERT INTO daily_campaign_rollup
+    SELECT
+      site_id,
+      toDate(timestamp) AS date,
+      utm_campaign,
+      utm_source,
+      utm_medium,
+      countIfState(event_type = 'pageview' AND ip_is_bot = 0) AS pv_state,
+      uniqExactIfState(visitor_id, event_type = 'pageview' AND ip_is_bot = 0) AS vis_state,
+      uniqExactIfState(session_id, event_type = 'pageview' AND ip_is_bot = 0) AS sess_state
+    FROM events
+    WHERE #{where_range} AND utm_campaign != ''
+    GROUP BY site_id, date, utm_campaign, utm_source, utm_medium
     """
   end
 

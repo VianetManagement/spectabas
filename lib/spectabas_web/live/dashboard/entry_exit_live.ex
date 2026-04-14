@@ -56,13 +56,13 @@ defmodule SpectabasWeb.Dashboard.EntryExitLive do
     data =
       case tab do
         "entry" ->
-          case Analytics.entry_pages(site, user, period) do
+          case Analytics.entry_pages_fast(site, user, period) do
             {:ok, rows} -> rows
             _ -> []
           end
 
         "exit" ->
-          case Analytics.exit_pages(site, user, period) do
+          case Analytics.exit_pages_fast(site, user, period) do
             {:ok, rows} -> rows
             _ -> []
           end

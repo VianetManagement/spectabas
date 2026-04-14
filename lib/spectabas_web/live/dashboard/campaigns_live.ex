@@ -147,7 +147,7 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
     saved = Campaigns.list_campaigns(site)
 
     detected =
-      case Analytics.campaign_performance(site, user, range_to_period(socket.assigns.range)) do
+      case Analytics.campaign_performance_fast(site, user, range_to_period(socket.assigns.range)) do
         {:ok, rows} -> rows
         _ -> []
       end

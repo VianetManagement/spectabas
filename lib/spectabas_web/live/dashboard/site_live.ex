@@ -683,13 +683,12 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     |> assign(:deferred_loaded, false)
   end
 
-  defp fetch_overview(site, user, date_range, opts, days_in_range \\ 0) do
-    result =
-      if days_in_range >= 7 do
-        Analytics.overview_stats_fast(site, user, date_range, opts)
-      else
-        Analytics.overview_stats(site, user, date_range, opts)
-      end
+  defp fetch_overview(site, user, date_range, opts, _days_in_range \\ 0) do
+    # Always use the fast variant — it's a single raw-events scan with uniq()
+    # (HyperLogLog) instead of the slow session-grouped uniqExact subquery.
+    # Falls back to regular overview_stats only when segments are active
+    # (handled inside overview_stats_fast itself).
+    result = Analytics.overview_stats_fast(site, user, date_range, opts)
 
     case result do
       {:ok, s} ->

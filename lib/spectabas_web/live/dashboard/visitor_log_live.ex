@@ -37,7 +37,9 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
         |> assign(:site, site)
         |> assign(:user, user)
         |> assign(:date_range, "7d")
-        |> assign(:page, 0)
+        |> assign(:cursor, nil)
+        |> assign(:cursor_stack, [])
+        |> assign(:page_num, 0)
         |> assign(:sort_by, "last_seen")
         |> assign(:sort_dir, "desc")
         |> assign(:segment, segment)
@@ -46,6 +48,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
         |> assign(:ip_info, nil)
         |> assign(:loading, true)
         |> assign(:visitors, [])
+        |> assign(:next_cursor, nil)
 
       if connected?(socket), do: send(self(), :load_data)
       {:ok, socket}
@@ -64,7 +67,9 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
     {:noreply,
      socket
      |> assign(:date_range, range)
-     |> assign(:page, 0)
+     |> assign(:cursor, nil)
+     |> assign(:cursor_stack, [])
+     |> assign(:page_num, 0)
      |> assign(:loading, true)}
   end
 
@@ -85,7 +90,9 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
      socket
      |> assign(:sort_by, col)
      |> assign(:sort_dir, new_dir)
-     |> assign(:page, 0)
+     |> assign(:cursor, nil)
+     |> assign(:cursor_stack, [])
+     |> assign(:page_num, 0)
      |> assign(:loading, true)}
   end
 
@@ -93,12 +100,30 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
 
   def handle_event("next_page", _params, socket) do
     send(self(), :load_data)
-    {:noreply, socket |> assign(:page, socket.assigns.page + 1) |> assign(:loading, true)}
+
+    {:noreply,
+     socket
+     |> assign(:cursor_stack, [socket.assigns.cursor | socket.assigns.cursor_stack])
+     |> assign(:cursor, socket.assigns.next_cursor)
+     |> assign(:page_num, socket.assigns.page_num + 1)
+     |> assign(:loading, true)}
   end
 
   def handle_event("prev_page", _params, socket) do
+    {prev_cursor, rest} =
+      case socket.assigns.cursor_stack do
+        [head | tail] -> {head, tail}
+        [] -> {nil, []}
+      end
+
     send(self(), :load_data)
-    {:noreply, socket |> assign(:page, max(socket.assigns.page - 1, 0)) |> assign(:loading, true)}
+
+    {:noreply,
+     socket
+     |> assign(:cursor, prev_cursor)
+     |> assign(:cursor_stack, rest)
+     |> assign(:page_num, max(socket.assigns.page_num - 1, 0))
+     |> assign(:loading, true)}
   end
 
   def handle_event("search_ip", %{"ip" => ip}, socket) do
@@ -137,22 +162,22 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
       site: site,
       user: user,
       date_range: range,
-      page: page,
+      cursor: cursor,
       sort_by: sort_by,
       sort_dir: sort_dir,
       segment: segment
     } = socket.assigns
 
-    visitors =
+    {visitors, next_cursor} =
       case Analytics.visitor_log(site, user, range_to_period(range),
-             page: page,
+             cursor: cursor,
              per_page: @per_page,
              sort_by: sort_by,
              sort_dir: sort_dir,
              segment: segment
            ) do
-        {:ok, rows} -> rows
-        _ -> []
+        {:ok, rows, nc} -> {rows, nc}
+        _ -> {[], nil}
       end
 
     # Enrich with emails from Postgres
@@ -166,7 +191,9 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
         end
       end)
 
-    assign(socket, :visitors, visitors)
+    socket
+    |> assign(:visitors, visitors)
+    |> assign(:next_cursor, next_cursor)
   end
 
   @impl true
@@ -461,16 +488,16 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
 
           <div class="flex items-center justify-between mt-4">
             <button
-              :if={@page > 0}
+              :if={@page_num > 0}
               phx-click="prev_page"
               class="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50"
             >
               &larr; Previous
             </button>
-            <span :if={@page == 0}></span>
-            <span class="text-xs text-gray-500">Page {@page + 1}</span>
+            <span :if={@page_num == 0}></span>
+            <span class="text-xs text-gray-500">Page {@page_num + 1}</span>
             <button
-              :if={length(@visitors) == 30}
+              :if={@next_cursor != nil}
               phx-click="next_page"
               class="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50"
             >

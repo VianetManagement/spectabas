@@ -79,7 +79,11 @@ config :spectabas, Oban,
        # Monday at 9am UTC — send weekly AI insights email
        {"0 9 * * 1", Spectabas.Workers.AIWeeklyEmail},
        # Daily at 01:30 UTC — roll up yesterday's stats into daily_rollup
-       {"30 1 * * *", Spectabas.Workers.DailyRollup}
+       {"30 1 * * *", Spectabas.Workers.DailyRollup},
+       # Daily at 02:00 UTC — materialize per-session facts for entry/exit queries
+       {"0 2 * * *", Spectabas.Workers.SessionFactsRollup},
+       # Daily at 02:30 UTC — refresh visitor first/last attribution for revenue queries
+       {"30 2 * * *", Spectabas.Workers.VisitorAttributionRollup}
      ]}
   ]
 
