@@ -1297,6 +1297,62 @@ defmodule Spectabas.Analytics do
   end
 
   @doc """
+  Engagement metrics (bounce rate, avg duration, pages/session) grouped by a
+  dimension. Uses the pre-materialized daily_session_facts table — much faster
+  than a session GROUP BY on raw events.
+
+  `group_by` is the column name in daily_session_facts to group on:
+  "referrer_domain", "utm_source", "utm_medium", "utm_campaign", etc.
+
+  Returns %{"dimension_value" => %{bounce_rate: 45.2, avg_duration: 120, pages_per_session: 2.3}}
+  """
+  def source_engagement(%Site{} = site, %User{} = user, date_range, group_by)
+      when group_by in ~w(referrer_domain utm_source utm_medium utm_campaign utm_term utm_content) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      site_p = ClickHouse.param(site.id)
+      from_date = date_range.from |> DateTime.to_date() |> Date.to_iso8601()
+      to_date = date_range.to |> DateTime.to_date() |> Date.to_iso8601()
+
+      sql = """
+      SELECT
+        #{group_by} AS dim,
+        count() AS sessions,
+        round(countIf(is_bounce = 1) / greatest(count(), 1) * 100, 1) AS bounce_rate,
+        round(avgIf(duration_s, duration_s > 0), 0) AS avg_duration,
+        round(avg(pageview_count), 1) AS pages_per_session
+      FROM daily_session_facts
+      WHERE site_id = #{site_p}
+        AND date >= #{ClickHouse.param(from_date)}
+        AND date <= #{ClickHouse.param(to_date)}
+        AND #{group_by} != ''
+      GROUP BY dim
+      ORDER BY sessions DESC
+      LIMIT 200
+      """
+
+      case ClickHouse.query(sql) do
+        {:ok, rows} ->
+          map =
+            Map.new(rows, fn r ->
+              {r["dim"],
+               %{
+                 bounce_rate: to_float(r["bounce_rate"]),
+                 avg_duration: to_int(r["avg_duration"]),
+                 pages_per_session: to_float(r["pages_per_session"])
+               }}
+            end)
+
+          {:ok, map}
+
+        error ->
+          error
+      end
+    end
+  end
+
+  @doc """
   Drill down into a specific channel — shows individual sources within that channel.
   """
   def channel_detail(%Site{} = site, %User{} = user, date_range, channel_name) do

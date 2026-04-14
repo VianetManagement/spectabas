@@ -100,14 +100,68 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
             []
           end
 
+        # Enrich channel detail with engagement metrics from daily_session_facts
+        detail = enrich_with_engagement(detail, site, user, period, "referrer_domain")
+
         socket
         |> assign(:channels, channels)
         |> assign(:channel_detail, detail)
 
       "sources" ->
-        sources = load_sources(site, user, period, socket.assigns.tab)
+        tab = socket.assigns.tab
+        sources = load_sources(site, user, period, tab)
+
+        # Map tab → session_facts column for engagement lookup
+        eng_dim =
+          case tab do
+            "referrers" -> "referrer_domain"
+            "utm_source" -> "utm_source"
+            "utm_medium" -> "utm_medium"
+            "utm_campaign" -> "utm_campaign"
+            "utm_term" -> nil
+            "utm_content" -> nil
+            _ -> nil
+          end
+
+        sources =
+          if eng_dim,
+            do: enrich_with_engagement(sources, site, user, period, eng_dim),
+            else: sources
+
         assign(socket, :sources, sources)
     end
+  end
+
+  # Merge engagement metrics from daily_session_facts into existing rows.
+  # Each row gets "bounce_rate", "avg_duration", "pages_per_session" keys.
+  defp enrich_with_engagement([], _site, _user, _period, _dim), do: []
+
+  defp enrich_with_engagement(rows, site, user, period, dim) do
+    engagement =
+      case Analytics.source_engagement(site, user, period, dim) do
+        {:ok, map} -> map
+        _ -> %{}
+      end
+
+    # The key in engagement map matches the dimension value in the row.
+    # For referrers: row["referrer_domain"] or row["source"]
+    Enum.map(rows, fn row ->
+      key = row["referrer_domain"] || row["source"] || row["value"] || ""
+
+      case Map.get(engagement, key) do
+        %{bounce_rate: br, avg_duration: dur, pages_per_session: pps} ->
+          row
+          |> Map.put("bounce_rate", to_string(br))
+          |> Map.put("avg_duration", to_string(dur))
+          |> Map.put("pages_per_session", to_string(pps))
+
+        _ ->
+          row
+          |> Map.put("bounce_rate", nil)
+          |> Map.put("avg_duration", nil)
+          |> Map.put("pages_per_session", nil)
+      end
+    end)
   end
 
   defp load_sources(site, user, period, tab) do
@@ -237,11 +291,20 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
                       <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                         Sessions
                       </th>
+                      <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
+                        Bounce
+                      </th>
+                      <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
+                        Duration
+                      </th>
+                      <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase hidden lg:table-cell">
+                        Pages/Sess
+                      </th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-gray-100">
                     <tr :if={@channel_detail == []}>
-                      <td colspan="4" class="px-6 py-8 text-center text-gray-500">
+                      <td colspan="7" class="px-6 py-8 text-center text-gray-500">
                         No sources for this channel.
                       </td>
                     </tr>
@@ -255,6 +318,17 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
                       </td>
                       <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
                         {format_number(to_num(src["sessions"]))}
+                      </td>
+                      <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums hidden md:table-cell">
+                        {if src["bounce_rate"], do: "#{src["bounce_rate"]}%", else: "—"}
+                      </td>
+                      <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums hidden md:table-cell">
+                        {if src["avg_duration"],
+                          do: format_duration(to_num(src["avg_duration"])),
+                          else: "—"}
+                      </td>
+                      <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums hidden lg:table-cell">
+                        {src["pages_per_session"] || "—"}
                       </td>
                     </tr>
                   </tbody>
@@ -370,11 +444,20 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                       Sessions
                     </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
+                      Bounce
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
+                      Duration
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase hidden lg:table-cell">
+                      Pages/Sess
+                    </th>
                   </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                   <tr :if={@sources == []}>
-                    <td colspan="3" class="px-6 py-8 text-center text-gray-500">
+                    <td colspan="6" class="px-6 py-8 text-center text-gray-500">
                       No data for this period.
                     </td>
                   </tr>
@@ -392,6 +475,17 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
                       {format_number(to_num(Map.get(source, "sessions", 0)))}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums hidden md:table-cell">
+                      {if source["bounce_rate"], do: "#{source["bounce_rate"]}%", else: "—"}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums hidden md:table-cell">
+                      {if source["avg_duration"],
+                        do: format_duration(to_num(source["avg_duration"])),
+                        else: "—"}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums hidden lg:table-cell">
+                      {source["pages_per_session"] || "—"}
                     </td>
                   </tr>
                 </tbody>

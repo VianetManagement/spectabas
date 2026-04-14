@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.37.2", "2026-04-15T00:00:00Z",
+       [
+         %{
+           title: "Feat: Acquisition drilldowns now show engagement metrics (safe approach)",
+           description:
+             "Sources and UTM tabs show Bounce Rate, Avg Duration, and Pages/Session alongside the existing columns. Unlike the v5.37.0 attempt that rewrote core queries (causing blank results), this version keeps the original fast queries untouched and enriches the results with a separate lightweight query against the pre-materialized daily_session_facts table. Engagement columns hidden on mobile for space."
+         }
+       ]},
       {"v5.37.1", "2026-04-14T23:00:00Z",
        [
          %{
