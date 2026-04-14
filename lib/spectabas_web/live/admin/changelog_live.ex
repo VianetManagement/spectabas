@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.38.2", "2026-04-15T03:00:00Z",
+       [
+         %{
+           title: "Test: Revenue attribution integration tests for all three touch models",
+           description:
+             "New integration test inserts synthetic events (2 visitors, 2 sources each, 2 orders) into ClickHouse and asserts: any/first/last touch all return non-zero revenue; first touch credits earliest source (google.com); last touch credits latest source (facebook.com); first and last have equal total revenue; any >= first (multi-attribution). Run with: mix test --only integration."
+         }
+       ]},
       {"v5.38.1", "2026-04-15T02:00:00Z",
        [
          %{
