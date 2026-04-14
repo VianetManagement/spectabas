@@ -53,6 +53,34 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.36.0", "2026-04-14T16:00:00Z",
+       [
+         %{
+           title: "Perf: Async mount on all 26 dashboard pages",
+           description:
+             "Every dashboard page now loads data asynchronously — the page renders instantly with a loading spinner, data fills in when ClickHouse responds. Previously 24 of 27 data pages blocked in mount for 3-10 seconds. Users see the page header, range selector, and sidebar immediately."
+         },
+         %{
+           title: "Perf: 6 ClickHouse query optimizations",
+           description:
+             "UTM bloom filter indexes (2-3x faster campaign queries). daily_campaign_rollup (50-100x faster Campaigns page). overview_stats_fast for all ranges (5-10x faster Today/Yesterday). daily_session_facts (10-20x faster entry/exit pages). visitor_attribution table (10-50x faster revenue attribution). Seek-based visitor_log pagination (10-20x faster on deep pages)."
+         },
+         %{
+           title: "Fix: Bounce rate was showing >100%",
+           description:
+             "overview_stats_fast was calculating bounce rate as sum(is_bounce) across all raw event rows. Since is_bounce defaults to 1 on every event, a session with 10 events contributed 10 to the numerator but only 1 to the denominator — producing bounce rates like 1121%. Restored the correct session-grouped subquery: countIf(pv=1)/count() where pv is pageviews per session."
+         },
+         %{
+           title: "Fix: Dashboard timeseries chart reliable rendering",
+           description:
+             "The main dashboard chart sometimes rendered partially or flickered. Two fixes: (1) Chart now reads initial data from a data-chart JSON attribute (race-free, same pattern as Search Keywords). (2) Removed the redundant timeseries re-push when deferred results complete — was causing Chart.js to re-animate identical data."
+         },
+         %{
+           title: "Fix: 10 mobile UX improvements",
+           description:
+             "Visitor Log hides 3 columns on mobile. Search Keywords and Scrapers headers stack on narrow screens. Settings tabs scroll horizontally. Modal close buttons enlarged for touch targets. Bot Traffic modal hides Network column. Journeys bounce table scrollable, pills truncate at 120px."
+         }
+       ]},
       {"v5.33.0", "2026-04-14T12:00:00Z",
        [
          %{
