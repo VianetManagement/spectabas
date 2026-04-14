@@ -470,10 +470,24 @@ defmodule SpectabasWeb.HealthController do
 
   defp sum_rev(rows) do
     Enum.reduce(rows, 0.0, fn r, acc ->
+      val = r["total_revenue"] || 0
+
       acc +
-        case Float.parse(r["total_revenue"] || "0") do
-          {f, _} -> f
-          :error -> 0.0
+        cond do
+          is_float(val) ->
+            val
+
+          is_integer(val) ->
+            val * 1.0
+
+          is_binary(val) ->
+            case Float.parse(val) do
+              {f, _} -> f
+              :error -> 0.0
+            end
+
+          true ->
+            0.0
         end
     end)
   end
