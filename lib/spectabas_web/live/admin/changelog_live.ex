@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.36.2", "2026-04-14T18:00:00Z",
+       [
+         %{
+           title: "Fix: GSC duplicate data deduplication endpoint",
+           description:
+             "Added /health/dedupe-search-console admin endpoint. Detects duplicate rows in search_console (from overlapping daily sync + backfill runs) and triggers OPTIMIZE TABLE FINAL to force ReplacingMergeTree deduplication. The daily_trends and sparkline queries dropped FINAL earlier (to fix alias bugs), so unmerged duplicates were inflating the April 10-11 data hump."
+         }
+       ]},
       {"v5.36.1", "2026-04-14T17:00:00Z",
        [
          %{

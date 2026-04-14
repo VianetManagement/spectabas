@@ -285,6 +285,50 @@ defmodule SpectabasWeb.HealthController do
     end
   end
 
+  def dedupe_search_console(conn, _params) do
+    # Check for duplicates
+    diag_sql = """
+    SELECT
+      toString(date) AS date,
+      count() AS total_rows,
+      uniqExact(query, page, country, device, source) AS unique_keys,
+      count() - uniqExact(query, page, country, device, source) AS duplicate_rows
+    FROM search_console
+    WHERE date >= today() - 90
+    GROUP BY site_id, date
+    HAVING duplicate_rows > 0
+    ORDER BY date ASC
+    """
+
+    dupes =
+      case Spectabas.ClickHouse.query(diag_sql) do
+        {:ok, rows} -> rows
+        _ -> []
+      end
+
+    if dupes == [] do
+      json(conn, %{ok: true, message: "No duplicates found", duplicates: []})
+    else
+      # Force merge to deduplicate ReplacingMergeTree
+      case Spectabas.ClickHouse.execute_admin("OPTIMIZE TABLE search_console FINAL") do
+        :ok ->
+          json(conn, %{
+            ok: true,
+            message:
+              "Found #{length(dupes)} date(s) with duplicates. OPTIMIZE FINAL triggered — duplicates will be merged.",
+            duplicates_before: dupes
+          })
+
+        {:error, e} ->
+          json(conn, %{
+            ok: false,
+            error: inspect(e) |> String.slice(0, 300),
+            duplicates: dupes
+          })
+      end
+    end
+  end
+
   def backfill_asn_flags(conn, _params) do
     {dc, vpn, tor} = Spectabas.IPEnricher.ASNBlocklist.sizes()
 
