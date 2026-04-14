@@ -951,6 +951,30 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
             </div>
 
             <div class="border-t border-gray-200 pt-6">
+              <h3 class="text-base font-medium text-gray-900 mb-2">Visitor Journeys</h3>
+              <p class="text-xs text-gray-500 mb-3">
+                Pages that count as conversions for the <.link
+                  navigate={~p"/dashboard/sites/#{@site.id}/journeys"}
+                  class="text-indigo-600 underline"
+                >Journeys page</.link>. One URL path per line. Paths are matched as prefixes
+                (e.g. <span class="font-mono">/contact</span>
+                matches <span class="font-mono">/contact</span>
+                and <span class="font-mono">/contact/thank-you</span>).
+              </p>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">
+                  Conversion pages
+                </label>
+                <textarea
+                  name="site[journey_conversion_pages_text]"
+                  rows="3"
+                  class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5 font-mono text-xs"
+                  placeholder="/contact&#10;/checkout&#10;/signup"
+                ><%= Enum.join(@site.journey_conversion_pages || [], "\n") %></textarea>
+              </div>
+            </div>
+
+            <div class="border-t border-gray-200 pt-6">
               <h3 class="text-base font-medium text-gray-900 mb-4">Ecommerce</h3>
               <div class="flex items-center gap-3">
                 <input type="hidden" name="site[ecommerce_enabled]" value="false" />

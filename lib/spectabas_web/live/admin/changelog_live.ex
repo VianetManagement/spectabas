@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   defp entries do
     [
+      {"v5.32.0", "2026-04-14T09:00:00Z",
+       [
+         %{
+           title: "Feat: Visitor Journeys redesign — page-type grouping + outcome segmentation",
+           description:
+             "Complete rewrite. URLs are now grouped by page type using your content prefixes (/listings/* becomes 'Listings', etc.) so thousands of unique paths collapse into recognizable patterns. Journeys are split into three sections: Converter journeys (paths that touched a conversion page), Engaged journeys (3+ pages, no conversion), and Bounce paths (single-page sessions by type and source). Consecutive identical page types are collapsed (Listings → Listings → Listings → Contact becomes Listings → Contact). Each journey shows visitor count, avg duration, and top 3 traffic sources. Conversion pages are site-configurable via Settings → Visitor Journeys (one URL prefix per line). Stats cards show total sessions, multi-page sessions, pages/session, converted, and bounced."
+         }
+       ]},
       {"v5.31.0", "2026-04-14T08:00:00Z",
        [
          %{
