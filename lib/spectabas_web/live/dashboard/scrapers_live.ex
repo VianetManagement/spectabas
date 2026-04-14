@@ -553,8 +553,4 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
 
   defp verdict_label(:normal), do: "Normal"
   defp verdict_label(_), do: "—"
-
-  defp blank_to_dash(nil), do: "—"
-  defp blank_to_dash(""), do: "—"
-  defp blank_to_dash(v), do: v
 end

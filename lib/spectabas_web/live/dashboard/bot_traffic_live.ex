@@ -428,8 +428,4 @@ defmodule SpectabasWeb.Dashboard.BotTrafficLive do
     </.dashboard_layout>
     """
   end
-
-  defp blank_to_dash(nil), do: "—"
-  defp blank_to_dash(""), do: "—"
-  defp blank_to_dash(v), do: v
 end

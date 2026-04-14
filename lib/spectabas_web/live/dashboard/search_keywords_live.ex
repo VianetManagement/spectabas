@@ -3,7 +3,7 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
 
   alias Spectabas.{Accounts, Sites, ClickHouse}
   import SpectabasWeb.Dashboard.SidebarComponent
-  import Spectabas.TypeHelpers, except: [format_number: 1]
+  import Spectabas.TypeHelpers
 
   @allowed_sort_cols ~w(total_clicks total_impressions ctr avg_pos)
   @allowed_sort_dirs ~w(asc desc)
@@ -1534,14 +1534,6 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
 
   # ---------------- Helpers ----------------
 
-  defp sort_arrow(col, sort_by, sort_dir) do
-    if col == sort_by do
-      if sort_dir == "desc", do: "\u25BC", else: "\u25B2"
-    else
-      ""
-    end
-  end
-
   defp position_color(pos) when is_number(pos) and pos <= 3, do: "text-green-700"
   defp position_color(pos) when is_number(pos) and pos <= 10, do: "text-blue-700"
   defp position_color(pos) when is_number(pos) and pos <= 20, do: "text-amber-600"
@@ -1555,18 +1547,6 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
       _ -> url
     end
   end
-
-  defp format_number(n) when is_integer(n) and n >= 1000 do
-    n
-    |> Integer.to_string()
-    |> String.graphemes()
-    |> Enum.reverse()
-    |> Enum.chunk_every(3)
-    |> Enum.join(",")
-    |> String.reverse()
-  end
-
-  defp format_number(n), do: to_string(n)
 
   defp range_to_days("7d"), do: 7
   defp range_to_days("30d"), do: 30

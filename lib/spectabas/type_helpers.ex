@@ -97,4 +97,18 @@ defmodule Spectabas.TypeHelpers do
   end
 
   def integer_with_commas(n), do: integer_with_commas(to_num(n))
+
+  @doc "Returns a dash for nil/empty, the value otherwise. For display in tables."
+  def blank_to_dash(nil), do: "—"
+  def blank_to_dash(""), do: "—"
+  def blank_to_dash(v), do: v
+
+  @doc "Sort indicator arrow for sortable table headers."
+  def sort_arrow(col, sort_by, sort_dir) do
+    cond do
+      col != sort_by -> ""
+      sort_dir == "desc" -> "\u25BC"
+      true -> "\u25B2"
+    end
+  end
 end

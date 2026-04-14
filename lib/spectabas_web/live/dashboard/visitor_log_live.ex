@@ -462,14 +462,6 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
     """
   end
 
-  defp sort_arrow(col, sort_by, sort_dir) do
-    cond do
-      col != sort_by -> ""
-      sort_dir == "desc" -> "\u25BC"
-      true -> "\u25B2"
-    end
-  end
-
   defp intent_pill("buying"), do: "bg-green-100 text-green-800"
   defp intent_pill("researching"), do: "bg-blue-100 text-blue-800"
   defp intent_pill("comparing"), do: "bg-purple-100 text-purple-800"

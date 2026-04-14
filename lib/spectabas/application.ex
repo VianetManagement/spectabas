@@ -3,6 +3,7 @@ defmodule Spectabas.Application do
 
   use Application
   require Logger
+  import Spectabas.TypeHelpers, only: [to_int: 1]
 
   @impl true
   def start(_type, _args) do
@@ -39,18 +40,11 @@ defmodule Spectabas.Application do
       Spectabas.Notifications.Slack.notify(":rocket: *Spectabas deployed* — v5.29.1")
     end)
 
-    # One-time backfill of daily_rollup if empty. Delayed so CH schema is ready.
+    # One-time backfill checks — delayed so ClickHouse schema is ready.
+    # Consolidated into one Task to keep startup simple.
     Task.start(fn ->
       Process.sleep(60_000)
       maybe_backfill_daily_rollup()
-    end)
-
-    # One-time backfill of ip_is_datacenter / ip_is_vpn / ip_is_tor flags on
-    # existing events. The ASN-list parser was broken until v5.27.1 so every
-    # historical event has these flags = 0. We enqueue the backfill if we see
-    # a non-empty blocklist AND zero flagged rows in the last 30 days.
-    Task.start(fn ->
-      Process.sleep(90_000)
       maybe_backfill_asn_flags()
     end)
 
@@ -110,10 +104,6 @@ defmodule Spectabas.Application do
       :ok
   end
 
-  defp to_int(n) when is_integer(n), do: n
-  defp to_int(n) when is_binary(n), do: String.to_integer(n)
-  defp to_int(_), do: 0
-
   defp maybe_backfill_daily_rollup do
     cfg = Application.get_env(:spectabas, Spectabas.ClickHouse, [])
 
@@ -128,14 +118,7 @@ defmodule Spectabas.Application do
         Enum.any?(tables, fn table ->
           case Spectabas.ClickHouse.query("SELECT count() AS c FROM #{table}") do
             {:ok, [%{"c" => c}]} ->
-              count =
-                case c do
-                  n when is_integer(n) -> n
-                  n when is_binary(n) -> String.to_integer(n)
-                  _ -> 0
-                end
-
-              count == 0
+              to_int(c) == 0
 
             _ ->
               false
