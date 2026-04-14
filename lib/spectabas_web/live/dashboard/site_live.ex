@@ -1045,6 +1045,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           <div
             id="timeseries-hook"
             phx-hook="TimeseriesChart"
+            phx-update="ignore"
             data-chart={@timeseries_json}
             class="h-48 sm:h-[280px] relative"
           >
@@ -1209,6 +1210,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
             <div
               id="map-hook"
               phx-hook="BubbleMap"
+              phx-update="ignore"
             >
               <div class="h-48 sm:h-[300px] relative">
                 <canvas></canvas>
