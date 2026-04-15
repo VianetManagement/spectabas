@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.39.1", "2026-04-15T05:30:00Z",
+       [
+         %{
+           title: "Feat: External ID visible on visitor profile page",
+           description:
+             "Visitor profile now shows the External ID field (from the identity cookie) below User ID when set."
+         }
+       ]},
       {"v5.39.0", "2026-04-15T05:00:00Z",
        [
          %{
