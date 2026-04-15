@@ -199,6 +199,12 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
               <.field :if={@visitor.email} label="Email" value={@visitor.email} />
               <.field :if={@visitor.user_id} label="User ID" value={@visitor.user_id} mono={true} />
               <.field
+                :if={@visitor.external_id}
+                label="External ID"
+                value={@visitor.external_id}
+                mono={true}
+              />
+              <.field
                 label="Browser"
                 value={"#{@profile["browser"] || "?"} #{@profile["browser_version"] || ""}"}
               />
