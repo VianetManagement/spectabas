@@ -285,35 +285,71 @@ defmodule Spectabas.Events.Ingest do
         # ETS cache check — most common path for returning GDPR-off visitors
         case Cache.get(site.id, payload.vid) do
           cached_id when not is_nil(cached_id) ->
+            # Even on cache hit, ensure external_id is set if _xid present
+            maybe_set_external_id(site.id, cached_id, payload._xid)
             cached_id
 
           nil ->
-            # Step 1: Try to find visitor by this cookie_id
-            existing_by_cookie =
-              Spectabas.Repo.one(
-                from(v in Visitor,
-                  where: v.site_id == ^site.id and v.cookie_id == ^payload.vid,
-                  limit: 1
-                )
-              )
+            xid = payload._xid || ""
 
-            if existing_by_cookie do
-              # Cookie matches an existing visitor — return visit
-              Visitors.get_or_create(site.id, payload.vid, :off, client_ip)
-              Cache.put(site.id, payload.vid, existing_by_cookie.id)
-              existing_by_cookie.id
-            else
-              # New cookie = new visitor. Do NOT merge by fingerprint in cookie mode —
-              # fingerprint dedup causes false merges when different people on the same
-              # device model/browser share a fingerprint (e.g. two iPhone 15 users).
-              case Visitors.get_or_create(site.id, payload.vid, :off, client_ip) do
-                {:ok, visitor} ->
-                  Cache.put(site.id, payload.vid, visitor.id)
-                  visitor.id
+            # If external identity cookie present, try to find existing visitor by it
+            existing_by_xid =
+              if xid != "", do: Visitors.find_by_external_id(site.id, xid), else: nil
 
-                _ ->
-                  payload.vid
-              end
+            case existing_by_xid do
+              %Visitor{} = xid_visitor ->
+                # External ID found — merge: update cookie_id to new cookie if changed
+                if xid_visitor.cookie_id != payload.vid do
+                  xid_visitor
+                  |> Visitor.changeset(%{
+                    cookie_id: payload.vid,
+                    last_seen_at: DateTime.utc_now() |> DateTime.truncate(:second),
+                    last_ip: client_ip
+                  })
+                  |> Spectabas.Repo.update()
+                else
+                  Visitors.get_or_create(site.id, payload.vid, :off, client_ip)
+                end
+
+                Cache.put(site.id, payload.vid, xid_visitor.id)
+                xid_visitor.id
+
+              nil ->
+                # No external ID match — standard cookie-based resolution
+                existing_by_cookie =
+                  Spectabas.Repo.one(
+                    from(v in Visitor,
+                      where: v.site_id == ^site.id and v.cookie_id == ^payload.vid,
+                      limit: 1
+                    )
+                  )
+
+                if existing_by_cookie do
+                  # Cookie matches an existing visitor — return visit
+                  Visitors.get_or_create(site.id, payload.vid, :off, client_ip)
+                  # Set external_id if _xid present and not already set
+                  if xid != "" and (existing_by_cookie.external_id || "") == "" do
+                    Visitors.set_external_id(existing_by_cookie, xid)
+                  end
+
+                  Cache.put(site.id, payload.vid, existing_by_cookie.id)
+                  existing_by_cookie.id
+                else
+                  # New cookie = new visitor. Do NOT merge by fingerprint in cookie mode —
+                  # fingerprint dedup causes false merges when different people on the same
+                  # device model/browser share a fingerprint (e.g. two iPhone 15 users).
+                  case Visitors.get_or_create(site.id, payload.vid, :off, client_ip) do
+                    {:ok, visitor} ->
+                      # Set external_id if _xid present
+                      if xid != "", do: Visitors.set_external_id(visitor, xid)
+
+                      Cache.put(site.id, payload.vid, visitor.id)
+                      visitor.id
+
+                    _ ->
+                      payload.vid
+                  end
+                end
             end
         end
 
@@ -595,6 +631,22 @@ defmodule Spectabas.Events.Ingest do
     # gclid: base64url chars; msclkid: hex + hyphens; fbclid: alphanumeric + punctuation
     # Allow alphanumeric, hyphens, underscores, dots, equals (covers all three formats)
     Regex.match?(~r/\A[a-zA-Z0-9\-_=.]+\z/, id)
+  end
+
+  # Best-effort external_id update on cache-hit path
+  defp maybe_set_external_id(_site_id, _visitor_id, nil), do: :ok
+  defp maybe_set_external_id(_site_id, _visitor_id, ""), do: :ok
+
+  defp maybe_set_external_id(_site_id, visitor_id, xid) do
+    case Spectabas.Repo.get(Visitor, visitor_id) do
+      %Visitor{external_id: existing} = visitor when existing in [nil, ""] ->
+        Visitors.set_external_id(visitor, xid)
+
+      _ ->
+        :ok
+    end
+  rescue
+    _ -> :ok
   end
 
   defp extract_utms(url, payload) do

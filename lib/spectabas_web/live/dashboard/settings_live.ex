@@ -1006,6 +1006,28 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
               </div>
             </div>
 
+            <div :if={@settings_tab == "content"} class="border-t border-gray-200 pt-6">
+              <h3 class="text-base font-medium text-gray-900 mb-2">Identity Cookie</h3>
+              <p class="text-xs text-gray-500 mb-3">
+                If your site sets its own cookie to identify logged-in users (e.g. <span class="font-mono">_puppies_fp</span>), enter the cookie name here.
+                The tracker will read it and use the value to merge visitor profiles when
+                a user clears their <span class="font-mono">_sab</span> cookie or switches
+                browsers. Only used in GDPR-off mode. Leave blank to disable.
+              </p>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">
+                  Cookie name
+                </label>
+                <input
+                  type="text"
+                  name="site[identity_cookie_name]"
+                  value={@site.identity_cookie_name}
+                  placeholder="_puppies_fp"
+                  class="mt-1 block w-64 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5 font-mono text-xs"
+                />
+              </div>
+            </div>
+
             <div :if={@settings_tab == "advanced"} class="border-t border-gray-200 pt-6">
               <h3 class="text-base font-medium text-gray-900 mb-4">Ecommerce</h3>
               <div class="flex items-center gap-3">

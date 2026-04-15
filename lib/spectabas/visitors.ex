@@ -87,6 +87,37 @@ defmodule Spectabas.Visitors do
   def find_by_fingerprint(_, _), do: nil
 
   @doc """
+  Find an existing visitor by external_id (from a customer-set identity cookie).
+  Uses partial index on (site_id, external_id) WHERE external_id IS NOT NULL.
+  """
+  def find_by_external_id(site_id, external_id)
+      when is_binary(external_id) and external_id != "" do
+    Repo.one(
+      from(v in Visitor,
+        where: v.site_id == ^site_id and v.external_id == ^external_id,
+        limit: 1
+      )
+    )
+  end
+
+  def find_by_external_id(_, _), do: nil
+
+  @doc """
+  Set external_id on an existing visitor. Silently skips on conflict
+  (another visitor already has this external_id for the site).
+  """
+  def set_external_id(%Visitor{} = visitor, external_id)
+      when is_binary(external_id) and external_id != "" do
+    visitor
+    |> Visitor.changeset(%{external_id: external_id})
+    |> Repo.update()
+  rescue
+    Ecto.ConstraintError -> {:ok, visitor}
+  end
+
+  def set_external_id(visitor, _), do: {:ok, visitor}
+
+  @doc """
   Get or create a visitor for the given site. In GDPR-off mode,
   `id_value` is used as cookie_id; in GDPR-on mode, as fingerprint_id.
   """

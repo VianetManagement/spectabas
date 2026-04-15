@@ -173,6 +173,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Sidebar Anomaly Badges** — red/amber dots on sidebar section labels when `AnomalyDetector` finds issues. Only computed on main dashboard (deferred stats). `AnomalyBadges` module maps anomaly categories to sidebar sections.
 - **Settings Tabs** — Settings page broken into 4 tabs (General, Content, Integrations, Advanced) for reduced cognitive load.
 - **Reverse Proxy (data-proxy)** — tracker supports `data-proxy` attribute for same-origin tracking through main domain, bypasses ad blockers
+- **External Identity Cookie** — sites configure a customer-set cookie name (e.g. `_puppies_fp`); tracker reads it and sends as `_xid`. Merges visitor profiles when `_sab` cookie changes but external identity persists. Configured per-site in Settings.
 
 ## Multi-Tenancy
 
@@ -280,7 +281,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Mobile responsiveness** — scrollable tables, collapsible mobile nav bar
 - **Accessible top nav** — WCAG AA contrast compliance
 - **Documentation pages** — docs split into `/docs` (index), `/docs/getting-started`, `/docs/dashboard`, `/docs/conversions`, `/docs/api`, `/docs/admin` with cross-category search. Requires login (behind :require_authenticated_user). Public pages: `/privacy`, `/terms`, homepage.
-- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.38.3)
+- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.39.0)
 - **Legal** — Privacy Policy at `/privacy` and Terms of Service at `/terms` (public, no auth required). Entity: Spectabas, Kent County MI. Contact: howdy@spectabas.com. Arbitration clause (AAA, Kent County). 18+ age restriction.
 
 ## Important Patterns
@@ -319,6 +320,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Rollup idempotency**: Re-runs for the same date DELETE existing rows first via `ALTER TABLE <table> DELETE WHERE date = X SETTINGS mutations_sync=2`. `uniqExactIfState` merges via set union so it would be idempotent alone, but `countIfState` merges via sum — so deletion is required.
 - **AI integration**: Per-site AI config in `ai_config_encrypted` (same pattern as ad credentials). `Spectabas.AI.Completion.generate/3` abstracts Anthropic/OpenAI/Google. `InsightsCache` caches AI analysis for 24h. Weekly AI email via `AIWeeklyEmail` Oban worker (Monday 9am UTC).
 - **Visitor dedup**: In GDPR-off (cookie) mode, new cookie = new visitor. No fingerprint merging. Fingerprint-based dedup only applies in GDPR-on (cookieless) mode via `Visitors.find_by_fingerprint/2`
+- **External identity cookie**: Sites can configure `identity_cookie_name` (e.g. `_puppies_fp`) in Settings. Tracker reads this cookie from the customer's domain via `data-xid-cookie` attribute and sends its value as `_xid`. Ingest resolves visitors by `external_id` first — if `_sab` cookie changes but `_xid` matches an existing visitor, the visitor is merged (cookie_id updated). `external_id` stored on visitors table with partial index `(site_id, external_id) WHERE external_id IS NOT NULL`. Only works in GDPR-off (cookie) mode.
 - **Timezone handling**: Requires `tzdata` library — without it, `DateTime.shift_zone` silently fails to UTC. All dashboard date boundaries use site timezone via `dates_to_utc_range/3`. Rolling periods (24h, 7d, 30d) are UTC-relative and timezone-independent. Only "Today" and date-picker ranges need timezone conversion. All ClickHouse queries that return displayed timestamps use `toTimezone(timestamp, site.timezone)` via the `tz_sql/1` helper. Admin pages use user's personal timezone preference for Postgres timestamps.
 - **Query consistency**: ALL analytics queries showing visitor/pageview/session counts MUST include `ip_is_bot = 0` and filter to pageview events. Exceptions: network_stats (shows bot %), realtime (all live activity), visitor detail pages, RUM queries. This ensures numbers match across dashboard, channels, sources, geography, etc.
 - **Bounce rate**: Industry-standard definition — `countIf(pv = 1)` — sessions with exactly 1 pageview. Do NOT factor in duration or custom events; those measure engagement, not bounce.

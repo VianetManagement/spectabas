@@ -272,8 +272,13 @@ defmodule Spectabas.Sites do
         do: ~s( data-xd="#{Enum.join(site.cross_domain_sites, ",")}"),
         else: ""
 
+    xid_attr =
+      if site.identity_cookie_name not in [nil, ""],
+        do: ~s( data-xid-cookie="#{site.identity_cookie_name}"),
+        else: ""
+
     """
-    <script defer data-id="#{site.public_key}"#{gdpr_attr}#{xd_attr} src="https://#{site.domain}/assets/v1.js"></script>
+    <script defer data-id="#{site.public_key}"#{gdpr_attr}#{xd_attr}#{xid_attr} src="https://#{site.domain}/assets/v1.js"></script>
     <noscript><img src="https://#{site.domain}/c/p?s=#{site.public_key}" alt="" style="position:absolute;width:0;height:0" /></noscript>\
     """
     |> String.trim()

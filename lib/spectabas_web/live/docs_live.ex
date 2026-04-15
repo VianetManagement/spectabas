@@ -1094,6 +1094,7 @@ defmodule SpectabasWeb.DocsLive do
             | `data-id` | string | (required) | Your site's public key. Found in Site Settings. |
             | `data-gdpr` | `"on"` / `"off"` | `"off"` | GDPR mode. `"on"` uses fingerprint-only identification (no cookies). `"off"` enables cookie-based visitor tracking and UTM persistence. |
             | `data-xd` | comma-separated domains | (none) | Cross-domain tracking. List domains that share visitor identity (e.g. `"shop.example.com,blog.example.com"`). |
+            | `data-xid-cookie` | cookie name | (none) | External identity cookie. Set the name of a first-party cookie on your domain (e.g. `"_my_fp"`). The tracker reads this cookie and sends its value with every event, enabling visitor merging even when the analytics cookie is cleared. Configure in Site Settings. |
 
             ```html
             <!-- Minimal (cookie-based, recommended) -->
@@ -1105,6 +1106,11 @@ defmodule SpectabasWeb.DocsLive do
             <!-- With cross-domain tracking -->
             <script defer data-id="YOUR_KEY"
               data-xd="shop.example.com,blog.example.com"
+              src="https://b.example.com/assets/v1.js"></script>
+
+            <!-- With external identity cookie -->
+            <script defer data-id="YOUR_KEY"
+              data-xid-cookie="_my_fp"
               src="https://b.example.com/assets/v1.js"></script>
             ```
             """

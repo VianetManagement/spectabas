@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.39.0", "2026-04-15T05:00:00Z",
+       [
+         %{
+           title: "Feat: External identity cookie support for cross-cookie visitor merging",
+           description:
+             "Sites can now configure an external identity cookie name (e.g. _puppies_fp) in Settings. When set, the tracker reads that cookie from the customer's domain and sends its value as _xid with every event. Ingest resolves visitors by external_id first — if a visitor clears their _sab cookie but the external cookie persists, they are merged back to the same visitor profile. Includes: migration for identity_cookie_name on sites + external_id on visitors with partial index, tracker data-xid-cookie attribute, snippet auto-generation, Visitors.find_by_external_id/2 and set_external_id/2, and 10 new unit tests."
+         }
+       ]},
       {"v5.38.3", "2026-04-15T04:00:00Z",
        [
          %{

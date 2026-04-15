@@ -27,6 +27,7 @@ defmodule Spectabas.Sites.Site do
     field :intent_config, :map, default: %{}
     field :scraper_content_prefixes, {:array, :string}, default: []
     field :journey_conversion_pages, {:array, :string}, default: []
+    field :identity_cookie_name, :string
 
     timestamps(type: :utc_datetime)
   end
@@ -56,7 +57,8 @@ defmodule Spectabas.Sites.Site do
       :intent_config,
       :ai_config_encrypted,
       :scraper_content_prefixes,
-      :journey_conversion_pages
+      :journey_conversion_pages,
+      :identity_cookie_name
     ])
     |> validate_required([:name, :domain])
     |> validate_length(:name, max: 255)

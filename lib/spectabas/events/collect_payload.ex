@@ -28,6 +28,7 @@ defmodule Spectabas.Events.CollectPayload do
     field :_oa, :integer
     field :_cid, :string, default: ""
     field :_cidt, :string, default: ""
+    field :_xid, :string, default: ""
   end
 
   @doc """
@@ -51,7 +52,8 @@ defmodule Spectabas.Events.CollectPayload do
       :_fp,
       :_oa,
       :_cid,
-      :_cidt
+      :_cidt,
+      :_xid
     ])
     |> validate_inclusion(:t, @valid_types)
     |> validate_length(:n, max: 256)
@@ -65,6 +67,7 @@ defmodule Spectabas.Events.CollectPayload do
     |> validate_length(:_fp, max: 256)
     |> validate_length(:_cid, max: 256)
     |> validate_length(:_cidt, max: 32)
+    |> validate_length(:_xid, max: 256)
     |> validate_props()
     |> apply_action(:validate)
   end
