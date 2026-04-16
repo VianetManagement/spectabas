@@ -1271,11 +1271,17 @@ defmodule SpectabasWeb.DocsLive do
             id: "site-search",
             title: "Site Search",
             body: """
-            Captures internal search queries automatically from URL parameters. Supports these common parameter names: `q`, `query`, `search`, `s`, `keyword`.
+            Captures internal search queries automatically from URL parameters. Default parameters: `q`, `query`, `search`, `s`, `keyword`. You can configure custom parameters per site in **Settings > Content > Site Search**.
 
-            **No code changes needed** — if your site's search results page uses a URL like `/search?q=widgets`, Spectabas automatically captures "widgets" as a search term.
+            **No code changes needed** — if your site's search results page uses a URL like `/search?q=widgets`, Spectabas automatically captures "widgets" as a search term. If your site uses a non-standard parameter (e.g. `?term=` or `?find=`), add it in Settings.
 
-            This tells you what visitors are looking for on your site, which can inform content creation and navigation improvements.
+            The dashboard shows:
+            - **Stats cards** — total searches, unique searchers, unique terms, and searches per searcher
+            - **Search volume trend** — daily bar chart of search activity
+            - **Top search terms** — ranked by frequency with unique searcher counts
+            - **Search pages** — which pages on your site trigger search queries
+
+            A banner at the top of the page shows exactly which URL parameters are being tracked, with a link to customize them.
             """
           },
           %{

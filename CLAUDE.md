@@ -120,7 +120,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 
 ### Analytics Pages (sidebar navigation, 39 pages across 7 categories)
 - **Overview**: Dashboard, Insights (8 anomaly types), Journeys (page-type grouping via content prefixes, outcome segmentation: converter/engaged/bounce, inline config panel), Realtime (visitor search/filter by email, IP, country)
-- **Behavior**: Pages (device split column: Desktop/Mobile/Tablet %), Entry/Exit, Page Transitions, Site Search, Outbound Links, Downloads, Events (clickable rows show property key/value breakdown via ARRAY JOIN JSONExtractKeysAndValues), Performance (RUM)
+- **Behavior**: Pages (device split column: Desktop/Mobile/Tablet %), Entry/Exit, Page Transitions, Site Search (stats cards, volume trend, top terms, search pages, configurable URL params), Outbound Links, Downloads, Events (clickable rows show property key/value breakdown via ARRAY JOIN JSONExtractKeysAndValues), Performance (RUM)
 - **Acquisition**: Acquisition (channels with engagement metrics + sources with UTM tabs, consolidated from 3 pages), Campaigns (auto-detects from UTM events, one-click "Save to Builder"), Search Keywords (GSC + Bing)
 - **Audience**: Geography, Visitor Map, Devices, Network, Bot Traffic (daily trend chart: bot vs human, clickable UA rows with detail modal), Scrapers, Visitor Log (sortable columns: Pages, Duration, Last Seen), Cohort Retention, Churn Risk
 - **Conversions**: Goals (top 3 traffic sources per goal: source attribution), Funnels, Ecommerce, Revenue Attribution (sortable, paid/organic split with pills, First Click touch model: visitor's first-ever referrer across all history), Revenue Cohorts, Buyer Patterns, MRR & Subscriptions
@@ -295,6 +295,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Origin validation**: Auto-allows parent domain of analytics subdomain
 - **Tracking subdomain plug**: Blocks all UI routes on analytics subdomains, only allows `/c/*`, `/assets/v1.js`, `/health`
 - **Spam filter**: `Spectabas.Analytics.SpamFilter` maintains builtin + DB-stored spam domains, auto-excluded from Sources/Channels queries. Admin page at `/admin/spam-filter` for managing blocklist with auto-detection of suspicious referrer domains. Daily Oban worker (`SpamDetector`) scans for candidates.
+- **Site search params**: Configurable per-site `search_query_params` array (Settings > Content). Ingest checks site's params first, falls back to defaults (`q`, `query`, `search`, `s`, `keyword`). Extracted values stored as `_search_query` in event properties. Site Search page shows config banner with tracked params.
 - **Pageview rate limiting**: Tracker uses sessionStorage to enforce 5-second minimum interval between pageviews for the same pathname (not full URL). Query-string-only changes (search filters, pagination) don't trigger new pageviews. Prevents overcounting from rapid refreshes, auto-refresh, or iframe reloads.
 - **SPA pageview tracking**: Only pathname changes trigger new pageviews. Query-string-only pushState changes are ignored. This matches standard analytics behavior (Matomo, GA).
 - **Saved segments**: Ownership enforced — `get_segment!/3` scopes by user_id and site_id. Never load segments by ID alone.
