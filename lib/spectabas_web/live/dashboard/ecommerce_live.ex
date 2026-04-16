@@ -65,6 +65,18 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
         _ -> []
       end
 
+    by_channel =
+      case Analytics.ecommerce_by_channel(site, user, period) do
+        {:ok, rows} -> rows
+        _ -> []
+      end
+
+    by_source =
+      case Analytics.ecommerce_by_source(site, user, period) do
+        {:ok, rows} -> rows
+        _ -> []
+      end
+
     # Enrich orders with visitor emails
     visitor_ids = Enum.map(orders, & &1["visitor_id"]) |> Enum.reject(&(is_nil(&1) or &1 == ""))
     email_map = Spectabas.Visitors.emails_for_visitor_ids(visitor_ids)
@@ -75,6 +87,8 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
     |> assign(:orders, orders)
     |> assign(:email_map, email_map)
     |> assign(:timeseries, timeseries)
+    |> assign(:by_channel, by_channel)
+    |> assign(:by_source, by_source)
     |> push_ecommerce_chart(timeseries)
   end
 
@@ -181,6 +195,106 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
           </div>
         </div>
 
+        <%!-- Channel & Source Breakdown --%>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          <div class="bg-white rounded-lg shadow overflow-x-auto">
+            <div class="px-6 py-4 border-b border-gray-200">
+              <h2 class="text-lg font-semibold text-gray-900">By Channel</h2>
+              <p class="text-xs text-gray-500 mt-0.5">Distribution platform</p>
+            </div>
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Channel
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Orders
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Revenue
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    AOV
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr :if={@by_channel == []}>
+                  <td colspan="4" class="px-6 py-6 text-center text-gray-500 text-sm">
+                    No channel data yet.
+                  </td>
+                </tr>
+                <tr :for={row <- @by_channel} class="hover:bg-gray-50">
+                  <td class="px-6 py-3 text-sm text-gray-900">
+                    <span class="inline-flex items-center gap-1.5">
+                      <span class={[
+                        "inline-block w-2 h-2 rounded-full",
+                        channel_color(row["ch"])
+                      ]}>
+                      </span>
+                      {row["ch"]}
+                    </span>
+                  </td>
+                  <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
+                    {format_number(to_num(row["orders"]))}
+                  </td>
+                  <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
+                    {Spectabas.Currency.format(row["rev"], @site.currency)}
+                  </td>
+                  <td class="px-6 py-3 text-sm text-gray-500 text-right tabular-nums">
+                    {Spectabas.Currency.format(row["aov"], @site.currency)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="bg-white rounded-lg shadow overflow-x-auto">
+            <div class="px-6 py-4 border-b border-gray-200">
+              <h2 class="text-lg font-semibold text-gray-900">By Source</h2>
+              <p class="text-xs text-gray-500 mt-0.5">UI element that led to purchase</p>
+            </div>
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Source
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Orders
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Revenue
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    AOV
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                <tr :if={@by_source == []}>
+                  <td colspan="4" class="px-6 py-6 text-center text-gray-500 text-sm">
+                    No source data yet.
+                  </td>
+                </tr>
+                <tr :for={row <- @by_source} class="hover:bg-gray-50">
+                  <td class="px-6 py-3 text-sm text-gray-900">{row["src"]}</td>
+                  <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
+                    {format_number(to_num(row["orders"]))}
+                  </td>
+                  <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
+                    {Spectabas.Currency.format(row["rev"], @site.currency)}
+                  </td>
+                  <td class="px-6 py-3 text-sm text-gray-500 text-right tabular-nums">
+                    {Spectabas.Currency.format(row["aov"], @site.currency)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <div class="bg-white rounded-lg shadow overflow-x-auto">
           <div class="px-6 py-4 border-b border-gray-200">
             <h2 class="text-lg font-semibold text-gray-900">Top Products</h2>
@@ -241,11 +355,11 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
                 <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                   Revenue
                 </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Tax
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Channel
                 </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Shipping
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Source
                 </th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Items
@@ -280,11 +394,16 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums font-medium">
                   {Spectabas.Currency.format(order["revenue"], @site.currency)}
                 </td>
-                <td class="px-6 py-4 text-sm text-gray-500 text-right tabular-nums">
-                  {format_money(order["tax"])}
+                <td class="px-6 py-4 text-sm text-gray-500">
+                  <span
+                    :if={order["channel"] && order["channel"] != ""}
+                    class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-700"
+                  >
+                    {order["channel"]}
+                  </span>
                 </td>
-                <td class="px-6 py-4 text-sm text-gray-500 text-right tabular-nums">
-                  {format_money(order["shipping"])}
+                <td class="px-6 py-4 text-sm text-gray-500">
+                  {order["source"]}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-500">
                   {parse_items_summary(order["items"])}
@@ -324,15 +443,8 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
 
   defp parse_items_summary(_), do: "—"
 
-  defp format_money(%Decimal{} = d), do: Decimal.round(d, 2) |> Decimal.to_string()
-  defp format_money(n) when is_number(n), do: :erlang.float_to_binary(n / 1, decimals: 2)
-
-  defp format_money(n) when is_binary(n) do
-    case Float.parse(n) do
-      {f, _} -> :erlang.float_to_binary(f, decimals: 2)
-      :error -> "0.00"
-    end
-  end
-
-  defp format_money(_), do: "0.00"
+  defp channel_color("web"), do: "bg-blue-500"
+  defp channel_color("ios_iap"), do: "bg-orange-500"
+  defp channel_color("android_iap"), do: "bg-green-500"
+  defp channel_color(_), do: "bg-gray-400"
 end

@@ -3396,6 +3396,8 @@ defmodule Spectabas.Analytics do
         discount,
         currency,
         items,
+        channel,
+        source,
         toTimezone(timestamp, #{tz}) AS timestamp
       FROM ecommerce_events
       WHERE site_id = #{ClickHouse.param(site.id)}
@@ -3405,6 +3407,61 @@ defmodule Spectabas.Analytics do
         AND (currency = #{ClickHouse.param(site_currency)} OR currency = '')
       ORDER BY timestamp DESC
       LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Revenue breakdown by distribution channel (web, ios_iap, etc)."
+  def ecommerce_by_channel(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      site_currency = site.currency || "USD"
+
+      sql = """
+      SELECT
+        if(channel = '', 'unknown', channel) AS ch,
+        count() AS orders,
+        sum(revenue) AS rev,
+        round(avg(revenue), 2) AS aov
+      FROM ecommerce_events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        #{ecommerce_source_filter(site)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND (currency = #{ClickHouse.param(site_currency)} OR currency = '')
+      GROUP BY ch
+      ORDER BY rev DESC
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Revenue breakdown by referral source (dashboard.main_cta, menu, email.*, etc)."
+  def ecommerce_by_source(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      site_currency = site.currency || "USD"
+
+      sql = """
+      SELECT
+        if(source = '', 'direct / unknown', source) AS src,
+        count() AS orders,
+        sum(revenue) AS rev,
+        round(avg(revenue), 2) AS aov
+      FROM ecommerce_events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        #{ecommerce_source_filter(site)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND (currency = #{ClickHouse.param(site_currency)} OR currency = '')
+      GROUP BY src
+      ORDER BY rev DESC
+      LIMIT 25
       """
 
       ClickHouse.query(sql)
