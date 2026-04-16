@@ -1,7 +1,7 @@
 defmodule SpectabasWeb.API.StatsController do
   use SpectabasWeb, :controller
 
-  alias Spectabas.{Sites, Analytics, Accounts, Visitors}
+  alias Spectabas.{Sites, Analytics, Accounts, Visitors, Ecommerce.Normalize}
   alias SpectabasWeb.Plugs.ApiAuth
   require Logger
 
@@ -141,6 +141,8 @@ defmodule SpectabasWeb.API.StatsController do
     "shipping": 2.80,                     (optional)
     "discount": 0,                        (optional)
     "currency": "USD",                    (optional, defaults to site currency)
+    "channel": "web",                     (optional, distribution platform)
+    "source": "dashboard.main_cta",       (optional, UI element / referrer)
     "items": [                            (optional)
       {"name": "Widget", "price": 29.99, "quantity": 3}
     ]
@@ -171,6 +173,8 @@ defmodule SpectabasWeb.API.StatsController do
           "discount" => parse_amount(params["discount"]),
           "currency" => params["currency"] || site.currency || "USD",
           "items" => Jason.encode!(params["items"] || []),
+          "channel" => Normalize.short_string(params["channel"]),
+          "source" => Normalize.short_string(params["source"]),
           "timestamp" => Calendar.strftime(now, "%Y-%m-%d %H:%M:%S")
         }
 

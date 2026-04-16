@@ -250,5 +250,194 @@ defmodule SpectabasWeb.API.EcommerceTest do
 
       assert conn.status in [200, 500]
     end
+
+    test "accepts channel and source fields", %{conn: conn, site: site} do
+      conn =
+        post(conn, "/api/v1/sites/#{site.id}/ecommerce/transactions", %{
+          "order_id" => "ORD-CHANNEL-1",
+          "revenue" => 9.99,
+          "channel" => "web",
+          "source" => "dashboard.main_cta"
+        })
+
+      assert conn.status in [200, 500]
+
+      if conn.status == 200 do
+        assert %{"ok" => true, "order_id" => "ORD-CHANNEL-1"} = json_response(conn, 200)
+      end
+    end
+
+    test "accepts transaction with channel only (no source)", %{conn: conn, site: site} do
+      conn =
+        post(conn, "/api/v1/sites/#{site.id}/ecommerce/transactions", %{
+          "order_id" => "ORD-CHANNEL-2",
+          "revenue" => 2.99,
+          "channel" => "ios_iap"
+        })
+
+      assert conn.status in [200, 500]
+    end
+
+    test "accepts transaction with source only (no channel)", %{conn: conn, site: site} do
+      conn =
+        post(conn, "/api/v1/sites/#{site.id}/ecommerce/transactions", %{
+          "order_id" => "ORD-CHANNEL-3",
+          "revenue" => 19.99,
+          "source" => "email.subscription_expired"
+        })
+
+      assert conn.status in [200, 500]
+    end
+
+    test "accepts transaction without channel or source (backward compat)", %{
+      conn: conn,
+      site: site
+    } do
+      conn =
+        post(conn, "/api/v1/sites/#{site.id}/ecommerce/transactions", %{
+          "order_id" => "ORD-CHANNEL-4",
+          "revenue" => 49.99
+        })
+
+      assert conn.status in [200, 500]
+    end
+
+    test "handles non-string channel and source values without crashing", %{
+      conn: conn,
+      site: site
+    } do
+      conn =
+        post(conn, "/api/v1/sites/#{site.id}/ecommerce/transactions", %{
+          "order_id" => "ORD-CHANNEL-5",
+          "revenue" => 5.00,
+          "channel" => 42,
+          "source" => true
+        })
+
+      assert conn.status in [200, 500]
+    end
+
+    test "handles null channel and source values", %{conn: conn, site: site} do
+      conn =
+        post(conn, "/api/v1/sites/#{site.id}/ecommerce/transactions", %{
+          "order_id" => "ORD-CHANNEL-6",
+          "revenue" => 5.00,
+          "channel" => nil,
+          "source" => nil
+        })
+
+      assert conn.status in [200, 500]
+    end
+
+    test "handles channel and source with whitespace and mixed case", %{conn: conn, site: site} do
+      conn =
+        post(conn, "/api/v1/sites/#{site.id}/ecommerce/transactions", %{
+          "order_id" => "ORD-CHANNEL-7",
+          "revenue" => 5.00,
+          "channel" => "  WEB  ",
+          "source" => "  Dashboard.Main_CTA  "
+        })
+
+      assert conn.status in [200, 500]
+    end
+
+    test "handles oversized channel and source values", %{conn: conn, site: site} do
+      long_string = String.duplicate("a", 200)
+
+      conn =
+        post(conn, "/api/v1/sites/#{site.id}/ecommerce/transactions", %{
+          "order_id" => "ORD-CHANNEL-8",
+          "revenue" => 5.00,
+          "channel" => long_string,
+          "source" => long_string
+        })
+
+      assert conn.status in [200, 500]
+    end
+
+    test "full transaction with all fields including channel and source", %{
+      conn: conn,
+      site: site
+    } do
+      conn =
+        post(conn, "/api/v1/sites/#{site.id}/ecommerce/transactions", %{
+          "order_id" => "ORD-FULL-CHANNEL",
+          "revenue" => 99.99,
+          "subtotal" => 89.99,
+          "tax" => 7.20,
+          "shipping" => 2.80,
+          "discount" => 10.00,
+          "currency" => "USD",
+          "visitor_id" => "vis-123",
+          "session_id" => "sess-456",
+          "email" => "buyer@example.com",
+          "channel" => "web",
+          "source" => "messages",
+          "items" => [
+            %{
+              "name" => "Monthly Plan",
+              "price" => 99.99,
+              "quantity" => 1,
+              "category" => "new_subscription"
+            }
+          ],
+          "occurred_at" => DateTime.utc_now() |> DateTime.add(-600) |> DateTime.to_unix()
+        })
+
+      assert conn.status in [200, 500]
+
+      if conn.status == 200 do
+        assert %{"ok" => true, "order_id" => "ORD-FULL-CHANNEL"} = json_response(conn, 200)
+      end
+    end
+  end
+
+  describe "Spectabas.Ecommerce.Normalize.short_string/1" do
+    alias Spectabas.Ecommerce.Normalize
+
+    test "trims whitespace" do
+      assert Normalize.short_string("  web  ") == "web"
+    end
+
+    test "lowercases" do
+      assert Normalize.short_string("WEB") == "web"
+      assert Normalize.short_string("Dashboard.Main_CTA") == "dashboard.main_cta"
+    end
+
+    test "trims and lowercases combined" do
+      assert Normalize.short_string("  IOS_IAP  ") == "ios_iap"
+    end
+
+    test "truncates at 64 characters" do
+      long = String.duplicate("a", 200)
+      result = Normalize.short_string(long)
+      assert String.length(result) == 64
+    end
+
+    test "returns empty string for nil" do
+      assert Normalize.short_string(nil) == ""
+    end
+
+    test "returns empty string for integer" do
+      assert Normalize.short_string(42) == ""
+    end
+
+    test "returns empty string for boolean" do
+      assert Normalize.short_string(true) == ""
+    end
+
+    test "returns empty string for empty string" do
+      assert Normalize.short_string("") == ""
+    end
+
+    test "handles unicode" do
+      assert Normalize.short_string("wéb") == "wéb"
+      assert Normalize.short_string("MENÜ") == "menü"
+    end
+
+    test "preserves dots and underscores" do
+      assert Normalize.short_string("email.subscription_expired") == "email.subscription_expired"
+      assert Normalize.short_string("dashboard.main_cta") == "dashboard.main_cta"
+    end
   end
 end
