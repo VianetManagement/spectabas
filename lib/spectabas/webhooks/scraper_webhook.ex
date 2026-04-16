@@ -38,18 +38,18 @@ defmodule Spectabas.Webhooks.ScraperWebhook do
           "[ScraperWebhook] Sent flag for visitor #{visitor.id} site=#{site.id} score=#{score_result.score} status=#{status}"
         )
 
-        {:ok, body}
+        {:ok, %{request: payload, response: body, status: status, url: url}}
 
       {:ok, %{status: status, body: body}} ->
         Logger.warning(
           "[ScraperWebhook] Non-OK response for visitor #{visitor.id}: status=#{status} body=#{inspect(body)}"
         )
 
-        {:error, "HTTP #{status}"}
+        {:error, %{request: payload, response: body, status: status, url: url}}
 
       {:error, reason} ->
         Logger.warning("[ScraperWebhook] Failed for visitor #{visitor.id}: #{inspect(reason)}")
-        {:error, reason}
+        {:error, %{request: payload, response: nil, status: nil, url: url, reason: reason}}
     end
   end
 
@@ -71,26 +71,26 @@ defmodule Spectabas.Webhooks.ScraperWebhook do
     }
 
     case do_post(url, payload, secret) do
-      {:ok, %{status: status}} when status in 200..299 ->
+      {:ok, %{status: status, body: body}} when status in 200..299 ->
         Logger.notice(
           "[ScraperWebhook] Sent deactivate for visitor #{visitor.id} site=#{site.id}"
         )
 
-        :ok
+        {:ok, %{request: payload, response: body, status: status, url: url}}
 
       {:ok, %{status: status, body: body}} ->
         Logger.warning(
           "[ScraperWebhook] Deactivate non-OK for visitor #{visitor.id}: status=#{status} body=#{inspect(body)}"
         )
 
-        {:error, "HTTP #{status}"}
+        {:error, %{request: payload, response: body, status: status, url: url}}
 
       {:error, reason} ->
         Logger.warning(
           "[ScraperWebhook] Deactivate failed for visitor #{visitor.id}: #{inspect(reason)}"
         )
 
-        {:error, reason}
+        {:error, %{request: payload, response: nil, status: nil, url: url, reason: reason}}
     end
   end
 

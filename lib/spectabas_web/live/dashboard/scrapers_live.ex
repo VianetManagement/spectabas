@@ -32,7 +32,7 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
         |> assign(:modal_visitor, nil)
         |> assign(:loading, true)
         |> assign(:candidates, [])
-        |> assign(:webhook_status, nil)
+        |> assign(:webhook_result, nil)
         |> assign(:summary, %{
           total: 0,
           suspicious: 0,
@@ -85,7 +85,7 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
   end
 
   def handle_event("close_visitor", _params, socket) do
-    {:noreply, socket |> assign(:modal_visitor, nil) |> assign(:webhook_status, nil)}
+    {:noreply, socket |> assign(:modal_visitor, nil) |> assign(:webhook_result, nil)}
   end
 
   def handle_event("send_webhook", %{"visitor_id" => visitor_id}, socket) do
@@ -101,7 +101,7 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
         pageviews = v["session_pageviews"] || 0
 
         case Spectabas.Webhooks.ScraperWebhook.send_flag(site, visitor, score_result, pageviews) do
-          {:ok, body} ->
+          {:ok, detail} ->
             now = DateTime.utc_now() |> DateTime.truncate(:second)
 
             visitor
@@ -111,10 +111,10 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
             })
             |> Spectabas.Repo.update()
 
-            {:noreply, assign(socket, :webhook_status, {:ok, inspect(body)})}
+            {:noreply, assign(socket, :webhook_result, {:ok, detail})}
 
-          {:error, reason} ->
-            {:noreply, assign(socket, :webhook_status, {:error, to_string(reason)})}
+          {:error, detail} ->
+            {:noreply, assign(socket, :webhook_result, {:error, detail})}
         end
     end
   end
@@ -124,11 +124,12 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
 
     case Spectabas.Repo.get(Spectabas.Visitors.Visitor, visitor_id) do
       nil ->
-        {:noreply, assign(socket, :webhook_status, {:error, "Visitor not found in database"})}
+        {:noreply,
+         assign(socket, :webhook_result, {:error, %{reason: "Visitor not found in database"}})}
 
       visitor ->
         case Spectabas.Webhooks.ScraperWebhook.send_deactivate(site, visitor) do
-          :ok ->
+          {:ok, detail} ->
             visitor
             |> Spectabas.Visitors.Visitor.changeset(%{
               scraper_webhook_sent_at: nil,
@@ -136,10 +137,10 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
             })
             |> Spectabas.Repo.update()
 
-            {:noreply, assign(socket, :webhook_status, {:ok, "Deactivated"})}
+            {:noreply, assign(socket, :webhook_result, {:ok, detail})}
 
-          {:error, reason} ->
-            {:noreply, assign(socket, :webhook_status, {:error, to_string(reason)})}
+          {:error, detail} ->
+            {:noreply, assign(socket, :webhook_result, {:error, detail})}
         end
     end
   end
@@ -545,18 +546,58 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
                   Mark as not scraper
                 </button>
                 <span
-                  :if={@webhook_status}
+                  :if={@webhook_result}
                   class={[
-                    "text-xs ml-2",
-                    if(elem(@webhook_status, 0) == :ok, do: "text-green-600", else: "text-red-600")
+                    "text-xs ml-2 font-medium",
+                    if(elem(@webhook_result, 0) == :ok, do: "text-green-600", else: "text-red-600")
                   ]}
                 >
-                  {case @webhook_status do
-                    {:ok, detail} -> "Sent! #{detail}"
-                    {:error, detail} -> "Failed: #{detail}"
-                  end}
+                  {if elem(@webhook_result, 0) == :ok,
+                    do: "Sent! (#{elem(@webhook_result, 1).status})",
+                    else: "Failed"}
                 </span>
               </div>
+
+              <%= if @webhook_result do %>
+                <% {status, detail} = @webhook_result %>
+                <div class="mt-3 space-y-2">
+                  <div>
+                    <div class="text-xs font-semibold text-gray-500 uppercase mb-1">
+                      Request →
+                      <span class="font-mono font-normal text-gray-600">
+                        {detail[:url] || detail.url}
+                      </span>
+                    </div>
+                    <div class="bg-gray-50 border border-gray-200 rounded p-2 text-xs font-mono text-gray-800 max-h-40 overflow-y-auto whitespace-pre-wrap break-all">
+                      {Jason.encode!(detail[:request] || detail.request, pretty: true)}
+                    </div>
+                  </div>
+                  <div>
+                    <div class="text-xs font-semibold text-gray-500 uppercase mb-1">
+                      Response
+                      <span
+                        :if={detail[:status]}
+                        class={[
+                          "ml-1 font-mono font-normal",
+                          if(status == :ok, do: "text-green-600", else: "text-red-600")
+                        ]}
+                      >
+                        {detail[:status] || detail.status}
+                      </span>
+                      <span :if={detail[:reason]} class="ml-1 font-mono font-normal text-red-600">
+                        {inspect(detail[:reason] || detail.reason)}
+                      </span>
+                    </div>
+                    <div class="bg-gray-50 border border-gray-200 rounded p-2 text-xs font-mono text-gray-800 max-h-40 overflow-y-auto whitespace-pre-wrap break-all">
+                      {cond do
+                        is_map(detail[:response]) -> Jason.encode!(detail[:response], pretty: true)
+                        is_nil(detail[:response]) -> "(no response body)"
+                        true -> inspect(detail[:response])
+                      end}
+                    </div>
+                  </div>
+                </div>
+              <% end %>
             </div>
 
             <div class="pt-3 border-t border-gray-200 flex items-center justify-between">

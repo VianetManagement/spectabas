@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.40.5", "2026-04-16T14:30:00Z",
+       [
+         %{
+           title: "UX: Show full webhook request payload and response in Scrapers modal",
+           description:
+             "Send webhook and Deactivate buttons now show the full JSON request body, target URL, response status, and response body in a scrollable detail panel below the buttons."
+         }
+       ]},
       {"v5.40.4", "2026-04-16T14:00:00Z",
        [
          %{

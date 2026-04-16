@@ -106,7 +106,7 @@ defmodule Spectabas.Application do
       :ok
   end
 
-  @version "v5.40.4"
+  @version "v5.40.5"
 
   defp deploy_message do
     # Pull the latest changelog entry to include in the Slack notification.
