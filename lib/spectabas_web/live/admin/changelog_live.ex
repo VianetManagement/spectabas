@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.45.2", "2026-04-16T23:00:00Z",
+       [
+         %{
+           title: "Fix: Scraper detector now counts unique pages, not raw pageviews",
+           description:
+             "session_pageviews now uses uniqIf(url_path) instead of countIf — refreshes and duration pings no longer inflate the score. Thresholds lowered to match: 30 unique pages = high_pageviews, 100 = very_high_pageviews. HAVING threshold also lowered to 20 unique pages. Affects both dashboard queries and visitor profile score."
+         }
+       ]},
       {"v5.45.1", "2026-04-16T22:30:00Z",
        [
          %{

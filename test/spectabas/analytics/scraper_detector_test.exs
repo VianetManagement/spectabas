@@ -76,13 +76,13 @@ defmodule Spectabas.Analytics.ScraperDetectorTest do
                ScraperDetector.score(%{visitor_ip_count: 2, referrer: "google.com"})
     end
 
-    test ":high_pageviews fires at 50–199 pageviews" do
+    test ":high_pageviews fires at 30–99 unique pages" do
       assert %{score: 10, signals: [:high_pageviews]} =
-               ScraperDetector.score(%{session_pageviews: 120, referrer: "google.com"})
+               ScraperDetector.score(%{session_pageviews: 50, referrer: "google.com"})
     end
 
-    test ":very_high_pageviews replaces :high_pageviews at 200+" do
-      result = ScraperDetector.score(%{session_pageviews: 290, referrer: "google.com"})
+    test ":very_high_pageviews replaces :high_pageviews at 100+ unique pages" do
+      result = ScraperDetector.score(%{session_pageviews: 150, referrer: "google.com"})
       assert result.score == 20
       assert :very_high_pageviews in result.signals
       refute :high_pageviews in result.signals

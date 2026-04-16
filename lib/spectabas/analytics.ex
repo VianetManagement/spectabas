@@ -3910,7 +3910,7 @@ defmodule Spectabas.Analytics do
         any(ip_org) AS asn,
         any(user_agent) AS user_agent,
         uniq(ip_address) AS visitor_ip_count,
-        countIf(event_type = 'pageview') AS session_pageviews,
+        uniqIf(url_path, event_type = 'pageview') AS session_pageviews,
         arrayFilter(p -> p != '',
           groupArrayIf(50)(url_path, event_type = 'pageview')) AS page_paths,
         any(referrer_domain) AS referrer,
@@ -3928,8 +3928,8 @@ defmodule Spectabas.Analytics do
         AND timestamp >= #{from_p}
         AND timestamp <= #{to_p}
       GROUP BY visitor_id
-      HAVING countIf(event_type = 'pageview') >= 30 OR uniq(ip_address) >= 3
-      ORDER BY countIf(event_type = 'pageview') DESC
+      HAVING uniqIf(url_path, event_type = 'pageview') >= 20 OR uniq(ip_address) >= 3
+      ORDER BY uniqIf(url_path, event_type = 'pageview') DESC
       LIMIT #{limit * 2}
       """
 
@@ -3980,7 +3980,7 @@ defmodule Spectabas.Analytics do
       any(ip_org) AS asn,
       any(user_agent) AS user_agent,
       uniq(ip_address) AS visitor_ip_count,
-      countIf(event_type = 'pageview') AS session_pageviews,
+      uniqIf(url_path, event_type = 'pageview') AS session_pageviews,
       arrayFilter(p -> p != '',
         groupArrayIf(50)(url_path, event_type = 'pageview')) AS page_paths,
       any(referrer_domain) AS referrer,
@@ -3994,8 +3994,8 @@ defmodule Spectabas.Analytics do
       AND timestamp >= #{from_p}
       AND timestamp <= #{to_p}
     GROUP BY visitor_id
-    HAVING countIf(event_type = 'pageview') >= 30 OR uniq(ip_address) >= 3
-    ORDER BY countIf(event_type = 'pageview') DESC
+    HAVING uniqIf(url_path, event_type = 'pageview') >= 20 OR uniq(ip_address) >= 3
+    ORDER BY uniqIf(url_path, event_type = 'pageview') DESC
     LIMIT #{limit}
     """
 

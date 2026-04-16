@@ -823,7 +823,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
       asn: profile["ip_org"] || "",
       user_agent: profile["user_agent"] || "",
       visitor_ip_count: ip_count,
-      session_pageviews: length(pageviews),
+      session_pageviews: page_paths |> Enum.uniq() |> length(),
       page_paths: page_paths,
       content_path_prefixes: List.wrap(site.scraper_content_prefixes),
       referrer: profile["referrer_domain"],

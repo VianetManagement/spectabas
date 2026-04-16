@@ -126,12 +126,13 @@ defmodule Spectabas.Analytics.ScraperDetector do
     end
   end
 
-  # Two-tier bucket — very_high_pageviews (200+) replaces high_pageviews
-  # (50–199) rather than stacking.
+  # Two-tier bucket based on unique pages visited (not raw pageviews).
+  # A visitor hitting 100+ distinct URLs is almost certainly crawling;
+  # 30+ is suspicious. Refreshes and duration pings don't inflate this.
   defp add_pageview_signal(points, signals, profile) do
     case profile[:session_pageviews] do
-      n when is_integer(n) and n >= 200 -> {points + 20, [:very_high_pageviews | signals]}
-      n when is_integer(n) and n >= 50 -> {points + 10, [:high_pageviews | signals]}
+      n when is_integer(n) and n >= 100 -> {points + 20, [:very_high_pageviews | signals]}
+      n when is_integer(n) and n >= 30 -> {points + 10, [:high_pageviews | signals]}
       _ -> {points, signals}
     end
   end
