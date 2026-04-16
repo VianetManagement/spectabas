@@ -292,7 +292,7 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
                 "discount" => 0,
                 "refund_amount" => 0,
                 "currency" => txn.currency,
-                "items" => "[]",
+                "items" => Jason.encode!(txn.items || []),
                 "timestamp" => txn.created_at
               }
             end)
@@ -484,14 +484,27 @@ defmodule Spectabas.AdIntegrations.Platforms.BraintreePlatform do
     ~r/<transaction>.*?<\/transaction>/s
     |> Regex.scan(body)
     |> Enum.map(fn [block] ->
+      amount = parse_amount(extract_xml(block, "amount"))
+      plan_id = extract_xml(block, "plan-id")
+      txn_type = extract_xml(block, "type")
+
+      items =
+        if plan_id != "" do
+          category = if txn_type == "sale", do: "subscription", else: "one_time"
+          [%{"name" => plan_id, "price" => amount, "quantity" => 1, "category" => category}]
+        else
+          []
+        end
+
       %{
         id: extract_xml(block, "id"),
-        amount: parse_amount(extract_xml(block, "amount")),
+        amount: amount,
         currency: extract_xml(block, "currency-iso-code") |> String.upcase(),
         email: extract_xml(block, "email") |> String.downcase(),
         created_at: extract_xml(block, "created-at") |> format_bt_datetime(),
         status: extract_xml(block, "status"),
-        refunded_transaction_id: extract_xml(block, "refunded-transaction-id")
+        refunded_transaction_id: extract_xml(block, "refunded-transaction-id"),
+        items: items
       }
     end)
     |> Enum.reject(fn t -> t.id == "" end)

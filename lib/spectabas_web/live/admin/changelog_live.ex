@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.44.1", "2026-04-16T19:30:00Z",
+       [
+         %{
+           title: "Feat: Braintree product data enrichment",
+           description:
+             "Braintree sync now extracts plan-id from transaction XML and populates the items column with product name, price, quantity, and category (subscription/one_time). New syncs going forward will appear in the Top Products table."
+         }
+       ]},
       {"v5.44.0", "2026-04-16T19:00:00Z",
        [
          %{
