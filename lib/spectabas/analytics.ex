@@ -3322,8 +3322,11 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
-      # Filter to site's configured currency to avoid mixing currencies
       site_currency = site.currency || "USD"
+      site_p = ClickHouse.param(site.id)
+      from_p = ClickHouse.param(format_datetime(date_range.from))
+      to_p = ClickHouse.param(format_datetime(date_range.to))
+      currency_p = ClickHouse.param(site_currency)
 
       sql = """
       SELECT
@@ -3331,20 +3334,93 @@ defmodule Spectabas.Analytics do
         sum(revenue) AS total_revenue,
         round(avg(revenue), 2) AS avg_order_value,
         min(revenue) AS min_order,
-        max(revenue) AS max_order
+        max(revenue) AS max_order,
+        uniq(visitor_id) AS unique_customers
       FROM ecommerce_events
-      WHERE site_id = #{ClickHouse.param(site.id)}
+      WHERE site_id = #{site_p}
         #{ecommerce_source_filter(site)}
-        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-        AND (currency = #{ClickHouse.param(site_currency)} OR currency = '')
+        AND timestamp >= #{from_p}
+        AND timestamp <= #{to_p}
+        AND (currency = #{currency_p} OR currency = '')
+      """
+
+      case ClickHouse.query(sql) do
+        {:ok, [row]} ->
+          {:ok, row}
+
+        {:ok, []} ->
+          {:ok,
+           %{
+             "total_orders" => 0,
+             "total_revenue" => 0,
+             "avg_order_value" => 0,
+             "unique_customers" => 0
+           }}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
+  end
+
+  def ecommerce_ltv_stats(%Site{} = site, %User{} = user) do
+    with :ok <- authorize(site, user) do
+      site_currency = site.currency || "USD"
+      site_p = ClickHouse.param(site.id)
+      currency_p = ClickHouse.param(site_currency)
+
+      # All-time LTV: revenue per customer (visitor_id), excluding empty visitor IDs
+      sql = """
+      SELECT
+        uniq(visitor_id) AS total_customers,
+        sum(revenue) AS total_lifetime_revenue,
+        round(sum(revenue) / greatest(uniq(visitor_id), 1), 2) AS avg_ltv,
+        round(sum(revenue - refund_amount) / greatest(uniq(visitor_id), 1), 2) AS avg_net_ltv,
+        count() AS total_orders,
+        round(count() / greatest(uniq(visitor_id), 1), 1) AS avg_orders_per_customer,
+        round(sum(refund_amount) / greatest(sum(revenue), 1) * 100, 1) AS refund_rate
+      FROM ecommerce_events
+      WHERE site_id = #{site_p}
+        #{ecommerce_source_filter(site)}
+        AND visitor_id != ''
+        AND (currency = #{currency_p} OR currency = '')
       """
 
       case ClickHouse.query(sql) do
         {:ok, [row]} -> {:ok, row}
-        {:ok, []} -> {:ok, %{"total_orders" => 0, "total_revenue" => 0, "avg_order_value" => 0}}
+        {:ok, []} -> {:ok, %{"total_customers" => 0, "avg_ltv" => 0, "avg_net_ltv" => 0}}
         {:error, reason} -> {:error, reason}
       end
+    end
+  end
+
+  def ecommerce_top_customers(%Site{} = site, %User{} = user, opts \\ []) do
+    limit = Keyword.get(opts, :limit, 20)
+
+    with :ok <- authorize(site, user) do
+      site_currency = site.currency || "USD"
+      site_p = ClickHouse.param(site.id)
+      currency_p = ClickHouse.param(site_currency)
+
+      sql = """
+      SELECT
+        visitor_id,
+        sum(revenue) AS total_revenue,
+        sum(revenue - refund_amount) AS net_revenue,
+        count() AS order_count,
+        min(timestamp) AS first_order,
+        max(timestamp) AS last_order
+      FROM ecommerce_events
+      WHERE site_id = #{site_p}
+        #{ecommerce_source_filter(site)}
+        AND visitor_id != ''
+        AND (currency = #{currency_p} OR currency = '')
+      GROUP BY visitor_id
+      ORDER BY total_revenue DESC
+      LIMIT #{limit}
+      """
+
+      ClickHouse.query(sql)
     end
   end
 

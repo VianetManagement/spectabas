@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.44.0", "2026-04-16T19:00:00Z",
+       [
+         %{
+           title: "Feat: LTV dashboard cards, top customers table, Stripe product data",
+           description:
+             "Ecommerce page now shows all-time LTV stats (avg net/gross LTV, orders per customer, refund rate) in indigo cards, plus period customer count. Top Customers by LTV table with clickable visitor links, gross/net revenue, order count, and date range. Stripe sync now extracts product line items from expanded invoices — new syncs populate the items column for Top Products."
+         }
+       ]},
       {"v5.43.2", "2026-04-16T18:00:00Z",
        [
          %{

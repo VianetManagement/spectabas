@@ -32,16 +32,18 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
   # (one per actual payment), while Charges can have multiple per payment (retries,
   # 3D Secure, etc.) which causes overcounting.
   defp fetch_charges_page(api_key, day_start, day_end, starting_after, acc) do
-    params = %{
-      "created[gte]" => DateTime.to_unix(day_start),
-      "created[lt]" => DateTime.to_unix(day_end),
-      "limit" => "100",
-      "expand[]" => "data.customer"
-    }
+    params =
+      [
+        {"created[gte]", DateTime.to_unix(day_start)},
+        {"created[lt]", DateTime.to_unix(day_end)},
+        {"limit", "100"},
+        {"expand[]", "data.customer"},
+        {"expand[]", "data.invoice"}
+      ]
 
     params =
       if starting_after,
-        do: Map.put(params, "starting_after", starting_after),
+        do: params ++ [{"starting_after", starting_after}],
         else: params
 
     qs = URI.encode_query(params)
@@ -70,12 +72,15 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
               end
 
             # Use pi_ ID as order_id (unique per payment, unlike ch_ which can have multiples)
+            items = extract_line_items(pi)
+
             %{
               charge_id: pi["id"],
               email: email,
               amount: (pi["amount_received"] || pi["amount"] || 0) / 100.0,
               currency: String.upcase(pi["currency"] || "usd"),
-              created_at: DateTime.from_unix!(pi["created"])
+              created_at: DateTime.from_unix!(pi["created"]),
+              items: items
             }
           end)
 
@@ -207,7 +212,7 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
                 "discount" => 0,
                 "refund_amount" => 0,
                 "currency" => charge.currency,
-                "items" => "[]",
+                "items" => Jason.encode!(charge.items || []),
                 "timestamp" => Calendar.strftime(charge.created_at, "%Y-%m-%d %H:%M:%S")
               }
             end)
@@ -660,4 +665,41 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
   end
 
   defp batch_resolve_visitors(_, _), do: %{}
+
+  # Extract product line items from a Stripe PaymentIntent's expanded invoice.
+  # Returns a list of %{name, price, quantity, category} maps for the items JSON column.
+  defp extract_line_items(pi) do
+    case pi do
+      %{"invoice" => %{"lines" => %{"data" => lines}}} when is_list(lines) ->
+        Enum.map(lines, fn line ->
+          name =
+            get_in(line, ["price", "product", "name"]) ||
+              get_in(line, ["description"]) ||
+              get_in(line, ["plan", "nickname"]) ||
+              "Unknown"
+
+          price = (line["amount"] || 0) / 100.0
+          quantity = line["quantity"] || 1
+
+          category =
+            cond do
+              get_in(line, ["price", "recurring"]) != nil -> "subscription"
+              true -> "one_time"
+            end
+
+          %{"name" => name, "price" => price, "quantity" => quantity, "category" => category}
+        end)
+
+      # No invoice (one-time payment) — use the PI description as the product name
+      _ ->
+        description = pi["description"] || ""
+
+        if description != "" do
+          amount = (pi["amount_received"] || pi["amount"] || 0) / 100.0
+          [%{"name" => description, "price" => amount, "quantity" => 1, "category" => "one_time"}]
+        else
+          []
+        end
+    end
+  end
 end

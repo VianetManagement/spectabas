@@ -80,9 +80,28 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
         _ -> []
       end
 
-    # Enrich orders with visitor emails
-    visitor_ids = Enum.map(orders, & &1["visitor_id"]) |> Enum.reject(&(is_nil(&1) or &1 == ""))
-    email_map = Spectabas.Visitors.emails_for_visitor_ids(visitor_ids)
+    ltv =
+      case Analytics.ecommerce_ltv_stats(site, user) do
+        {:ok, data} -> data
+        _ -> %{"total_customers" => 0, "avg_ltv" => 0, "avg_net_ltv" => 0}
+      end
+
+    top_customers =
+      case Analytics.ecommerce_top_customers(site, user, limit: 10) do
+        {:ok, rows} -> rows
+        _ -> []
+      end
+
+    # Enrich orders + top customers with visitor emails
+    order_vids = Enum.map(orders, & &1["visitor_id"])
+    customer_vids = Enum.map(top_customers, & &1["visitor_id"])
+
+    all_vids =
+      (order_vids ++ customer_vids)
+      |> Enum.reject(&(is_nil(&1) or &1 == ""))
+      |> Enum.uniq()
+
+    email_map = Spectabas.Visitors.emails_for_visitor_ids(all_vids)
 
     socket
     |> assign(:ecommerce, stats)
@@ -92,6 +111,8 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
     |> assign(:timeseries, timeseries)
     |> assign(:by_channel, by_channel)
     |> assign(:by_source, by_source)
+    |> assign(:ltv, ltv)
+    |> assign(:top_customers, top_customers)
     |> push_ecommerce_chart(timeseries)
   end
 
@@ -165,24 +186,65 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
           </p>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <div class="bg-white rounded-lg shadow p-6">
-            <dt class="text-sm font-medium text-gray-500">Total Revenue</dt>
-            <dd class="mt-1 text-3xl font-bold text-gray-900">
+        <%!-- Period Stats --%>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div class="bg-white rounded-lg shadow p-5">
+            <dt class="text-xs font-medium text-gray-500 uppercase">Revenue</dt>
+            <dd class="mt-1 text-2xl font-bold text-gray-900">
               {Spectabas.Currency.format(@ecommerce["total_revenue"], @site.currency)}
             </dd>
           </div>
-          <div class="bg-white rounded-lg shadow p-6">
-            <dt class="text-sm font-medium text-gray-500">Orders</dt>
-            <dd class="mt-1 text-3xl font-bold text-gray-900">
+          <div class="bg-white rounded-lg shadow p-5">
+            <dt class="text-xs font-medium text-gray-500 uppercase">Orders</dt>
+            <dd class="mt-1 text-2xl font-bold text-gray-900">
               {format_number(to_num(@ecommerce["total_orders"]))}
             </dd>
           </div>
-          <div class="bg-white rounded-lg shadow p-6">
-            <dt class="text-sm font-medium text-gray-500">Avg Order Value</dt>
-            <dd class="mt-1 text-3xl font-bold text-gray-900">
+          <div class="bg-white rounded-lg shadow p-5">
+            <dt class="text-xs font-medium text-gray-500 uppercase">AOV</dt>
+            <dd class="mt-1 text-2xl font-bold text-gray-900">
               {Spectabas.Currency.format(@ecommerce["avg_order_value"], @site.currency)}
             </dd>
+          </div>
+          <div class="bg-white rounded-lg shadow p-5">
+            <dt class="text-xs font-medium text-gray-500 uppercase">Customers</dt>
+            <dd class="mt-1 text-2xl font-bold text-gray-900">
+              {format_number(to_num(@ecommerce["unique_customers"]))}
+            </dd>
+          </div>
+        </div>
+
+        <%!-- LTV Stats (all-time) --%>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-5">
+            <dt class="text-xs font-medium text-indigo-700 uppercase">Avg LTV (net)</dt>
+            <dd class="mt-1 text-2xl font-bold text-indigo-900">
+              {Spectabas.Currency.format(@ltv["avg_net_ltv"], @site.currency)}
+            </dd>
+            <p class="text-xs text-indigo-500 mt-0.5">all-time, after refunds</p>
+          </div>
+          <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-5">
+            <dt class="text-xs font-medium text-indigo-700 uppercase">Avg LTV (gross)</dt>
+            <dd class="mt-1 text-2xl font-bold text-indigo-900">
+              {Spectabas.Currency.format(@ltv["avg_ltv"], @site.currency)}
+            </dd>
+            <p class="text-xs text-indigo-500 mt-0.5">all-time, before refunds</p>
+          </div>
+          <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-5">
+            <dt class="text-xs font-medium text-indigo-700 uppercase">Orders / Customer</dt>
+            <dd class="mt-1 text-2xl font-bold text-indigo-900">
+              {to_num(@ltv["avg_orders_per_customer"])}
+            </dd>
+            <p class="text-xs text-indigo-500 mt-0.5">
+              {format_number(to_num(@ltv["total_customers"]))} total customers
+            </p>
+          </div>
+          <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-5">
+            <dt class="text-xs font-medium text-indigo-700 uppercase">Refund Rate</dt>
+            <dd class="mt-1 text-2xl font-bold text-indigo-900">
+              {to_num(@ltv["refund_rate"])}%
+            </dd>
+            <p class="text-xs text-indigo-500 mt-0.5">of gross revenue</p>
           </div>
         </div>
 
@@ -296,6 +358,71 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
               </tbody>
             </table>
           </div>
+        </div>
+
+        <%!-- Top Customers by LTV --%>
+        <div class="bg-white rounded-lg shadow overflow-x-auto mb-8">
+          <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">Top Customers by LTV</h2>
+            <p class="text-xs text-gray-500 mt-0.5">All-time revenue per customer</p>
+          </div>
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Customer
+                </th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                  Gross Revenue
+                </th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                  Net Revenue
+                </th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                  Orders
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">
+                  First Order
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">
+                  Last Order
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              <tr :if={@top_customers == []}>
+                <td colspan="6" class="px-6 py-6 text-center text-gray-500 text-sm">
+                  No customer data yet.
+                </td>
+              </tr>
+              <tr :for={c <- @top_customers} class="hover:bg-gray-50">
+                <td class="px-6 py-3 text-sm text-gray-900">
+                  <.link
+                    :if={c["visitor_id"] && c["visitor_id"] != ""}
+                    navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{c["visitor_id"]}"}
+                    class="text-indigo-600 hover:text-indigo-800"
+                  >
+                    {customer_label(c["visitor_id"], @email_map)}
+                  </.link>
+                </td>
+                <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums font-medium">
+                  {Spectabas.Currency.format(c["total_revenue"], @site.currency)}
+                </td>
+                <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
+                  {Spectabas.Currency.format(c["net_revenue"], @site.currency)}
+                </td>
+                <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
+                  {to_num(c["order_count"])}
+                </td>
+                <td class="px-6 py-3 text-sm text-gray-500 hidden sm:table-cell">
+                  {format_date(c["first_order"])}
+                </td>
+                <td class="px-6 py-3 text-sm text-gray-500 hidden sm:table-cell">
+                  {format_date(c["last_order"])}
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
         <div class="bg-white rounded-lg shadow overflow-x-auto">
@@ -450,4 +577,20 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
   defp channel_color("ios_iap"), do: "bg-orange-500"
   defp channel_color("android_iap"), do: "bg-green-500"
   defp channel_color(_), do: "bg-gray-400"
+
+  defp customer_label(visitor_id, email_map) do
+    case email_map[visitor_id] do
+      %{email: email} when email != "" -> email
+      _ -> String.slice(to_string(visitor_id), 0, 12) <> "..."
+    end
+  end
+
+  defp format_date(nil), do: "-"
+  defp format_date(""), do: "-"
+
+  defp format_date(dt) when is_binary(dt) do
+    dt |> String.slice(0, 10)
+  end
+
+  defp format_date(_), do: "-"
 end
