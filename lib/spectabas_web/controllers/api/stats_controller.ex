@@ -1,7 +1,7 @@
 defmodule SpectabasWeb.API.StatsController do
   use SpectabasWeb, :controller
 
-  alias Spectabas.{Sites, Analytics, Accounts, Visitors}
+  alias Spectabas.{Sites, Analytics, Accounts, Visitors, Ecommerce.Normalize}
   alias SpectabasWeb.Plugs.ApiAuth
   require Logger
 
@@ -173,8 +173,8 @@ defmodule SpectabasWeb.API.StatsController do
           "discount" => parse_amount(params["discount"]),
           "currency" => params["currency"] || site.currency || "USD",
           "items" => Jason.encode!(params["items"] || []),
-          "channel" => normalize_short_string(params["channel"]),
-          "source" => normalize_short_string(params["source"]),
+          "channel" => Normalize.short_string(params["channel"]),
+          "source" => Normalize.short_string(params["source"]),
           "timestamp" => Calendar.strftime(now, "%Y-%m-%d %H:%M:%S")
         }
 
@@ -248,14 +248,6 @@ defmodule SpectabasWeb.API.StatsController do
   end
 
   defp parse_amount(_), do: 0
-
-  defp normalize_short_string(nil), do: ""
-
-  defp normalize_short_string(value) when is_binary(value) do
-    value |> String.trim() |> String.downcase() |> String.slice(0, 64)
-  end
-
-  defp normalize_short_string(_), do: ""
 
   def ecommerce_stats(conn, %{"site_id" => site_id} = params) do
     with :ok <- require_scope(conn, "read:stats"),

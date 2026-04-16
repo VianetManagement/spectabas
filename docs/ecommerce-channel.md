@@ -25,7 +25,7 @@ Without these, we can't answer:
 
 Nothing in the existing `ecommerce_events` schema carries this information. `visitor_id` / `session_id` describe the visitor, not the purchase pathway; `items[].category` describes the product type (`"new_subscription"`, `"renewal"`, `"one_time"`), not the channel or referral source.
 
-Both columns use `LowCardinality(String)` in ClickHouse — near-zero storage cost, filter- and group-by-friendly. These are deliberately **generic** fields so other Spectabas customers can adopt them (e.g. `channel: "pos"`, `source: "partner_landing_page"`).
+`channel` uses `LowCardinality(String)` (small closed set — 2–5 values, dictionary-encoded). `source` uses plain `String` (open-ended — 18+ values today, grows with product features). Both are deliberately **generic** so other Spectabas customers can adopt them (e.g. `channel: "pos"`, `source: "partner_landing_page"`).
 
 ## Client side (already shipped in Roommates)
 
@@ -209,18 +209,20 @@ Then update `@optional_fields` in `lib/spectabas/ecommerce/ecommerce_order.ex:28
 @optional_fields ~w(visitor_id session_id revenue subtotal tax shipping discount currency items channel source)a
 ```
 
-### 4. Analytics queries — expose as filters / dimensions (deferred)
+### 4. Analytics queries and dashboard
 
-**Not needed for the Roommates migration itself** — rows will start landing with both fields populated immediately after steps 1 + 2 ship; nothing breaks if nothing queries the columns.
+**Already implemented:**
 
-When dashboards need to use these, the changes are confined to `lib/spectabas/analytics.ex`:
+- `ecommerce_by_channel/3` in `lib/spectabas/analytics.ex` — groups ecommerce_events by `channel`, returns orders, revenue, AOV per channel.
+- `ecommerce_by_source/3` in `lib/spectabas/analytics.ex` — groups ecommerce_events by `source`, returns orders, revenue, AOV per source (top 25).
+- `ecommerce_orders/3` in `lib/spectabas/analytics.ex` — SELECT now includes `channel` and `source` columns.
+- Dashboard (`lib/spectabas_web/live/dashboard/ecommerce_live.ex`) — "By Channel" and "By Source" tables rendered side-by-side between the revenue chart and Top Products. Recent Orders table shows channel and source per row.
 
-- `ecommerce_stats/3` (~line 3321) — accept optional `channel` and `source` filters, add `AND channel = ...` / `AND source = ...` when set.
-- `ecommerce_top_products/3` (~line 3351) — same filter options.
-- `ecommerce_orders/3` (~line 3381) — expose both in the SELECT so the orders list UI can show them per row.
-- Consider `ecommerce_stats_by_channel/3` (one row per channel) and `ecommerce_stats_by_source/3` (one row per source) for dedicated dashboard widgets.
+**Future enhancements (not yet implemented):**
 
-Leave this for a follow-up PR driven by a concrete dashboard requirement.
+- `ecommerce_stats/3` — accept optional `channel` and `source` filter params to scope the summary cards (total revenue, orders, AOV) to a single channel or source.
+- `ecommerce_top_products/3` — same filter options, to see product mix per channel.
+- Dedicated `ecommerce_stats_by_channel/3` / `ecommerce_stats_by_source/3` for widgets that compare channels or sources within a single view (e.g. stacked bar chart).
 
 ## Deployment and rollback
 

@@ -65,14 +65,17 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
         _ -> []
       end
 
+    channel_task = Task.async(fn -> Analytics.ecommerce_by_channel(site, user, period) end)
+    source_task = Task.async(fn -> Analytics.ecommerce_by_source(site, user, period) end)
+
     by_channel =
-      case Analytics.ecommerce_by_channel(site, user, period) do
+      case Task.await(channel_task, 5_000) do
         {:ok, rows} -> rows
         _ -> []
       end
 
     by_source =
-      case Analytics.ecommerce_by_source(site, user, period) do
+      case Task.await(source_task, 5_000) do
         {:ok, rows} -> rows
         _ -> []
       end

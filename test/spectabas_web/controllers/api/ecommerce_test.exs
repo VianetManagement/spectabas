@@ -374,7 +374,12 @@ defmodule SpectabasWeb.API.EcommerceTest do
           "channel" => "web",
           "source" => "messages",
           "items" => [
-            %{"name" => "Monthly Plan", "price" => 99.99, "quantity" => 1, "category" => "new_subscription"}
+            %{
+              "name" => "Monthly Plan",
+              "price" => 99.99,
+              "quantity" => 1,
+              "category" => "new_subscription"
+            }
           ],
           "occurred_at" => DateTime.utc_now() |> DateTime.add(-600) |> DateTime.to_unix()
         })
@@ -387,35 +392,52 @@ defmodule SpectabasWeb.API.EcommerceTest do
     end
   end
 
-  describe "normalize_short_string/1 (via POST /ecommerce/transactions)" do
-    # These tests verify normalization behavior by sending edge-case values
-    # through the endpoint. Since the response doesn't echo stored values,
-    # we verify the endpoint doesn't crash — normalization correctness is
-    # validated by the private function's implementation (lowercase, trim,
-    # 64-char cap).
+  describe "Spectabas.Ecommerce.Normalize.short_string/1" do
+    alias Spectabas.Ecommerce.Normalize
 
-    test "empty string channel and source are accepted", %{conn: conn, site: site} do
-      conn =
-        post(conn, "/api/v1/sites/#{site.id}/ecommerce/transactions", %{
-          "order_id" => "ORD-NORM-1",
-          "revenue" => 1.00,
-          "channel" => "",
-          "source" => ""
-        })
-
-      assert conn.status in [200, 500]
+    test "trims whitespace" do
+      assert Normalize.short_string("  web  ") == "web"
     end
 
-    test "unicode channel and source are accepted", %{conn: conn, site: site} do
-      conn =
-        post(conn, "/api/v1/sites/#{site.id}/ecommerce/transactions", %{
-          "order_id" => "ORD-NORM-2",
-          "revenue" => 1.00,
-          "channel" => "wéb",
-          "source" => "menü"
-        })
+    test "lowercases" do
+      assert Normalize.short_string("WEB") == "web"
+      assert Normalize.short_string("Dashboard.Main_CTA") == "dashboard.main_cta"
+    end
 
-      assert conn.status in [200, 500]
+    test "trims and lowercases combined" do
+      assert Normalize.short_string("  IOS_IAP  ") == "ios_iap"
+    end
+
+    test "truncates at 64 characters" do
+      long = String.duplicate("a", 200)
+      result = Normalize.short_string(long)
+      assert String.length(result) == 64
+    end
+
+    test "returns empty string for nil" do
+      assert Normalize.short_string(nil) == ""
+    end
+
+    test "returns empty string for integer" do
+      assert Normalize.short_string(42) == ""
+    end
+
+    test "returns empty string for boolean" do
+      assert Normalize.short_string(true) == ""
+    end
+
+    test "returns empty string for empty string" do
+      assert Normalize.short_string("") == ""
+    end
+
+    test "handles unicode" do
+      assert Normalize.short_string("wéb") == "wéb"
+      assert Normalize.short_string("MENÜ") == "menü"
+    end
+
+    test "preserves dots and underscores" do
+      assert Normalize.short_string("email.subscription_expired") == "email.subscription_expired"
+      assert Normalize.short_string("dashboard.main_cta") == "dashboard.main_cta"
     end
   end
 end

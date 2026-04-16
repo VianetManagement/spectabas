@@ -91,6 +91,8 @@ CREATE TABLE IF NOT EXISTS spectabas.ecommerce_events
     tax           Decimal(12, 2) DEFAULT 0,
     shipping      Decimal(12, 2) DEFAULT 0,
     discount      Decimal(12, 2) DEFAULT 0,
+    refund_amount Decimal(12, 2) DEFAULT 0,
+    import_source LowCardinality(String) DEFAULT '',
     currency      LowCardinality(String) DEFAULT 'USD',
     items         String DEFAULT '[]',
     channel       LowCardinality(String) DEFAULT '',
