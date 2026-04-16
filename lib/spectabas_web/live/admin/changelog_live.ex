@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.40.4", "2026-04-16T14:00:00Z",
+       [
+         %{
+           title: "Fix: Webhook URL is now the full endpoint path, not base URL",
+           description:
+             "Webhook URL field accepts the complete endpoint (e.g. https://app.com/api/webhooks/spectabas/scraper). No longer prepends /api/webhooks/spectabas/scraper. Deactivate appends /deactivate to the configured URL."
+         }
+       ]},
       {"v5.40.3", "2026-04-16T13:30:00Z",
        [
          %{

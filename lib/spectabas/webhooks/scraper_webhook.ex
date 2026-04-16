@@ -14,7 +14,7 @@ defmodule Spectabas.Webhooks.ScraperWebhook do
   - `total_pageviews` — integer from ClickHouse
   """
   def send_flag(%Site{} = site, %Visitor{} = visitor, score_result, total_pageviews) do
-    url = String.trim_trailing(site.scraper_webhook_url, "/") <> "/api/webhooks/spectabas/scraper"
+    url = String.trim_trailing(site.scraper_webhook_url, "/")
     secret = site.scraper_webhook_secret
 
     payload = %{
@@ -58,8 +58,7 @@ defmodule Spectabas.Webhooks.ScraperWebhook do
   """
   def send_deactivate(%Site{} = site, %Visitor{} = visitor) do
     url =
-      String.trim_trailing(site.scraper_webhook_url, "/") <>
-        "/api/webhooks/spectabas/scraper/deactivate"
+      String.trim_trailing(site.scraper_webhook_url, "/") <> "/deactivate"
 
     secret = site.scraper_webhook_secret
 
