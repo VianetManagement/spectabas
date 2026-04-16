@@ -961,6 +961,30 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
             </div>
 
             <div :if={@settings_tab == "content"} class="border-t border-gray-200 pt-6">
+              <h3 class="text-base font-medium text-gray-900 mb-2">Site Search</h3>
+              <p class="text-xs text-gray-500 mb-3">
+                URL query parameters that indicate an internal site search. When a pageview
+                URL contains one of these parameters, its value is captured as the search query
+                on the <.link
+                  navigate={~p"/dashboard/sites/#{@site.id}/search"}
+                  class="text-indigo-600 underline"
+                >Site Search page</.link>. One parameter name per line. Leave blank to use defaults
+                (<span class="font-mono">q</span>, <span class="font-mono">query</span>, <span class="font-mono">search</span>, <span class="font-mono">s</span>, <span class="font-mono">keyword</span>).
+              </p>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">
+                  Search query parameters
+                </label>
+                <textarea
+                  name="site[search_query_params_text]"
+                  rows="3"
+                  class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5 font-mono text-xs"
+                  placeholder="q&#10;query&#10;search&#10;s&#10;keyword"
+                ><%= Enum.join(@site.search_query_params || [], "\n") %></textarea>
+              </div>
+            </div>
+
+            <div :if={@settings_tab == "content"} class="border-t border-gray-200 pt-6">
               <h3 class="text-base font-medium text-gray-900 mb-2">Scraper Detection</h3>
               <p class="text-xs text-gray-500 mb-3">
                 URL path prefixes that identify "content" on your site. Drives the

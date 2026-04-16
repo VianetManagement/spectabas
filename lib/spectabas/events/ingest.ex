@@ -43,7 +43,7 @@ defmodule Spectabas.Events.Ingest do
 
     # Extract UTMs, search query, and ad click IDs from the ORIGINAL URL before GDPR stripping
     utms = extract_utms(payload.u, payload)
-    search_query = extract_search_query(payload.u)
+    search_query = extract_search_query(payload.u, site)
     {click_id, click_id_type} = extract_click_id(payload)
 
     {_url_parsed, url_path, url_host, url_scheme} = normalize_url(payload.u, gdpr_mode)
@@ -491,19 +491,25 @@ defmodule Spectabas.Events.Ingest do
   defp normalize_path(_), do: "/"
 
   # Extract internal site search query from page URL query params
-  @search_params ~w(q query search s keyword)
-  defp extract_search_query(url) when is_binary(url) do
+  @default_search_params ~w(q query search s keyword)
+  defp extract_search_query(url, site) when is_binary(url) do
+    search_params =
+      case site.search_query_params do
+        list when is_list(list) and list != [] -> list
+        _ -> @default_search_params
+      end
+
     case URI.parse(url) do
       %URI{query: query} when is_binary(query) ->
         params = URI.decode_query(query)
-        Enum.find_value(@search_params, "", fn key -> params[key] end)
+        Enum.find_value(search_params, "", fn key -> params[key] end)
 
       _ ->
         ""
     end
   end
 
-  defp extract_search_query(_), do: ""
+  defp extract_search_query(_, _), do: ""
 
   defp merge_search_query(props, ""), do: props
   defp merge_search_query(props, query), do: Map.put(props, "_search_query", query)

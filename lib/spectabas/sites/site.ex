@@ -28,6 +28,7 @@ defmodule Spectabas.Sites.Site do
     field :scraper_content_prefixes, {:array, :string}, default: []
     field :journey_conversion_pages, {:array, :string}, default: []
     field :identity_cookie_name, :string
+    field :search_query_params, {:array, :string}, default: []
     field :scraper_webhook_url, :string
     field :scraper_webhook_secret, :string
     field :scraper_webhook_enabled, :boolean, default: false
@@ -62,6 +63,7 @@ defmodule Spectabas.Sites.Site do
       :scraper_content_prefixes,
       :journey_conversion_pages,
       :identity_cookie_name,
+      :search_query_params,
       :scraper_webhook_url,
       :scraper_webhook_secret,
       :scraper_webhook_enabled

@@ -236,12 +236,14 @@ defmodule Spectabas.Sites do
     |> maybe_parse_list("ip_blocklist_text", "ip_blocklist")
     |> maybe_parse_list("scraper_content_prefixes_text", "scraper_content_prefixes")
     |> maybe_parse_list("journey_conversion_pages_text", "journey_conversion_pages")
+    |> maybe_parse_list("search_query_params_text", "search_query_params")
     |> Map.drop([
       "cross_domain_sites_text",
       "ip_allowlist_text",
       "ip_blocklist_text",
       "scraper_content_prefixes_text",
-      "journey_conversion_pages_text"
+      "journey_conversion_pages_text",
+      "search_query_params_text"
     ])
   end
 

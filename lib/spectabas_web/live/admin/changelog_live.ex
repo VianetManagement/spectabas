@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.41.0", "2026-04-16T15:00:00Z",
+       [
+         %{
+           title: "Feat: Configurable site search query parameters",
+           description:
+             "Sites can now configure which URL query parameters identify internal search queries (Settings > Content > Site Search). Defaults to q, query, search, s, keyword when unconfigured. Custom params take precedence over defaults."
+         }
+       ]},
       {"v5.40.5", "2026-04-16T14:30:00Z",
        [
          %{

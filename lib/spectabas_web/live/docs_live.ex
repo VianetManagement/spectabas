@@ -2081,6 +2081,7 @@ defmodule SpectabasWeb.DocsLive do
 
             ### Content
             - **Intent Classification** — configure path patterns for visitor intent detection (buying, researching, support, etc.)
+            - **Site Search** — configure which URL query parameters identify internal search queries (defaults: q, query, search, s, keyword)
             - **Scraper Detection** — set content path prefixes for systematic crawl detection
             - **Visitor Journeys** — configure journey page-type groupings
 
