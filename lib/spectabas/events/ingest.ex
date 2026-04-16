@@ -43,7 +43,7 @@ defmodule Spectabas.Events.Ingest do
 
     # Extract UTMs, search query, and ad click IDs from the ORIGINAL URL before GDPR stripping
     utms = extract_utms(payload.u, payload)
-    search_query = extract_search_query(payload.u, site)
+    {search_query, search_param} = extract_search_query(payload.u, site)
     {click_id, click_id_type} = extract_click_id(payload)
 
     {_url_parsed, url_path, url_host, url_scheme} = normalize_url(payload.u, gdpr_mode)
@@ -79,7 +79,7 @@ defmodule Spectabas.Events.Ingest do
         screen_width: payload.sw,
         screen_height: payload.sh,
         duration: payload.d,
-        props: merge_search_query(payload.p || %{}, search_query),
+        props: merge_search_query(payload.p || %{}, search_query, search_param),
         user_agent: ua_string,
         browser_fingerprint:
           cond do
@@ -490,7 +490,8 @@ defmodule Spectabas.Events.Ingest do
 
   defp normalize_path(_), do: "/"
 
-  # Extract internal site search query from page URL query params
+  # Extract internal site search query from page URL query params.
+  # Returns {query_value, param_name} or {"", ""}.
   @default_search_params ~w(q query search s keyword)
   defp extract_search_query(url, site) when is_binary(url) do
     search_params =
@@ -502,17 +503,28 @@ defmodule Spectabas.Events.Ingest do
     case URI.parse(url) do
       %URI{query: query} when is_binary(query) ->
         params = URI.decode_query(query)
-        Enum.find_value(search_params, "", fn key -> params[key] end)
+
+        Enum.find_value(search_params, {"", ""}, fn key ->
+          case params[key] do
+            val when is_binary(val) and val != "" -> {val, key}
+            _ -> nil
+          end
+        end)
 
       _ ->
-        ""
+        {"", ""}
     end
   end
 
-  defp extract_search_query(_, _), do: ""
+  defp extract_search_query(_, _), do: {"", ""}
 
-  defp merge_search_query(props, ""), do: props
-  defp merge_search_query(props, query), do: Map.put(props, "_search_query", query)
+  defp merge_search_query(props, "", _), do: props
+
+  defp merge_search_query(props, query, param) do
+    props
+    |> Map.put("_search_query", query)
+    |> Map.put("_search_param", param)
+  end
 
   defp parse_referrer_domain(nil, _site), do: ""
   defp parse_referrer_domain("", _site), do: ""

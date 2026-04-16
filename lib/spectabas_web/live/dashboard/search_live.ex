@@ -28,11 +28,13 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
         |> assign(:site, site)
         |> assign(:user, user)
         |> assign(:date_range, "30d")
+        |> assign(:param_filter, nil)
         |> assign(:loading, true)
         |> assign(:searches, [])
         |> assign(:stats, nil)
         |> assign(:trend, [])
         |> assign(:search_pages, [])
+        |> assign(:params_used, [])
         |> assign(:tracked_params, tracked_params)
         |> assign(:using_defaults, site.search_query_params in [nil, []])
 
@@ -47,21 +49,33 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
     {:noreply, socket |> assign(:date_range, range) |> assign(:loading, true)}
   end
 
+  def handle_event("filter_param", %{"param" => "all"}, socket) do
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:param_filter, nil) |> assign(:loading, true)}
+  end
+
+  def handle_event("filter_param", %{"param" => param}, socket) do
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:param_filter, param) |> assign(:loading, true)}
+  end
+
   @impl true
   def handle_info(:load_data, socket) do
     {:noreply, socket |> load_data() |> assign(:loading, false)}
   end
 
   defp load_data(socket) do
-    %{site: site, user: user, date_range: range} = socket.assigns
+    %{site: site, user: user, date_range: range, param_filter: param_filter} = socket.assigns
     period = range_to_period(range)
 
-    # Run all queries in parallel
     tasks = [
-      Task.async(fn -> {:searches, Analytics.site_searches(site, user, period)} end),
+      Task.async(fn ->
+        {:searches, Analytics.site_searches(site, user, period, param: param_filter)}
+      end),
       Task.async(fn -> {:stats, Analytics.site_search_stats(site, user, period)} end),
       Task.async(fn -> {:trend, Analytics.site_search_trend(site, user, period)} end),
-      Task.async(fn -> {:pages, Analytics.site_search_pages(site, user, period)} end)
+      Task.async(fn -> {:pages, Analytics.site_search_pages(site, user, period)} end),
+      Task.async(fn -> {:params_used, Analytics.site_search_params_used(site, user, period)} end)
     ]
 
     results = Task.await_many(tasks, 30_000)
@@ -71,6 +85,7 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
       {:stats, {:ok, [row | _]}}, sock -> assign(sock, :stats, row)
       {:trend, {:ok, rows}}, sock -> assign(sock, :trend, rows)
       {:pages, {:ok, rows}}, sock -> assign(sock, :search_pages, rows)
+      {:params_used, {:ok, rows}}, sock -> assign(sock, :params_used, rows)
       _, sock -> sock
     end)
   end
@@ -147,6 +162,44 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
               </p>
             </div>
           </div>
+        </div>
+
+        <%!-- Parameter Filter Pills --%>
+        <div :if={@params_used != [] && !@loading} class="flex flex-wrap items-center gap-2 mb-6">
+          <span class="text-xs font-medium text-gray-500 uppercase mr-1">Filter by param:</span>
+          <button
+            phx-click="filter_param"
+            phx-value-param="all"
+            class={[
+              "px-3 py-1 text-xs font-medium rounded-full border",
+              if(is_nil(@param_filter),
+                do: "bg-indigo-600 text-white border-indigo-600",
+                else: "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+              )
+            ]}
+          >
+            All
+          </button>
+          <button
+            :for={pu <- @params_used}
+            phx-click="filter_param"
+            phx-value-param={pu["param"]}
+            class={[
+              "px-3 py-1 text-xs font-medium rounded-full border font-mono",
+              if(@param_filter == pu["param"],
+                do: "bg-indigo-600 text-white border-indigo-600",
+                else: "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+              )
+            ]}
+          >
+            ?{pu["param"]}=
+            <span class={[
+              "ml-1 text-xs",
+              if(@param_filter == pu["param"], do: "text-indigo-200", else: "text-gray-400")
+            ]}>
+              {format_number(to_num(pu["cnt"]))}
+            </span>
+          </button>
         </div>
 
         <%= if @loading do %>
@@ -255,7 +308,15 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
                   </tr>
                   <tr :for={s <- @searches} class="hover:bg-gray-50">
                     <td class="px-6 py-3 text-sm font-medium text-gray-900">
-                      {s["search_term"]}
+                      <span class="inline-flex items-center gap-2">
+                        {s["search_term"]}
+                        <span
+                          :if={s["search_param"] && s["search_param"] != ""}
+                          class="inline-flex items-center px-1.5 py-0 rounded text-[10px] font-mono font-medium bg-gray-100 text-gray-500 border border-gray-200"
+                        >
+                          {s["search_param"]}
+                        </span>
+                      </span>
                     </td>
                     <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
                       {format_number(to_num(s["searches"]))}

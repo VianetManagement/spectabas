@@ -282,7 +282,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Mobile responsiveness** — scrollable tables, collapsible mobile nav bar
 - **Accessible top nav** — WCAG AA contrast compliance
 - **Documentation pages** — docs split into `/docs` (index), `/docs/getting-started`, `/docs/dashboard`, `/docs/conversions`, `/docs/api`, `/docs/admin` with cross-category search. Requires login (behind :require_authenticated_user). Public pages: `/privacy`, `/terms`, homepage.
-- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.42.0)
+- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.43.0)
 - **Legal** — Privacy Policy at `/privacy` and Terms of Service at `/terms` (public, no auth required). Entity: Spectabas, Kent County MI. Contact: howdy@spectabas.com. Arbitration clause (AAA, Kent County). 18+ age restriction.
 
 ## Important Patterns
@@ -295,7 +295,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Origin validation**: Auto-allows parent domain of analytics subdomain
 - **Tracking subdomain plug**: Blocks all UI routes on analytics subdomains, only allows `/c/*`, `/assets/v1.js`, `/health`
 - **Spam filter**: `Spectabas.Analytics.SpamFilter` maintains builtin + DB-stored spam domains, auto-excluded from Sources/Channels queries. Admin page at `/admin/spam-filter` for managing blocklist with auto-detection of suspicious referrer domains. Daily Oban worker (`SpamDetector`) scans for candidates.
-- **Site search params**: Configurable per-site `search_query_params` array (Settings > Content). Ingest checks site's params first, falls back to defaults (`q`, `query`, `search`, `s`, `keyword`). Extracted values stored as `_search_query` in event properties. Site Search page shows config banner with tracked params.
+- **Site search params**: Configurable per-site `search_query_params` array (Settings > Content). Ingest checks site's params first, falls back to defaults (`q`, `query`, `search`, `s`, `keyword`). Extracted values stored as `_search_query` and `_search_param` in event properties. Site Search page shows config banner with tracked params, filter pills by parameter, and param badges on each search term row.
 - **Pageview rate limiting**: Tracker uses sessionStorage to enforce 5-second minimum interval between pageviews for the same pathname (not full URL). Query-string-only changes (search filters, pagination) don't trigger new pageviews. Prevents overcounting from rapid refreshes, auto-refresh, or iframe reloads.
 - **SPA pageview tracking**: Only pathname changes trigger new pageviews. Query-string-only pushState changes are ignored. This matches standard analytics behavior (Matomo, GA).
 - **Saved segments**: Ownership enforced — `get_segment!/3` scopes by user_id and site_id. Never load segments by ID alone.

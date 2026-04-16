@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.43.0", "2026-04-16T17:00:00Z",
+       [
+         %{
+           title: "Feat: Site Search param filter + param badges on search terms",
+           description:
+             "Ingest now records which URL parameter matched each search query (_search_param in event properties). Site Search page shows filter pills by parameter (e.g. ?q=, ?search=, ?keyword=) with counts. Each search term row shows a param badge. Filter to see only terms from a specific parameter. Data flows from new events forward — existing events won't have the param tag."
+         }
+       ]},
       {"v5.42.0", "2026-04-16T16:00:00Z",
        [
          %{

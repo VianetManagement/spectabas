@@ -4216,17 +4216,26 @@ defmodule Spectabas.Analytics do
   Top internal site search queries extracted from URL params.
   Looks for common search params: q, query, search, s, keyword.
   """
-  def site_searches(%Site{} = site, %User{} = user, date_range) do
+  def site_searches(%Site{} = site, %User{} = user, date_range, opts \\ []) do
     date_range = ensure_date_range(date_range)
+    param_filter = Keyword.get(opts, :param, nil)
 
     with :ok <- authorize(site, user) do
       site_p = ClickHouse.param(site.id)
       from_p = ClickHouse.param(format_datetime(date_range.from))
       to_p = ClickHouse.param(format_datetime(date_range.to))
 
+      param_clause =
+        if param_filter && param_filter != "" do
+          "AND JSONExtractString(properties, '_search_param') = #{ClickHouse.param(param_filter)}"
+        else
+          ""
+        end
+
       sql = """
       SELECT
         JSONExtractString(properties, '_search_query') AS search_term,
+        JSONExtractString(properties, '_search_param') AS search_param,
         count() AS searches,
         uniq(visitor_id) AS unique_searchers
       FROM events
@@ -4236,9 +4245,38 @@ defmodule Spectabas.Analytics do
         AND timestamp <= #{to_p}
         AND ip_is_bot = 0
         AND JSONExtractString(properties, '_search_query') != ''
-      GROUP BY search_term
+        #{param_clause}
+      GROUP BY search_term, search_param
       ORDER BY searches DESC
       LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  def site_search_params_used(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      site_p = ClickHouse.param(site.id)
+      from_p = ClickHouse.param(format_datetime(date_range.from))
+      to_p = ClickHouse.param(format_datetime(date_range.to))
+
+      sql = """
+      SELECT
+        JSONExtractString(properties, '_search_param') AS param,
+        count() AS cnt
+      FROM events
+      WHERE site_id = #{site_p}
+        AND event_type = 'pageview'
+        AND timestamp >= #{from_p}
+        AND timestamp <= #{to_p}
+        AND ip_is_bot = 0
+        AND JSONExtractString(properties, '_search_query') != ''
+        AND JSONExtractString(properties, '_search_param') != ''
+      GROUP BY param
+      ORDER BY cnt DESC
       """
 
       ClickHouse.query(sql)
