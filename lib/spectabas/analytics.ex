@@ -4220,22 +4220,108 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
-      # Extract search query from properties._search_query (set during ingest)
+      site_p = ClickHouse.param(site.id)
+      from_p = ClickHouse.param(format_datetime(date_range.from))
+      to_p = ClickHouse.param(format_datetime(date_range.to))
+
       sql = """
       SELECT
         JSONExtractString(properties, '_search_query') AS search_term,
         count() AS searches,
         uniq(visitor_id) AS unique_searchers
       FROM events
-      WHERE site_id = #{ClickHouse.param(site.id)}
+      WHERE site_id = #{site_p}
         AND event_type = 'pageview'
-        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND timestamp >= #{from_p}
+        AND timestamp <= #{to_p}
         AND ip_is_bot = 0
         AND JSONExtractString(properties, '_search_query') != ''
       GROUP BY search_term
       ORDER BY searches DESC
       LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  def site_search_stats(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      site_p = ClickHouse.param(site.id)
+      from_p = ClickHouse.param(format_datetime(date_range.from))
+      to_p = ClickHouse.param(format_datetime(date_range.to))
+
+      sql = """
+      SELECT
+        count() AS total_searches,
+        uniq(visitor_id) AS unique_searchers,
+        uniq(JSONExtractString(properties, '_search_query')) AS unique_terms
+      FROM events
+      WHERE site_id = #{site_p}
+        AND event_type = 'pageview'
+        AND timestamp >= #{from_p}
+        AND timestamp <= #{to_p}
+        AND ip_is_bot = 0
+        AND JSONExtractString(properties, '_search_query') != ''
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  def site_search_trend(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      site_p = ClickHouse.param(site.id)
+      from_p = ClickHouse.param(format_datetime(date_range.from))
+      to_p = ClickHouse.param(format_datetime(date_range.to))
+
+      sql = """
+      SELECT
+        toDate(timestamp) AS day,
+        count() AS searches,
+        uniq(visitor_id) AS searchers
+      FROM events
+      WHERE site_id = #{site_p}
+        AND event_type = 'pageview'
+        AND timestamp >= #{from_p}
+        AND timestamp <= #{to_p}
+        AND ip_is_bot = 0
+        AND JSONExtractString(properties, '_search_query') != ''
+      GROUP BY day
+      ORDER BY day ASC
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  def site_search_pages(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      site_p = ClickHouse.param(site.id)
+      from_p = ClickHouse.param(format_datetime(date_range.from))
+      to_p = ClickHouse.param(format_datetime(date_range.to))
+
+      sql = """
+      SELECT
+        url_path,
+        count() AS searches,
+        uniq(JSONExtractString(properties, '_search_query')) AS unique_terms
+      FROM events
+      WHERE site_id = #{site_p}
+        AND event_type = 'pageview'
+        AND timestamp >= #{from_p}
+        AND timestamp <= #{to_p}
+        AND ip_is_bot = 0
+        AND JSONExtractString(properties, '_search_query') != ''
+      GROUP BY url_path
+      ORDER BY searches DESC
+      LIMIT 20
       """
 
       ClickHouse.query(sql)

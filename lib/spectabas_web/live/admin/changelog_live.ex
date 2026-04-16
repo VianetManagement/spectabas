@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.42.0", "2026-04-16T16:00:00Z",
+       [
+         %{
+           title: "Feat: Site Search page redesign",
+           description:
+             "Completely rebuilt Site Search page. Stats cards (total searches, unique searchers, unique terms, searches per searcher). Search volume bar chart trend. Top Search Terms table with avg-per-person column. Search Pages sidebar showing which pages trigger searches. Config banner showing tracked URL parameters with link to Settings. 90-day date range option. All 4 queries run in parallel."
+         }
+       ]},
       {"v5.41.0", "2026-04-16T15:00:00Z",
        [
          %{

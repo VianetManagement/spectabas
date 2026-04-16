@@ -1,12 +1,12 @@
 defmodule SpectabasWeb.Dashboard.SearchLive do
   use SpectabasWeb, :live_view
 
-  @moduledoc "Internal site search queries extracted from URL parameters."
-
   alias Spectabas.{Accounts, Sites, Analytics}
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers
   import SpectabasWeb.Dashboard.DateHelpers
+
+  @default_search_params ~w(q query search s keyword)
 
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
@@ -16,6 +16,12 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
     unless Accounts.can_access_site?(user, site) do
       {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
     else
+      tracked_params =
+        case site.search_query_params do
+          list when is_list(list) and list != [] -> list
+          _ -> @default_search_params
+        end
+
       socket =
         socket
         |> assign(:page_title, "Site Search - #{site.name}")
@@ -23,6 +29,12 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
         |> assign(:user, user)
         |> assign(:date_range, "30d")
         |> assign(:loading, true)
+        |> assign(:searches, [])
+        |> assign(:stats, nil)
+        |> assign(:trend, [])
+        |> assign(:search_pages, [])
+        |> assign(:tracked_params, tracked_params)
+        |> assign(:using_defaults, site.search_query_params in [nil, []])
 
       if connected?(socket), do: send(self(), :load_data)
       {:ok, socket}
@@ -42,14 +54,25 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
 
   defp load_data(socket) do
     %{site: site, user: user, date_range: range} = socket.assigns
+    period = range_to_period(range)
 
-    searches =
-      case Analytics.site_searches(site, user, range_to_period(range)) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
+    # Run all queries in parallel
+    tasks = [
+      Task.async(fn -> {:searches, Analytics.site_searches(site, user, period)} end),
+      Task.async(fn -> {:stats, Analytics.site_search_stats(site, user, period)} end),
+      Task.async(fn -> {:trend, Analytics.site_search_trend(site, user, period)} end),
+      Task.async(fn -> {:pages, Analytics.site_search_pages(site, user, period)} end)
+    ]
 
-    assign(socket, :searches, searches)
+    results = Task.await_many(tasks, 30_000)
+
+    Enum.reduce(results, socket, fn
+      {:searches, {:ok, rows}}, sock -> assign(sock, :searches, rows)
+      {:stats, {:ok, [row | _]}}, sock -> assign(sock, :stats, row)
+      {:trend, {:ok, rows}}, sock -> assign(sock, :trend, rows)
+      {:pages, {:ok, rows}}, sock -> assign(sock, :search_pages, rows)
+      _, sock -> sock
+    end)
   end
 
   @impl true
@@ -64,16 +87,16 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
       live_visitors={0}
     >
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div class="flex items-center justify-between mb-8">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4">
           <div>
-            <h1 class="text-2xl font-bold text-gray-900 mt-2">Site Search</h1>
+            <h1 class="text-2xl font-bold text-gray-900">Site Search</h1>
             <p class="text-sm text-gray-500 mt-1">
-              Internal search queries from URL parameters (q, query, search, s, keyword)
+              What visitors are searching for on your site
             </p>
           </div>
           <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">
             <button
-              :for={r <- [{"7d", "7 days"}, {"30d", "30 days"}]}
+              :for={r <- [{"7d", "7 days"}, {"30d", "30 days"}, {"90d", "90 days"}]}
               phx-click="change_range"
               phx-value-range={elem(r, 0)}
               class={[
@@ -87,6 +110,43 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
               {elem(r, 1)}
             </button>
           </nav>
+        </div>
+
+        <%!-- Tracked Parameters Banner --%>
+        <div class="bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-3 mb-6">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <div class="text-xs font-semibold text-indigo-800 uppercase mb-1">
+                Tracking URL Parameters
+              </div>
+              <div class="flex flex-wrap gap-1.5">
+                <span
+                  :for={param <- @tracked_params}
+                  class="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-medium bg-indigo-100 text-indigo-700"
+                >
+                  ?{param}=
+                </span>
+              </div>
+              <p :if={@using_defaults} class="text-xs text-indigo-600 mt-1.5">
+                Using default parameters.
+                <.link
+                  navigate={~p"/dashboard/sites/#{@site.id}/settings"}
+                  class="underline hover:text-indigo-800"
+                >
+                  Customize in Settings &rarr;
+                </.link>
+              </p>
+              <p :if={!@using_defaults} class="text-xs text-indigo-600 mt-1.5">
+                Custom parameters configured.
+                <.link
+                  navigate={~p"/dashboard/sites/#{@site.id}/settings"}
+                  class="underline hover:text-indigo-800"
+                >
+                  Edit in Settings &rarr;
+                </.link>
+              </p>
+            </div>
+          </div>
         </div>
 
         <%= if @loading do %>
@@ -111,43 +171,164 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
             </div>
           </div>
         <% else %>
-          <div class="bg-white rounded-lg shadow overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-              <thead class="bg-gray-50">
-                <tr>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Search Term
-                  </th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Searches
-                  </th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Unique Searchers
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-200">
-                <tr :if={@searches == []}>
-                  <td colspan="3" class="px-6 py-8 text-center text-gray-500">
-                    No search queries found. Site search tracking works by extracting query parameters
-                    (q, query, search, s, keyword) from page URLs.
-                  </td>
-                </tr>
-                <tr :for={s <- @searches} class="hover:bg-gray-50">
-                  <td class="px-6 py-4 text-sm font-medium text-gray-900">{s["search_term"]}</td>
-                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                    {format_number(to_num(s["searches"]))}
-                  </td>
-                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                    {format_number(to_num(s["unique_searchers"]))}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <%!-- Stats Cards --%>
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div class="bg-white rounded-lg shadow px-5 py-4">
+              <div class="text-xs font-medium text-gray-500 uppercase">Total Searches</div>
+              <div class="text-2xl font-bold text-gray-900 mt-1">
+                {format_number(to_num((@stats || %{})["total_searches"]))}
+              </div>
+            </div>
+            <div class="bg-white rounded-lg shadow px-5 py-4">
+              <div class="text-xs font-medium text-gray-500 uppercase">Unique Searchers</div>
+              <div class="text-2xl font-bold text-gray-900 mt-1">
+                {format_number(to_num((@stats || %{})["unique_searchers"]))}
+              </div>
+            </div>
+            <div class="bg-white rounded-lg shadow px-5 py-4">
+              <div class="text-xs font-medium text-gray-500 uppercase">Unique Terms</div>
+              <div class="text-2xl font-bold text-gray-900 mt-1">
+                {format_number(to_num((@stats || %{})["unique_terms"]))}
+              </div>
+            </div>
+            <div class="bg-white rounded-lg shadow px-5 py-4">
+              <div class="text-xs font-medium text-gray-500 uppercase">Searches / Searcher</div>
+              <div class="text-2xl font-bold text-gray-900 mt-1">
+                {searches_per_searcher(@stats)}
+              </div>
+            </div>
+          </div>
+
+          <%!-- Search Trend --%>
+          <%= if @trend != [] do %>
+            <div class="bg-white rounded-lg shadow p-5 mb-6">
+              <h2 class="text-sm font-semibold text-gray-900 mb-3">Search Volume</h2>
+              <div class="flex items-end gap-px h-24">
+                <% max_val = @trend |> Enum.map(&to_num(&1["searches"])) |> Enum.max(fn -> 1 end) %>
+                <div
+                  :for={d <- @trend}
+                  class="flex-1 bg-indigo-500 rounded-t hover:bg-indigo-600 transition-colors relative group"
+                  style={"height: #{bar_height(to_num(d["searches"]), max_val)}%"}
+                >
+                  <div class="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover:block bg-gray-900 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-10">
+                    {d["day"]} &mdash; {format_number(to_num(d["searches"]))} searches
+                  </div>
+                </div>
+              </div>
+              <div class="flex justify-between mt-1 text-xs text-gray-400">
+                <span>{List.first(@trend)["day"]}</span>
+                <span>{List.last(@trend)["day"]}</span>
+              </div>
+            </div>
+          <% end %>
+
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <%!-- Search Terms Table (2/3 width) --%>
+            <div class="lg:col-span-2 bg-white rounded-lg shadow overflow-x-auto">
+              <div class="px-6 py-4 border-b border-gray-200">
+                <h2 class="text-base font-semibold text-gray-900">Top Search Terms</h2>
+                <p class="text-xs text-gray-500 mt-0.5">What visitors type into your search</p>
+              </div>
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Search Term
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Searches
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Searchers
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">
+                      Avg / Person
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                  <tr :if={@searches == []}>
+                    <td colspan="4" class="px-6 py-8 text-center text-gray-500 text-sm">
+                      No search queries found in this period. Make sure your site's search results page
+                      uses one of the tracked URL parameters shown above.
+                    </td>
+                  </tr>
+                  <tr :for={s <- @searches} class="hover:bg-gray-50">
+                    <td class="px-6 py-3 text-sm font-medium text-gray-900">
+                      {s["search_term"]}
+                    </td>
+                    <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
+                      {format_number(to_num(s["searches"]))}
+                    </td>
+                    <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
+                      {format_number(to_num(s["unique_searchers"]))}
+                    </td>
+                    <td class="px-6 py-3 text-sm text-gray-500 text-right tabular-nums hidden sm:table-cell">
+                      {avg_per_person(s)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <%!-- Search Pages (1/3 width) --%>
+            <div class="bg-white rounded-lg shadow overflow-x-auto">
+              <div class="px-6 py-4 border-b border-gray-200">
+                <h2 class="text-base font-semibold text-gray-900">Search Pages</h2>
+                <p class="text-xs text-gray-500 mt-0.5">Pages where search happens</p>
+              </div>
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      Page
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                      Searches
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                  <tr :if={@search_pages == []}>
+                    <td colspan="2" class="px-6 py-6 text-center text-gray-500 text-sm">
+                      No data yet.
+                    </td>
+                  </tr>
+                  <tr :for={p <- @search_pages} class="hover:bg-gray-50">
+                    <td
+                      class="px-6 py-3 text-sm text-indigo-700 font-mono truncate max-w-[200px]"
+                      title={p["url_path"]}
+                    >
+                      {p["url_path"]}
+                    </td>
+                    <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
+                      {format_number(to_num(p["searches"]))}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         <% end %>
       </div>
     </.dashboard_layout>
     """
   end
+
+  defp searches_per_searcher(nil), do: "0"
+
+  defp searches_per_searcher(stats) do
+    total = to_num(stats["total_searches"])
+    searchers = to_num(stats["unique_searchers"])
+    if searchers > 0, do: Float.round(total / searchers, 1) |> to_string(), else: "0"
+  end
+
+  defp avg_per_person(row) do
+    searches = to_num(row["searches"])
+    searchers = to_num(row["unique_searchers"])
+    if searchers > 0, do: Float.round(searches / searchers, 1) |> to_string(), else: "1"
+  end
+
+  defp bar_height(val, max) when max > 0, do: round(val / max * 100) |> max(2)
+  defp bar_height(_, _), do: 2
 end
