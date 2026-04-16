@@ -29,6 +29,8 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
         |> assign(:user, user)
         |> assign(:date_range, "30d")
         |> assign(:param_filter, nil)
+        |> assign(:sort_by, "searches")
+        |> assign(:sort_dir, :desc)
         |> assign(:loading, true)
         |> assign(:searches, [])
         |> assign(:stats, nil)
@@ -53,6 +55,24 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
     send(self(), :load_critical)
     send(self(), :load_deferred)
     {:noreply, socket}
+  end
+
+  def handle_event("sort", %{"col" => col}, socket)
+      when col in ~w(search_term searches unique_searchers) do
+    {sort_by, sort_dir} =
+      if socket.assigns.sort_by == col do
+        {col, if(socket.assigns.sort_dir == :desc, do: :asc, else: :desc)}
+      else
+        {col, :desc}
+      end
+
+    sorted = sort_searches(socket.assigns.searches, sort_by, sort_dir)
+
+    {:noreply,
+     socket
+     |> assign(:sort_by, sort_by)
+     |> assign(:sort_dir, sort_dir)
+     |> assign(:searches, sorted)}
   end
 
   def handle_event("filter_param", %{"param" => "all"}, socket) do
@@ -319,14 +339,26 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
               <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
                   <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Search Term
+                    <th
+                      phx-click="sort"
+                      phx-value-col="search_term"
+                      class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700 select-none"
+                    >
+                      Search Term{col_arrow("search_term", @sort_by, @sort_dir)}
                     </th>
-                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Searches
+                    <th
+                      phx-click="sort"
+                      phx-value-col="searches"
+                      class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700 select-none"
+                    >
+                      Searches{col_arrow("searches", @sort_by, @sort_dir)}
                     </th>
-                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Searchers
+                    <th
+                      phx-click="sort"
+                      phx-value-col="unique_searchers"
+                      class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700 select-none"
+                    >
+                      Searchers{col_arrow("unique_searchers", @sort_by, @sort_dir)}
                     </th>
                     <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">
                       Avg / Person
@@ -426,4 +458,16 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
 
   defp bar_height(val, max) when max > 0, do: round(val / max * 100) |> max(2)
   defp bar_height(_, _), do: 2
+
+  defp sort_searches(rows, "search_term", dir) do
+    Enum.sort_by(rows, &String.downcase(&1["search_term"] || ""), dir)
+  end
+
+  defp sort_searches(rows, col, dir) do
+    Enum.sort_by(rows, &to_num(&1[col]), dir)
+  end
+
+  defp col_arrow(col, col, :asc), do: " \u25B2"
+  defp col_arrow(col, col, :desc), do: " \u25BC"
+  defp col_arrow(_, _, _), do: ""
 end

@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.43.2", "2026-04-16T18:00:00Z",
+       [
+         %{
+           title: "UX: Sortable columns on Site Search top terms table",
+           description:
+             "Click Search Term, Searches, or Searchers column headers to sort. Click again to toggle ascending/descending. Sort indicator arrow shown on active column."
+         }
+       ]},
       {"v5.43.1", "2026-04-16T17:30:00Z",
        [
          %{
