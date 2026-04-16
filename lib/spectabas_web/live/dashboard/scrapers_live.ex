@@ -33,6 +33,8 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
         |> assign(:loading, true)
         |> assign(:candidates, [])
         |> assign(:webhook_result, nil)
+        |> assign(:tab, "scrapers")
+        |> assign(:webhook_log, [])
         |> assign(:summary, %{
           total: 0,
           suspicious: 0,
@@ -57,6 +59,15 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
   end
 
   @impl true
+  def handle_event("switch_tab", %{"tab" => "webhook_log"}, socket) do
+    log = Spectabas.Webhooks.ScraperWebhook.list_deliveries(socket.assigns.site.id)
+    {:noreply, socket |> assign(:tab, "webhook_log") |> assign(:webhook_log, log)}
+  end
+
+  def handle_event("switch_tab", %{"tab" => tab}, socket) do
+    {:noreply, assign(socket, :tab, tab)}
+  end
+
   def handle_event("change_range", %{"range" => range}, socket) do
     send(self(), :load_data)
     {:noreply, socket |> assign(:date_range, range) |> assign(:loading, true)}
@@ -111,10 +122,16 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
             })
             |> Spectabas.Repo.update()
 
-            {:noreply, assign(socket, :webhook_result, {:ok, detail})}
+            log = Spectabas.Webhooks.ScraperWebhook.list_deliveries(site.id)
+
+            {:noreply,
+             socket |> assign(:webhook_result, {:ok, detail}) |> assign(:webhook_log, log)}
 
           {:error, detail} ->
-            {:noreply, assign(socket, :webhook_result, {:error, detail})}
+            log = Spectabas.Webhooks.ScraperWebhook.list_deliveries(site.id)
+
+            {:noreply,
+             socket |> assign(:webhook_result, {:error, detail}) |> assign(:webhook_log, log)}
         end
     end
   end
@@ -136,10 +153,16 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
             })
             |> Spectabas.Repo.update()
 
-            {:noreply, assign(socket, :webhook_result, {:ok, detail})}
+            log = Spectabas.Webhooks.ScraperWebhook.list_deliveries(site.id)
+
+            {:noreply,
+             socket |> assign(:webhook_result, {:ok, detail}) |> assign(:webhook_log, log)}
 
           {:error, detail} ->
-            {:noreply, assign(socket, :webhook_result, {:error, detail})}
+            log = Spectabas.Webhooks.ScraperWebhook.list_deliveries(site.id)
+
+            {:noreply,
+             socket |> assign(:webhook_result, {:error, detail}) |> assign(:webhook_log, log)}
         end
     end
   end
@@ -239,374 +262,504 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
           </div>
         <% end %>
 
-        <%!-- Summary cards --%>
-        <div class="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8">
-          <div class="bg-white rounded-lg shadow p-4 border-t-4 border-red-500">
-            <div class="text-xs font-medium text-gray-500 uppercase">Certain</div>
-            <div class="text-2xl font-bold text-red-700 mt-1">{@summary.certain}</div>
-            <div class="text-xs text-gray-500 mt-0.5">score ≥ 85</div>
-          </div>
-          <div class="bg-white rounded-lg shadow p-4 border-t-4 border-amber-500">
-            <div class="text-xs font-medium text-gray-500 uppercase">Suspicious</div>
-            <div class="text-2xl font-bold text-amber-600 mt-1">{@summary.suspicious}</div>
-            <div class="text-xs text-gray-500 mt-0.5">score 60–84</div>
-          </div>
-          <div class="bg-white rounded-lg shadow p-4">
-            <div class="text-xs font-medium text-gray-500 uppercase">Datacenter</div>
-            <div class="text-2xl font-bold text-gray-900 mt-1">{@summary.datacenter}</div>
-            <div class="text-xs text-gray-500 mt-0.5">flagged ASN</div>
-          </div>
-          <div class="bg-white rounded-lg shadow p-4">
-            <div class="text-xs font-medium text-gray-500 uppercase">Spoofed UA</div>
-            <div class="text-2xl font-bold text-gray-900 mt-1">{@summary.spoofed}</div>
-            <div class="text-xs text-gray-500 mt-0.5">mobile UA + DC IP</div>
-          </div>
-          <div class="bg-white rounded-lg shadow p-4">
-            <div class="text-xs font-medium text-gray-500 uppercase">IP Rotation</div>
-            <div class="text-2xl font-bold text-gray-900 mt-1">{@summary.rotating}</div>
-            <div class="text-xs text-gray-500 mt-0.5">same cookie, 3+ IPs</div>
-          </div>
-          <div class="bg-white rounded-lg shadow p-4">
-            <div class="text-xs font-medium text-gray-500 uppercase">Total Flagged</div>
-            <div class="text-2xl font-bold text-gray-900 mt-1">{@summary.total}</div>
-            <div class="text-xs text-gray-500 mt-0.5">all scores &gt; 0</div>
-          </div>
-        </div>
+        <%!-- Tab navigation --%>
+        <nav class="flex gap-1 bg-gray-100 rounded-lg p-1 mb-6 w-fit">
+          <button
+            :for={{id, label} <- [{"scrapers", "Detection"}, {"webhook_log", "Webhook Log"}]}
+            phx-click="switch_tab"
+            phx-value-tab={id}
+            class={[
+              "px-4 py-1.5 text-sm font-medium rounded-md",
+              if(@tab == id,
+                do: "bg-white shadow text-gray-900",
+                else: "text-gray-600 hover:text-gray-900"
+              )
+            ]}
+          >
+            {label}
+          </button>
+        </nav>
 
-        <%= if @loading do %>
-          <div class="bg-white rounded-lg shadow p-12 text-center mb-8">
-            <div class="inline-flex items-center gap-3 text-gray-600">
-              <svg
-                class="animate-spin h-5 w-5 text-indigo-600"
-                viewBox="0 0 24 24"
-                fill="none"
-              >
-                <circle
-                  class="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  stroke-width="4"
-                />
-                <path
-                  class="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                />
-              </svg>
-              <span class="text-sm">
-                Scanning visitors for scraper signals... This can take 10-30 seconds on large sites.
-              </span>
+        <div :if={@tab == "scrapers"}>
+          <%!-- Summary cards --%>
+          <div class="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8">
+            <div class="bg-white rounded-lg shadow p-4 border-t-4 border-red-500">
+              <div class="text-xs font-medium text-gray-500 uppercase">Certain</div>
+              <div class="text-2xl font-bold text-red-700 mt-1">{@summary.certain}</div>
+              <div class="text-xs text-gray-500 mt-0.5">score ≥ 85</div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4 border-t-4 border-amber-500">
+              <div class="text-xs font-medium text-gray-500 uppercase">Suspicious</div>
+              <div class="text-2xl font-bold text-amber-600 mt-1">{@summary.suspicious}</div>
+              <div class="text-xs text-gray-500 mt-0.5">score 60–84</div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+              <div class="text-xs font-medium text-gray-500 uppercase">Datacenter</div>
+              <div class="text-2xl font-bold text-gray-900 mt-1">{@summary.datacenter}</div>
+              <div class="text-xs text-gray-500 mt-0.5">flagged ASN</div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+              <div class="text-xs font-medium text-gray-500 uppercase">Spoofed UA</div>
+              <div class="text-2xl font-bold text-gray-900 mt-1">{@summary.spoofed}</div>
+              <div class="text-xs text-gray-500 mt-0.5">mobile UA + DC IP</div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+              <div class="text-xs font-medium text-gray-500 uppercase">IP Rotation</div>
+              <div class="text-2xl font-bold text-gray-900 mt-1">{@summary.rotating}</div>
+              <div class="text-xs text-gray-500 mt-0.5">same cookie, 3+ IPs</div>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+              <div class="text-xs font-medium text-gray-500 uppercase">Total Flagged</div>
+              <div class="text-2xl font-bold text-gray-900 mt-1">{@summary.total}</div>
+              <div class="text-xs text-gray-500 mt-0.5">all scores &gt; 0</div>
             </div>
           </div>
-        <% end %>
 
-        <%!-- Candidates table --%>
-        <div class="bg-white rounded-lg shadow overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Visitor
-                </th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Score
-                </th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Signals
-                </th>
-                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  Pageviews
-                </th>
-                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                  IPs
-                </th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
-                  Network
-                </th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
-                  Location
-                </th>
-                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Last Seen
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100">
-              <tr :if={@candidates == []}>
-                <td colspan="8" class="px-4 py-12 text-center text-gray-500">
-                  No scraper candidates in this range. Either your site is clean, or you
-                  may need to configure content path prefixes for the systematic-crawl
-                  signal to fire (<.link
-                    navigate={~p"/dashboard/sites/#{@site.id}/settings"}
-                    class="text-indigo-600 underline"
-                  >Settings</.link>).
-                </td>
-              </tr>
-              <tr
-                :for={{c, idx} <- Enum.with_index(@candidates)}
-                class="hover:bg-amber-50 cursor-pointer"
-                phx-click="open_visitor"
-                phx-value-idx={idx}
-              >
-                <td class="px-4 py-3 text-sm">
-                  <span class="font-mono text-xs text-indigo-700">
-                    {String.slice(c["visitor_id"] || "", 0, 12)}...
-                  </span>
-                </td>
-                <td class="px-4 py-3">
+          <%= if @loading do %>
+            <div class="bg-white rounded-lg shadow p-12 text-center mb-8">
+              <div class="inline-flex items-center gap-3 text-gray-600">
+                <svg
+                  class="animate-spin h-5 w-5 text-indigo-600"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                >
+                  <circle
+                    class="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    stroke-width="4"
+                  />
+                  <path
+                    class="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  />
+                </svg>
+                <span class="text-sm">
+                  Scanning visitors for scraper signals... This can take 10-30 seconds on large sites.
+                </span>
+              </div>
+            </div>
+          <% end %>
+
+          <%!-- Candidates table --%>
+          <div class="bg-white rounded-lg shadow overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Visitor
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Score
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Signals
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Pageviews
+                  </th>
+                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    IPs
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
+                    Network
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
+                    Location
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Last Seen
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <tr :if={@candidates == []}>
+                  <td colspan="8" class="px-4 py-12 text-center text-gray-500">
+                    No scraper candidates in this range. Either your site is clean, or you
+                    may need to configure content path prefixes for the systematic-crawl
+                    signal to fire (<.link
+                      navigate={~p"/dashboard/sites/#{@site.id}/settings"}
+                      class="text-indigo-600 underline"
+                    >Settings</.link>).
+                  </td>
+                </tr>
+                <tr
+                  :for={{c, idx} <- Enum.with_index(@candidates)}
+                  class="hover:bg-amber-50 cursor-pointer"
+                  phx-click="open_visitor"
+                  phx-value-idx={idx}
+                >
+                  <td class="px-4 py-3 text-sm">
+                    <span class="font-mono text-xs text-indigo-700">
+                      {String.slice(c["visitor_id"] || "", 0, 12)}...
+                    </span>
+                  </td>
+                  <td class="px-4 py-3">
+                    <span class={[
+                      "inline-flex items-center justify-center w-10 h-6 rounded text-xs font-bold",
+                      score_color(to_num(c["score"]))
+                    ]}>
+                      {c["score"]}
+                    </span>
+                  </td>
+                  <td class="px-4 py-3">
+                    <div class="flex flex-wrap gap-1">
+                      <span
+                        :for={sig <- c["signals"] || []}
+                        class={[
+                          "inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium",
+                          signal_color(sig)
+                        ]}
+                      >
+                        {signal_label(sig)}
+                      </span>
+                    </div>
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
+                    {format_number(to_num(c["session_pageviews"]))}
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
+                    {to_num(c["visitor_ip_count"])}
+                  </td>
+                  <td class="px-4 py-3 text-xs text-gray-600 truncate max-w-xs hidden md:table-cell">
+                    {blank_to_dash(c["asn"])}
+                  </td>
+                  <td class="px-4 py-3 text-xs text-gray-600 hidden md:table-cell">
+                    {[c["city"], c["country"]]
+                    |> Enum.reject(&(&1 == "" || is_nil(&1)))
+                    |> Enum.join(", ")}
+                  </td>
+                  <td class="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
+                    {c["last_seen"]}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <%!-- Visitor detail modal --%>
+          <%= if @modal_visitor do %>
+            <% v = @modal_visitor %>
+            <div class="fixed inset-0 bg-gray-900/50 z-40" phx-click="close_visitor"></div>
+            <div class="fixed left-1/2 -translate-x-1/2 top-10 bottom-10 z-50 w-[calc(100%-2rem)] max-w-3xl bg-white rounded-lg shadow-2xl overflow-y-auto">
+              <div class="sticky top-0 bg-white px-6 py-4 border-b border-gray-200 flex items-start justify-between rounded-t-lg">
+                <div>
+                  <h3 class="text-lg font-semibold text-gray-900">Scraper Detail</h3>
+                  <p class="text-xs text-gray-500 mt-0.5 font-mono">{v["visitor_id"]}</p>
+                </div>
+                <button
+                  type="button"
+                  phx-click="close_visitor"
+                  class="shrink-0 ml-4 text-gray-400 hover:text-gray-700 text-2xl leading-none p-3"
+                  aria-label="Close"
+                >
+                  &times;
+                </button>
+              </div>
+
+              <div class="px-6 py-4 space-y-5">
+                <div class="flex items-center gap-3">
                   <span class={[
-                    "inline-flex items-center justify-center w-10 h-6 rounded text-xs font-bold",
-                    score_color(to_num(c["score"]))
+                    "inline-flex items-center px-3 py-1 rounded-full text-sm font-bold",
+                    score_color(to_num(v["score"]))
                   ]}>
-                    {c["score"]}
+                    Score {v["score"]}
                   </span>
-                </td>
-                <td class="px-4 py-3">
-                  <div class="flex flex-wrap gap-1">
+                  <span class="text-sm font-medium text-gray-700">
+                    Verdict: {verdict_label(v["verdict"])}
+                  </span>
+                </div>
+
+                <div>
+                  <h4 class="text-xs font-semibold text-gray-500 uppercase mb-2">
+                    Triggered Signals
+                  </h4>
+                  <div class="flex flex-wrap gap-2">
                     <span
-                      :for={sig <- c["signals"] || []}
+                      :for={sig <- v["signals"] || []}
                       class={[
-                        "inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium",
+                        "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
                         signal_color(sig)
                       ]}
+                      title={signal_explanation(sig)}
                     >
                       {signal_label(sig)}
                     </span>
+                    <span :if={(v["signals"] || []) == []} class="text-sm text-gray-500 italic">
+                      No signals triggered.
+                    </span>
                   </div>
-                </td>
-                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
-                  {format_number(to_num(c["session_pageviews"]))}
-                </td>
-                <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
-                  {to_num(c["visitor_ip_count"])}
-                </td>
-                <td class="px-4 py-3 text-xs text-gray-600 truncate max-w-xs hidden md:table-cell">
-                  {blank_to_dash(c["asn"])}
-                </td>
-                <td class="px-4 py-3 text-xs text-gray-600 hidden md:table-cell">
-                  {[c["city"], c["country"]]
-                  |> Enum.reject(&(&1 == "" || is_nil(&1)))
-                  |> Enum.join(", ")}
-                </td>
-                <td class="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
-                  {c["last_seen"]}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                  <div>
+                    <div class="text-xs text-gray-500">Pageviews</div>
+                    <div class="font-semibold text-gray-900">
+                      {format_number(to_num(v["session_pageviews"]))}
+                    </div>
+                  </div>
+                  <div>
+                    <div class="text-xs text-gray-500">Unique IPs</div>
+                    <div class="font-semibold text-gray-900">{to_num(v["visitor_ip_count"])}</div>
+                  </div>
+                  <div>
+                    <div class="text-xs text-gray-500">Screen</div>
+                    <div class="text-gray-800">{blank_to_dash(v["screen_resolution"])}</div>
+                  </div>
+                  <div>
+                    <div class="text-xs text-gray-500">First Seen</div>
+                    <div class="text-gray-800">{blank_to_dash(v["first_seen"])}</div>
+                  </div>
+                  <div>
+                    <div class="text-xs text-gray-500">Last Seen</div>
+                    <div class="text-gray-800">{blank_to_dash(v["last_seen"])}</div>
+                  </div>
+                  <div>
+                    <div class="text-xs text-gray-500">Location</div>
+                    <div class="text-gray-800">
+                      {[v["city"], v["country"]]
+                      |> Enum.reject(&(&1 == "" || is_nil(&1)))
+                      |> Enum.join(", ")
+                      |> blank_to_dash()}
+                    </div>
+                  </div>
+                  <div class="col-span-2 sm:col-span-3">
+                    <div class="text-xs text-gray-500">Referrer</div>
+                    <div class="text-gray-800">{blank_to_dash(v["referrer"])}</div>
+                  </div>
+                  <div class="col-span-2 sm:col-span-3">
+                    <div class="text-xs text-gray-500">ASN / Network</div>
+                    <div class="text-gray-800">{blank_to_dash(v["asn"])}</div>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 class="text-xs font-semibold text-gray-500 uppercase mb-1">User Agent</h4>
+                  <div class="bg-gray-50 border border-gray-200 rounded p-3 text-xs font-mono text-gray-800 break-all">
+                    {blank_to_dash(v["user_agent"])}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 class="text-xs font-semibold text-gray-500 uppercase mb-2">
+                    Recent Page Paths
+                    <span class="text-gray-400 font-normal">
+                      ({length(List.wrap(v["page_paths"]))} total, showing up to 20)
+                    </span>
+                  </h4>
+                  <%= if List.wrap(v["page_paths"]) == [] do %>
+                    <p class="text-sm text-gray-500 italic">No pageviews captured.</p>
+                  <% else %>
+                    <div class="bg-gray-50 border border-gray-200 rounded p-3 text-xs font-mono space-y-0.5 max-h-64 overflow-y-auto">
+                      <div
+                        :for={path <- Enum.take(List.wrap(v["page_paths"]), 20)}
+                        class="text-indigo-700 truncate"
+                      >
+                        {path}
+                      </div>
+                    </div>
+                  <% end %>
+                </div>
+
+                <div
+                  :if={@site.scraper_webhook_enabled && @site.scraper_webhook_url}
+                  class="pt-3 border-t border-gray-200"
+                >
+                  <div class="flex items-center gap-2">
+                    <button
+                      type="button"
+                      phx-click="send_webhook"
+                      phx-value-visitor_id={v["visitor_id"]}
+                      class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg text-white bg-red-600 hover:bg-red-700 shadow-sm"
+                    >
+                      Send webhook
+                    </button>
+                    <button
+                      type="button"
+                      phx-click="deactivate_webhook"
+                      phx-value-visitor_id={v["visitor_id"]}
+                      class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-300"
+                    >
+                      Mark as not scraper
+                    </button>
+                    <span
+                      :if={@webhook_result}
+                      class={[
+                        "text-xs ml-2 font-medium",
+                        if(elem(@webhook_result, 0) == :ok,
+                          do: "text-green-600",
+                          else: "text-red-600"
+                        )
+                      ]}
+                    >
+                      {if elem(@webhook_result, 0) == :ok,
+                        do: "Sent! (#{elem(@webhook_result, 1).status})",
+                        else: "Failed"}
+                    </span>
+                  </div>
+
+                  <%= if @webhook_result do %>
+                    <% {status, detail} = @webhook_result %>
+                    <div class="mt-3 space-y-2">
+                      <div>
+                        <div class="text-xs font-semibold text-gray-500 uppercase mb-1">
+                          Request →
+                          <span class="font-mono font-normal text-gray-600">
+                            {detail[:url]}
+                          </span>
+                        </div>
+                        <div class="bg-gray-50 border border-gray-200 rounded p-2 text-xs font-mono text-gray-800 max-h-40 overflow-y-auto whitespace-pre-wrap break-all">
+                          {Jason.encode!(detail[:request], pretty: true)}
+                        </div>
+                      </div>
+                      <div>
+                        <div class="text-xs font-semibold text-gray-500 uppercase mb-1">
+                          Response
+                          <span
+                            :if={detail[:status]}
+                            class={[
+                              "ml-1 font-mono font-normal",
+                              if(status == :ok, do: "text-green-600", else: "text-red-600")
+                            ]}
+                          >
+                            HTTP {detail[:status]}
+                          </span>
+                          <span :if={detail[:reason]} class="ml-1 font-mono font-normal text-red-600">
+                            {inspect(detail[:reason])}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  <% end %>
+                </div>
+
+                <div class="pt-3 border-t border-gray-200 flex items-center justify-between">
+                  <div class="text-xs text-gray-500">
+                    Use this visitor_id in your own API or middleware to drive tarpits, data
+                    poisoning, honeypots, or other countermeasures.
+                  </div>
+                  <.link
+                    navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{v["visitor_id"]}"}
+                    class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 shrink-0 ml-3"
+                  >
+                    Full visitor profile &rarr;
+                  </.link>
+                </div>
+              </div>
+            </div>
+          <% end %>
+        </div>
+
+        <%!-- Webhook Log Tab --%>
+        <div :if={@tab == "webhook_log"}>
+          <div class="bg-white rounded-lg shadow overflow-x-auto">
+            <div class="px-6 py-4 border-b border-gray-200">
+              <h2 class="text-lg font-semibold text-gray-900">Webhook Delivery Log</h2>
+              <p class="text-xs text-gray-500 mt-0.5">
+                Last 50 webhook deliveries (30-day retention)
+              </p>
+            </div>
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Time
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Type
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Visitor
+                  </th>
+                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                    Score
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Signals
+                  </th>
+                  <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                    Status
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">
+                    Detail
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200">
+                <tr :if={@webhook_log == []}>
+                  <td colspan="7" class="px-6 py-8 text-center text-gray-500 text-sm">
+                    No webhook deliveries yet. Deliveries are logged when the Oban worker flags a scraper or when you manually send/deactivate from the Detection tab.
+                  </td>
+                </tr>
+                <tr :for={d <- @webhook_log} class="hover:bg-gray-50">
+                  <td class="px-6 py-3 text-xs text-gray-500 whitespace-nowrap">
+                    {Calendar.strftime(d.inserted_at, "%Y-%m-%d %H:%M")}
+                  </td>
+                  <td class="px-6 py-3 text-sm">
+                    <span class={[
+                      "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
+                      if(d.event_type == "flag",
+                        do: "bg-red-100 text-red-800",
+                        else: "bg-green-100 text-green-800"
+                      )
+                    ]}>
+                      {d.event_type}
+                    </span>
+                  </td>
+                  <td class="px-6 py-3 text-sm">
+                    <.link
+                      :if={d.visitor_id}
+                      navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{d.visitor_id}"}
+                      class="text-indigo-600 hover:text-indigo-800 font-mono text-xs"
+                    >
+                      {String.slice(to_string(d.visitor_id), 0, 12)}...
+                    </.link>
+                  </td>
+                  <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
+                    {d.score || "-"}
+                  </td>
+                  <td class="px-6 py-3">
+                    <div class="flex flex-wrap gap-1">
+                      <span
+                        :for={sig <- d.signals || []}
+                        class="inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium bg-gray-100 text-gray-600"
+                      >
+                        {sig}
+                      </span>
+                    </div>
+                  </td>
+                  <td class="px-6 py-3 text-center">
+                    <span class={[
+                      "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
+                      if(d.success,
+                        do: "bg-green-100 text-green-800",
+                        else: "bg-red-100 text-red-800"
+                      )
+                    ]}>
+                      {if d.success, do: "OK", else: "Failed"}
+                    </span>
+                  </td>
+                  <td class="px-6 py-3 text-xs text-gray-500 hidden sm:table-cell">
+                    <%= cond do %>
+                      <% d.success && d.http_status -> %>
+                        <span class="font-mono">HTTP {d.http_status}</span>
+                      <% d.error_message -> %>
+                        <span class="text-red-600">{String.slice(d.error_message, 0, 60)}</span>
+                      <% d.http_status -> %>
+                        <span class="font-mono text-red-600">HTTP {d.http_status}</span>
+                      <% true -> %>
+                        -
+                    <% end %>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-
-      <%!-- Visitor detail modal --%>
-      <%= if @modal_visitor do %>
-        <% v = @modal_visitor %>
-        <div class="fixed inset-0 bg-gray-900/50 z-40" phx-click="close_visitor"></div>
-        <div class="fixed left-1/2 -translate-x-1/2 top-10 bottom-10 z-50 w-[calc(100%-2rem)] max-w-3xl bg-white rounded-lg shadow-2xl overflow-y-auto">
-          <div class="sticky top-0 bg-white px-6 py-4 border-b border-gray-200 flex items-start justify-between rounded-t-lg">
-            <div>
-              <h3 class="text-lg font-semibold text-gray-900">Scraper Detail</h3>
-              <p class="text-xs text-gray-500 mt-0.5 font-mono">{v["visitor_id"]}</p>
-            </div>
-            <button
-              type="button"
-              phx-click="close_visitor"
-              class="shrink-0 ml-4 text-gray-400 hover:text-gray-700 text-2xl leading-none p-3"
-              aria-label="Close"
-            >
-              &times;
-            </button>
-          </div>
-
-          <div class="px-6 py-4 space-y-5">
-            <div class="flex items-center gap-3">
-              <span class={[
-                "inline-flex items-center px-3 py-1 rounded-full text-sm font-bold",
-                score_color(to_num(v["score"]))
-              ]}>
-                Score {v["score"]}
-              </span>
-              <span class="text-sm font-medium text-gray-700">
-                Verdict: {verdict_label(v["verdict"])}
-              </span>
-            </div>
-
-            <div>
-              <h4 class="text-xs font-semibold text-gray-500 uppercase mb-2">
-                Triggered Signals
-              </h4>
-              <div class="flex flex-wrap gap-2">
-                <span
-                  :for={sig <- v["signals"] || []}
-                  class={[
-                    "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
-                    signal_color(sig)
-                  ]}
-                  title={signal_explanation(sig)}
-                >
-                  {signal_label(sig)}
-                </span>
-                <span :if={(v["signals"] || []) == []} class="text-sm text-gray-500 italic">
-                  No signals triggered.
-                </span>
-              </div>
-            </div>
-
-            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
-              <div>
-                <div class="text-xs text-gray-500">Pageviews</div>
-                <div class="font-semibold text-gray-900">
-                  {format_number(to_num(v["session_pageviews"]))}
-                </div>
-              </div>
-              <div>
-                <div class="text-xs text-gray-500">Unique IPs</div>
-                <div class="font-semibold text-gray-900">{to_num(v["visitor_ip_count"])}</div>
-              </div>
-              <div>
-                <div class="text-xs text-gray-500">Screen</div>
-                <div class="text-gray-800">{blank_to_dash(v["screen_resolution"])}</div>
-              </div>
-              <div>
-                <div class="text-xs text-gray-500">First Seen</div>
-                <div class="text-gray-800">{blank_to_dash(v["first_seen"])}</div>
-              </div>
-              <div>
-                <div class="text-xs text-gray-500">Last Seen</div>
-                <div class="text-gray-800">{blank_to_dash(v["last_seen"])}</div>
-              </div>
-              <div>
-                <div class="text-xs text-gray-500">Location</div>
-                <div class="text-gray-800">
-                  {[v["city"], v["country"]]
-                  |> Enum.reject(&(&1 == "" || is_nil(&1)))
-                  |> Enum.join(", ")
-                  |> blank_to_dash()}
-                </div>
-              </div>
-              <div class="col-span-2 sm:col-span-3">
-                <div class="text-xs text-gray-500">Referrer</div>
-                <div class="text-gray-800">{blank_to_dash(v["referrer"])}</div>
-              </div>
-              <div class="col-span-2 sm:col-span-3">
-                <div class="text-xs text-gray-500">ASN / Network</div>
-                <div class="text-gray-800">{blank_to_dash(v["asn"])}</div>
-              </div>
-            </div>
-
-            <div>
-              <h4 class="text-xs font-semibold text-gray-500 uppercase mb-1">User Agent</h4>
-              <div class="bg-gray-50 border border-gray-200 rounded p-3 text-xs font-mono text-gray-800 break-all">
-                {blank_to_dash(v["user_agent"])}
-              </div>
-            </div>
-
-            <div>
-              <h4 class="text-xs font-semibold text-gray-500 uppercase mb-2">
-                Recent Page Paths
-                <span class="text-gray-400 font-normal">
-                  ({length(List.wrap(v["page_paths"]))} total, showing up to 20)
-                </span>
-              </h4>
-              <%= if List.wrap(v["page_paths"]) == [] do %>
-                <p class="text-sm text-gray-500 italic">No pageviews captured.</p>
-              <% else %>
-                <div class="bg-gray-50 border border-gray-200 rounded p-3 text-xs font-mono space-y-0.5 max-h-64 overflow-y-auto">
-                  <div
-                    :for={path <- Enum.take(List.wrap(v["page_paths"]), 20)}
-                    class="text-indigo-700 truncate"
-                  >
-                    {path}
-                  </div>
-                </div>
-              <% end %>
-            </div>
-
-            <div
-              :if={@site.scraper_webhook_enabled && @site.scraper_webhook_url}
-              class="pt-3 border-t border-gray-200"
-            >
-              <div class="flex items-center gap-2">
-                <button
-                  type="button"
-                  phx-click="send_webhook"
-                  phx-value-visitor_id={v["visitor_id"]}
-                  class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg text-white bg-red-600 hover:bg-red-700 shadow-sm"
-                >
-                  Send webhook
-                </button>
-                <button
-                  type="button"
-                  phx-click="deactivate_webhook"
-                  phx-value-visitor_id={v["visitor_id"]}
-                  class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-300"
-                >
-                  Mark as not scraper
-                </button>
-                <span
-                  :if={@webhook_result}
-                  class={[
-                    "text-xs ml-2 font-medium",
-                    if(elem(@webhook_result, 0) == :ok, do: "text-green-600", else: "text-red-600")
-                  ]}
-                >
-                  {if elem(@webhook_result, 0) == :ok,
-                    do: "Sent! (#{elem(@webhook_result, 1).status})",
-                    else: "Failed"}
-                </span>
-              </div>
-
-              <%= if @webhook_result do %>
-                <% {status, detail} = @webhook_result %>
-                <div class="mt-3 space-y-2">
-                  <div>
-                    <div class="text-xs font-semibold text-gray-500 uppercase mb-1">
-                      Request →
-                      <span class="font-mono font-normal text-gray-600">
-                        {detail[:url]}
-                      </span>
-                    </div>
-                    <div class="bg-gray-50 border border-gray-200 rounded p-2 text-xs font-mono text-gray-800 max-h-40 overflow-y-auto whitespace-pre-wrap break-all">
-                      {Jason.encode!(detail[:request], pretty: true)}
-                    </div>
-                  </div>
-                  <div>
-                    <div class="text-xs font-semibold text-gray-500 uppercase mb-1">
-                      Response
-                      <span
-                        :if={detail[:status]}
-                        class={[
-                          "ml-1 font-mono font-normal",
-                          if(status == :ok, do: "text-green-600", else: "text-red-600")
-                        ]}
-                      >
-                        HTTP {detail[:status]}
-                      </span>
-                      <span :if={detail[:reason]} class="ml-1 font-mono font-normal text-red-600">
-                        {inspect(detail[:reason])}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              <% end %>
-            </div>
-
-            <div class="pt-3 border-t border-gray-200 flex items-center justify-between">
-              <div class="text-xs text-gray-500">
-                Use this visitor_id in your own API or middleware to drive tarpits, data
-                poisoning, honeypots, or other countermeasures.
-              </div>
-              <.link
-                navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{v["visitor_id"]}"}
-                class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 shrink-0 ml-3"
-              >
-                Full visitor profile &rarr;
-              </.link>
-            </div>
-          </div>
-        </div>
-      <% end %>
     </.dashboard_layout>
     """
   end

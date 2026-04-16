@@ -32,6 +32,15 @@ defmodule Spectabas.Workers.ApiLogCleanup do
       )
     end
 
+    # Clean up old webhook delivery logs
+    wh_count = Spectabas.Webhooks.ScraperWebhook.cleanup_old_deliveries(@retention_days)
+
+    if wh_count > 0 do
+      Logger.info(
+        "[ApiLogCleanup] Deleted #{wh_count} webhook deliveries older than #{@retention_days} days"
+      )
+    end
+
     :ok
   end
 end

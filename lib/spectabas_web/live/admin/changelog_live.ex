@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.45.0", "2026-04-16T22:00:00Z",
+       [
+         %{
+           title: "Feat: Webhook delivery log on Scrapers page",
+           description:
+             "New webhook_deliveries PostgreSQL table logs every scraper webhook (flag + deactivate) with visitor ID, score, signals, HTTP status, and success/error. Scrapers page has a 'Webhook Log' tab showing last 50 deliveries with visitor links, signal badges, and status indicators. 30-day retention via existing ApiLogCleanup worker."
+         }
+       ]},
       {"v5.44.3", "2026-04-16T21:00:00Z",
        [
          %{
