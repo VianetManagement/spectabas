@@ -38,33 +38,38 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
         |> assign(:tracked_params, tracked_params)
         |> assign(:using_defaults, site.search_query_params in [nil, []])
 
-      if connected?(socket), do: send(self(), :load_data)
+      if connected?(socket) do
+        send(self(), :load_critical)
+        send(self(), :load_deferred)
+      end
+
       {:ok, socket}
     end
   end
 
   @impl true
   def handle_event("change_range", %{"range" => range}, socket) do
-    send(self(), :load_data)
-    {:noreply, socket |> assign(:date_range, range) |> assign(:loading, true)}
+    socket = socket |> assign(:date_range, range) |> assign(:loading, true)
+    send(self(), :load_critical)
+    send(self(), :load_deferred)
+    {:noreply, socket}
   end
 
   def handle_event("filter_param", %{"param" => "all"}, socket) do
-    send(self(), :load_data)
-    {:noreply, socket |> assign(:param_filter, nil) |> assign(:loading, true)}
+    socket = socket |> assign(:param_filter, nil) |> assign(:loading, true)
+    send(self(), :load_critical)
+    {:noreply, socket}
   end
 
   def handle_event("filter_param", %{"param" => param}, socket) do
-    send(self(), :load_data)
-    {:noreply, socket |> assign(:param_filter, param) |> assign(:loading, true)}
+    socket = socket |> assign(:param_filter, param) |> assign(:loading, true)
+    send(self(), :load_critical)
+    {:noreply, socket}
   end
 
   @impl true
-  def handle_info(:load_data, socket) do
-    {:noreply, socket |> load_data() |> assign(:loading, false)}
-  end
-
-  defp load_data(socket) do
+  def handle_info(:load_critical, socket) do
+    # Critical path: searches table + params_used (for filter pills) — render immediately
     %{site: site, user: user, date_range: range, param_filter: param_filter} = socket.assigns
     period = range_to_period(range)
 
@@ -72,23 +77,52 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
       Task.async(fn ->
         {:searches, Analytics.site_searches(site, user, period, param: param_filter)}
       end),
-      Task.async(fn -> {:stats, Analytics.site_search_stats(site, user, period)} end),
-      Task.async(fn -> {:trend, Analytics.site_search_trend(site, user, period)} end),
-      Task.async(fn -> {:pages, Analytics.site_search_pages(site, user, period)} end),
       Task.async(fn -> {:params_used, Analytics.site_search_params_used(site, user, period)} end)
     ]
 
-    results = Task.await_many(tasks, 30_000)
+    socket =
+      tasks
+      |> Task.await_many(30_000)
+      |> Enum.reduce(socket, fn
+        {:searches, {:ok, rows}}, sock -> assign(sock, :searches, rows)
+        {:params_used, {:ok, rows}}, sock -> assign(sock, :params_used, rows)
+        _, sock -> sock
+      end)
 
-    Enum.reduce(results, socket, fn
-      {:searches, {:ok, rows}}, sock -> assign(sock, :searches, rows)
-      {:stats, {:ok, [row | _]}}, sock -> assign(sock, :stats, row)
-      {:trend, {:ok, rows}}, sock -> assign(sock, :trend, rows)
-      {:pages, {:ok, rows}}, sock -> assign(sock, :search_pages, rows)
-      {:params_used, {:ok, rows}}, sock -> assign(sock, :params_used, rows)
-      _, sock -> sock
-    end)
+    {:noreply, assign(socket, :loading, false)}
   end
+
+  def handle_info(:load_deferred, socket) do
+    # Deferred: stats cards, trend chart, search pages — fire independently
+    %{site: site, user: user, date_range: range} = socket.assigns
+    period = range_to_period(range)
+    pid = self()
+
+    for {key, fun} <- [
+          stats: fn -> Analytics.site_search_stats(site, user, period) end,
+          trend: fn -> Analytics.site_search_trend(site, user, period) end,
+          search_pages: fn -> Analytics.site_search_pages(site, user, period) end
+        ] do
+      Task.start(fn ->
+        case fun.() do
+          {:ok, rows} -> send(pid, {:deferred, key, rows})
+          _ -> :ok
+        end
+      end)
+    end
+
+    {:noreply, socket}
+  end
+
+  def handle_info({:deferred, :stats, [row | _]}, socket) do
+    {:noreply, assign(socket, :stats, row)}
+  end
+
+  def handle_info({:deferred, key, rows}, socket) when key in [:trend, :search_pages] do
+    {:noreply, assign(socket, key, rows)}
+  end
+
+  def handle_info({:deferred, _, _}, socket), do: {:noreply, socket}
 
   @impl true
   def render(assigns) do

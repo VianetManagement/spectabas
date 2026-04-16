@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.43.1", "2026-04-16T17:30:00Z",
+       [
+         %{
+           title: "Perf: Progressive rendering on Site Search page",
+           description:
+             "Search terms table and filter pills load first (critical path), then stats cards, trend chart, and search pages stream in progressively. Page no longer blocked by the slowest query."
+         }
+       ]},
       {"v5.43.0", "2026-04-16T17:00:00Z",
        [
          %{
