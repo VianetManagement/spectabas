@@ -1029,6 +1029,56 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
             </div>
 
             <div :if={@settings_tab == "advanced"} class="border-t border-gray-200 pt-6">
+              <h3 class="text-base font-medium text-gray-900 mb-2">Scraper Webhooks</h3>
+              <p class="text-xs text-gray-500 mb-3">
+                Automatically POST to your endpoint when a visitor is flagged as a scraper.
+                The webhook fires once per visitor when they first cross the detection threshold,
+                and again if their score escalates significantly.
+              </p>
+              <div class="space-y-3">
+                <div class="flex items-center gap-3">
+                  <input type="hidden" name="site[scraper_webhook_enabled]" value="false" />
+                  <input
+                    type="checkbox"
+                    name="site[scraper_webhook_enabled]"
+                    value="true"
+                    checked={@site.scraper_webhook_enabled}
+                    class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <label class="text-sm font-medium text-gray-700">Enable scraper webhooks</label>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700">Webhook URL</label>
+                  <input
+                    type="url"
+                    name="site[scraper_webhook_url]"
+                    value={@site.scraper_webhook_url}
+                    placeholder="https://yourapp.com"
+                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5 font-mono text-xs"
+                  />
+                  <p class="mt-1 text-xs text-gray-400">
+                    Base URL — webhook POSTs to
+                    <span class="font-mono">/api/webhooks/spectabas/scraper</span>
+                  </p>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700">Webhook Secret</label>
+                  <input
+                    type="password"
+                    name="site[scraper_webhook_secret]"
+                    value={@site.scraper_webhook_secret}
+                    placeholder="shared bearer token"
+                    autocomplete="off"
+                    class="mt-1 block w-64 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5 font-mono text-xs"
+                  />
+                  <p class="mt-1 text-xs text-gray-400">
+                    Sent as <span class="font-mono">Authorization: Bearer &lt;secret&gt;</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div :if={@settings_tab == "advanced"} class="border-t border-gray-200 pt-6">
               <h3 class="text-base font-medium text-gray-900 mb-4">Ecommerce</h3>
               <div class="flex items-center gap-3">
                 <input type="hidden" name="site[ecommerce_enabled]" value="false" />

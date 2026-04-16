@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.40.0", "2026-04-16T12:00:00Z",
+       [
+         %{
+           title: "Feat: Scraper detection webhooks",
+           description:
+             "Per-site webhook configuration (URL + Bearer secret) in Settings > Advanced. When a visitor crosses the scraper detection threshold, a POST is sent with visitor identifiers (IPs, external ID, user ID), score, signals, and activation delay (0h for score >= 95, 48h otherwise). Oban worker scans every 15 min. Re-sends on score escalation (suspicious → certain). Manual Send/Deactivate buttons on Scrapers page detail modal. Deactivation clears the flag and notifies the receiving app."
+         }
+       ]},
       {"v5.39.1", "2026-04-15T05:30:00Z",
        [
          %{

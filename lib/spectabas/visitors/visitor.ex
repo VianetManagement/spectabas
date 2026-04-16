@@ -23,13 +23,16 @@ defmodule Spectabas.Visitors.Visitor do
     field :known_ips, {:array, :string}, default: []
     field :gdpr_mode, :string, default: "on"
     field :external_id, :string
+    field :scraper_webhook_sent_at, :utc_datetime
+    field :scraper_webhook_score, :integer
 
     timestamps()
   end
 
   @required_fields ~w(site_id)a
   @optional_fields ~w(fingerprint_id cookie_id user_id email email_hash
-                       first_seen_at last_seen_at last_ip known_ips gdpr_mode external_id)a
+                       first_seen_at last_seen_at last_ip known_ips gdpr_mode external_id
+                       scraper_webhook_sent_at scraper_webhook_score)a
 
   def changeset(visitor, attrs) do
     visitor

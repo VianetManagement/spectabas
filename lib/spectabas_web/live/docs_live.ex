@@ -2092,6 +2092,7 @@ defmodule SpectabasWeb.DocsLive do
             ### Advanced
             - **Tracking Snippet** — copy your site's embed code
             - **IP Blocklist** — block specific IPs from being tracked
+            - **Scraper Webhooks** — configure a webhook URL and Bearer secret to receive POST notifications when scrapers are detected. Fires once per visitor on first flag, re-fires on score escalation. Manual send/deactivate from the Scrapers page.
             - **Ecommerce** — enable ecommerce tracking with currency setting
 
             ### User Timezone

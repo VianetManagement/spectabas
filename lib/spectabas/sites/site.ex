@@ -28,6 +28,9 @@ defmodule Spectabas.Sites.Site do
     field :scraper_content_prefixes, {:array, :string}, default: []
     field :journey_conversion_pages, {:array, :string}, default: []
     field :identity_cookie_name, :string
+    field :scraper_webhook_url, :string
+    field :scraper_webhook_secret, :string
+    field :scraper_webhook_enabled, :boolean, default: false
 
     timestamps(type: :utc_datetime)
   end
@@ -58,7 +61,10 @@ defmodule Spectabas.Sites.Site do
       :ai_config_encrypted,
       :scraper_content_prefixes,
       :journey_conversion_pages,
-      :identity_cookie_name
+      :identity_cookie_name,
+      :scraper_webhook_url,
+      :scraper_webhook_secret,
+      :scraper_webhook_enabled
     ])
     |> validate_required([:name, :domain])
     |> validate_length(:name, max: 255)

@@ -3828,6 +3828,70 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  @doc """
+  Internal variant of scraper_candidates for system workers (no auth check).
+  Scans last `hours` of traffic for visitors crossing the scraper threshold.
+  """
+  def scraper_candidates_system(%Site{} = site, opts \\ []) do
+    hours = Keyword.get(opts, :hours, 1)
+    min_score = Keyword.get(opts, :min_score, 60)
+    limit = Keyword.get(opts, :limit, 200)
+
+    site_p = ClickHouse.param(site.id)
+    from_p = ClickHouse.param(format_datetime(DateTime.add(DateTime.utc_now(), -hours, :hour)))
+    to_p = ClickHouse.param(format_datetime(DateTime.utc_now()))
+
+    sql = """
+    SELECT
+      visitor_id,
+      any(ip_org) AS asn,
+      any(user_agent) AS user_agent,
+      uniq(ip_address) AS visitor_ip_count,
+      countIf(event_type = 'pageview') AS session_pageviews,
+      arrayFilter(p -> p != '',
+        groupArrayIf(50)(url_path, event_type = 'pageview')) AS page_paths,
+      any(referrer_domain) AS referrer,
+      concat(toString(any(screen_width)), 'x', toString(any(screen_height))) AS screen_resolution,
+      arraySlice(arrayDifference(arraySort(
+        groupArrayIf(100)(toUnixTimestamp(timestamp) * 1000,
+          event_type = 'pageview'))), 2) AS request_intervals_ms,
+      max(ip_is_datacenter) AS is_datacenter
+    FROM events
+    WHERE site_id = #{site_p}
+      AND timestamp >= #{from_p}
+      AND timestamp <= #{to_p}
+    GROUP BY visitor_id
+    HAVING countIf(event_type = 'pageview') >= 30 OR uniq(ip_address) >= 3
+    ORDER BY countIf(event_type = 'pageview') DESC
+    LIMIT #{limit}
+    """
+
+    case ClickHouse.query(sql, receive_timeout: 60_000) do
+      {:ok, rows} ->
+        prefixes = List.wrap(site.scraper_content_prefixes)
+
+        scored =
+          rows
+          |> Enum.map(fn row ->
+            profile = row_to_profile(row, prefixes)
+            result = Spectabas.Analytics.ScraperDetector.score(profile)
+
+            Map.merge(row, %{
+              "score" => result.score,
+              "signals" => result.signals,
+              "verdict" => Spectabas.Analytics.ScraperDetector.verdict(result.score)
+            })
+          end)
+          |> Enum.filter(fn r -> r["score"] >= min_score end)
+          |> Enum.sort_by(&(-&1["score"]))
+
+        {:ok, scored}
+
+      error ->
+        error
+    end
+  end
+
   defp row_to_profile(row, prefixes) do
     %{
       asn: row["asn"],

@@ -83,7 +83,9 @@ config :spectabas, Oban,
        # Daily at 02:00 UTC — materialize per-session facts for entry/exit queries
        {"0 2 * * *", Spectabas.Workers.SessionFactsRollup},
        # Daily at 02:30 UTC — refresh visitor first/last attribution for revenue queries
-       {"30 2 * * *", Spectabas.Workers.VisitorAttributionRollup}
+       {"30 2 * * *", Spectabas.Workers.VisitorAttributionRollup},
+       # Every 15 minutes — scan for scrapers and fire webhooks
+       {"*/15 * * * *", Spectabas.Workers.ScraperWebhookScan}
      ]}
   ]
 

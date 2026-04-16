@@ -32,6 +32,7 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
         |> assign(:modal_visitor, nil)
         |> assign(:loading, true)
         |> assign(:candidates, [])
+        |> assign(:webhook_status, nil)
         |> assign(:summary, %{
           total: 0,
           suspicious: 0,
@@ -84,7 +85,63 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
   end
 
   def handle_event("close_visitor", _params, socket) do
-    {:noreply, assign(socket, :modal_visitor, nil)}
+    {:noreply, socket |> assign(:modal_visitor, nil) |> assign(:webhook_status, nil)}
+  end
+
+  def handle_event("send_webhook", %{"visitor_id" => visitor_id}, socket) do
+    site = socket.assigns.site
+    v = socket.assigns.modal_visitor
+
+    case Spectabas.Repo.get(Spectabas.Visitors.Visitor, visitor_id) do
+      nil ->
+        {:noreply, assign(socket, :webhook_status, :error)}
+
+      visitor ->
+        score_result = %{score: v["score"], signals: v["signals"] || []}
+        pageviews = v["session_pageviews"] || 0
+
+        case Spectabas.Webhooks.ScraperWebhook.send_flag(site, visitor, score_result, pageviews) do
+          {:ok, _} ->
+            now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+            visitor
+            |> Spectabas.Visitors.Visitor.changeset(%{
+              scraper_webhook_sent_at: now,
+              scraper_webhook_score: v["score"]
+            })
+            |> Spectabas.Repo.update()
+
+            {:noreply, assign(socket, :webhook_status, :ok)}
+
+          {:error, _} ->
+            {:noreply, assign(socket, :webhook_status, :error)}
+        end
+    end
+  end
+
+  def handle_event("deactivate_webhook", %{"visitor_id" => visitor_id}, socket) do
+    site = socket.assigns.site
+
+    case Spectabas.Repo.get(Spectabas.Visitors.Visitor, visitor_id) do
+      nil ->
+        {:noreply, assign(socket, :webhook_status, :error)}
+
+      visitor ->
+        case Spectabas.Webhooks.ScraperWebhook.send_deactivate(site, visitor) do
+          :ok ->
+            visitor
+            |> Spectabas.Visitors.Visitor.changeset(%{
+              scraper_webhook_sent_at: nil,
+              scraper_webhook_score: nil
+            })
+            |> Spectabas.Repo.update()
+
+            {:noreply, assign(socket, :webhook_status, :ok)}
+
+          {:error, _} ->
+            {:noreply, assign(socket, :webhook_status, :error)}
+        end
+    end
   end
 
   defp load_data(socket) do
@@ -466,6 +523,39 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
               <% end %>
             </div>
 
+            <div
+              :if={@site.scraper_webhook_enabled && @site.scraper_webhook_url}
+              class="pt-3 border-t border-gray-200"
+            >
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  phx-click="send_webhook"
+                  phx-value-visitor_id={v["visitor_id"]}
+                  class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg text-white bg-red-600 hover:bg-red-700 shadow-sm"
+                >
+                  Send webhook
+                </button>
+                <button
+                  type="button"
+                  phx-click="deactivate_webhook"
+                  phx-value-visitor_id={v["visitor_id"]}
+                  class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-300"
+                >
+                  Mark as not scraper
+                </button>
+                <span
+                  :if={@webhook_status}
+                  class={[
+                    "text-xs ml-2",
+                    if(@webhook_status == :ok, do: "text-green-600", else: "text-red-600")
+                  ]}
+                >
+                  {if @webhook_status == :ok, do: "Sent!", else: "Failed"}
+                </span>
+              </div>
+            </div>
+
             <div class="pt-3 border-t border-gray-200 flex items-center justify-between">
               <div class="text-xs text-gray-500">
                 Use this visitor_id in your own API or middleware to drive tarpits, data
@@ -473,7 +563,7 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
               </div>
               <.link
                 navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{v["visitor_id"]}"}
-                class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 shrink-0 ml-3"
+                class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 shrink-0 ml-3"
               >
                 Full visitor profile &rarr;
               </.link>

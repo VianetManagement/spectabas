@@ -151,6 +151,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Revenue Cohorts** — LTV by first-purchase cohort week; heatmap of revenue per customer over time
 - **Buyer Patterns** — lift analysis comparing buyer vs non-buyer page visits; side-by-side engagement stats
 - **Scraper Detection** — weighted-signal scoring identifies likely scrapers: datacenter ASN (+35), spoofed mobile UA on datacenter IP (+20), IP rotation with same cookie (+20), 200+ pageviews (+20), systematic content crawl (+15), robotic request timing (+10), no referrer (+5), emulator resolution (+5). Score capped at 100; verdicts: :normal (<60), :suspicious (60-84), :certain (85+). Per-site `scraper_content_prefixes` configurable in Settings. `Spectabas.Analytics.ScraperDetector` is a pure stateless module — no DB, no side effects. Dashboard shows summary cards + sortable table + click-to-detail modal with full UA, page paths, signals explained, and link to visitor profile.
+- **Scraper Webhooks** — per-site webhook (URL + Bearer secret) fires POST when a visitor crosses scraper threshold. Payload: visitor identifiers (IPs, external_id, user_id), score, signals, activation_delay_hours (0 for score >= 95, 48 otherwise). Oban `ScraperWebhookScan` worker every 15 min. Tracks `scraper_webhook_sent_at` + `scraper_webhook_score` on visitors to send once, re-sends on score escalation. Manual Send/Deactivate buttons on Scrapers page. Deactivation POST to `/api/webhooks/spectabas/scraper/deactivate`.
 - **Churn Risk** — flags customers with 50%+ engagement decline (sessions, pages) over 14-day windows
 - **Funnel Revenue** — funnels show revenue from visitors at each step (ecommerce sites only)
 - **Abandoned Funnel Export** — CSV export of visitor IDs + emails who dropped off at each funnel step
@@ -281,7 +282,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Mobile responsiveness** — scrollable tables, collapsible mobile nav bar
 - **Accessible top nav** — WCAG AA contrast compliance
 - **Documentation pages** — docs split into `/docs` (index), `/docs/getting-started`, `/docs/dashboard`, `/docs/conversions`, `/docs/api`, `/docs/admin` with cross-category search. Requires login (behind :require_authenticated_user). Public pages: `/privacy`, `/terms`, homepage.
-- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.39.1)
+- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.40.0)
 - **Legal** — Privacy Policy at `/privacy` and Terms of Service at `/terms` (public, no auth required). Entity: Spectabas, Kent County MI. Contact: howdy@spectabas.com. Arbitration clause (AAA, Kent County). 18+ age restriction.
 
 ## Important Patterns
