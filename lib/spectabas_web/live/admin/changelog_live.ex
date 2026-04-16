@@ -53,12 +53,12 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
-      {"v5.40.1", "2026-04-16T12:30:00Z",
+      {"v5.40.2", "2026-04-16T13:00:00Z",
        [
          %{
-           title: "Fix: Scraper webhook secret field clearing URL on keystroke",
+           title: "Fix: Webhook config fields clearing each other on keystroke",
            description:
-             "Password-type inputs don't send their value on phx-change events, causing the changeset to clear sibling fields. Changed webhook secret to text input."
+             "Webhook URL/secret inputs read from @site (saved DB record) instead of @form (changeset). Every phx-change re-rendered the unsaved nil values, clearing user input. Now reads from @form so values track the changeset."
          }
        ]},
       {"v5.40.0", "2026-04-16T12:00:00Z",

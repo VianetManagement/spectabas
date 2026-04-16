@@ -1042,7 +1042,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                     type="checkbox"
                     name="site[scraper_webhook_enabled]"
                     value="true"
-                    checked={@site.scraper_webhook_enabled}
+                    checked={@form[:scraper_webhook_enabled].value}
                     class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                   />
                   <label class="text-sm font-medium text-gray-700">Enable scraper webhooks</label>
@@ -1052,7 +1052,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                   <input
                     type="url"
                     name="site[scraper_webhook_url]"
-                    value={@site.scraper_webhook_url}
+                    value={@form[:scraper_webhook_url].value}
                     placeholder="https://yourapp.com"
                     class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5 font-mono text-xs"
                   />
@@ -1066,7 +1066,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                   <input
                     type="text"
                     name="site[scraper_webhook_secret]"
-                    value={@site.scraper_webhook_secret}
+                    value={@form[:scraper_webhook_secret].value}
                     placeholder="shared bearer token"
                     autocomplete="off"
                     class="mt-1 block w-64 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5 font-mono text-xs"
