@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.40.3", "2026-04-16T13:30:00Z",
+       [
+         %{
+           title: "UX: Show webhook response detail on send/deactivate",
+           description:
+             "Send webhook and Mark as not scraper buttons now display the full response or error message instead of just 'Sent!' or 'Failed'."
+         }
+       ]},
       {"v5.40.2", "2026-04-16T13:00:00Z",
        [
          %{

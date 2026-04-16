@@ -94,14 +94,14 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
 
     case Spectabas.Repo.get(Spectabas.Visitors.Visitor, visitor_id) do
       nil ->
-        {:noreply, assign(socket, :webhook_status, :error)}
+        {:noreply, assign(socket, :webhook_status, {:error, "Visitor not found in database"})}
 
       visitor ->
         score_result = %{score: v["score"], signals: v["signals"] || []}
         pageviews = v["session_pageviews"] || 0
 
         case Spectabas.Webhooks.ScraperWebhook.send_flag(site, visitor, score_result, pageviews) do
-          {:ok, _} ->
+          {:ok, body} ->
             now = DateTime.utc_now() |> DateTime.truncate(:second)
 
             visitor
@@ -111,10 +111,10 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
             })
             |> Spectabas.Repo.update()
 
-            {:noreply, assign(socket, :webhook_status, :ok)}
+            {:noreply, assign(socket, :webhook_status, {:ok, inspect(body)})}
 
-          {:error, _} ->
-            {:noreply, assign(socket, :webhook_status, :error)}
+          {:error, reason} ->
+            {:noreply, assign(socket, :webhook_status, {:error, to_string(reason)})}
         end
     end
   end
@@ -124,7 +124,7 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
 
     case Spectabas.Repo.get(Spectabas.Visitors.Visitor, visitor_id) do
       nil ->
-        {:noreply, assign(socket, :webhook_status, :error)}
+        {:noreply, assign(socket, :webhook_status, {:error, "Visitor not found in database"})}
 
       visitor ->
         case Spectabas.Webhooks.ScraperWebhook.send_deactivate(site, visitor) do
@@ -136,10 +136,10 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
             })
             |> Spectabas.Repo.update()
 
-            {:noreply, assign(socket, :webhook_status, :ok)}
+            {:noreply, assign(socket, :webhook_status, {:ok, "Deactivated"})}
 
-          {:error, _} ->
-            {:noreply, assign(socket, :webhook_status, :error)}
+          {:error, reason} ->
+            {:noreply, assign(socket, :webhook_status, {:error, to_string(reason)})}
         end
     end
   end
@@ -548,10 +548,13 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
                   :if={@webhook_status}
                   class={[
                     "text-xs ml-2",
-                    if(@webhook_status == :ok, do: "text-green-600", else: "text-red-600")
+                    if(elem(@webhook_status, 0) == :ok, do: "text-green-600", else: "text-red-600")
                   ]}
                 >
-                  {if @webhook_status == :ok, do: "Sent!", else: "Failed"}
+                  {case @webhook_status do
+                    {:ok, detail} -> "Sent! #{detail}"
+                    {:error, detail} -> "Failed: #{detail}"
+                  end}
                 </span>
               </div>
             </div>
