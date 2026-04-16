@@ -74,13 +74,42 @@ defmodule Spectabas.Sites.Site do
     |> validate_inclusion(:gdpr_mode, ["on", "off"])
     |> validate_number(:retention_days, greater_than: 0, less_than_or_equal_to: 3650)
     |> validate_length(:currency, is: 3)
+    |> validate_webhook_url()
     |> unique_constraint(:domain)
     |> unique_constraint(:public_key)
   end
 
-  @doc """
-  Generates a random public key for a site (16 bytes, base64url encoded).
-  """
+  defp validate_webhook_url(changeset) do
+    case get_change(changeset, :scraper_webhook_url) do
+      nil ->
+        changeset
+
+      "" ->
+        changeset
+
+      url ->
+        uri = URI.parse(url)
+
+        cond do
+          uri.scheme not in ["https", "http"] ->
+            add_error(changeset, :scraper_webhook_url, "must use https:// or http://")
+
+          is_nil(uri.host) or uri.host == "" ->
+            add_error(changeset, :scraper_webhook_url, "must include a hostname")
+
+          uri.host in ["localhost", "127.0.0.1", "0.0.0.0", "::1"] ->
+            add_error(changeset, :scraper_webhook_url, "cannot point to localhost")
+
+          String.contains?(uri.host, "169.254.") ->
+            add_error(changeset, :scraper_webhook_url, "cannot point to link-local addresses")
+
+          true ->
+            changeset
+        end
+    end
+  end
+
+  @doc "Generates a random public key for a site (16 bytes, base64url encoded)."
   def generate_public_key do
     :crypto.strong_rand_bytes(16) |> Base.url_encode64(padding: false)
   end

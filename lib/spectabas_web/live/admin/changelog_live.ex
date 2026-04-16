@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.44.3", "2026-04-16T21:00:00Z",
+       [
+         %{
+           title: "Security: three hardening fixes from audit",
+           description:
+             "1) Webhook URL validation — rejects localhost, link-local, missing scheme/host. 2) Visitor lookup in webhook handlers scoped by site_id — prevents cross-tenant data access via forged visitor UUIDs. 3) Webhook response body no longer rendered in UI — only HTTP status code shown, eliminating SSRF read-back channel."
+         }
+       ]},
       {"v5.44.2", "2026-04-16T20:00:00Z",
        [
          %{

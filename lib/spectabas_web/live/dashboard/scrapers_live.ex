@@ -92,9 +92,9 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
     site = socket.assigns.site
     v = socket.assigns.modal_visitor
 
-    case Spectabas.Repo.get(Spectabas.Visitors.Visitor, visitor_id) do
+    case Spectabas.Repo.get_by(Spectabas.Visitors.Visitor, id: visitor_id, site_id: site.id) do
       nil ->
-        {:noreply, assign(socket, :webhook_status, {:error, "Visitor not found in database"})}
+        {:noreply, assign(socket, :webhook_result, {:error, %{reason: "Visitor not found"}})}
 
       visitor ->
         score_result = %{score: v["score"], signals: v["signals"] || []}
@@ -122,10 +122,9 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
   def handle_event("deactivate_webhook", %{"visitor_id" => visitor_id}, socket) do
     site = socket.assigns.site
 
-    case Spectabas.Repo.get(Spectabas.Visitors.Visitor, visitor_id) do
+    case Spectabas.Repo.get_by(Spectabas.Visitors.Visitor, id: visitor_id, site_id: site.id) do
       nil ->
-        {:noreply,
-         assign(socket, :webhook_result, {:error, %{reason: "Visitor not found in database"}})}
+        {:noreply, assign(socket, :webhook_result, {:error, %{reason: "Visitor not found"}})}
 
       visitor ->
         case Spectabas.Webhooks.ScraperWebhook.send_deactivate(site, visitor) do
@@ -565,11 +564,11 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
                     <div class="text-xs font-semibold text-gray-500 uppercase mb-1">
                       Request →
                       <span class="font-mono font-normal text-gray-600">
-                        {detail[:url] || detail.url}
+                        {detail[:url]}
                       </span>
                     </div>
                     <div class="bg-gray-50 border border-gray-200 rounded p-2 text-xs font-mono text-gray-800 max-h-40 overflow-y-auto whitespace-pre-wrap break-all">
-                      {Jason.encode!(detail[:request] || detail.request, pretty: true)}
+                      {Jason.encode!(detail[:request], pretty: true)}
                     </div>
                   </div>
                   <div>
@@ -582,18 +581,11 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
                           if(status == :ok, do: "text-green-600", else: "text-red-600")
                         ]}
                       >
-                        {detail[:status] || detail.status}
+                        HTTP {detail[:status]}
                       </span>
                       <span :if={detail[:reason]} class="ml-1 font-mono font-normal text-red-600">
-                        {inspect(detail[:reason] || detail.reason)}
+                        {inspect(detail[:reason])}
                       </span>
-                    </div>
-                    <div class="bg-gray-50 border border-gray-200 rounded p-2 text-xs font-mono text-gray-800 max-h-40 overflow-y-auto whitespace-pre-wrap break-all">
-                      {cond do
-                        is_map(detail[:response]) -> Jason.encode!(detail[:response], pretty: true)
-                        is_nil(detail[:response]) -> "(no response body)"
-                        true -> inspect(detail[:response])
-                      end}
                     </div>
                   </div>
                 </div>
