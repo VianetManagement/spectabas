@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.44.2", "2026-04-16T20:00:00Z",
+       [
+         %{
+           title: "Fix: Stripe sync crash on unexpanded product object",
+           description:
+             "product field on invoice line items is a string ID (not expanded map). get_in crashed with Access.get/3 on the string. Now checks if product is a map before accessing nested name, falls back to line description."
+         }
+       ]},
       {"v5.44.1", "2026-04-16T19:30:00Z",
        [
          %{

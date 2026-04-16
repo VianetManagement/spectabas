@@ -672,20 +672,23 @@ defmodule Spectabas.AdIntegrations.Platforms.StripePlatform do
     case pi do
       %{"invoice" => %{"lines" => %{"data" => lines}}} when is_list(lines) ->
         Enum.map(lines, fn line ->
+          # product may be an expanded map or a string ID — only dig into maps
+          product = get_in(line, ["price", "product"])
+
+          product_name =
+            if is_map(product), do: product["name"], else: nil
+
           name =
-            get_in(line, ["price", "product", "name"]) ||
-              get_in(line, ["description"]) ||
+            product_name ||
+              line["description"] ||
               get_in(line, ["plan", "nickname"]) ||
               "Unknown"
 
           price = (line["amount"] || 0) / 100.0
           quantity = line["quantity"] || 1
 
-          category =
-            cond do
-              get_in(line, ["price", "recurring"]) != nil -> "subscription"
-              true -> "one_time"
-            end
+          recurring = is_map(line["price"]) and is_map(line["price"]["recurring"])
+          category = if recurring, do: "subscription", else: "one_time"
 
           %{"name" => name, "price" => price, "quantity" => quantity, "category" => category}
         end)
