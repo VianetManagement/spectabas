@@ -93,6 +93,8 @@ CREATE TABLE IF NOT EXISTS spectabas.ecommerce_events
     discount      Decimal(12, 2) DEFAULT 0,
     currency      LowCardinality(String) DEFAULT 'USD',
     items         String DEFAULT '[]',
+    channel       LowCardinality(String) DEFAULT '',
+    source        String DEFAULT '',
     timestamp     DateTime DEFAULT now()
 )
 ENGINE = MergeTree()
