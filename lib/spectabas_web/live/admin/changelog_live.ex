@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.45.1", "2026-04-16T22:30:00Z",
+       [
+         %{
+           title: "Feat: Scraper score and signals on visitor profile page",
+           description:
+             "Visitor profile now shows a real-time scraper score computed from the visitor's ClickHouse data (pageviews, IPs, timing, ASN, UA). Score badge is color-coded (red >= 85, amber >= 60) with verdict label. Individual signal badges shown below. Only displayed when score > 0."
+         }
+       ]},
       {"v5.45.0", "2026-04-16T22:00:00Z",
        [
          %{

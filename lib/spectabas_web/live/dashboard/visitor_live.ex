@@ -107,6 +107,9 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
           {[], nil}
         end
 
+      # Compute scraper score from available data
+      scraper_result = compute_scraper_score(profile, timeline, site)
+
       {:ok,
        socket
        |> assign(:page_title, "Visitor - #{site.name}")
@@ -122,6 +125,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
        |> assign(:show_ip_panel, false)
        |> assign(:orders, orders)
        |> assign(:ltv, ltv)
+       |> assign(:scraper, scraper_result)
        |> assign(:visitor_ips, load_visitor_ips(site, visitor_id))}
     end
   end
@@ -219,6 +223,36 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
                 value={if @visitor.cookie_id, do: "Cookie", else: "Fingerprint"}
               />
               <.field label="GDPR Mode" value={@site.gdpr_mode || "on"} />
+              <div :if={@scraper.score > 0}>
+                <dt class="text-xs font-medium text-gray-500">Scraper Score</dt>
+                <dd class="mt-0.5 flex items-center gap-2">
+                  <span class={[
+                    "inline-flex items-center px-2 py-0.5 rounded text-xs font-bold",
+                    cond do
+                      @scraper.score >= 85 -> "bg-red-100 text-red-800"
+                      @scraper.score >= 60 -> "bg-amber-100 text-amber-800"
+                      true -> "bg-gray-100 text-gray-700"
+                    end
+                  ]}>
+                    {@scraper.score}
+                  </span>
+                  <span class="text-xs text-gray-500">
+                    {cond do
+                      @scraper.score >= 85 -> "certain"
+                      @scraper.score >= 60 -> "suspicious"
+                      true -> "low"
+                    end}
+                  </span>
+                </dd>
+                <dd :if={@scraper.signals != []} class="mt-1 flex flex-wrap gap-1">
+                  <span
+                    :for={sig <- @scraper.signals}
+                    class="inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium bg-gray-100 text-gray-600"
+                  >
+                    {sig}
+                  </span>
+                </dd>
+              </div>
               <div :if={@profile["browser_fingerprint"] && @profile["browser_fingerprint"] != ""}>
                 <dt class="text-xs font-medium text-gray-500">Browser Fingerprint</dt>
                 <dd class="mt-0.5 text-xs text-indigo-600 font-mono">
@@ -766,4 +800,47 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
       _ -> []
     end
   end
+
+  defp compute_scraper_score(profile, timeline, site) do
+    pageviews = timeline |> Enum.filter(&(&1["event_type"] == "pageview"))
+    ip_count = timeline |> Enum.map(& &1["ip_address"]) |> Enum.uniq() |> length()
+    page_paths = pageviews |> Enum.map(& &1["url_path"]) |> Enum.reject(&is_nil/1)
+
+    intervals =
+      pageviews
+      |> Enum.map(& &1["timestamp"])
+      |> Enum.reject(&is_nil/1)
+      |> Enum.sort()
+      |> Enum.chunk_every(2, 1, :discard)
+      |> Enum.map(fn [a, b] ->
+        case {parse_ts(a), parse_ts(b)} do
+          {%DateTime{} = da, %DateTime{} = db} -> DateTime.diff(db, da, :millisecond)
+          _ -> 0
+        end
+      end)
+
+    detector_profile = %{
+      asn: profile["ip_org"] || "",
+      user_agent: profile["user_agent"] || "",
+      visitor_ip_count: ip_count,
+      session_pageviews: length(pageviews),
+      page_paths: page_paths,
+      content_path_prefixes: List.wrap(site.scraper_content_prefixes),
+      referrer: profile["referrer_domain"],
+      screen_resolution: "#{profile["screen_width"] || 0}x#{profile["screen_height"] || 0}",
+      request_intervals_ms: intervals,
+      is_datacenter: to_num(profile["ip_is_datacenter"]) == 1
+    }
+
+    Spectabas.Analytics.ScraperDetector.score(detector_profile)
+  end
+
+  defp parse_ts(ts) when is_binary(ts) do
+    case DateTime.from_iso8601(ts) do
+      {:ok, dt, _} -> dt
+      _ -> nil
+    end
+  end
+
+  defp parse_ts(_), do: nil
 end
