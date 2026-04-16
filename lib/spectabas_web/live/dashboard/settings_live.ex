@@ -1064,7 +1064,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                 <div>
                   <label class="block text-sm font-medium text-gray-700">Webhook Secret</label>
                   <input
-                    type="password"
+                    type="text"
                     name="site[scraper_webhook_secret]"
                     value={@site.scraper_webhook_secret}
                     placeholder="shared bearer token"

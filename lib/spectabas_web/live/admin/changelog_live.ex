@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.40.1", "2026-04-16T12:30:00Z",
+       [
+         %{
+           title: "Fix: Scraper webhook secret field clearing URL on keystroke",
+           description:
+             "Password-type inputs don't send their value on phx-change events, causing the changeset to clear sibling fields. Changed webhook secret to text input."
+         }
+       ]},
       {"v5.40.0", "2026-04-16T12:00:00Z",
        [
          %{
