@@ -3645,7 +3645,7 @@ defmodule Spectabas.Analytics do
     FROM events
     WHERE site_id = #{ClickHouse.param(site.id)}
       AND visitor_id = #{ClickHouse.param(visitor_id)}
-    ORDER BY timestamp ASC
+    ORDER BY timestamp DESC
     LIMIT 1000
     """
 

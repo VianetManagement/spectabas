@@ -79,6 +79,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
         timeline
         |> Enum.group_by(& &1["session_id"])
         |> Enum.map(fn {sid, events} ->
+          events = Enum.sort_by(events, & &1["timestamp"])
           pageviews = Enum.filter(events, &(&1["event_type"] == "pageview"))
 
           %{
