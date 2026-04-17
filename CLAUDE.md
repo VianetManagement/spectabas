@@ -6,7 +6,7 @@ Spectabas is a multi-tenant, privacy-first web analytics SaaS platform built wit
 
 ## Tech Stack
 
-- **Elixir 1.17 / Phoenix 1.8** with LiveView, scope-based auth (current_scope, not current_user)
+- **Elixir 1.18 / Phoenix 1.8** with LiveView, scope-based auth (current_scope, not current_user)
 - **PostgreSQL** — users, sites, sessions, visitors, audit logs (on Render, Ohio region)
 - **ClickHouse** — event storage and analytics queries (Render private service, Ohio region)
 - **Chart.js** — interactive charts (vendored UMD build, no CDN)

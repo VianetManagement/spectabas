@@ -11,7 +11,7 @@ defmodule SpectabasWeb.Dashboard.ReportsLive do
     user = socket.assigns.current_scope.user
     site = Sites.get_site!(site_id)
 
-    unless Accounts.can_access_site?(user, site) do
+    if !Accounts.can_access_site?(user, site) do
       {:ok,
        socket
        |> put_flash(:error, "Unauthorized")

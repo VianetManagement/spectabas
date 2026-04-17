@@ -35,7 +35,7 @@ defmodule Spectabas.ClickHouse do
     # Wait for ClickHouse to be ready (up to 30 seconds)
     connected = wait_for_clickhouse(admin_req, 15)
 
-    unless connected do
+    if !connected do
       Logger.error(
         "[CH:init] Could not connect to ClickHouse after retries, skipping schema init"
       )

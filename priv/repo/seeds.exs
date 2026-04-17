@@ -7,7 +7,7 @@ alias Spectabas.Accounts.User
 alias Spectabas.Sites.Site
 
 # Create superadmin user if not exists
-unless Repo.get_by(User, email: "admin@spectabas.com") do
+if !Repo.get_by(User, email: "admin@spectabas.com") do
   %User{}
   |> User.email_changeset(%{email: "admin@spectabas.com"})
   |> User.password_changeset(%{password: "Admin123!@#456"})
@@ -19,7 +19,7 @@ unless Repo.get_by(User, email: "admin@spectabas.com") do
 end
 
 # Create a demo site if not exists
-unless Repo.get_by(Site, domain: "demo.spectabas.com") do
+if !Repo.get_by(Site, domain: "demo.spectabas.com") do
   %Site{}
   |> Site.changeset(%{
     name: "Demo Site",

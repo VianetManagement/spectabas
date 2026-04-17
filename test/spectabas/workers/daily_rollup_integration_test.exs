@@ -22,7 +22,7 @@ defmodule Spectabas.Workers.DailyRollupIntegrationTest do
   @test_date "2026-03-15"
 
   setup do
-    unless clickhouse_reachable?() do
+    if !clickhouse_reachable?() do
       # Fail fast with a readable message if someone runs --only integration
       # without a CH available.
       flunk("ClickHouse not reachable — integration tests require a running ClickHouse")

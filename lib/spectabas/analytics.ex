@@ -5166,7 +5166,7 @@ defmodule Spectabas.Analytics do
     allowed_fields =
       ~w(url_path referrer_domain ip_country ip_region_name browser os device_type)
 
-    unless field in allowed_fields do
+    if field not in allowed_fields do
       {:error, :invalid_field}
     else
       with :ok <- authorize(site, user),

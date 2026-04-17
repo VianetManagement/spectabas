@@ -1,5 +1,5 @@
 # Build stage
-FROM hexpm/elixir:1.17.3-erlang-27.2-ubuntu-jammy-20260217 AS build
+FROM hexpm/elixir:1.18.2-erlang-27.2-ubuntu-jammy-20260217 AS build
 
 RUN apt-get update -y && apt-get install -y build-essential git curl \
     && apt-get clean && rm -f /var/lib/apt/lists/*_*

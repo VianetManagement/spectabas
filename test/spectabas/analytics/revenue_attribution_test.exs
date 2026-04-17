@@ -28,7 +28,7 @@ defmodule Spectabas.Analytics.RevenueAttributionTest do
   # Visitor B: arrives from newsletter (utm_source), buys
 
   setup do
-    unless clickhouse_reachable?() do
+    if !clickhouse_reachable?() do
       flunk("ClickHouse not reachable")
     end
 

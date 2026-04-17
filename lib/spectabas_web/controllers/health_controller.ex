@@ -879,7 +879,7 @@ defmodule SpectabasWeb.HealthController do
   end
 
   def click_id_diag(conn, %{"token" => token}) do
-    unless valid_token?(token) do
+    if !valid_token?(token) do
       conn |> put_status(403) |> json(%{error: "forbidden"})
     else
       q1 =
@@ -954,7 +954,7 @@ defmodule SpectabasWeb.HealthController do
   end
 
   def send_setup_emails(conn, %{"token" => token}) do
-    unless valid_token?(token) do
+    if !valid_token?(token) do
       conn |> put_status(403) |> json(%{error: "forbidden"})
     else
       results = %{
@@ -979,7 +979,7 @@ defmodule SpectabasWeb.HealthController do
   end
 
   def fix_ch_schema(conn, %{"token" => token}) do
-    unless valid_token?(token) do
+    if !valid_token?(token) do
       conn |> put_status(403) |> json(%{error: "forbidden"})
     else
       db = Application.get_env(:spectabas, Spectabas.ClickHouse)[:database] || "spectabas"
@@ -1071,7 +1071,7 @@ defmodule SpectabasWeb.HealthController do
   end
 
   def ecom_diag(conn, %{"token" => token, "site_id" => site_id} = params) do
-    unless valid_token?(token) do
+    if !valid_token?(token) do
       conn |> put_status(403) |> json(%{error: "forbidden"})
     else
       case params["action"] do
@@ -1800,7 +1800,7 @@ defmodule SpectabasWeb.HealthController do
   end
 
   def oban_admin(conn, %{"token" => token, "action" => action} = params) do
-    unless valid_token?(token) do
+    if !valid_token?(token) do
       conn |> put_status(403) |> json(%{error: "forbidden"})
     else
       import Ecto.Query

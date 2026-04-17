@@ -56,7 +56,7 @@ if config_env() == :prod do
 
   # Mailer — use Resend if key provided, otherwise Local
   if resend_key = System.get_env("RESEND_API_KEY") do
-    unless resend_key == "re_placeholder" do
+    if resend_key != "re_placeholder" do
       config :spectabas, Spectabas.Mailer,
         adapter: Swoosh.Adapters.Resend,
         api_key: resend_key

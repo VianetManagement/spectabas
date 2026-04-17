@@ -15,7 +15,7 @@ defmodule Mix.Tasks.BackfillGeo do
   def run(_args) do
     Mix.Task.run("app.start")
 
-    unless Process.whereis(Spectabas.ClickHouse) do
+    if !Process.whereis(Spectabas.ClickHouse) do
       Mix.raise("ClickHouse is not running")
     end
 

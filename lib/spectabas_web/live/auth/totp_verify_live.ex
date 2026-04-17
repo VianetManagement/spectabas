@@ -7,7 +7,7 @@ defmodule SpectabasWeb.Auth.TOTPVerifyLive do
   def mount(_params, _session, socket) do
     user = socket.assigns.current_scope.user
 
-    unless user.totp_enabled do
+    if !user.totp_enabled do
       {:ok,
        socket
        |> put_flash(:info, "Two-factor authentication is not enabled.")

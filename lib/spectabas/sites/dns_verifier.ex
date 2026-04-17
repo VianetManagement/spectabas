@@ -50,7 +50,7 @@ defmodule Spectabas.Sites.DNSVerifier do
     Enum.each(sites, fn site ->
       case check_domain(site.domain) do
         :verified ->
-          unless site.dns_verified do
+          if !site.dns_verified do
             Spectabas.Sites.mark_dns_verified(site)
             Logger.info("[DNSVerifier] Verified: #{site.domain}")
           end
