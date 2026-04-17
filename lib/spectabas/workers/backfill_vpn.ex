@@ -12,6 +12,24 @@ defmodule Spectabas.Workers.BackfillVpn do
     start = System.monotonic_time(:millisecond)
     Logger.notice("[BackfillVpn] Starting VPN provider backfill...")
 
+    {total_tagged, total_checked} = process_all_batches(0, 0)
+
+    ms = System.monotonic_time(:millisecond) - start
+
+    Logger.notice(
+      "[BackfillVpn] Complete! #{total_checked} IPs checked, #{total_tagged} tagged, #{ms}ms"
+    )
+
+    DownloadLog.log_download("vpn-backfill", "success",
+      file_size: total_tagged,
+      duration_ms: ms,
+      error_message: "#{total_checked} IPs checked, #{total_tagged} tagged"
+    )
+
+    :ok
+  end
+
+  defp process_all_batches(total_tagged, total_checked) do
     sql = """
     SELECT DISTINCT ip_address
     FROM events
@@ -20,53 +38,44 @@ defmodule Spectabas.Workers.BackfillVpn do
     """
 
     case Spectabas.ClickHouse.query(sql, receive_timeout: 120_000) do
+      {:ok, []} ->
+        {total_tagged, total_checked}
+
       {:ok, rows} ->
-        total = length(rows)
-        ips = Enum.map(rows, & &1["ip_address"])
-        Logger.notice("[BackfillVpn] Found #{total} distinct IPs to check")
+        batch_size = length(rows)
 
-        {tagged, skipped, _} =
-          Enum.reduce(ips, {0, 0, 0}, fn ip, {tagged, skipped, processed} ->
-            processed = processed + 1
+        Logger.notice(
+          "[BackfillVpn] Batch: #{batch_size} IPs (cumulative: #{total_checked} checked, #{total_tagged} tagged)"
+        )
 
-            if rem(processed, 5000) == 0 do
-              Logger.notice("[BackfillVpn] Progress: #{processed}/#{total} (#{tagged} tagged)")
-            end
+        {tagged, _skipped} =
+          Enum.reduce(rows, {0, 0}, fn row, {tagged, skipped} ->
+            ip = row["ip_address"]
 
             case Spectabas.IPEnricher.vpn_provider_for_ip(ip) do
               "" ->
-                {tagged, skipped + 1, processed}
+                mark_checked(ip)
+                {tagged, skipped + 1}
 
               provider ->
                 update_vpn(ip, provider)
-                {tagged + 1, skipped, processed}
+                {tagged + 1, skipped}
             end
           end)
 
-        ms = System.monotonic_time(:millisecond) - start
+        new_tagged = total_tagged + tagged
+        new_checked = total_checked + batch_size
 
-        Logger.notice(
-          "[BackfillVpn] Done! #{tagged} VPN/relay IPs tagged, #{skipped} non-VPN, #{ms}ms"
-        )
-
-        DownloadLog.log_download("vpn-backfill", "success",
-          file_size: tagged,
-          duration_ms: ms,
-          error_message: "#{total} IPs checked, #{tagged} tagged, #{skipped} non-VPN"
-        )
-
-        :ok
+        if batch_size < @batch_size do
+          {new_tagged, new_checked}
+        else
+          process_all_batches(new_tagged, new_checked)
+        end
 
       {:error, e} ->
-        ms = System.monotonic_time(:millisecond) - start
         Logger.error("[BackfillVpn] Query failed: #{inspect(e)}")
-
-        DownloadLog.log_download("vpn-backfill", "error",
-          error_message: inspect(e),
-          duration_ms: ms
-        )
-
-        {:error, inspect(e)}
+        DownloadLog.log_download("vpn-backfill", "error", error_message: inspect(e))
+        {total_tagged, total_checked}
     end
   end
 
@@ -83,5 +92,19 @@ defmodule Spectabas.Workers.BackfillVpn do
       :ok -> :ok
       {:error, e} -> Logger.warning("[BackfillVpn] Update failed for #{ip}: #{inspect(e)}")
     end
+  end
+
+  # For non-VPN IPs, set ip_vpn_provider to a sentinel so they don't get
+  # re-queried in the next batch. Uses a single space — empty string is
+  # the "not yet checked" marker.
+  defp mark_checked(ip) do
+    sql = """
+    ALTER TABLE events UPDATE
+      ip_vpn_provider = ' '
+    WHERE ip_address = #{Spectabas.ClickHouse.param(ip)} AND ip_vpn_provider = ''
+    SETTINGS mutations_sync = 0
+    """
+
+    Spectabas.ClickHouse.execute(sql)
   end
 end
