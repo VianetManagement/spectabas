@@ -104,8 +104,8 @@ defmodule Spectabas.GeoIP do
       log_name = String.replace(filename, ".mmdb", "")
 
       timed_download(log_name, fn ->
-        case Req.get(url, receive_timeout: 120_000) do
-          {:ok, %{status: 200, body: body}} ->
+        case Req.get(url, receive_timeout: 180_000, raw: true) do
+          {:ok, %{status: 200, body: body}} when is_binary(body) ->
             data = :zlib.gunzip(body)
             File.write!(dest, data)
             load_db(dest, id)
@@ -181,9 +181,14 @@ defmodule Spectabas.GeoIP do
               "interpolated-vpn.mmdb" => :vpn_interpolated
             }
 
+            Logger.notice(
+              "[GeoIP] ipapi archive: #{length(files)} files, #{byte_size(body)} bytes"
+            )
+
             count =
               Enum.reduce(files, 0, fn {name_cl, data}, acc ->
                 name = to_string(name_cl)
+                Logger.notice("[GeoIP] ipapi archive entry: #{name} (#{byte_size(data)} bytes)")
 
                 case Map.get(targets, name) do
                   nil ->

@@ -4,10 +4,10 @@ defmodule Spectabas.Analytics.ScraperDetectorTest do
   alias Spectabas.Analytics.ScraperDetector
 
   describe "score/1 — clean profile" do
-    test "empty profile scores 5 (nil referrer is a scraper-lean hint)" do
+    test "empty profile scores 10 (nil referrer is a scraper-lean hint)" do
       # Intentional: a visitor with NO data we can see is slightly scraper-lean.
-      # Our only signal that fires with no data is :no_referrer (worth 5).
-      assert %{score: 5, signals: [:no_referrer]} = ScraperDetector.score(%{})
+      # Our only signal that fires with no data is :no_referrer (worth 10).
+      assert %{score: 10, signals: [:no_referrer]} = ScraperDetector.score(%{})
     end
 
     test "normal residential visitor scores low" do
@@ -33,7 +33,7 @@ defmodule Spectabas.Analytics.ScraperDetectorTest do
     # :no_referrer signal so we can assert one signal in isolation.
 
     test ":datacenter_asn fires on matching ASN prefix" do
-      assert %{score: 35, signals: [:datacenter_asn]} =
+      assert %{score: 40, signals: [:datacenter_asn]} =
                ScraperDetector.score(%{asn: "AS16276 OVH SAS", referrer: "google.com"})
     end
 
@@ -52,8 +52,8 @@ defmodule Spectabas.Analytics.ScraperDetectorTest do
 
       assert :datacenter_asn in result.signals
       assert :spoofed_mobile_ua in result.signals
-      # 35 + 20 = 55
-      assert result.score == 55
+      # 40 + 20 = 60
+      assert result.score == 60
     end
 
     test ":spoofed_mobile_ua does NOT fire when mobile UA comes from a residential ASN" do
@@ -76,8 +76,11 @@ defmodule Spectabas.Analytics.ScraperDetectorTest do
                ScraperDetector.score(%{visitor_ip_count: 2, referrer: "google.com"})
     end
 
-    test ":high_pageviews fires at 30–99 unique pages" do
+    test ":high_pageviews fires at 20+ unique pages with escalating score" do
       assert %{score: 10, signals: [:high_pageviews]} =
+               ScraperDetector.score(%{session_pageviews: 25, referrer: "google.com"})
+
+      assert %{score: 15, signals: [:high_pageviews]} =
                ScraperDetector.score(%{session_pageviews: 50, referrer: "google.com"})
     end
 
@@ -134,8 +137,8 @@ defmodule Spectabas.Analytics.ScraperDetectorTest do
     end
 
     test ":no_referrer fires on nil or empty referrer" do
-      assert %{score: 5, signals: [:no_referrer]} = ScraperDetector.score(%{referrer: nil})
-      assert %{score: 5, signals: [:no_referrer]} = ScraperDetector.score(%{referrer: ""})
+      assert %{score: 10, signals: [:no_referrer]} = ScraperDetector.score(%{referrer: nil})
+      assert %{score: 10, signals: [:no_referrer]} = ScraperDetector.score(%{referrer: ""})
     end
 
     test ":no_referrer does not fire when referrer is present" do

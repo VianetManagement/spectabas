@@ -53,6 +53,24 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.53.0", "2026-04-18T06:00:00Z",
+       [
+         %{
+           title: "Tune: Scraper scoring rebalanced with escalating pageview tiers",
+           description:
+             "datacenter_asn +35→+40, no_referrer +5→+10. Pageviews now escalate: 20+ unique pages (+10), 50+ (+15), 100+ (+20), 200+ (+25). The visitor at score 50 would now score 65. Puppies-side tarpit threshold should be lowered from 70 to 60 to match."
+         },
+         %{
+           title: "Fix: DB-IP download — use raw: true to prevent double-decompression",
+           description:
+             "Req auto-decompresses gzip responses. DB-IP downloads (.mmdb.gz) were getting gunzipped by Req and then gunzipped again by our code, causing a crash. Added raw: true and increased timeout to 180s."
+         },
+         %{
+           title: "Fix: ipapi VPN download — added per-file extraction logging",
+           description:
+             "Added detailed logging for each file extracted from the ipapi.is tar.gz archive to diagnose the missing interpolated-vpn.mmdb issue."
+         }
+       ]},
       {"v5.52.0", "2026-04-18T05:00:00Z",
        [
          %{

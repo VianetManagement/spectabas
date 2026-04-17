@@ -112,7 +112,7 @@ defmodule Spectabas.Analytics.ScraperDetector do
     on_known_vpn = known_vpn_provider?(profile[:vpn_provider])
 
     if is_dc and not on_known_vpn do
-      {points + 35, [:datacenter_asn | signals]}
+      {points + 40, [:datacenter_asn | signals]}
     else
       {points, signals}
     end
@@ -139,13 +139,14 @@ defmodule Spectabas.Analytics.ScraperDetector do
     end
   end
 
-  # Two-tier bucket based on unique pages visited (not raw pageviews).
-  # A visitor hitting 100+ distinct URLs is almost certainly crawling;
-  # 30+ is suspicious. Refreshes and duration pings don't inflate this.
+  # Escalating score based on unique pages visited (not raw pageviews).
+  # More unique pages = higher confidence of automated crawling.
   defp add_pageview_signal(points, signals, profile) do
     case profile[:session_pageviews] do
+      n when is_integer(n) and n >= 200 -> {points + 25, [:very_high_pageviews | signals]}
       n when is_integer(n) and n >= 100 -> {points + 20, [:very_high_pageviews | signals]}
-      n when is_integer(n) and n >= 30 -> {points + 10, [:high_pageviews | signals]}
+      n when is_integer(n) and n >= 50 -> {points + 15, [:high_pageviews | signals]}
+      n when is_integer(n) and n >= 20 -> {points + 10, [:high_pageviews | signals]}
       _ -> {points, signals}
     end
   end
@@ -170,8 +171,8 @@ defmodule Spectabas.Analytics.ScraperDetector do
 
   defp add_referrer_signal(points, signals, profile) do
     case profile[:referrer] do
-      nil -> {points + 5, [:no_referrer | signals]}
-      "" -> {points + 5, [:no_referrer | signals]}
+      nil -> {points + 10, [:no_referrer | signals]}
+      "" -> {points + 10, [:no_referrer | signals]}
       _ -> {points, signals}
     end
   end
