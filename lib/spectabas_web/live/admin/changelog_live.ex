@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.51.0", "2026-04-18T04:00:00Z",
+       [
+         %{
+           title: "Feat: Auto-download GeoIP databases with admin status page",
+           description:
+             "All external IP databases (DB-IP, MaxMind, ipapi.is VPN) now auto-download on boot and refresh on the 1st/15th of each month. Set IPAPI_API_KEY env var for VPN databases. New admin page at /admin/geoip shows current database status (loaded/not loaded), download history with timestamps, file sizes, durations, and errors. Refresh Now button triggers an immediate download."
+         }
+       ]},
       {"v5.50.0", "2026-04-18T03:00:00Z",
        [
          %{

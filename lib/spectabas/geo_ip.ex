@@ -53,30 +53,38 @@ defmodule Spectabas.GeoIP do
     end
 
     # ipapi.is VPN databases (optional, $79/mo subscription)
-    # Place enumerated-vpn.mmdb and interpolated-vpn.mmdb in priv/geoip/ or set IPAPI_VPN_DIR
-    vpn_dir = System.get_env("IPAPI_VPN_DIR")
+    # Loaded from persistent cache, priv/geoip, or downloaded on first boot if IPAPI_API_KEY is set
+    vpn_loaded =
+      for {filename, db_id} <- [
+            {"enumerated-vpn.mmdb", :vpn_enumerated},
+            {"interpolated-vpn.mmdb", :vpn_interpolated}
+          ] do
+        cond do
+          File.exists?(Path.join(cache_dir, filename)) ->
+            load_db(cache_dir, filename, db_id)
+            true
 
-    for {filename, db_id} <- [
-          {"enumerated-vpn.mmdb", :vpn_enumerated},
-          {"interpolated-vpn.mmdb", :vpn_interpolated}
-        ] do
-      cond do
-        vpn_dir && File.exists?(Path.join(vpn_dir, filename)) ->
-          load_db(vpn_dir, filename, db_id)
+          File.exists?(Path.join(geoip_dir, filename)) ->
+            if persistent_dir,
+              do: File.cp(Path.join(geoip_dir, filename), Path.join(cache_dir, filename))
 
-        File.exists?(Path.join(cache_dir, filename)) ->
-          load_db(cache_dir, filename, db_id)
+            load_db(geoip_dir, filename, db_id)
+            true
 
-        File.exists?(Path.join(geoip_dir, filename)) ->
-          if persistent_dir,
-            do: File.cp(Path.join(geoip_dir, filename), Path.join(cache_dir, filename))
+          true ->
+            false
+        end
+      end
 
-          load_db(geoip_dir, filename, db_id)
+    # If VPN databases not found locally, download from ipapi.is on first boot
+    if not Enum.all?(vpn_loaded) do
+      api_key = System.get_env("IPAPI_API_KEY")
 
-        true ->
-          Logger.info(
-            "[GeoIP] #{filename} not found (optional — place in priv/geoip/ or set IPAPI_VPN_DIR)"
-          )
+      if api_key && api_key != "" do
+        Logger.info("[GeoIP] VPN databases not found, downloading from ipapi.is...")
+        download_ipapi_vpn(api_key, cache_dir)
+      else
+        Logger.info("[GeoIP] VPN databases not found (set IPAPI_API_KEY to auto-download)")
       end
     end
 
@@ -111,6 +119,44 @@ defmodule Spectabas.GeoIP do
     else
       Logger.info("[GeoIP] Not found (optional): #{path}")
     end
+  end
+
+  defp download_ipapi_vpn(api_key, target_dir) do
+    url = "https://ipapi.is/app/getData?type=ipToVpn&format=mmdb&apiKey=#{api_key}"
+
+    case Req.get(url, receive_timeout: 300_000, raw: true) do
+      {:ok, %{status: 200, body: body}} when is_binary(body) ->
+        {:ok, files} = :erl_tar.extract({:binary, body}, [:compressed, :memory])
+
+        for {name_cl, data} <- files do
+          name = to_string(name_cl)
+
+          case name do
+            "enumerated-vpn.mmdb" ->
+              dest = Path.join(target_dir, name)
+              File.write!(dest, data)
+              load_db(target_dir, name, :vpn_enumerated)
+              Logger.info("[GeoIP] Downloaded ipapi VPN enumerated: #{byte_size(data)} bytes")
+
+            "interpolated-vpn.mmdb" ->
+              dest = Path.join(target_dir, name)
+              File.write!(dest, data)
+              load_db(target_dir, name, :vpn_interpolated)
+              Logger.info("[GeoIP] Downloaded ipapi VPN interpolated: #{byte_size(data)} bytes")
+
+            _ ->
+              :ok
+          end
+        end
+
+      {:ok, %{status: status}} ->
+        Logger.warning("[GeoIP] ipapi.is VPN download HTTP #{status}")
+
+      {:error, reason} ->
+        Logger.warning("[GeoIP] ipapi.is VPN download failed: #{inspect(reason)}")
+    end
+  rescue
+    e -> Logger.warning("[GeoIP] ipapi.is VPN download error: #{Exception.message(e)}")
   end
 
   defp download_maxmind(key, dest_path) do

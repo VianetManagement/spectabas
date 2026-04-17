@@ -242,6 +242,7 @@ defmodule SpectabasWeb.Router do
       live "/changelog", Admin.ChangelogLive, :index
       live "/ingest", Admin.IngestDiagnosticsLive, :index
       live "/api-logs", Admin.ApiLogsLive, :index
+      live "/geoip", Admin.GeoipLive, :index
     end
   end
 
