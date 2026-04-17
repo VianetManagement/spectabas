@@ -27,7 +27,7 @@ defmodule Spectabas.Webhooks.ScraperWebhook do
         user_id: parse_user_id(visitor.user_id)
       },
       score: score_result.score,
-      activation_delay_hours: activation_delay(score_result.score),
+      activation_delay_hours: 0,
       metadata: %{
         visitor_id: visitor.id,
         signals: signals,
@@ -176,9 +176,6 @@ defmodule Spectabas.Webhooks.ScraperWebhook do
   rescue
     e -> Logger.warning("[ScraperWebhook] Failed to log delivery: #{inspect(e)}")
   end
-
-  defp activation_delay(score) when score >= 95, do: 0
-  defp activation_delay(_score), do: 48
 
   defp parse_user_id(nil), do: nil
   defp parse_user_id(""), do: nil

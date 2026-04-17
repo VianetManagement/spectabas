@@ -36,7 +36,7 @@ defmodule Spectabas.Workers.ScraperWebhookScan do
   defp scan_site(site) do
     case Analytics.scraper_candidates_system(site,
            hours: 1,
-           min_score: ScraperDetector.score_suspicious()
+           min_score: ScraperDetector.score_watching()
          ) do
       {:ok, candidates} ->
         Logger.notice(
@@ -64,17 +64,20 @@ defmodule Spectabas.Workers.ScraperWebhookScan do
     visitor = Repo.one(from(v in Visitor, where: v.id == ^visitor_id, limit: 1))
 
     if visitor do
+      prev = visitor.scraper_webhook_score || 0
+      prev_tier = score_tier(prev)
+      curr_tier = score_tier(score)
+
       cond do
         # Never sent — first flag
         is_nil(visitor.scraper_webhook_sent_at) ->
           send_and_record(site, visitor, score, signals, row)
 
-        # Score escalated significantly (crossed from suspicious to certain)
-        score >= ScraperDetector.score_certain() and
-            (visitor.scraper_webhook_score || 0) < ScraperDetector.score_certain() ->
+        # Score escalated to a higher tier (watching → suspicious → certain)
+        curr_tier > prev_tier ->
           send_and_record(site, visitor, score, signals, row)
 
-        # Already sent at this tier — skip
+        # Same tier — skip
         true ->
           :ok
       end
@@ -102,4 +105,10 @@ defmodule Spectabas.Workers.ScraperWebhookScan do
         :ok
     end
   end
+
+  # Maps score to a numeric tier for escalation comparison:
+  # 0 = watching (40-69), 1 = suspicious/tarpit (70-84), 2 = certain/active (85+)
+  defp score_tier(score) when score >= 85, do: 2
+  defp score_tier(score) when score >= 70, do: 1
+  defp score_tier(_), do: 0
 end

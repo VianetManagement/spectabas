@@ -1466,21 +1466,34 @@ defmodule SpectabasWeb.DocsLive do
             body: """
             Identifies likely scraper visitors using a weighted-signal scoring model. Each visitor is scored 0-100 based on multiple signals:
 
-            - **Datacenter ASN (+35)** — visitor's IP belongs to a known hosting provider (OVH, AWS, Hetzner, DigitalOcean, etc.)
-            - **Spoofed Mobile UA (+20)** — mobile user agent string coming from a datacenter IP
+            - **Datacenter ASN (+35)** — visitor's IP belongs to a known hosting provider (OVH, AWS, Hetzner, DigitalOcean, etc.). **Suppressed** when the IP belongs to a known consumer VPN (NordVPN, Mullvad, ProtonVPN, etc.) detected via the ipapi.is VPN database.
+            - **Spoofed Mobile UA (+20)** — mobile user agent string coming from a datacenter IP. Also suppressed for known VPN users.
             - **IP Rotation (+20)** — same cookie/visitor ID seen from 3+ distinct IPs
-            - **Very High Pageviews (+20)** — 200+ pageviews in the period
-            - **High Pageviews (+10)** — 50-199 pageviews
+            - **Very High Pageviews (+20)** — 100+ unique pages in the period
+            - **High Pageviews (+10)** — 30-99 unique pages
             - **Systematic Crawl (+15)** — over 80% of visited pages match your configured content path prefixes
             - **Robotic Timing (+10)** — request interval standard deviation under 300ms (evenly paced, programmatic)
             - **No Referrer (+5)** — direct entry with no referrer
             - **Emulator Resolution (+5)** — screen resolution matches a known headless browser default
 
-            **Verdicts:** Normal (score below 60), Suspicious (60-84), Near-certain scraper (85+).
+            ### Score Tiers
+
+            Scores drive a three-tier response when delivered via webhook to your application:
+
+            | Score | Tier | Recommended action |
+            |-------|------|--------------------|
+            | 85+ | **Certain** | Full countermeasures (tarpit + data poisoning) |
+            | 70-84 | **Suspicious** | Tarpit only (slow responses, no poisoning) |
+            | 40-69 | **Watching** | Log and observe — no user-facing action |
+            | < 40 | Normal | Not flagged |
+
+            ### VPN User Safety
+
+            Visitors on known consumer VPNs are protected from false positives. The datacenter ASN signal (+35) and spoofed mobile UA signal (+20) are suppressed when the visitor's IP matches a known VPN provider in the ipapi.is database. This prevents legitimate VPN users from being flagged as scrapers even though their VPN exit nodes run on datacenter infrastructure.
 
             **Configure content prefixes** in Site Settings to enable the systematic-crawl signal. Add URL path prefixes like `/listings` or `/profiles` that represent your valuable content pages. Without this, the systematic-crawl signal will not fire but all other signals still work.
 
-            **Click any row** to see full details including the complete user agent string, all visited page paths, signal explanations, and a link to the full visitor profile.
+            **Click any row** to see full details including the complete user agent string, all visited page paths, signal explanations, and a link to the full visitor profile. Score, Pageviews, IPs, and Last Seen columns are sortable.
 
             Scraper detection runs retroactively on past traffic. It scores visitors at query time from stored event data, not at ingest time.
             """
@@ -2106,7 +2119,7 @@ defmodule SpectabasWeb.DocsLive do
             ### Advanced
             - **Tracking Snippet** — copy your site's embed code
             - **IP Blocklist** — block specific IPs from being tracked
-            - **Scraper Webhooks** — configure a webhook URL and Bearer secret to receive POST notifications when scrapers are detected. Fires once per visitor on first flag, re-fires on score escalation. Manual send/deactivate from the Scrapers page. When the datacenter ASN signal fires, the payload includes `ip_ranges` with /64 CIDR prefixes for IPv6 addresses — enabling prefix-based blocking to counter IPv6 address rotation.
+            - **Scraper Webhooks** — configure a webhook URL and Bearer secret to receive POST notifications when scrapers are detected. Webhooks fire at score 40+ (watching tier) and re-fire when the score escalates to a higher tier (watching → suspicious → certain). Manual send/deactivate from the Scrapers page. Payload includes `ip_ranges` with /64 CIDR prefixes for IPv6 addresses when datacenter ASN signal fires. `activation_delay_hours` is always 0 — the recipient manages timing.
             - **Ecommerce** — enable ecommerce tracking with currency setting
 
             ### User Timezone

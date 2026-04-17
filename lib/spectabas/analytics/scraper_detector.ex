@@ -50,6 +50,7 @@ defmodule Spectabas.Analytics.ScraperDetector do
     0x0
   )
 
+  @score_watching 40
   @score_suspicious 60
   @score_certain 85
 
@@ -58,6 +59,9 @@ defmodule Spectabas.Analytics.ScraperDetector do
 
   @doc "List of screen resolutions commonly used by headless browsers/emulators."
   def suspicious_resolutions, do: @suspicious_resolutions
+
+  @doc "Score threshold for the watching tier (logged but no action)."
+  def score_watching, do: @score_watching
 
   @doc "Score threshold at which a visitor is considered suspicious."
   def score_suspicious, do: @score_suspicious

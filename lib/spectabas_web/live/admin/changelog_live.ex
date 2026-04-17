@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.50.0", "2026-04-18T03:00:00Z",
+       [
+         %{
+           title: "Feat: Three-tier scraper scoring aligned with webhook recipients",
+           description:
+             "Scraper scores now drive a three-tier response: Certain (85+, full countermeasures), Suspicious (70-84, tarpit only), Watching (40-69, log and observe). Webhook send threshold lowered from 60 to 40 for watching-tier visibility. Webhooks re-fire on tier escalation (watching → suspicious → certain). activation_delay_hours always 0 — recipient manages timing. Documentation updated with tier table, VPN safety info, and signal weights."
+         }
+       ]},
       {"v5.49.0", "2026-04-18T02:00:00Z",
        [
          %{
