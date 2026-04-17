@@ -3,46 +3,71 @@ defmodule Spectabas.Workers.BackfillVpn do
 
   require Logger
 
+  alias Spectabas.GeoIP.DownloadLog
+
+  @batch_size 50000
+
   @impl Oban.Worker
   def perform(_job) do
+    start = System.monotonic_time(:millisecond)
     Logger.notice("[BackfillVpn] Starting VPN provider backfill...")
 
-    # Get distinct IPs that don't have VPN provider data yet
     sql = """
     SELECT DISTINCT ip_address
     FROM events
     WHERE ip_address != '' AND ip_vpn_provider = ''
-    LIMIT 50000
+    LIMIT #{@batch_size}
     """
 
     case Spectabas.ClickHouse.query(sql, receive_timeout: 120_000) do
       {:ok, rows} ->
+        total = length(rows)
         ips = Enum.map(rows, & &1["ip_address"])
-        Logger.notice("[BackfillVpn] Found #{length(ips)} distinct IPs to check")
+        Logger.notice("[BackfillVpn] Found #{total} distinct IPs to check")
 
-        {tagged, skipped} =
-          Enum.reduce(ips, {0, 0}, fn ip, {tagged, skipped} ->
-            case lookup_vpn(ip) do
+        {tagged, skipped, _} =
+          Enum.reduce(ips, {0, 0, 0}, fn ip, {tagged, skipped, processed} ->
+            processed = processed + 1
+
+            if rem(processed, 5000) == 0 do
+              Logger.notice("[BackfillVpn] Progress: #{processed}/#{total} (#{tagged} tagged)")
+            end
+
+            case Spectabas.IPEnricher.vpn_provider_for_ip(ip) do
               "" ->
-                {tagged, skipped + 1}
+                {tagged, skipped + 1, processed}
 
               provider ->
                 update_vpn(ip, provider)
-                {tagged + 1, skipped}
+                {tagged + 1, skipped, processed}
             end
           end)
 
-        Logger.notice("[BackfillVpn] Done! Tagged #{tagged} IPs as VPN, #{skipped} non-VPN")
+        ms = System.monotonic_time(:millisecond) - start
+
+        Logger.notice(
+          "[BackfillVpn] Done! #{tagged} VPN/relay IPs tagged, #{skipped} non-VPN, #{ms}ms"
+        )
+
+        DownloadLog.log_download("vpn-backfill", "success",
+          file_size: tagged,
+          duration_ms: ms,
+          error_message: "#{total} IPs checked, #{tagged} tagged, #{skipped} non-VPN"
+        )
+
         :ok
 
       {:error, e} ->
+        ms = System.monotonic_time(:millisecond) - start
         Logger.error("[BackfillVpn] Query failed: #{inspect(e)}")
+
+        DownloadLog.log_download("vpn-backfill", "error",
+          error_message: inspect(e),
+          duration_ms: ms
+        )
+
         {:error, inspect(e)}
     end
-  end
-
-  defp lookup_vpn(ip_string) do
-    Spectabas.IPEnricher.vpn_provider_for_ip(ip_string)
   end
 
   defp update_vpn(ip, provider) do
