@@ -1,19 +1,37 @@
 defmodule Spectabas.Webhooks.ScraperWebhook do
   require Logger
+  import Bitwise
 
   alias Spectabas.Repo
   alias Spectabas.Sites.Site
   alias Spectabas.Visitors.Visitor
   alias Spectabas.Webhooks.WebhookDelivery
 
+  # Default prefix length for datacenter IPv6 CIDR ranges.
+  # /64 covers a single subnet — the standard rotation pool for
+  # scrapers cycling through addresses on a single server.
+  @ipv6_prefix_length 64
+
   def send_flag(%Site{} = site, %Visitor{} = visitor, score_result, total_pageviews) do
     url = String.trim_trailing(site.scraper_webhook_url, "/")
     secret = site.scraper_webhook_secret
     signals = Enum.map(score_result.signals, &to_string/1)
+    has_datacenter = :datacenter_asn in score_result.signals
+    ips = visitor.known_ips || []
+
+    ip_ranges =
+      if has_datacenter do
+        ips
+        |> Enum.flat_map(&ipv6_to_cidr/1)
+        |> Enum.uniq()
+      else
+        []
+      end
 
     payload = %{
       identifiers: %{
-        ip_addresses: visitor.known_ips || [],
+        ip_addresses: ips,
+        ip_ranges: ip_ranges,
         fingerprint: visitor.external_id || "",
         user_id: parse_user_id(visitor.user_id)
       },
@@ -55,10 +73,17 @@ defmodule Spectabas.Webhooks.ScraperWebhook do
   def send_deactivate(%Site{} = site, %Visitor{} = visitor) do
     url = String.trim_trailing(site.scraper_webhook_url, "/") <> "/deactivate"
     secret = site.scraper_webhook_secret
+    ips = visitor.known_ips || []
+
+    ip_ranges =
+      ips
+      |> Enum.flat_map(&ipv6_to_cidr/1)
+      |> Enum.uniq()
 
     payload = %{
       identifiers: %{
-        ip_addresses: visitor.known_ips || [],
+        ip_addresses: ips,
+        ip_ranges: ip_ranges,
         fingerprint: visitor.external_id || "",
         user_id: parse_user_id(visitor.user_id)
       }
@@ -99,6 +124,19 @@ defmodule Spectabas.Webhooks.ScraperWebhook do
 
     from(d in WebhookDelivery,
       where: d.site_id == ^site_id,
+      order_by: [desc: d.inserted_at],
+      limit: ^limit
+    )
+    |> Repo.all()
+  end
+
+  def list_visitor_deliveries(visitor_id, opts \\ []) do
+    import Ecto.Query
+
+    limit = Keyword.get(opts, :limit, 20)
+
+    from(d in WebhookDelivery,
+      where: d.visitor_id == ^visitor_id,
       order_by: [desc: d.inserted_at],
       limit: ^limit
     )
@@ -162,5 +200,41 @@ defmodule Spectabas.Webhooks.ScraperWebhook do
     ]
 
     Req.post(url, json: payload, headers: headers, receive_timeout: 10_000)
+  end
+
+  # Converts an IPv6 address string to a CIDR prefix string (e.g. "2a04:4e41:3ec6:5198::/64").
+  # IPv4 addresses are skipped — IPv4 rotation is rare and /32 is already exact.
+  defp ipv6_to_cidr(ip_string) when is_binary(ip_string) do
+    case :inet.parse_address(String.to_charlist(ip_string)) do
+      {:ok, {_, _, _, _, _, _, _, _} = addr} ->
+        prefix = mask_ipv6(addr, @ipv6_prefix_length)
+        [format_ipv6(prefix) <> "/#{@ipv6_prefix_length}"]
+
+      _ ->
+        # IPv4 or unparseable — skip
+        []
+    end
+  end
+
+  defp ipv6_to_cidr(_), do: []
+
+  # Zero out bits beyond the prefix length in an IPv6 8-tuple of 16-bit words.
+  defp mask_ipv6({a, b, c, d, e, f, g, h}, prefix_len) do
+    full =
+      a <<< 112 ||| b <<< 96 ||| c <<< 80 ||| d <<< 64 ||| e <<< 48 ||| f <<< 32 ||| g <<< 16 |||
+        h
+
+    shift = 128 - prefix_len
+    masked = (full >>> shift) <<< shift
+
+    {masked >>> 112 &&& 0xFFFF, masked >>> 96 &&& 0xFFFF, masked >>> 80 &&& 0xFFFF,
+     masked >>> 64 &&& 0xFFFF, masked >>> 48 &&& 0xFFFF, masked >>> 32 &&& 0xFFFF,
+     masked >>> 16 &&& 0xFFFF, masked &&& 0xFFFF}
+  end
+
+  defp format_ipv6({a, b, c, d, e, f, g, h}) do
+    {a, b, c, d, e, f, g, h}
+    |> :inet.ntoa()
+    |> List.to_string()
   end
 end

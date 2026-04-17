@@ -1534,6 +1534,9 @@ defmodule SpectabasWeb.DocsLive do
             - Full IP enrichment data (postal code, lat/lon, ASN details)
             - **Other visitors from the same IP** — useful for identifying shared networks, offices, or potential fraud
 
+            ### Scraper Webhook Status
+            If this visitor has been flagged via scraper webhook, a prominent banner appears at the top — red for "Flagged" (with score and timestamp) or green for "Deactivated" (marked as not a scraper). A **Webhook Activity** table shows the full delivery history: timestamps, event type (flagged/deactivated), score, triggered signals, and HTTP delivery status.
+
             ### Session History
             Table of all sessions with entry/exit pages, referrer, and duration.
 
@@ -2099,7 +2102,7 @@ defmodule SpectabasWeb.DocsLive do
             ### Advanced
             - **Tracking Snippet** — copy your site's embed code
             - **IP Blocklist** — block specific IPs from being tracked
-            - **Scraper Webhooks** — configure a webhook URL and Bearer secret to receive POST notifications when scrapers are detected. Fires once per visitor on first flag, re-fires on score escalation. Manual send/deactivate from the Scrapers page.
+            - **Scraper Webhooks** — configure a webhook URL and Bearer secret to receive POST notifications when scrapers are detected. Fires once per visitor on first flag, re-fires on score escalation. Manual send/deactivate from the Scrapers page. When the datacenter ASN signal fires, the payload includes `ip_ranges` with /64 CIDR prefixes for IPv6 addresses — enabling prefix-based blocking to counter IPv6 address rotation.
             - **Ecommerce** — enable ecommerce tracking with currency setting
 
             ### User Timezone

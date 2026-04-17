@@ -1,12 +1,11 @@
 defmodule SpectabasWeb.Dashboard.VisitorLive do
   use SpectabasWeb, :live_view
 
-  @moduledoc "Individual visitor profile — sessions, events, IP details."
-
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers
 
   alias Spectabas.{Accounts, Sites, Visitors, Analytics}
+  alias Spectabas.Webhooks.ScraperWebhook
 
   @impl true
   def mount(%{"site_id" => site_id, "visitor_id" => visitor_id} = params, _session, socket) do
@@ -18,57 +17,63 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
     else
       visitor = Visitors.get_visitor!(visitor_id)
 
-      timeline =
-        case Analytics.visitor_timeline(site, visitor_id) do
-          {:ok, events} -> events
-          _ -> []
-        end
-
+      # Fast: single ClickHouse aggregation
       profile =
         case Analytics.visitor_profile(site, visitor_id) do
           {:ok, p} when is_map(p) -> p
           _ -> %{}
         end
 
-      # Use the IP from the search context if provided, otherwise fall back to last known IP
       last_ip =
         params["ip"] ||
           visitor.last_ip ||
-          get_in(List.first(timeline) || %{}, ["ip_address"])
+          get_in(List.first([]) || %{}, ["ip_address"])
 
-      {ip_info, ip_visitors} =
-        if last_ip && last_ip != "" do
-          ip_info =
-            case Analytics.ip_details(site, last_ip) do
-              {:ok, info} -> info
-              _ -> nil
-            end
+      socket =
+        socket
+        |> assign(:page_title, "Visitor - #{site.name}")
+        |> assign(:site, site)
+        |> assign(:visitor, visitor)
+        |> assign(:visitor_id, visitor_id)
+        |> assign(:profile, profile)
+        |> assign(:last_ip, last_ip)
+        |> assign(:show_ip_panel, false)
+        # Deferred assigns — nil means "loading"
+        |> assign(:timeline, nil)
+        |> assign(:sessions, nil)
+        |> assign(:ip_info, nil)
+        |> assign(:ip_visitors, nil)
+        |> assign(:fp_visitors, nil)
+        |> assign(:visitor_ips, nil)
+        |> assign(:orders, nil)
+        |> assign(:ltv, nil)
+        |> assign(:scraper, nil)
+        |> assign(:webhook_deliveries, nil)
+        |> assign(:deferred_loaded, false)
 
-          ip_visitors =
-            case Analytics.visitors_by_ip(site, last_ip) do
-              {:ok, rows} -> Enum.reject(rows, &(&1["visitor_id"] == visitor_id))
-              _ -> []
-            end
+      if connected?(socket), do: send(self(), :load_deferred)
 
-          {ip_info, ip_visitors}
-        else
-          {nil, []}
+      {:ok, socket}
+    end
+  end
+
+  @impl true
+  def handle_info(:load_deferred, socket) do
+    site = socket.assigns.site
+    visitor_id = socket.assigns.visitor_id
+    last_ip = socket.assigns.last_ip
+    profile = socket.assigns.profile
+    lv_pid = self()
+
+    # Spawn each deferred query as an independent task
+    # Timeline + scraper score (timeline needed for score computation)
+    Task.start(fn ->
+      timeline =
+        case Analytics.visitor_timeline(site, visitor_id) do
+          {:ok, events} -> events
+          _ -> []
         end
 
-      # Get visitors with same browser fingerprint
-      fingerprint = profile["browser_fingerprint"]
-
-      fp_visitors =
-        if fingerprint && fingerprint != "" do
-          case Analytics.visitors_by_fingerprint(site, fingerprint) do
-            {:ok, rows} -> Enum.reject(rows, &(&1["visitor_id"] == visitor_id))
-            _ -> []
-          end
-        else
-          []
-        end
-
-      # Compute session list from timeline
       sessions =
         timeline
         |> Enum.group_by(& &1["session_id"])
@@ -87,7 +92,68 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
         end)
         |> Enum.sort_by(& &1.started, :desc)
 
-      # Load ecommerce orders and LTV for this visitor
+      scraper = compute_scraper_score(profile, timeline, site)
+
+      send(lv_pid, {:deferred_result, :timeline, timeline})
+      send(lv_pid, {:deferred_result, :sessions, sessions})
+      send(lv_pid, {:deferred_result, :scraper, scraper})
+    end)
+
+    # IP details + other visitors from same IP
+    Task.start(fn ->
+      {ip_info, ip_visitors} =
+        if last_ip && last_ip != "" do
+          info =
+            case Analytics.ip_details(site, last_ip) do
+              {:ok, i} -> i
+              _ -> nil
+            end
+
+          visitors =
+            case Analytics.visitors_by_ip(site, last_ip) do
+              {:ok, rows} -> Enum.reject(rows, &(&1["visitor_id"] == visitor_id))
+              _ -> []
+            end
+
+          {info, visitors}
+        else
+          {nil, []}
+        end
+
+      send(lv_pid, {:deferred_result, :ip_info, ip_info})
+      send(lv_pid, {:deferred_result, :ip_visitors, ip_visitors})
+    end)
+
+    # Fingerprint matches
+    Task.start(fn ->
+      fingerprint = profile["browser_fingerprint"]
+
+      fp_visitors =
+        if fingerprint && fingerprint != "" do
+          case Analytics.visitors_by_fingerprint(site, fingerprint) do
+            {:ok, rows} -> Enum.reject(rows, &(&1["visitor_id"] == visitor_id))
+            _ -> []
+          end
+        else
+          []
+        end
+
+      send(lv_pid, {:deferred_result, :fp_visitors, fp_visitors})
+    end)
+
+    # IP address history
+    Task.start(fn ->
+      ips =
+        case Analytics.visitor_ips(site, visitor_id) do
+          {:ok, rows} -> rows
+          _ -> []
+        end
+
+      send(lv_pid, {:deferred_result, :visitor_ips, ips})
+    end)
+
+    # Ecommerce data
+    Task.start(fn ->
       {orders, ltv} =
         if site.ecommerce_enabled do
           ord =
@@ -107,27 +173,21 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
           {[], nil}
         end
 
-      # Compute scraper score from available data
-      scraper_result = compute_scraper_score(profile, timeline, site)
+      send(lv_pid, {:deferred_result, :orders, orders})
+      send(lv_pid, {:deferred_result, :ltv, ltv})
+    end)
 
-      {:ok,
-       socket
-       |> assign(:page_title, "Visitor - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:visitor, visitor)
-       |> assign(:profile, profile)
-       |> assign(:timeline, timeline)
-       |> assign(:sessions, sessions)
-       |> assign(:last_ip, last_ip)
-       |> assign(:ip_info, ip_info)
-       |> assign(:ip_visitors, ip_visitors)
-       |> assign(:fp_visitors, fp_visitors)
-       |> assign(:show_ip_panel, false)
-       |> assign(:orders, orders)
-       |> assign(:ltv, ltv)
-       |> assign(:scraper, scraper_result)
-       |> assign(:visitor_ips, load_visitor_ips(site, visitor_id))}
-    end
+    # Webhook deliveries (Postgres, fast)
+    Task.start(fn ->
+      deliveries = ScraperWebhook.list_visitor_deliveries(visitor_id)
+      send(lv_pid, {:deferred_result, :webhook_deliveries, deliveries})
+    end)
+
+    {:noreply, socket}
+  end
+
+  def handle_info({:deferred_result, key, value}, socket) do
+    {:noreply, assign(socket, key, value)}
   end
 
   @impl true
@@ -149,6 +209,13 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
           </.link>
           <h1 class="text-2xl font-bold text-gray-900 mt-2">Visitor Profile</h1>
         </div>
+
+        <%!-- Webhook Status Banner --%>
+        <.webhook_status_banner
+          visitor={@visitor}
+          webhook_deliveries={@webhook_deliveries}
+          site={@site}
+        />
 
         <%!-- Top stats row --%>
         <div class={"grid grid-cols-2 gap-4 mb-6 " <> if(@ltv, do: "md:grid-cols-6", else: "md:grid-cols-5")}>
@@ -223,49 +290,66 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
                 value={if @visitor.cookie_id, do: "Cookie", else: "Fingerprint"}
               />
               <.field label="GDPR Mode" value={@site.gdpr_mode || "on"} />
-              <div :if={@scraper.score > 0}>
-                <dt class="text-xs font-medium text-gray-500">Scraper Score</dt>
-                <dd class="mt-0.5 flex items-center gap-2">
-                  <span class={[
-                    "inline-flex items-center px-2 py-0.5 rounded text-xs font-bold",
-                    cond do
-                      @scraper.score >= 85 -> "bg-red-100 text-red-800"
-                      @scraper.score >= 60 -> "bg-amber-100 text-amber-800"
-                      true -> "bg-gray-100 text-gray-700"
-                    end
-                  ]}>
-                    {@scraper.score}
-                  </span>
-                  <span class="text-xs text-gray-500">
-                    {cond do
-                      @scraper.score >= 85 -> "certain"
-                      @scraper.score >= 60 -> "suspicious"
-                      true -> "low"
-                    end}
-                  </span>
-                </dd>
-                <dd :if={@scraper.signals != []} class="mt-1 flex flex-wrap gap-1">
-                  <span
-                    :for={sig <- @scraper.signals}
-                    class="inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium bg-gray-100 text-gray-600"
-                  >
-                    {sig}
-                  </span>
-                </dd>
-              </div>
+              <%!-- Scraper score (deferred) --%>
+              <%= if @scraper == nil do %>
+                <div>
+                  <dt class="text-xs font-medium text-gray-500">Scraper Score</dt>
+                  <dd class="mt-0.5">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs text-gray-400">
+                      Loading...
+                    </span>
+                  </dd>
+                </div>
+              <% else %>
+                <div :if={@scraper.score > 0}>
+                  <dt class="text-xs font-medium text-gray-500">Scraper Score</dt>
+                  <dd class="mt-0.5 flex items-center gap-2">
+                    <span class={[
+                      "inline-flex items-center px-2 py-0.5 rounded text-xs font-bold",
+                      cond do
+                        @scraper.score >= 85 -> "bg-red-100 text-red-800"
+                        @scraper.score >= 60 -> "bg-amber-100 text-amber-800"
+                        true -> "bg-gray-100 text-gray-700"
+                      end
+                    ]}>
+                      {@scraper.score}
+                    </span>
+                    <span class="text-xs text-gray-500">
+                      {cond do
+                        @scraper.score >= 85 -> "certain"
+                        @scraper.score >= 60 -> "suspicious"
+                        true -> "low"
+                      end}
+                    </span>
+                  </dd>
+                  <dd :if={@scraper.signals != []} class="mt-1 flex flex-wrap gap-1">
+                    <span
+                      :for={sig <- @scraper.signals}
+                      class="inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium bg-gray-100 text-gray-600"
+                    >
+                      {sig}
+                    </span>
+                  </dd>
+                </div>
+              <% end %>
               <div :if={@profile["browser_fingerprint"] && @profile["browser_fingerprint"] != ""}>
                 <dt class="text-xs font-medium text-gray-500">Browser Fingerprint</dt>
                 <dd class="mt-0.5 text-xs text-indigo-600 font-mono">
                   {@profile["browser_fingerprint"]}
-                  <span
-                    :if={@fp_visitors != [] && length(@fp_visitors) <= 10}
-                    class="text-amber-600 ml-1"
-                  >
-                    ({length(@fp_visitors)} other visitors share this fingerprint)
-                  </span>
-                  <span :if={length(@fp_visitors) > 10} class="text-gray-400 ml-1">
-                    (common device — {length(@fp_visitors)} matches)
-                  </span>
+                  <%= if @fp_visitors != nil do %>
+                    <span
+                      :if={@fp_visitors != [] && length(@fp_visitors) <= 10}
+                      class="text-amber-600 ml-1"
+                    >
+                      ({length(@fp_visitors)} other visitors share this fingerprint)
+                    </span>
+                    <span
+                      :if={@fp_visitors != nil && length(@fp_visitors) > 10}
+                      class="text-gray-400 ml-1"
+                    >
+                      (common device — {length(@fp_visitors)} matches)
+                    </span>
+                  <% end %>
                 </dd>
               </div>
               <div :if={@profile["user_agent"] && @profile["user_agent"] != ""}>
@@ -369,6 +453,9 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
           </div>
         </div>
 
+        <%!-- Webhook Delivery History --%>
+        <.webhook_history deliveries={@webhook_deliveries} site={@site} />
+
         <%!-- IP Details Panel --%>
         <div :if={@last_ip} class="bg-white rounded-lg shadow mb-6">
           <button
@@ -380,9 +467,14 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
                 IP Address: <span class="font-mono text-indigo-600">{@last_ip}</span>
               </h3>
               <p class="text-xs text-gray-500 mt-0.5">
-                {length(@ip_visitors)} other visitor(s) from this IP {if @ip_info,
+                <%= if @ip_visitors != nil do %>
+                  {length(@ip_visitors)} other visitor(s) from this IP
+                <% else %>
+                  Loading...
+                <% end %>
+                {if @ip_info,
                   do:
-                    " &middot; #{@ip_info["ip_city"]}, #{@ip_info["ip_region_name"]}, #{@ip_info["ip_country"]}",
+                    " · #{@ip_info["ip_city"]}, #{@ip_info["ip_region_name"]}, #{@ip_info["ip_country"]}",
                   else: ""}
               </p>
             </div>
@@ -408,7 +500,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
             </div>
 
             <%!-- Other visitors from same IP --%>
-            <div :if={@ip_visitors != []}>
+            <div :if={@ip_visitors != nil && @ip_visitors != []}>
               <h4 class="text-xs font-semibold text-gray-500 uppercase mb-2">
                 Other visitors from this IP
               </h4>
@@ -461,96 +553,100 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
         </div>
 
         <%!-- IP Address History --%>
-        <div :if={@visitor_ips != []} class="bg-white rounded-lg shadow mb-6">
-          <div class="px-5 py-4 border-b border-gray-100">
-            <h3 class="text-sm font-semibold text-gray-700">
-              IP Addresses Used ({length(@visitor_ips)})
-            </h3>
+        <.loading_section loaded={@visitor_ips != nil}>
+          <div :if={@visitor_ips != nil && @visitor_ips != []} class="bg-white rounded-lg shadow mb-6">
+            <div class="px-5 py-4 border-b border-gray-100">
+              <h3 class="text-sm font-semibold text-gray-700">
+                IP Addresses Used ({length(@visitor_ips)})
+              </h3>
+            </div>
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-2 text-left text-xs text-gray-500">IP Address</th>
+                  <th class="px-4 py-2 text-left text-xs text-gray-500">Location</th>
+                  <th class="px-4 py-2 text-left text-xs text-gray-500">Organization</th>
+                  <th class="px-4 py-2 text-right text-xs text-gray-500">Events</th>
+                  <th class="px-4 py-2 text-left text-xs text-gray-500">Last Seen</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <tr :for={ip <- @visitor_ips} class="hover:bg-gray-50">
+                  <td class="px-4 py-2">
+                    <.link
+                      navigate={~p"/dashboard/sites/#{@site.id}/ip/#{ip["ip_address"]}"}
+                      class="font-mono text-xs text-indigo-600 hover:text-indigo-800"
+                    >
+                      {ip["ip_address"]}
+                    </.link>
+                    <span
+                      :if={ip["is_datacenter"] == "1" || ip["is_datacenter"] == 1}
+                      class="ml-1 text-[10px] bg-orange-100 text-orange-700 px-1 rounded"
+                    >
+                      DC
+                    </span>
+                    <span
+                      :if={ip["is_vpn"] == "1" || ip["is_vpn"] == 1}
+                      class="ml-1 text-[10px] bg-yellow-100 text-yellow-700 px-1 rounded"
+                    >
+                      VPN
+                    </span>
+                  </td>
+                  <td class="px-4 py-2 text-gray-600">
+                    {[ip["city"], ip["country"]]
+                    |> Enum.reject(&(&1 == "" || is_nil(&1)))
+                    |> Enum.join(", ")}
+                  </td>
+                  <td class="px-4 py-2 text-gray-500 text-xs">{ip["org"]}</td>
+                  <td class="px-4 py-2 text-gray-900 text-right tabular-nums">{ip["events"]}</td>
+                  <td class="px-4 py-2 text-gray-500 text-xs">{ip["last_seen"]}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-          <table class="min-w-full divide-y divide-gray-200 text-sm">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-4 py-2 text-left text-xs text-gray-500">IP Address</th>
-                <th class="px-4 py-2 text-left text-xs text-gray-500">Location</th>
-                <th class="px-4 py-2 text-left text-xs text-gray-500">Organization</th>
-                <th class="px-4 py-2 text-right text-xs text-gray-500">Events</th>
-                <th class="px-4 py-2 text-left text-xs text-gray-500">Last Seen</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100">
-              <tr :for={ip <- @visitor_ips} class="hover:bg-gray-50">
-                <td class="px-4 py-2">
-                  <.link
-                    navigate={~p"/dashboard/sites/#{@site.id}/ip/#{ip["ip_address"]}"}
-                    class="font-mono text-xs text-indigo-600 hover:text-indigo-800"
-                  >
-                    {ip["ip_address"]}
-                  </.link>
-                  <span
-                    :if={ip["is_datacenter"] == "1" || ip["is_datacenter"] == 1}
-                    class="ml-1 text-[10px] bg-orange-100 text-orange-700 px-1 rounded"
-                  >
-                    DC
-                  </span>
-                  <span
-                    :if={ip["is_vpn"] == "1" || ip["is_vpn"] == 1}
-                    class="ml-1 text-[10px] bg-yellow-100 text-yellow-700 px-1 rounded"
-                  >
-                    VPN
-                  </span>
-                </td>
-                <td class="px-4 py-2 text-gray-600">
-                  {[ip["city"], ip["country"]]
-                  |> Enum.reject(&(&1 == "" || is_nil(&1)))
-                  |> Enum.join(", ")}
-                </td>
-                <td class="px-4 py-2 text-gray-500 text-xs">{ip["org"]}</td>
-                <td class="px-4 py-2 text-gray-900 text-right tabular-nums">{ip["events"]}</td>
-                <td class="px-4 py-2 text-gray-500 text-xs">{ip["last_seen"]}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        </.loading_section>
 
         <%!-- Session History --%>
-        <div class="bg-white rounded-lg shadow mb-6">
-          <div class="px-5 py-4 border-b border-gray-100">
-            <h3 class="text-sm font-semibold text-gray-700">Sessions ({length(@sessions)})</h3>
+        <.loading_section loaded={@sessions != nil}>
+          <div :if={@sessions != nil} class="bg-white rounded-lg shadow mb-6">
+            <div class="px-5 py-4 border-b border-gray-100">
+              <h3 class="text-sm font-semibold text-gray-700">Sessions ({length(@sessions)})</h3>
+            </div>
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-2 text-left text-xs text-gray-500">Started</th>
+                  <th class="px-4 py-2 text-right text-xs text-gray-500">Pages</th>
+                  <th class="px-4 py-2 text-left text-xs text-gray-500">Entry</th>
+                  <th class="px-4 py-2 text-left text-xs text-gray-500">Exit</th>
+                  <th class="px-4 py-2 text-left text-xs text-gray-500">Referrer</th>
+                  <th class="px-4 py-2 text-right text-xs text-gray-500">Duration</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <tr :for={s <- @sessions} class="hover:bg-gray-50">
+                  <td class="px-4 py-2 text-gray-500 text-xs">{s.started}</td>
+                  <td class="px-4 py-2 text-gray-900 text-right tabular-nums">{s.pages}</td>
+                  <td class="px-4 py-2 text-gray-700 font-mono text-xs truncate max-w-[150px]">
+                    {s.entry}
+                  </td>
+                  <td class="px-4 py-2 text-gray-700 font-mono text-xs truncate max-w-[150px]">
+                    {s.exit}
+                  </td>
+                  <td class="px-4 py-2 text-gray-500 text-xs truncate max-w-[120px]">
+                    {s.referrer || "Direct"}
+                  </td>
+                  <td class="px-4 py-2 text-gray-900 text-right tabular-nums">
+                    {format_duration(s.duration)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-          <table class="min-w-full divide-y divide-gray-200 text-sm">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-4 py-2 text-left text-xs text-gray-500">Started</th>
-                <th class="px-4 py-2 text-right text-xs text-gray-500">Pages</th>
-                <th class="px-4 py-2 text-left text-xs text-gray-500">Entry</th>
-                <th class="px-4 py-2 text-left text-xs text-gray-500">Exit</th>
-                <th class="px-4 py-2 text-left text-xs text-gray-500">Referrer</th>
-                <th class="px-4 py-2 text-right text-xs text-gray-500">Duration</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100">
-              <tr :for={s <- @sessions} class="hover:bg-gray-50">
-                <td class="px-4 py-2 text-gray-500 text-xs">{s.started}</td>
-                <td class="px-4 py-2 text-gray-900 text-right tabular-nums">{s.pages}</td>
-                <td class="px-4 py-2 text-gray-700 font-mono text-xs truncate max-w-[150px]">
-                  {s.entry}
-                </td>
-                <td class="px-4 py-2 text-gray-700 font-mono text-xs truncate max-w-[150px]">
-                  {s.exit}
-                </td>
-                <td class="px-4 py-2 text-gray-500 text-xs truncate max-w-[120px]">
-                  {s.referrer || "Direct"}
-                </td>
-                <td class="px-4 py-2 text-gray-900 text-right tabular-nums">
-                  {format_duration(s.duration)}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        </.loading_section>
 
         <%!-- Ecommerce Orders --%>
-        <div :if={@orders != []} class="bg-white rounded-lg shadow mb-6">
+        <div :if={@orders != nil && @orders != []} class="bg-white rounded-lg shadow mb-6">
           <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
             <h3 class="text-sm font-semibold text-gray-700">
               Orders ({length(@orders)})
@@ -596,7 +692,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
 
         <%!-- Browser Fingerprint Cross-Reference (only useful when < 10 matches) --%>
         <div
-          :if={@fp_visitors != [] && length(@fp_visitors) <= 10}
+          :if={@fp_visitors != nil && @fp_visitors != [] && length(@fp_visitors) <= 10}
           class="bg-white rounded-lg shadow mb-6"
         >
           <div class="px-5 py-4 border-b border-gray-100">
@@ -644,7 +740,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
 
         <%!-- High collision fingerprint notice --%>
         <div
-          :if={@fp_visitors != [] && length(@fp_visitors) > 10}
+          :if={@fp_visitors != nil && @fp_visitors != [] && length(@fp_visitors) > 10}
           class="bg-white rounded-lg shadow mb-6 px-5 py-4"
         >
           <p class="text-sm text-gray-500">
@@ -655,48 +751,216 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
         </div>
 
         <%!-- Event Timeline --%>
-        <div class="bg-white rounded-lg shadow">
-          <div class="px-5 py-4 border-b border-gray-100">
-            <h3 class="text-sm font-semibold text-gray-700">
-              Event Timeline ({length(@timeline)} events)
-            </h3>
+        <.loading_section loaded={@timeline != nil}>
+          <div :if={@timeline != nil} class="bg-white rounded-lg shadow">
+            <div class="px-5 py-4 border-b border-gray-100">
+              <h3 class="text-sm font-semibold text-gray-700">
+                Event Timeline ({length(@timeline)} events)
+              </h3>
+            </div>
+            <div :if={@timeline == []} class="px-5 py-8 text-center text-gray-500">
+              No events recorded.
+            </div>
+            <ul class="divide-y divide-gray-50">
+              <li
+                :for={event <- @timeline}
+                class="px-5 py-2.5 flex items-center justify-between text-sm"
+              >
+                <div class="flex items-center gap-3 min-w-0">
+                  <span class={[
+                    "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium shrink-0",
+                    event_type_class(event["event_type"])
+                  ]}>
+                    {event["event_type"]}
+                  </span>
+                  <span class="text-gray-900 truncate font-mono text-xs">{event["url_path"]}</span>
+                  <span
+                    :if={event["event_name"] && event["event_name"] != ""}
+                    class="text-gray-500 text-xs"
+                  >
+                    ({event["event_name"]})
+                  </span>
+                  <span
+                    :if={to_num(event["duration_s"]) > 0}
+                    class="text-gray-500 text-xs"
+                  >
+                    {format_duration(to_num(event["duration_s"]))}
+                  </span>
+                </div>
+                <span class="text-xs text-gray-500 shrink-0 ml-4">{event["timestamp"]}</span>
+              </li>
+            </ul>
           </div>
-          <div :if={@timeline == []} class="px-5 py-8 text-center text-gray-500">
-            No events recorded.
-          </div>
-          <ul class="divide-y divide-gray-50">
-            <li
-              :for={event <- @timeline}
-              class="px-5 py-2.5 flex items-center justify-between text-sm"
-            >
-              <div class="flex items-center gap-3 min-w-0">
-                <span class={[
-                  "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium shrink-0",
-                  event_type_class(event["event_type"])
-                ]}>
-                  {event["event_type"]}
-                </span>
-                <span class="text-gray-900 truncate font-mono text-xs">{event["url_path"]}</span>
-                <span
-                  :if={event["event_name"] && event["event_name"] != ""}
-                  class="text-gray-500 text-xs"
-                >
-                  ({event["event_name"]})
-                </span>
-                <span
-                  :if={to_num(event["duration_s"]) > 0}
-                  class="text-gray-500 text-xs"
-                >
-                  {format_duration(to_num(event["duration_s"]))}
-                </span>
-              </div>
-              <span class="text-xs text-gray-500 shrink-0 ml-4">{event["timestamp"]}</span>
-            </li>
-          </ul>
-        </div>
+        </.loading_section>
       </div>
     </.dashboard_layout>
     """
+  end
+
+  # --- Component functions ---
+
+  defp webhook_status_banner(assigns) do
+    # Determine current webhook state from visitor record + deliveries
+    status = webhook_status(assigns.visitor, assigns.webhook_deliveries)
+    assigns = assign(assigns, :status, status)
+
+    ~H"""
+    <%= case @status do %>
+      <% :flagged -> %>
+        <div class="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 flex items-center gap-3">
+          <div class="flex-shrink-0">
+            <.icon name="hero-shield-exclamation" class="w-6 h-6 text-red-600" />
+          </div>
+          <div class="flex-1">
+            <h3 class="text-sm font-semibold text-red-800">Scraper Webhook Triggered</h3>
+            <p class="text-xs text-red-700 mt-0.5">
+              This visitor was flagged as a scraper via webhook {if @visitor.scraper_webhook_sent_at,
+                do:
+                  "on #{Calendar.strftime(@visitor.scraper_webhook_sent_at, "%b %d, %Y at %H:%M UTC")}",
+                else: ""} with score {@visitor.scraper_webhook_score || "?"}.
+            </p>
+          </div>
+          <.link
+            navigate={~p"/dashboard/sites/#{@site.id}/scrapers"}
+            class="text-xs text-red-700 hover:text-red-900 font-medium shrink-0"
+          >
+            View Scrapers &rarr;
+          </.link>
+        </div>
+      <% :deactivated -> %>
+        <div class="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 flex items-center gap-3">
+          <div class="flex-shrink-0">
+            <.icon name="hero-shield-check" class="w-6 h-6 text-green-600" />
+          </div>
+          <div class="flex-1">
+            <h3 class="text-sm font-semibold text-green-800">Scraper Webhook Deactivated</h3>
+            <p class="text-xs text-green-700 mt-0.5">
+              This visitor was previously flagged but has been deactivated (marked as not a scraper).
+            </p>
+          </div>
+        </div>
+      <% :loading -> %>
+        <div class="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-3 flex items-center gap-2">
+          <div class="animate-spin h-4 w-4 border-2 border-gray-300 border-t-gray-600 rounded-full">
+          </div>
+          <span class="text-xs text-gray-500">Loading webhook status...</span>
+        </div>
+      <% _ -> %>
+    <% end %>
+    """
+  end
+
+  defp webhook_history(assigns) do
+    ~H"""
+    <%= cond do %>
+      <% @deliveries == nil -> %>
+        <%!-- Still loading --%>
+      <% @deliveries != [] -> %>
+        <div class="bg-white rounded-lg shadow mb-6">
+          <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h3 class="text-sm font-semibold text-gray-700">
+              Webhook Activity ({length(@deliveries)})
+            </h3>
+            <.link
+              navigate={~p"/dashboard/sites/#{@site.id}/scrapers"}
+              class="text-xs text-indigo-600 hover:text-indigo-800"
+            >
+              View all webhooks &rarr;
+            </.link>
+          </div>
+          <table class="min-w-full divide-y divide-gray-200 text-sm">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-4 py-2 text-left text-xs text-gray-500">Time</th>
+                <th class="px-4 py-2 text-left text-xs text-gray-500">Event</th>
+                <th class="px-4 py-2 text-left text-xs text-gray-500">Score</th>
+                <th class="px-4 py-2 text-left text-xs text-gray-500">Signals</th>
+                <th class="px-4 py-2 text-left text-xs text-gray-500">Status</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr :for={d <- @deliveries} class="hover:bg-gray-50">
+                <td class="px-4 py-2 text-gray-500 text-xs">
+                  {Calendar.strftime(d.inserted_at, "%b %d, %Y %H:%M")}
+                </td>
+                <td class="px-4 py-2">
+                  <span class={[
+                    "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
+                    if(d.event_type == "flag",
+                      do: "bg-red-100 text-red-800",
+                      else: "bg-green-100 text-green-800"
+                    )
+                  ]}>
+                    {if d.event_type == "flag", do: "Flagged", else: "Deactivated"}
+                  </span>
+                </td>
+                <td class="px-4 py-2 text-gray-900 tabular-nums">
+                  {d.score || "-"}
+                </td>
+                <td class="px-4 py-2">
+                  <div class="flex flex-wrap gap-1">
+                    <span
+                      :for={sig <- d.signals || []}
+                      class="inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium bg-gray-100 text-gray-600"
+                    >
+                      {sig}
+                    </span>
+                  </div>
+                </td>
+                <td class="px-4 py-2">
+                  <%= if d.success do %>
+                    <span class="inline-flex items-center gap-1 text-xs text-green-700">
+                      <.icon name="hero-check-circle-mini" class="w-3.5 h-3.5" /> {d.http_status}
+                    </span>
+                  <% else %>
+                    <span class="inline-flex items-center gap-1 text-xs text-red-700">
+                      <.icon name="hero-x-circle-mini" class="w-3.5 h-3.5" />
+                      {d.error_message || "HTTP #{d.http_status}"}
+                    </span>
+                  <% end %>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      <% true -> %>
+        <%!-- No deliveries, show nothing --%>
+    <% end %>
+    """
+  end
+
+  defp loading_section(assigns) do
+    ~H"""
+    <%= if @loaded do %>
+      {render_slot(@inner_block)}
+    <% else %>
+      <div class="bg-white rounded-lg shadow mb-6 px-5 py-6 flex items-center justify-center">
+        <div class="animate-spin h-5 w-5 border-2 border-gray-300 border-t-indigo-600 rounded-full mr-3">
+        </div>
+        <span class="text-sm text-gray-400">Loading...</span>
+      </div>
+    <% end %>
+    """
+  end
+
+  defp webhook_status(visitor, deliveries) do
+    cond do
+      deliveries == nil ->
+        :loading
+
+      visitor.scraper_webhook_sent_at != nil ->
+        # Check if most recent delivery is a deactivate
+        latest = List.first(deliveries)
+
+        if latest && latest.event_type == "deactivate" do
+          :deactivated
+        else
+          :flagged
+        end
+
+      true ->
+        :none
+    end
   end
 
   defp field(assigns) do
@@ -793,13 +1057,6 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
   defp click_platform_class("linkedin_ads"), do: "bg-blue-100 text-blue-900"
   defp click_platform_class("snapchat_ads"), do: "bg-yellow-100 text-yellow-800"
   defp click_platform_class(_), do: "bg-gray-100 text-gray-800"
-
-  defp load_visitor_ips(site, visitor_id) do
-    case Analytics.visitor_ips(site, visitor_id) do
-      {:ok, rows} -> rows
-      _ -> []
-    end
-  end
 
   defp compute_scraper_score(profile, timeline, site) do
     pageviews = timeline |> Enum.filter(&(&1["event_type"] == "pageview"))

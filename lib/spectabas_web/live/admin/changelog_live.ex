@@ -53,6 +53,24 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.46.0", "2026-04-17T18:00:00Z",
+       [
+         %{
+           title: "Feat: Visitor profile deferred loading",
+           description:
+             "Visitor profile page now loads critical data (visitor record, profile stats) synchronously and defers heavy queries (timeline, sessions, IPs, fingerprints, ecommerce, scraper score) via progressive async loading. Page renders instantly with loading spinners that fill in as data arrives."
+         },
+         %{
+           title: "Feat: Webhook status banner and history on visitor profile",
+           description:
+             "Visitor profile shows a prominent banner when the visitor has been flagged (red) or deactivated (green) via scraper webhook. New Webhook Activity section shows the full delivery log for the visitor: timestamp, event type, score, signals, and HTTP status."
+         },
+         %{
+           title: "Feat: IPv6 CIDR prefix ranges in scraper webhook payload",
+           description:
+             "When the datacenter_asn signal fires, webhook payload now includes ip_ranges with /64 CIDR prefixes for all IPv6 addresses. Solves the IPv6 rotation problem where datacenter scrapers cycle addresses faster than individual flags can propagate. IPv4 addresses are unaffected. Deactivate payloads also include ip_ranges for cleanup."
+         }
+       ]},
       {"v5.45.2", "2026-04-16T23:00:00Z",
        [
          %{
