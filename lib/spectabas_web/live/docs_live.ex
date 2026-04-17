@@ -1466,14 +1466,15 @@ defmodule SpectabasWeb.DocsLive do
             body: """
             Identifies likely scraper visitors using a weighted-signal scoring model. Each visitor is scored 0-100 based on multiple signals:
 
-            - **Datacenter ASN (+35)** — visitor's IP belongs to a known hosting provider (OVH, AWS, Hetzner, DigitalOcean, etc.). **Suppressed** when the IP belongs to a known consumer VPN (NordVPN, Mullvad, ProtonVPN, etc.) detected via the ipapi.is VPN database.
+            - **Datacenter ASN (+40)** — visitor's IP belongs to a known hosting provider (OVH, AWS, Hetzner, DigitalOcean, etc.). **Suppressed** when the IP belongs to a known consumer VPN or privacy relay.
             - **Spoofed Mobile UA (+20)** — mobile user agent string coming from a datacenter IP. Also suppressed for known VPN users.
             - **IP Rotation (+20)** — same cookie/visitor ID seen from 3+ distinct IPs
-            - **Very High Pageviews (+20)** — 100+ unique pages in the period
-            - **High Pageviews (+10)** — 30-99 unique pages
+            - **Extreme Pageviews (+50)** — 1,000+ unique pages. Definitive scraping regardless of network type.
+            - **Very High Pageviews (+20-25)** — 100-999 unique pages (200+ = +25, 100+ = +20)
+            - **High Pageviews (+10-15)** — 20-99 unique pages (50+ = +15, 20+ = +10)
             - **Systematic Crawl (+15)** — over 80% of visited pages match your configured content path prefixes
             - **Robotic Timing (+10)** — request interval standard deviation under 300ms (evenly paced, programmatic)
-            - **No Referrer (+5)** — direct entry with no referrer
+            - **No Referrer (+10)** — direct entry with no referrer
             - **Emulator Resolution (+5)** — screen resolution matches a known headless browser default
 
             ### Score Tiers
@@ -1487,13 +1488,30 @@ defmodule SpectabasWeb.DocsLive do
             | 40-69 | **Watching** | Log and observe — no user-facing action |
             | < 40 | Normal | Not flagged |
 
-            ### VPN User Safety
+            ### VPN & Privacy Relay Protection
 
-            Visitors on known consumer VPNs are protected from false positives. The datacenter ASN signal (+35) and spoofed mobile UA signal (+20) are suppressed when the visitor's IP matches a known VPN provider in the ipapi.is database. This prevents legitimate VPN users from being flagged as scrapers even though their VPN exit nodes run on datacenter infrastructure.
+            Visitors on known consumer VPNs and privacy relays are protected from false positives:
+
+            - **VPN providers** (NordVPN, Mullvad, ProtonVPN, etc.) — detected via ipapi.is VPN database (enumerated + interpolated MMDB). The datacenter ASN and spoofed mobile UA signals are suppressed.
+            - **Privacy relays** (Apple iCloud Private Relay via Fastly, Cloudflare WARP, Akamai CDN) — detected by ASN. Same suppression behavior.
+            - VPN provider names are shown on visitor profiles (purple badge) and the Realtime page.
+            - The ipapi.is VPN databases auto-download on boot and refresh weekly. Status visible at Admin > GeoIP Databases.
+
+            ### AI Score Calibration
+
+            The **Calibration** tab lets you analyze your site's visitor behavior with AI and get per-site weight recommendations:
+
+            1. Click **Run AI Calibration** — gathers 30-day baseline stats (pageview distribution, network breakdown, referrer mix) from ClickHouse
+            2. Sends the baseline + current weights to your configured AI provider
+            3. AI returns recommended weight adjustments with reasoning and confidence level
+            4. **Approve** to apply as per-site overrides, or **Reject** to dismiss
+            5. **Reset to Defaults** clears all per-site overrides
+
+            Per-site weight overrides are used automatically for all scoring — Scrapers page, visitor profiles, and webhook notifications.
 
             **Configure content prefixes** in Site Settings to enable the systematic-crawl signal. Add URL path prefixes like `/listings` or `/profiles` that represent your valuable content pages. Without this, the systematic-crawl signal will not fire but all other signals still work.
 
-            **Click any row** to see full details including the complete user agent string, all visited page paths, signal explanations, and a link to the full visitor profile. Score, Pageviews, IPs, and Last Seen columns are sortable.
+            **Click any row** to see full details including the complete user agent string, all visited page paths, signal explanations, and a link to the full visitor profile (opens in new tab). Score, Pageviews, IPs, and Last Seen columns are sortable.
 
             Scraper detection runs retroactively on past traffic. It scores visitors at query time from stored event data, not at ingest time.
             """
@@ -1537,7 +1555,7 @@ defmodule SpectabasWeb.DocsLive do
             Browser, OS, screen size, identification method (cookie vs fingerprint), GDPR mode.
 
             ### Location & Network
-            Country, region, city, timezone, ISP/organization. Badges for datacenter, VPN, or bot traffic.
+            Country, region, city, timezone, ISP/organization. Badges for datacenter, VPN (with provider name, e.g. "VPN (NordVPN)"), or bot traffic. VPN provider is detected in real-time from the live Geolix databases even for historical visitors.
 
             ### Acquisition & Behavior
             Original referrer, first and last pages, UTM sources, top pages visited.
