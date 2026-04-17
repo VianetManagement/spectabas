@@ -225,7 +225,7 @@ defmodule Spectabas.Webhooks.ScraperWebhook do
         h
 
     shift = 128 - prefix_len
-    masked = (full >>> shift) <<< shift
+    masked = full >>> shift <<< shift
 
     {masked >>> 112 &&& 0xFFFF, masked >>> 96 &&& 0xFFFF, masked >>> 80 &&& 0xFFFF,
      masked >>> 64 &&& 0xFFFF, masked >>> 48 &&& 0xFFFF, masked >>> 32 &&& 0xFFFF,
