@@ -1211,6 +1211,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
               id="map-hook"
               phx-hook="BubbleMap"
               phx-update="ignore"
+              data-chart={Jason.encode!(%{points: []})}
             >
               <div class="h-48 sm:h-[300px] relative">
                 <canvas></canvas>

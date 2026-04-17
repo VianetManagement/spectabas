@@ -23,6 +23,10 @@ defmodule SpectabasWeb.Dashboard.MapLive do
         |> assign(:user, user)
         |> assign(:date_range, "7d")
         |> assign(:loading, true)
+        |> assign(:locations, [])
+        |> assign(:timezones, [])
+        |> assign(:map_data, %{points: []})
+        |> assign(:map_chart_key, 0)
 
       if connected?(socket), do: send(self(), :load_data)
       {:ok, socket}
@@ -62,10 +66,25 @@ defmodule SpectabasWeb.Dashboard.MapLive do
         _ -> []
       end
 
+    map_points = build_map_points(locations)
+
     socket
     |> assign(:locations, locations)
     |> assign(:timezones, timezones)
+    |> assign(:map_data, %{points: map_points})
+    |> assign(:map_chart_key, System.unique_integer([:positive]))
     |> push_chart_events(locations, timezones)
+  end
+
+  defp build_map_points(locations) do
+    Enum.map(locations, fn loc ->
+      %{
+        lat: to_float(loc["ip_lat"]),
+        lon: to_float(loc["ip_lon"]),
+        visitors: to_num(loc["visitors"]),
+        label: location_name(loc)
+      }
+    end)
   end
 
   defp push_chart_events(socket, locations, timezones) do
@@ -174,7 +193,12 @@ defmodule SpectabasWeb.Dashboard.MapLive do
                 </button>
               </div>
             </div>
-            <div id="fullpage-map-hook" phx-hook="BubbleMap">
+            <div
+              id={"fullpage-map-hook-#{@map_chart_key}"}
+              phx-hook="BubbleMap"
+              phx-update="ignore"
+              data-chart={Jason.encode!(@map_data)}
+            >
               <div class="h-[250px] sm:h-[350px] lg:h-[450px]" style="position: relative;">
                 <canvas></canvas>
               </div>

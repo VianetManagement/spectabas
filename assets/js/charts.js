@@ -285,6 +285,18 @@ const MAP_REGIONS = {
 export const BubbleMap = {
   mounted() {
     this.chart = null
+
+    // Always initialize the chart immediately so the world map outline renders,
+    // even before any data arrives. setData with empty points creates the chart.
+    this.setData({ points: [] })
+
+    // Race-free initial data from data-chart attribute (if server pre-loaded data)
+    const raw = this.el.dataset.chart
+    if (raw) {
+      try { this.setData(JSON.parse(raw)) } catch (e) { /* ok */ }
+    }
+
+    // Subsequent updates via push_event
     this.handleEvent("map-data", (data) => this.setData(data))
     this.handleEvent("map-zoom", ({region}) => this.zoomTo(region))
   },
