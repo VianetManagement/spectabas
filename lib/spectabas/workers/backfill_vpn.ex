@@ -98,7 +98,8 @@ defmodule Spectabas.Workers.BackfillVpn do
     sql = """
     ALTER TABLE events UPDATE
       ip_vpn_provider = #{ClickHouse.param(provider)},
-      ip_is_vpn = 1
+      ip_is_vpn = 1,
+      ip_is_datacenter = 0
     WHERE ip_address IN (#{in_clause})
     SETTINGS mutations_sync = 0
     """
