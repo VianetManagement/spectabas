@@ -69,21 +69,40 @@ defmodule Spectabas.Analytics.ScraperDetector do
   @doc "Score threshold at which a visitor is considered a near-certain scraper."
   def score_certain, do: @score_certain
 
+  # Default signal weights
+  @default_weights %{
+    datacenter_asn: 40,
+    spoofed_mobile_ua: 20,
+    ip_rotation: 20,
+    very_high_pageviews_200: 25,
+    very_high_pageviews_100: 20,
+    high_pageviews_50: 15,
+    high_pageviews_20: 10,
+    systematic_crawl: 15,
+    robotic_timing: 10,
+    no_referrer: 10,
+    suspicious_resolution: 5
+  }
+
+  def default_weights, do: @default_weights
+
   @doc """
   Score a visitor profile. Returns `%{score: integer(0..100), signals: [atom]}`.
+  Accepts optional per-site weight overrides map.
   """
-  def score(profile) when is_map(profile) do
+  def score(profile, overrides \\ nil) when is_map(profile) do
+    w = merge_weights(overrides)
     signals = []
     points = 0
 
-    {points, signals} = add_datacenter_signal(points, signals, profile)
-    {points, signals} = add_spoofed_ua_signal(points, signals, profile)
-    {points, signals} = add_ip_rotation_signal(points, signals, profile)
-    {points, signals} = add_pageview_signal(points, signals, profile)
-    {points, signals} = add_systematic_crawl_signal(points, signals, profile)
-    {points, signals} = add_referrer_signal(points, signals, profile)
-    {points, signals} = add_robotic_timing_signal(points, signals, profile)
-    {points, signals} = add_resolution_signal(points, signals, profile)
+    {points, signals} = add_datacenter_signal(points, signals, profile, w)
+    {points, signals} = add_spoofed_ua_signal(points, signals, profile, w)
+    {points, signals} = add_ip_rotation_signal(points, signals, profile, w)
+    {points, signals} = add_pageview_signal(points, signals, profile, w)
+    {points, signals} = add_systematic_crawl_signal(points, signals, profile, w)
+    {points, signals} = add_referrer_signal(points, signals, profile, w)
+    {points, signals} = add_robotic_timing_signal(points, signals, profile, w)
+    {points, signals} = add_resolution_signal(points, signals, profile, w)
 
     %{score: min(points, 100), signals: Enum.reverse(signals)}
   end
@@ -99,59 +118,55 @@ defmodule Spectabas.Analytics.ScraperDetector do
 
   # ---------------- Signal helpers ----------------
 
-  defp add_datacenter_signal(points, signals, profile) do
-    # Check BOTH the 10-entry @datacenter_asns string list AND the
-    # caller-supplied `is_datacenter` boolean (from the comprehensive 900-entry
-    # ASNBlocklist). Either match fires the signal.
-    #
-    # SUPPRESS when the IP belongs to a known consumer VPN provider (e.g.
-    # NordVPN, Mullvad, ExpressVPN). These run on datacenter infrastructure
-    # but serve legitimate users. The vpn_provider field comes from the
-    # ipapi.is VPN MMDB database.
+  defp add_datacenter_signal(points, signals, profile, w) do
     is_dc = datacenter_asn?(profile[:asn]) or profile[:is_datacenter] == true
     on_known_vpn = known_vpn_provider?(profile[:vpn_provider])
 
     if is_dc and not on_known_vpn do
-      {points + 40, [:datacenter_asn | signals]}
+      {points + w.datacenter_asn, [:datacenter_asn | signals]}
     else
       {points, signals}
     end
   end
 
-  # Only fires if we ALSO match the datacenter signal — a mobile UA on a
-  # residential ISP is normal; a mobile UA on an OVH IP is almost certainly
-  # spoofed. Also suppressed when on a known consumer VPN.
-  defp add_spoofed_ua_signal(points, signals, profile) do
+  defp add_spoofed_ua_signal(points, signals, profile, w) do
     is_dc = datacenter_asn?(profile[:asn]) or profile[:is_datacenter] == true
     on_known_vpn = known_vpn_provider?(profile[:vpn_provider])
 
     if is_dc and not on_known_vpn and mobile_ua?(profile[:user_agent]) do
-      {points + 20, [:spoofed_mobile_ua | signals]}
+      {points + w.spoofed_mobile_ua, [:spoofed_mobile_ua | signals]}
     else
       {points, signals}
     end
   end
 
-  defp add_ip_rotation_signal(points, signals, profile) do
+  defp add_ip_rotation_signal(points, signals, profile, w) do
     case profile[:visitor_ip_count] do
-      n when is_integer(n) and n >= 3 -> {points + 20, [:ip_rotation | signals]}
+      n when is_integer(n) and n >= 3 -> {points + w.ip_rotation, [:ip_rotation | signals]}
       _ -> {points, signals}
     end
   end
 
-  # Escalating score based on unique pages visited (not raw pageviews).
-  # More unique pages = higher confidence of automated crawling.
-  defp add_pageview_signal(points, signals, profile) do
+  defp add_pageview_signal(points, signals, profile, w) do
     case profile[:session_pageviews] do
-      n when is_integer(n) and n >= 200 -> {points + 25, [:very_high_pageviews | signals]}
-      n when is_integer(n) and n >= 100 -> {points + 20, [:very_high_pageviews | signals]}
-      n when is_integer(n) and n >= 50 -> {points + 15, [:high_pageviews | signals]}
-      n when is_integer(n) and n >= 20 -> {points + 10, [:high_pageviews | signals]}
-      _ -> {points, signals}
+      n when is_integer(n) and n >= 200 ->
+        {points + w.very_high_pageviews_200, [:very_high_pageviews | signals]}
+
+      n when is_integer(n) and n >= 100 ->
+        {points + w.very_high_pageviews_100, [:very_high_pageviews | signals]}
+
+      n when is_integer(n) and n >= 50 ->
+        {points + w.high_pageviews_50, [:high_pageviews | signals]}
+
+      n when is_integer(n) and n >= 20 ->
+        {points + w.high_pageviews_20, [:high_pageviews | signals]}
+
+      _ ->
+        {points, signals}
     end
   end
 
-  defp add_systematic_crawl_signal(points, signals, profile) do
+  defp add_systematic_crawl_signal(points, signals, profile, w) do
     paths = List.wrap(profile[:page_paths])
     prefixes = List.wrap(profile[:content_path_prefixes])
 
@@ -160,7 +175,7 @@ defmodule Spectabas.Analytics.ScraperDetector do
       ratio = matching / length(paths)
 
       if ratio > 0.8 do
-        {points + 15, [:systematic_crawl | signals]}
+        {points + w.systematic_crawl, [:systematic_crawl | signals]}
       else
         {points, signals}
       end
@@ -169,15 +184,15 @@ defmodule Spectabas.Analytics.ScraperDetector do
     end
   end
 
-  defp add_referrer_signal(points, signals, profile) do
+  defp add_referrer_signal(points, signals, profile, w) do
     case profile[:referrer] do
-      nil -> {points + 10, [:no_referrer | signals]}
-      "" -> {points + 10, [:no_referrer | signals]}
+      nil -> {points + w.no_referrer, [:no_referrer | signals]}
+      "" -> {points + w.no_referrer, [:no_referrer | signals]}
       _ -> {points, signals}
     end
   end
 
-  defp add_robotic_timing_signal(points, signals, profile) do
+  defp add_robotic_timing_signal(points, signals, profile, w) do
     intervals = profile[:request_intervals_ms]
 
     case intervals do
@@ -185,7 +200,7 @@ defmodule Spectabas.Analytics.ScraperDetector do
         sd = std_dev(list)
 
         if sd < 300.0 do
-          {points + 10, [:robotic_timing | signals]}
+          {points + w.robotic_timing, [:robotic_timing | signals]}
         else
           {points, signals}
         end
@@ -195,9 +210,9 @@ defmodule Spectabas.Analytics.ScraperDetector do
     end
   end
 
-  defp add_resolution_signal(points, signals, profile) do
+  defp add_resolution_signal(points, signals, profile, w) do
     if (profile[:screen_resolution] || "") in @suspicious_resolutions do
-      {points + 5, [:suspicious_resolution | signals]}
+      {points + w.suspicious_resolution, [:suspicious_resolution | signals]}
     else
       {points, signals}
     end
@@ -254,10 +269,31 @@ defmodule Spectabas.Analytics.ScraperDetector do
 
   defp std_dev(_), do: 0.0
 
-  # A known consumer VPN provider — suppress the datacenter_asn signal
-  # because these run on datacenter infrastructure but serve legitimate users.
   defp known_vpn_provider?(nil), do: false
   defp known_vpn_provider?(""), do: false
   defp known_vpn_provider?(name) when is_binary(name), do: true
   defp known_vpn_provider?(_), do: false
+
+  # Merge per-site overrides into default weights. Overrides is a map with
+  # string keys (from JSON) like %{"datacenter_asn" => 45, "no_referrer" => 15}.
+  defp merge_weights(nil), do: @default_weights
+
+  defp merge_weights(overrides) when is_map(overrides) do
+    Enum.reduce(overrides, @default_weights, fn {key, value}, acc ->
+      atom_key =
+        try do
+          String.to_existing_atom(key)
+        rescue
+          _ -> nil
+        end
+
+      if atom_key && Map.has_key?(acc, atom_key) && is_number(value) do
+        Map.put(acc, atom_key, value)
+      else
+        acc
+      end
+    end)
+  end
+
+  defp merge_weights(_), do: @default_weights
 end

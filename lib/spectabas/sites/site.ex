@@ -32,6 +32,7 @@ defmodule Spectabas.Sites.Site do
     field :scraper_webhook_url, :string
     field :scraper_webhook_secret, :string
     field :scraper_webhook_enabled, :boolean, default: false
+    field :scraper_weight_overrides, :map
 
     timestamps(type: :utc_datetime)
   end

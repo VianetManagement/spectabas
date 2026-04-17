@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.54.0", "2026-04-18T07:00:00Z",
+       [
+         %{
+           title: "Feat: AI-powered scraper score calibration with per-site weight overrides",
+           description:
+             "New Calibration tab on the Scrapers page. Click 'Run AI Calibration' to analyze your site's 30-day visitor baseline (pageview distribution, network breakdown, referrer mix) and get AI-recommended weight adjustments. Review recommendations with Approve/Reject buttons. Approved weights are stored per-site and used automatically for all scraper scoring. Reset to Defaults button to clear overrides."
+         }
+       ]},
       {"v5.53.0", "2026-04-18T06:00:00Z",
        [
          %{

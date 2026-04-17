@@ -37,6 +37,8 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
         |> assign(:webhook_log, [])
         |> assign(:sort_by, "score")
         |> assign(:sort_dir, "desc")
+        |> assign(:calibrations, [])
+        |> assign(:calibrating, false)
         |> assign(:summary, %{
           total: 0,
           suspicious: 0,
@@ -60,14 +62,82 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
     {:noreply, load_data(socket)}
   end
 
+  def handle_info({:calibration_done, result}, socket) do
+    calibrations = Spectabas.Analytics.ScraperCalibration.latest_for_site(socket.assigns.site.id)
+
+    socket =
+      case result do
+        {:ok, _cal} ->
+          socket |> put_flash(:info, "AI calibration complete — review recommendations below.")
+
+        {:error, reason} ->
+          msg = if is_binary(reason), do: reason, else: inspect(reason)
+          socket |> put_flash(:error, "Calibration failed: #{msg}")
+      end
+
+    {:noreply, socket |> assign(:calibrating, false) |> assign(:calibrations, calibrations)}
+  end
+
   @impl true
   def handle_event("switch_tab", %{"tab" => "webhook_log"}, socket) do
     log = Spectabas.Webhooks.ScraperWebhook.list_deliveries(socket.assigns.site.id)
     {:noreply, socket |> assign(:tab, "webhook_log") |> assign(:webhook_log, log)}
   end
 
+  def handle_event("switch_tab", %{"tab" => "calibration"}, socket) do
+    calibrations = Spectabas.Analytics.ScraperCalibration.latest_for_site(socket.assigns.site.id)
+
+    {:noreply,
+     socket
+     |> assign(:tab, "calibration")
+     |> assign(:calibrations, calibrations)
+     |> assign(:calibrating, false)}
+  end
+
   def handle_event("switch_tab", %{"tab" => tab}, socket) do
     {:noreply, assign(socket, :tab, tab)}
+  end
+
+  def handle_event("run_calibration", _params, socket) do
+    socket = assign(socket, :calibrating, true)
+    site = socket.assigns.site
+    lv_pid = self()
+
+    Task.start(fn ->
+      result = Spectabas.Analytics.ScraperCalibration.run(site)
+      send(lv_pid, {:calibration_done, result})
+    end)
+
+    {:noreply, socket}
+  end
+
+  def handle_event("approve_calibration", %{"id" => id_str}, socket) do
+    {id, _} = Integer.parse(id_str)
+    Spectabas.Analytics.ScraperCalibration.approve_calibration(id)
+    site = Sites.get_site!(socket.assigns.site.id)
+    calibrations = Spectabas.Analytics.ScraperCalibration.latest_for_site(site.id)
+
+    {:noreply,
+     socket
+     |> assign(:site, site)
+     |> assign(:calibrations, calibrations)
+     |> put_flash(:info, "Calibration approved — weight overrides applied.")}
+  end
+
+  def handle_event("reject_calibration", %{"id" => id_str}, socket) do
+    {id, _} = Integer.parse(id_str)
+    Spectabas.Analytics.ScraperCalibration.reject_calibration(id)
+    calibrations = Spectabas.Analytics.ScraperCalibration.latest_for_site(socket.assigns.site.id)
+    {:noreply, socket |> assign(:calibrations, calibrations)}
+  end
+
+  def handle_event("clear_overrides", _params, socket) do
+    {:ok, site} = Sites.update_site(socket.assigns.site, %{"scraper_weight_overrides" => nil})
+
+    {:noreply,
+     socket
+     |> assign(:site, site)
+     |> put_flash(:info, "Weight overrides cleared — using defaults.")}
   end
 
   def handle_event("change_range", %{"range" => range}, socket) do
@@ -272,7 +342,13 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
         <%!-- Tab navigation --%>
         <nav class="flex gap-1 bg-gray-100 rounded-lg p-1 mb-6 w-fit">
           <button
-            :for={{id, label} <- [{"scrapers", "Detection"}, {"webhook_log", "Webhook Log"}]}
+            :for={
+              {id, label} <- [
+                {"scrapers", "Detection"},
+                {"webhook_log", "Webhook Log"},
+                {"calibration", "Calibration"}
+              ]
+            }
             phx-click="switch_tab"
             phx-value-tab={id}
             class={[
@@ -786,6 +862,197 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
             </table>
           </div>
         </div>
+
+        <%!-- Calibration Tab --%>
+        <div :if={@tab == "calibration"}>
+          <%!-- Current overrides --%>
+          <div class="bg-white rounded-lg shadow mb-6">
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 class="text-lg font-semibold text-gray-900">AI Score Calibration</h2>
+                <p class="text-xs text-gray-500 mt-0.5">
+                  Analyze your site's visitor behavior and get AI-recommended weight adjustments.
+                </p>
+              </div>
+              <div class="flex items-center gap-2">
+                <button
+                  :if={@site.scraper_weight_overrides}
+                  phx-click="clear_overrides"
+                  data-confirm="Reset to default weights? This removes all per-site overrides."
+                  class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-300"
+                >
+                  Reset to Defaults
+                </button>
+                <button
+                  phx-click="run_calibration"
+                  disabled={@calibrating}
+                  class={[
+                    "inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg text-white shadow-sm",
+                    if(@calibrating,
+                      do: "bg-indigo-400 cursor-wait",
+                      else: "bg-indigo-600 hover:bg-indigo-700"
+                    )
+                  ]}
+                >
+                  {if @calibrating, do: "Analyzing...", else: "Run AI Calibration"}
+                </button>
+              </div>
+            </div>
+
+            <%!-- Active weights display --%>
+            <div class="px-6 py-4">
+              <h3 class="text-sm font-semibold text-gray-700 mb-3">
+                {if @site.scraper_weight_overrides,
+                  do: "Active Per-Site Weights",
+                  else: "Default Weights (no overrides)"}
+              </h3>
+              <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                <div
+                  :for={{key, default_val} <- Spectabas.Analytics.ScraperDetector.default_weights()}
+                  class="bg-gray-50 rounded-lg p-3"
+                >
+                  <div class="text-xs text-gray-500">{key}</div>
+                  <div class="text-lg font-bold text-gray-900 mt-0.5">
+                    +{active_weight(@site.scraper_weight_overrides, key, default_val)}
+                  </div>
+                  <div
+                    :if={override_differs?(@site.scraper_weight_overrides, key, default_val)}
+                    class="text-[10px] text-indigo-600 mt-0.5"
+                  >
+                    default: +{default_val}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <%!-- Calibration history --%>
+          <div :for={cal <- @calibrations} class="bg-white rounded-lg shadow mb-4">
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <span class={[
+                  "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium mr-2",
+                  case cal.status do
+                    "pending" -> "bg-amber-100 text-amber-800"
+                    "approved" -> "bg-green-100 text-green-800"
+                    "rejected" -> "bg-gray-100 text-gray-500"
+                  end
+                ]}>
+                  {cal.status}
+                </span>
+                <span class="text-sm text-gray-500">
+                  {Calendar.strftime(cal.inserted_at, "%b %d, %Y %H:%M UTC")}
+                </span>
+                <span :if={cal.ai_provider} class="text-xs text-gray-400 ml-2">
+                  via {cal.ai_provider}
+                </span>
+              </div>
+              <div :if={cal.status == "pending"} class="flex gap-2">
+                <button
+                  phx-click="approve_calibration"
+                  phx-value-id={cal.id}
+                  class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg text-white bg-green-600 hover:bg-green-700"
+                >
+                  Approve
+                </button>
+                <button
+                  phx-click="reject_calibration"
+                  phx-value-id={cal.id}
+                  class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg text-gray-700 bg-gray-100 hover:bg-gray-200 border border-gray-300"
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+
+            <div class="px-6 py-4 space-y-4">
+              <%!-- Baseline stats --%>
+              <div :if={cal.baseline}>
+                <h4 class="text-xs font-semibold text-gray-500 uppercase mb-2">
+                  Site Baseline (30 days)
+                </h4>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                  <div>
+                    <span class="text-gray-500">Visitors:</span>
+                    <span class="font-medium ml-1">
+                      {format_number(cal.baseline["total_visitors"] || 0)}
+                    </span>
+                  </div>
+                  <div>
+                    <span class="text-gray-500">p95 pages:</span>
+                    <span class="font-medium ml-1">
+                      {get_in(cal.baseline, ["pageview_distribution", "p95"]) || "?"}
+                    </span>
+                  </div>
+                  <div>
+                    <span class="text-gray-500">DC visitors:</span>
+                    <span class="font-medium ml-1">
+                      {get_in(cal.baseline, ["network", "datacenter"]) || "?"}
+                    </span>
+                  </div>
+                  <div>
+                    <span class="text-gray-500">VPN visitors:</span>
+                    <span class="font-medium ml-1">
+                      {get_in(cal.baseline, ["network", "vpn"]) || "?"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <%!-- AI recommendations --%>
+              <div :if={cal.recommendations}>
+                <h4 class="text-xs font-semibold text-gray-500 uppercase mb-2">
+                  Recommended Weights
+                </h4>
+                <%= if cal.recommendations["weights"] do %>
+                  <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                    <div
+                      :for={{key, val} <- cal.recommendations["weights"]}
+                      class="bg-gray-50 rounded p-2"
+                    >
+                      <div class="text-xs text-gray-500">{key}</div>
+                      <div class="text-sm font-bold text-gray-900">+{val}</div>
+                    </div>
+                  </div>
+                <% end %>
+
+                <div
+                  :if={cal.recommendations["reasoning"]}
+                  class="mt-3 text-sm text-gray-700 bg-blue-50 border border-blue-100 rounded-lg p-3"
+                >
+                  <span class="font-medium text-blue-800">AI reasoning:</span>
+                  {cal.recommendations["reasoning"]}
+                </div>
+
+                <div class="flex gap-4 mt-2 text-xs text-gray-500">
+                  <span :if={cal.recommendations["confidence"]}>
+                    Confidence: <span class="font-medium">{cal.recommendations["confidence"]}</span>
+                  </span>
+                  <span :if={cal.recommendations["warnings"]}>
+                    Warnings: <span class="text-amber-600">{cal.recommendations["warnings"]}</span>
+                  </span>
+                </div>
+
+                <div
+                  :if={cal.recommendations["error"]}
+                  class="mt-2 text-sm text-red-600 bg-red-50 rounded-lg p-3"
+                >
+                  {cal.recommendations["error"]}
+                  <div :if={cal.recommendations["raw"]} class="text-xs font-mono mt-1 text-red-500">
+                    {cal.recommendations["raw"]}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div
+            :if={@calibrations == []}
+            class="bg-white rounded-lg shadow px-6 py-8 text-center text-gray-500 text-sm"
+          >
+            No calibrations yet. Click "Run AI Calibration" to analyze your site's visitor behavior and get weight recommendations.
+          </div>
+        </div>
       </div>
     </.dashboard_layout>
     """
@@ -859,6 +1126,24 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
 
   defp verdict_label(:normal), do: "Normal"
   defp verdict_label(_), do: "—"
+
+  defp active_weight(nil, _key, default), do: default
+
+  defp active_weight(overrides, key, default) when is_map(overrides) do
+    key_str = to_string(key)
+    Map.get(overrides, key_str, default)
+  end
+
+  defp active_weight(_, _, default), do: default
+
+  defp override_differs?(nil, _key, _default), do: false
+
+  defp override_differs?(overrides, key, default) when is_map(overrides) do
+    key_str = to_string(key)
+    Map.has_key?(overrides, key_str) and Map.get(overrides, key_str) != default
+  end
+
+  defp override_differs?(_, _, _), do: false
 
   defp sort_candidates(candidates, sort_by, sort_dir) do
     sorted =

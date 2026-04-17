@@ -3940,12 +3940,13 @@ defmodule Spectabas.Analytics do
       case ClickHouse.query(sql, receive_timeout: 60_000) do
         {:ok, rows} ->
           prefixes = List.wrap(site.scraper_content_prefixes)
+          weight_overrides = site.scraper_weight_overrides
 
           scored =
             rows
             |> Enum.map(fn row ->
               profile = row_to_profile(row, prefixes)
-              result = Spectabas.Analytics.ScraperDetector.score(profile)
+              result = Spectabas.Analytics.ScraperDetector.score(profile, weight_overrides)
 
               Map.merge(row, %{
                 "score" => result.score,
@@ -4007,12 +4008,13 @@ defmodule Spectabas.Analytics do
     case ClickHouse.query(sql, receive_timeout: 60_000) do
       {:ok, rows} ->
         prefixes = List.wrap(site.scraper_content_prefixes)
+        weight_overrides = site.scraper_weight_overrides
 
         scored =
           rows
           |> Enum.map(fn row ->
             profile = row_to_profile(row, prefixes)
-            result = Spectabas.Analytics.ScraperDetector.score(profile)
+            result = Spectabas.Analytics.ScraperDetector.score(profile, weight_overrides)
 
             Map.merge(row, %{
               "score" => result.score,
@@ -4076,7 +4078,7 @@ defmodule Spectabas.Analytics do
     case ClickHouse.query(sql) do
       {:ok, [row]} ->
         profile = row_to_profile(row, prefixes)
-        result = Spectabas.Analytics.ScraperDetector.score(profile)
+        result = Spectabas.Analytics.ScraperDetector.score(profile, site.scraper_weight_overrides)
 
         {:ok,
          %{
