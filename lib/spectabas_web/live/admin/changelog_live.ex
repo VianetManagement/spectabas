@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.46.2", "2026-04-17T20:00:00Z",
+       [
+         %{
+           title: "Fix: ClickHouse memory limits to prevent OOM crash",
+           description:
+             "Per-query memory reduced from 2GB to 800MB. Server memory cap lowered from 75% to 60% of RAM. Added max_bytes_before_external_group_by (400MB) to spill heavy GROUP BY to disk. Query timeout set to 120s. ClickHouse connection pool reduced from 100 to 10. Rollup INSERT queries for page and geo tables capped at 500MB with 250MB external GROUP BY threshold."
+         }
+       ]},
       {"v5.46.1", "2026-04-17T19:00:00Z",
        [
          %{

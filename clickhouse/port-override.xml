@@ -4,13 +4,21 @@
     <listen_host>0.0.0.0</listen_host>
     <tcp_port replace="replace">9000</tcp_port>
 
-    <!-- Cap total server memory at 75% of available RAM -->
-    <max_server_memory_usage_to_ram_ratio>0.75</max_server_memory_usage_to_ram_ratio>
+    <!-- Cap total server memory at 60% of available RAM, leaving headroom for OS + merges -->
+    <max_server_memory_usage_to_ram_ratio>0.6</max_server_memory_usage_to_ram_ratio>
 
-    <!-- Per-query memory limit: 2GB (safety net against runaway queries) -->
     <profiles>
         <default>
-            <max_memory_usage>2000000000</max_memory_usage>
+            <!-- Per-query memory limit: 800MB (down from 2GB).
+                 On 8GB container this allows ~6 concurrent heavy queries safely. -->
+            <max_memory_usage>800000000</max_memory_usage>
+
+            <!-- Spill GROUP BY to disk when a single query exceeds 400MB.
+                 Prevents OOM on high-cardinality rollup inserts (url_path, ip_city). -->
+            <max_bytes_before_external_group_by>400000000</max_bytes_before_external_group_by>
+
+            <!-- Kill queries that run longer than 120 seconds -->
+            <max_execution_time>120</max_execution_time>
         </default>
     </profiles>
 </clickhouse>

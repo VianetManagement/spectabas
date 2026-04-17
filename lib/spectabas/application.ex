@@ -19,7 +19,7 @@ defmodule Spectabas.Application do
         {Finch,
          name: Spectabas.ClickHouseFinch,
          pools: %{
-           :default => [size: 25, count: 4]
+           :default => [size: 10, count: 1]
          }},
         {Oban, Application.fetch_env!(:spectabas, Oban)},
         Spectabas.GeoIP,
@@ -106,7 +106,7 @@ defmodule Spectabas.Application do
       :ok
   end
 
-  @version "v5.46.1"
+  @version "v5.46.2"
 
   defp deploy_message do
     # Pull the latest changelog entry to include in the Slack notification.

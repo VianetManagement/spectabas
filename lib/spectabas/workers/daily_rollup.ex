@@ -137,6 +137,7 @@ defmodule Spectabas.Workers.DailyRollup do
     FROM events
     WHERE #{where_range} AND url_path != ''
     GROUP BY site_id, date, url_path
+    SETTINGS max_memory_usage = 500000000, max_bytes_before_external_group_by = 250000000
     """
   end
 
@@ -172,6 +173,7 @@ defmodule Spectabas.Workers.DailyRollup do
     FROM events
     WHERE #{where_range} AND ip_country != ''
     GROUP BY site_id, date, ip_country, ip_region_name, ip_city, ip_lat, ip_lon, ip_timezone
+    SETTINGS max_memory_usage = 500000000, max_bytes_before_external_group_by = 250000000
     """
   end
 
