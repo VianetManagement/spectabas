@@ -4734,6 +4734,37 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  def rum_timing_timeseries(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      tz = site.timezone || "UTC"
+
+      sql = """
+      SELECT
+        toDate(toTimezone(timestamp, #{ClickHouse.param(tz)})) AS bucket,
+        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'ttfb')),
+          toFloat64OrZero(JSONExtractString(properties, 'ttfb')) > 0)) AS median_ttfb,
+        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'fcp')),
+          toFloat64OrZero(JSONExtractString(properties, 'fcp')) > 0)) AS median_fcp,
+        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'dom_complete')),
+          toFloat64OrZero(JSONExtractString(properties, 'dom_complete')) > 0)) AS median_dom,
+        round(quantileIf(0.5)(toFloat64OrZero(JSONExtractString(properties, 'page_load')),
+          toFloat64OrZero(JSONExtractString(properties, 'page_load')) > 0)) AS median_page_load,
+        count() AS samples
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND event_name = '_rum'
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      GROUP BY bucket
+      ORDER BY bucket ASC
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
   @doc """
   Performance by page: slowest pages by median page load time.
   """

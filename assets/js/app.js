@@ -24,7 +24,7 @@ import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import topbar from "../vendor/topbar"
 
-import { TimeseriesChart, BarChart, BubbleMap, EcommerceChart, VitalsChart } from "./charts"
+import { TimeseriesChart, BarChart, BubbleMap, EcommerceChart, VitalsChart, TimingChart } from "./charts"
 
 // WebAuthn passkey registration hook
 const PasskeyRegister = {
@@ -345,6 +345,7 @@ const Hooks = {
   BubbleMap,
   EcommerceChart,
   VitalsChart,
+  TimingChart,
   PasskeyRegister,
   AutoDismiss,
   Sparkline,

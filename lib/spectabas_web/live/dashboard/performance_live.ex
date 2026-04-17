@@ -49,8 +49,10 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
     by_page = safe_query(fn -> Analytics.rum_by_page(site, user, period) end)
     by_device = safe_query(fn -> Analytics.rum_by_device(site, user, period) end)
     vitals_ts = safe_query(fn -> Analytics.rum_vitals_timeseries(site, user, period) end)
+    timing_ts = safe_query(fn -> Analytics.rum_timing_timeseries(site, user, period) end)
 
     vitals_chart_data = build_vitals_chart_data(vitals_ts)
+    timing_chart_data = build_timing_chart_data(timing_ts)
 
     socket
     |> assign(:overview, overview)
@@ -59,6 +61,8 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
     |> assign(:by_device, by_device)
     |> assign(:vitals_chart_data, vitals_chart_data)
     |> assign(:vitals_chart_key, System.unique_integer([:positive]))
+    |> assign(:timing_chart_data, timing_chart_data)
+    |> assign(:timing_chart_key, System.unique_integer([:positive]))
   end
 
   defp build_vitals_chart_data(rows) when is_list(rows) do
@@ -71,6 +75,18 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
   end
 
   defp build_vitals_chart_data(_), do: %{labels: [], lcp: [], cls: [], fid: []}
+
+  defp build_timing_chart_data(rows) when is_list(rows) do
+    %{
+      labels: Enum.map(rows, & &1["bucket"]),
+      ttfb: Enum.map(rows, &to_num(&1["median_ttfb"])),
+      fcp: Enum.map(rows, &to_num(&1["median_fcp"])),
+      dom: Enum.map(rows, &to_num(&1["median_dom"])),
+      page_load: Enum.map(rows, &to_num(&1["median_page_load"]))
+    }
+  end
+
+  defp build_timing_chart_data(_), do: %{labels: [], ttfb: [], fcp: [], dom: [], page_load: []}
 
   @impl true
   def render(assigns) do
@@ -195,6 +211,21 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
               <.timing_card label="First Paint" value={to_num(@overview["median_fcp"])} unit="ms" />
               <.timing_card label="DOM Ready" value={to_num(@overview["median_dom"])} unit="ms" />
               <.timing_card label="Full Load" value={to_num(@overview["median_page_load"])} unit="ms" />
+            </div>
+          </div>
+
+          <%!-- Page Load Timing Over Time --%>
+          <div :if={@timing_chart_data.labels != []} class="bg-white rounded-lg shadow p-5 mb-6">
+            <h3 class="font-semibold text-gray-900 mb-4">Page Load Timing Over Time</h3>
+            <div
+              id={"timing-chart-#{@timing_chart_key}"}
+              phx-hook="TimingChart"
+              phx-update="ignore"
+              data-chart={Jason.encode!(@timing_chart_data)}
+            >
+              <div style="height: 280px; position: relative;">
+                <canvas></canvas>
+              </div>
             </div>
           </div>
 

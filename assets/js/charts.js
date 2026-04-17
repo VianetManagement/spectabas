@@ -520,3 +520,93 @@ export const VitalsChart = {
     if (this.chart) this.chart.destroy()
   },
 }
+
+// --- Page Load Timing Timeseries (single y-axis, 4 metrics in ms) ---
+export const TimingChart = {
+  mounted() {
+    this.chart = null
+
+    const raw = this.el.dataset.chart
+    if (raw) {
+      try { this.setData(JSON.parse(raw)) } catch (e) { /* ok */ }
+    }
+
+    this.handleEvent("timing-data", (data) => this.setData(data))
+  },
+  setData(data) {
+    const canvas = this.el.querySelector("canvas")
+    if (!canvas || !data || !data.labels) return
+
+    const metrics = [
+      { key: "ttfb", label: "TTFB", color: "#6366f1" },
+      { key: "fcp", label: "First Paint", color: "#8b5cf6" },
+      { key: "dom", label: "DOM Ready", color: "#f59e0b" },
+      { key: "page_load", label: "Full Load", color: "#ef4444" },
+    ]
+
+    const datasets = metrics.map(m => ({
+      label: m.label,
+      data: data[m.key] || [],
+      borderColor: m.color,
+      backgroundColor: m.color + "1a",
+      fill: false,
+      tension: 0.3,
+      pointRadius: data.labels.length > 20 ? 0 : 3,
+      pointHoverRadius: 5,
+      borderWidth: 2,
+    }))
+
+    if (this.chart) {
+      this.chart.data.labels = data.labels
+      this.chart.data.datasets = datasets
+      this.chart.resize()
+      this.chart.update()
+      return
+    }
+
+    this.chart = new Chart(canvas, {
+      type: "line",
+      data: { labels: data.labels, datasets: datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 300 },
+        interaction: { intersect: false, mode: "index" },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { maxTicksLimit: 8, color: "#9ca3af" },
+          },
+          y: {
+            beginAtZero: true,
+            title: { display: true, text: "ms", color: "#9ca3af", font: { size: 11 } },
+            grid: { color: "#f3f4f6" },
+            ticks: { color: "#9ca3af", precision: 0 },
+          },
+        },
+        plugins: {
+          tooltip: {
+            backgroundColor: "#1f2937",
+            titleColor: "#f9fafb",
+            bodyColor: "#d1d5db",
+            padding: 10,
+            cornerRadius: 8,
+            callbacks: {
+              label: function(ctx) {
+                return `${ctx.dataset.label}: ${Math.round(ctx.parsed.y)}ms`
+              }
+            },
+          },
+          legend: {
+            display: true,
+            position: "top",
+            labels: { usePointStyle: true, pointStyle: "line", padding: 16, font: { size: 11 } },
+          },
+        },
+      },
+    })
+  },
+  destroyed() {
+    if (this.chart) this.chart.destroy()
+  },
+}

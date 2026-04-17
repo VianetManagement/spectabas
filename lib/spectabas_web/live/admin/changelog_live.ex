@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.48.1", "2026-04-18T01:00:00Z",
+       [
+         %{
+           title: "Feat: Page Load Timing over time chart on Performance page",
+           description:
+             "New line chart showing TTFB, First Paint, DOM Ready, and Full Load (all in ms) trended daily. Appears after the Page Load Timing summary cards, before Performance by Device."
+         }
+       ]},
       {"v5.48.0", "2026-04-18T00:00:00Z",
        [
          %{
