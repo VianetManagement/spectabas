@@ -3682,6 +3682,7 @@ defmodule Spectabas.Analytics do
       any(ip_is_datacenter) AS is_datacenter,
       any(ip_is_vpn) AS is_vpn,
       any(ip_is_bot) AS is_bot,
+      any(ip_vpn_provider) AS vpn_provider,
       any(user_agent) AS user_agent,
       any(browser_fingerprint) AS browser_fingerprint,
       groupUniqArray(10)(url_path) AS top_pages,

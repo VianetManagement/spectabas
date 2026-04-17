@@ -1077,7 +1077,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
       end)
 
     detector_profile = %{
-      asn: profile["ip_org"] || "",
+      asn: profile["org"] || profile["ip_org"] || "",
       user_agent: profile["user_agent"] || "",
       visitor_ip_count: ip_count,
       session_pageviews: page_paths |> Enum.uniq() |> length(),
@@ -1086,8 +1086,8 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
       referrer: profile["referrer_domain"],
       screen_resolution: "#{profile["screen_width"] || 0}x#{profile["screen_height"] || 0}",
       request_intervals_ms: intervals,
-      is_datacenter: to_num(profile["ip_is_datacenter"]) == 1,
-      vpn_provider: profile["ip_vpn_provider"] || ""
+      is_datacenter: to_num(profile["is_datacenter"] || profile["ip_is_datacenter"]) == 1,
+      vpn_provider: profile["vpn_provider"] || profile["ip_vpn_provider"] || ""
     }
 
     Spectabas.Analytics.ScraperDetector.score(detector_profile)
