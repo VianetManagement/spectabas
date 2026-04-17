@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.46.4", "2026-04-17T22:00:00Z",
+       [
+         %{
+           title: "Fix: Visitor map renders world outline even with no data",
+           description:
+             "BubbleMap chart hook bailed out on empty data, preventing the world map background from rendering. Now always initializes the chart so the map outline appears even when ClickHouse is unavailable or returns no location data."
+         }
+       ]},
       {"v5.46.3", "2026-04-17T21:00:00Z",
        [
          %{

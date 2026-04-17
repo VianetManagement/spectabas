@@ -304,12 +304,10 @@ export const BubbleMap = {
     if (active) active.className = "px-2 py-1 text-xs rounded-md bg-indigo-600 text-white map-zoom-btn"
   },
   setData(data) {
-    if (!data || !data.points || data.points.length === 0) return
-
     const canvas = this.el.querySelector("canvas")
     if (!canvas) return
 
-    const points = data.points.map((p) => ({
+    const points = (data && data.points || []).map((p) => ({
       x: p.lon,
       y: p.lat,
       r: Math.max(4, Math.sqrt(p.visitors) * 4),
