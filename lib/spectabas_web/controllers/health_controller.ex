@@ -627,6 +627,11 @@ defmodule SpectabasWeb.HealthController do
     json(conn, %{status: "done", ips_found: length(ips), results: results})
   end
 
+  def backfill_vpn(conn, _params) do
+    Oban.insert(Spectabas.Workers.BackfillVpn.new(%{}))
+    json(conn, %{status: "queued", message: "VPN backfill job queued on maintenance queue"})
+  end
+
   def test_dashboard(conn, _params) do
     alias Spectabas.{Sites, Analytics, Accounts}
 

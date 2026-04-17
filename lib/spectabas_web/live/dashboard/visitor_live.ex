@@ -49,6 +49,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
         |> assign(:ltv, nil)
         |> assign(:scraper, nil)
         |> assign(:webhook_deliveries, nil)
+        |> assign(:vpn_provider, nil)
         |> assign(:deferred_loaded, false)
 
       if connected?(socket), do: send(self(), :load_deferred)
@@ -157,6 +158,33 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
         end
 
       send(lv_pid, {:deferred_result, :visitor_ips, ips})
+    end)
+
+    # Real-time VPN provider lookup (checks live Geolix databases, not stored ClickHouse data)
+    Task.start(fn ->
+      vpn =
+        if last_ip && last_ip != "" do
+          case :inet.parse_address(String.to_charlist(last_ip)) do
+            {:ok, parsed} ->
+              case Geolix.lookup(parsed, where: :vpn_enumerated) do
+                %{serviceName: name} when is_binary(name) and name != "" ->
+                  name
+
+                _ ->
+                  case Geolix.lookup(parsed, where: :vpn_interpolated) do
+                    %{serviceName: name} when is_binary(name) and name != "" -> name
+                    _ -> ""
+                  end
+              end
+
+            _ ->
+              ""
+          end
+        else
+          ""
+        end
+
+      send(lv_pid, {:deferred_result, :vpn_provider, vpn})
     end)
 
     # Ecommerce data
@@ -388,12 +416,22 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
                   Datacenter
                 </span>
                 <span
-                  :if={@profile["is_vpn"] == "1" || @profile["is_vpn"] == 1}
-                  class="px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800"
+                  :if={
+                    @profile["is_vpn"] == "1" || @profile["is_vpn"] == 1 ||
+                      (@vpn_provider && @vpn_provider != "")
+                  }
+                  class="px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800"
                 >
-                  VPN{if @profile["vpn_provider"] && @profile["vpn_provider"] != "",
-                    do: " (#{@profile["vpn_provider"]})",
-                    else: ""}
+                  VPN{cond do
+                    @vpn_provider && @vpn_provider != "" ->
+                      " (#{@vpn_provider})"
+
+                    @profile["vpn_provider"] && @profile["vpn_provider"] != "" ->
+                      " (#{@profile["vpn_provider"]})"
+
+                    true ->
+                      ""
+                  end}
                 </span>
                 <span
                   :if={@profile["is_bot"] == "1" || @profile["is_bot"] == 1}
