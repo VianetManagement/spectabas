@@ -73,6 +73,7 @@ defmodule Spectabas.Analytics.ScraperDetector do
     datacenter_asn: 40,
     spoofed_mobile_ua: 20,
     ip_rotation: 20,
+    extreme_pageviews_1000: 50,
     very_high_pageviews_200: 25,
     very_high_pageviews_100: 20,
     high_pageviews_50: 15,
@@ -148,6 +149,9 @@ defmodule Spectabas.Analytics.ScraperDetector do
 
   defp add_pageview_signal(points, signals, profile, w) do
     case profile[:session_pageviews] do
+      n when is_integer(n) and n >= 1000 ->
+        {points + w.extreme_pageviews_1000, [:extreme_pageviews | signals]}
+
       n when is_integer(n) and n >= 200 ->
         {points + w.very_high_pageviews_200, [:very_high_pageviews | signals]}
 
