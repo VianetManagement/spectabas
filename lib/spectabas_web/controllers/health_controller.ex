@@ -750,9 +750,9 @@ defmodule SpectabasWeb.HealthController do
         _ -> "no_result"
       end
 
-    # Test VPN database (ipapi.is)
-    vpn_enum_loaded = Geolix.lookup({1, 1, 1, 1}, where: :vpn_enumerated) != nil
-    vpn_interp_loaded = Geolix.lookup({146, 70, 161, 1}, where: :vpn_interpolated) != nil
+    # Test VPN database (ipapi.is) — check metadata, not IP lookups (test IPs may not be in every DB)
+    vpn_enum_loaded = match?(%{}, Geolix.metadata(where: :vpn_enumerated))
+    vpn_interp_loaded = match?(%{}, Geolix.metadata(where: :vpn_interpolated))
 
     vpn_test =
       case Geolix.lookup({1, 1, 1, 1}, where: :vpn_enumerated) do

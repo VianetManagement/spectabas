@@ -201,7 +201,7 @@ defmodule SpectabasWeb.Admin.GeoipLive do
       %{
         name: "ipapi.is VPN (Enumerated)",
         provider: "ipapi.is ($79/mo)",
-        loaded: Geolix.lookup({1, 1, 1, 1}, where: :vpn_enumerated) != nil,
+        loaded: geolix_db_loaded?(:vpn_enumerated),
         env_var: "IPAPI_API_KEY",
         log_name: "ipapi-vpn-enumerated",
         provider_key: "ipapi_vpn"
@@ -209,7 +209,7 @@ defmodule SpectabasWeb.Admin.GeoipLive do
       %{
         name: "ipapi.is VPN (Interpolated)",
         provider: "ipapi.is ($79/mo)",
-        loaded: Geolix.lookup({1, 1, 1, 1}, where: :vpn_interpolated) != nil,
+        loaded: geolix_db_loaded?(:vpn_interpolated),
         env_var: "IPAPI_API_KEY",
         log_name: "ipapi-vpn-interpolated",
         provider_key: "ipapi_vpn"
@@ -225,6 +225,15 @@ defmodule SpectabasWeb.Admin.GeoipLive do
       nil ->
         "Never"
     end
+  end
+
+  defp geolix_db_loaded?(db_id) do
+    case Geolix.metadata(where: db_id) do
+      %{} -> true
+      _ -> false
+    end
+  rescue
+    _ -> false
   end
 
   defp format_size(nil), do: "-"
