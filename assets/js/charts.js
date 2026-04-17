@@ -300,6 +300,12 @@ export const BubbleMap = {
     this.handleEvent("map-data", (data) => this.setData(data))
     this.handleEvent("map-zoom", ({region}) => this.zoomTo(region))
   },
+  updated() {
+    // LiveView may re-render the container; ensure chart persists
+    if (!this.chart) {
+      this.setData({ points: [] })
+    }
+  },
   zoomTo(region) {
     if (!this.chart) return
     const r = MAP_REGIONS[region] || MAP_REGIONS.world
@@ -319,18 +325,18 @@ export const BubbleMap = {
     const canvas = this.el.querySelector("canvas")
     if (!canvas) return
 
-    const points = (data && data.points || []).map((p) => ({
+    const rawPoints = (data && data.points || [])
+    const points = rawPoints.filter(p => p && typeof p.lon === "number" && typeof p.lat === "number").map((p) => ({
       x: p.lon,
       y: p.lat,
-      r: Math.max(4, Math.sqrt(p.visitors) * 4),
-      label: p.label,
-      visitors: p.visitors,
+      r: Math.max(4, Math.sqrt(p.visitors || 0) * 4),
+      label: p.label || "",
+      visitors: p.visitors || 0,
     }))
 
     if (this.chart) {
       this.chart.data.datasets[0].data = points
-      this.chart.resize()
-      this.chart.update()
+      this.chart.update("none")
       return
     }
 
