@@ -53,6 +53,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.46.1", "2026-04-17T19:00:00Z",
+       [
+         %{
+           title: "Chore: Elixir 1.17 → 1.18 upgrade",
+           description:
+             "Upgraded Elixir from 1.17 to 1.18 across Dockerfile, CI, and local tooling. Ran mix format --migrate to clean up deprecated unless syntax. OTP 27.2 unchanged."
+         },
+         %{
+           title: "Chore: Dependency updates",
+           description:
+             "phoenix_live_view 1.1.27 → 1.1.28, geolix 2.0.0 → 2.1.0, geolix_adapter_mmdb2 0.6.0 → 0.7.0, swoosh 1.24.0 → 1.25.0, lazy_html 0.1.10 → 0.1.11."
+         }
+       ]},
       {"v5.46.0", "2026-04-17T18:00:00Z",
        [
          %{
