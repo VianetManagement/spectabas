@@ -34,6 +34,22 @@ defmodule Spectabas.Visitors do
     end
   end
 
+  def scraper_scores_for_visitor_ids(visitor_ids) when is_list(visitor_ids) do
+    visitor_ids = Enum.reject(visitor_ids, &(is_nil(&1) or &1 == ""))
+
+    if visitor_ids == [] do
+      %{}
+    else
+      query =
+        from(v in Visitor,
+          where: v.id in ^visitor_ids and not is_nil(v.scraper_webhook_score),
+          select: {v.id, v.scraper_webhook_score}
+        )
+
+      Repo.all(query) |> Map.new()
+    end
+  end
+
   @doc """
   Count identified visitors (those with an email) seen in a given time range.
 

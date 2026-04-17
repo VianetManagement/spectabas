@@ -35,6 +35,8 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
         |> assign(:webhook_result, nil)
         |> assign(:tab, "scrapers")
         |> assign(:webhook_log, [])
+        |> assign(:sort_by, "score")
+        |> assign(:sort_dir, "desc")
         |> assign(:summary, %{
           total: 0,
           suspicious: 0,
@@ -84,15 +86,20 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
     {:noreply, socket |> assign(:min_score, min) |> assign(:loading, true)}
   end
 
-  def handle_event("open_visitor", %{"idx" => idx_str}, socket) do
-    case Integer.parse(idx_str) do
-      {idx, _} ->
-        v = Enum.at(socket.assigns.candidates || [], idx)
-        {:noreply, assign(socket, :modal_visitor, v)}
+  def handle_event("sort_scrapers", %{"field" => field}, socket) do
+    dir =
+      if socket.assigns.sort_by == field do
+        if socket.assigns.sort_dir == "asc", do: "desc", else: "asc"
+      else
+        "desc"
+      end
 
-      _ ->
-        {:noreply, socket}
-    end
+    {:noreply, socket |> assign(:sort_by, field) |> assign(:sort_dir, dir)}
+  end
+
+  def handle_event("open_visitor", %{"visitor_id" => vid}, socket) do
+    v = Enum.find(socket.assigns.candidates || [], &(&1["visitor_id"] == vid))
+    {:noreply, assign(socket, :modal_visitor, v)}
   end
 
   def handle_event("close_visitor", _params, socket) do
@@ -352,17 +359,30 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Visitor
                   </th>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Score
+                  <th
+                    class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-indigo-600"
+                    phx-click="sort_scrapers"
+                    phx-value-field="score"
+                  >
+                    Score <.sort_indicator sort_by={@sort_by} sort_dir={@sort_dir} field="score" />
                   </th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Signals
                   </th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                  <th
+                    class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-indigo-600"
+                    phx-click="sort_scrapers"
+                    phx-value-field="pageviews"
+                  >
                     Pageviews
+                    <.sort_indicator sort_by={@sort_by} sort_dir={@sort_dir} field="pageviews" />
                   </th>
-                  <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    IPs
+                  <th
+                    class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-indigo-600"
+                    phx-click="sort_scrapers"
+                    phx-value-field="ips"
+                  >
+                    IPs <.sort_indicator sort_by={@sort_by} sort_dir={@sort_dir} field="ips" />
                   </th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
                     Network
@@ -370,8 +390,13 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">
                     Location
                   </th>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th
+                    class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-indigo-600"
+                    phx-click="sort_scrapers"
+                    phx-value-field="last_seen"
+                  >
                     Last Seen
+                    <.sort_indicator sort_by={@sort_by} sort_dir={@sort_dir} field="last_seen" />
                   </th>
                 </tr>
               </thead>
@@ -387,10 +412,10 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
                   </td>
                 </tr>
                 <tr
-                  :for={{c, idx} <- Enum.with_index(@candidates)}
+                  :for={c <- sort_candidates(@candidates, @sort_by, @sort_dir)}
                   class="hover:bg-amber-50 cursor-pointer"
                   phx-click="open_visitor"
-                  phx-value-idx={idx}
+                  phx-value-visitor_id={c["visitor_id"]}
                 >
                   <td class="px-4 py-3 text-sm">
                     <span class="font-mono text-xs text-indigo-700">
@@ -641,12 +666,13 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
                     Use this visitor_id in your own API or middleware to drive tarpits, data
                     poisoning, honeypots, or other countermeasures.
                   </div>
-                  <.link
-                    navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{v["visitor_id"]}"}
+                  <a
+                    href={~p"/dashboard/sites/#{@site.id}/visitors/#{v["visitor_id"]}"}
+                    target="_blank"
                     class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 shrink-0 ml-3"
                   >
-                    Full visitor profile &rarr;
-                  </.link>
+                    Full visitor profile &nearr;
+                  </a>
                 </div>
               </div>
             </div>
@@ -710,13 +736,14 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
                     </span>
                   </td>
                   <td class="px-6 py-3 text-sm">
-                    <.link
+                    <a
                       :if={d.visitor_id}
-                      navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{d.visitor_id}"}
+                      href={~p"/dashboard/sites/#{@site.id}/visitors/#{d.visitor_id}"}
+                      target="_blank"
                       class="text-indigo-600 hover:text-indigo-800 font-mono text-xs"
                     >
-                      {String.slice(to_string(d.visitor_id), 0, 12)}...
-                    </.link>
+                      {String.slice(to_string(d.visitor_id), 0, 12)}... &nearr;
+                    </a>
                   </td>
                   <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
                     {d.score || "-"}
@@ -832,4 +859,27 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
 
   defp verdict_label(:normal), do: "Normal"
   defp verdict_label(_), do: "—"
+
+  defp sort_candidates(candidates, sort_by, sort_dir) do
+    sorted =
+      Enum.sort_by(candidates, fn c ->
+        case sort_by do
+          "score" -> to_num(c["score"])
+          "pageviews" -> to_num(c["session_pageviews"])
+          "ips" -> to_num(c["visitor_ip_count"])
+          "last_seen" -> c["last_seen"] || ""
+          _ -> to_num(c["score"])
+        end
+      end)
+
+    if sort_dir == "desc", do: Enum.reverse(sorted), else: sorted
+  end
+
+  defp sort_indicator(assigns) do
+    ~H"""
+    <span :if={@sort_by == @field} class="ml-0.5 text-indigo-500">
+      {if @sort_dir == "asc", do: "↑", else: "↓"}
+    </span>
+    """
+  end
 end

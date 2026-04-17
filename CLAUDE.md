@@ -282,7 +282,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Mobile responsiveness** — scrollable tables, collapsible mobile nav bar
 - **Accessible top nav** — WCAG AA contrast compliance
 - **Documentation pages** — docs split into `/docs` (index), `/docs/getting-started`, `/docs/dashboard`, `/docs/conversions`, `/docs/api`, `/docs/admin` with cross-category search. Requires login (behind :require_authenticated_user). Public pages: `/privacy`, `/terms`, homepage.
-- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.47.0)
+- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.48.0)
 - **Legal** — Privacy Policy at `/privacy` and Terms of Service at `/terms` (public, no auth required). Entity: Spectabas, Kent County MI. Contact: howdy@spectabas.com. Arbitration clause (AAA, Kent County). 18+ age restriction.
 
 ## Important Patterns

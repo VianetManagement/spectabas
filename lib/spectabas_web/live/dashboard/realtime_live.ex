@@ -145,6 +145,17 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
         end
       end)
 
+    # Enrich with scraper webhook scores
+    scraper_map = Visitors.scraper_scores_for_visitor_ids(Enum.map(grouped, & &1["visitor_id"]))
+
+    grouped =
+      Enum.map(grouped, fn v ->
+        case Map.get(scraper_map, v["visitor_id"]) do
+          score when is_integer(score) -> Map.put(v, "scraper_score", score)
+          _ -> v
+        end
+      end)
+
     socket
     |> assign(:active_count, active_count)
     |> assign(:grouped, grouped)
@@ -300,6 +311,19 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
                     title={"#{v["ecom_orders"]} order(s) — #{Spectabas.Currency.format(v["ecom_revenue"], @site.currency)}"}
                   >
                     Customer
+                  </span>
+                  <span
+                    :if={v["scraper_score"]}
+                    class={[
+                      "ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold",
+                      if(v["scraper_score"] >= 85,
+                        do: "bg-red-100 text-red-800",
+                        else: "bg-amber-100 text-amber-800"
+                      )
+                    ]}
+                    title={"Scraper score #{v["scraper_score"]} — flagged via webhook"}
+                  >
+                    Scraper {v["scraper_score"]}
                   </span>
                 </td>
                 <td class="px-4 py-3 text-sm">

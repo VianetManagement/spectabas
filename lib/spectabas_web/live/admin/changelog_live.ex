@@ -53,6 +53,24 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.48.0", "2026-04-18T00:00:00Z",
+       [
+         %{
+           title: "Feat: Sortable columns on Scraper Detection page",
+           description:
+             "Score, Pageviews, IPs, and Last Seen columns are now sortable (click header to toggle asc/desc). Default sort: score descending."
+         },
+         %{
+           title: "Feat: Visitor profile opens in new window from Scrapers page",
+           description:
+             "The 'Full visitor profile' button in the scraper detail modal now opens in a new browser tab. Webhook log visitor links also open in new tabs."
+         },
+         %{
+           title: "Feat: Scraper score pill on Realtime page",
+           description:
+             "Active visitors who have been flagged via scraper webhook now show a color-coded 'Scraper N' pill next to their visitor ID on the Realtime page. Red for certain (85+), amber for suspicious (60-84)."
+         }
+       ]},
       {"v5.47.0", "2026-04-17T23:00:00Z",
        [
          %{
