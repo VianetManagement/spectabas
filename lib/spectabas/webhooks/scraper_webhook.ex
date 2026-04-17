@@ -16,17 +16,8 @@ defmodule Spectabas.Webhooks.ScraperWebhook do
     url = String.trim_trailing(site.scraper_webhook_url, "/")
     secret = site.scraper_webhook_secret
     signals = Enum.map(score_result.signals, &to_string/1)
-    has_datacenter = :datacenter_asn in score_result.signals
     ips = visitor.known_ips || []
-
-    ip_ranges =
-      if has_datacenter do
-        ips
-        |> Enum.flat_map(&ipv6_to_cidr/1)
-        |> Enum.uniq()
-      else
-        []
-      end
+    ip_ranges = compute_ip_ranges(ips, score_result.signals)
 
     payload = %{
       identifiers: %{
@@ -74,11 +65,7 @@ defmodule Spectabas.Webhooks.ScraperWebhook do
     url = String.trim_trailing(site.scraper_webhook_url, "/") <> "/deactivate"
     secret = site.scraper_webhook_secret
     ips = visitor.known_ips || []
-
-    ip_ranges =
-      ips
-      |> Enum.flat_map(&ipv6_to_cidr/1)
-      |> Enum.uniq()
+    ip_ranges = compute_ip_ranges(ips, [:datacenter_asn])
 
     payload = %{
       identifiers: %{
@@ -115,6 +102,16 @@ defmodule Spectabas.Webhooks.ScraperWebhook do
 
     log_delivery(site.id, visitor.id, "deactivate", nil, [], url, result)
     result
+  end
+
+  def compute_ip_ranges(ips, signals) when is_list(ips) and is_list(signals) do
+    if :datacenter_asn in signals do
+      ips
+      |> Enum.flat_map(&ipv6_to_cidr/1)
+      |> Enum.uniq()
+    else
+      []
+    end
   end
 
   def list_deliveries(site_id, opts \\ []) do
