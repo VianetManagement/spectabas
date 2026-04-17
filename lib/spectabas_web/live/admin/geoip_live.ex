@@ -18,12 +18,20 @@ defmodule SpectabasWeb.Admin.GeoipLive do
   end
 
   @impl true
-  def handle_event("refresh_now", _params, socket) do
+  def handle_event("refresh_all", _params, socket) do
     Oban.insert(Spectabas.Workers.GeoIPRefresh.new(%{}))
 
     {:noreply,
      socket
-     |> put_flash(:info, "GeoIP refresh job queued. Reload page in a minute to see results.")}
+     |> put_flash(:info, "Refresh all databases queued. Reload in a minute to see results.")}
+  end
+
+  def handle_event("refresh_provider", %{"provider" => provider}, socket) do
+    Oban.insert(Spectabas.Workers.GeoIPRefresh.new(%{"provider" => provider}))
+
+    {:noreply,
+     socket
+     |> put_flash(:info, "Refresh #{provider} queued. Reload in a minute to see results.")}
   end
 
   @impl true
@@ -37,14 +45,14 @@ defmodule SpectabasWeb.Admin.GeoipLive do
           </.link>
           <h1 class="text-2xl font-bold text-gray-900 mt-2">GeoIP Databases</h1>
           <p class="text-sm text-gray-500 mt-1">
-            External IP enrichment databases — auto-downloaded on the 1st and 15th of each month.
+            External IP enrichment databases — auto-downloaded on boot and refreshed weekly (Monday 06:00 UTC).
           </p>
         </div>
         <button
-          phx-click="refresh_now"
+          phx-click="refresh_all"
           class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm"
         >
-          Refresh Now
+          Refresh All
         </button>
       </div>
 
@@ -69,6 +77,7 @@ defmodule SpectabasWeb.Admin.GeoipLive do
               <th class="px-5 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                 Last Download
               </th>
+              <th class="px-5 py-3 text-right text-xs font-medium text-gray-500 uppercase"></th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
@@ -86,6 +95,15 @@ defmodule SpectabasWeb.Admin.GeoipLive do
               <td class="px-5 py-3 text-xs text-gray-500 font-mono">{db.env_var}</td>
               <td class="px-5 py-3 text-xs text-gray-500">
                 {last_download_for(db.log_name, @latest)}
+              </td>
+              <td class="px-5 py-3 text-right">
+                <button
+                  phx-click="refresh_provider"
+                  phx-value-provider={db.provider_key}
+                  class="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                >
+                  Re-download
+                </button>
               </td>
             </tr>
           </tbody>
@@ -160,36 +178,41 @@ defmodule SpectabasWeb.Admin.GeoipLive do
         name: "DB-IP City Lite",
         provider: "DB-IP (free)",
         loaded: Geolix.lookup({8, 8, 8, 8}, where: :city) != nil,
-        env_var: "(bundled in Docker)",
-        log_name: "dbip-city-lite"
+        env_var: "(auto)",
+        log_name: "dbip-city-lite",
+        provider_key: "dbip"
       },
       %{
         name: "DB-IP ASN Lite",
         provider: "DB-IP (free)",
         loaded: Geolix.lookup({8, 8, 8, 8}, where: :asn) != nil,
-        env_var: "(bundled in Docker)",
-        log_name: "dbip-asn-lite"
+        env_var: "(auto)",
+        log_name: "dbip-asn-lite",
+        provider_key: "dbip"
       },
       %{
         name: "MaxMind GeoLite2-City",
         provider: "MaxMind (free w/ key)",
         loaded: Geolix.lookup({8, 8, 8, 8}, where: :maxmind_city) != nil,
         env_var: "MAXMIND_LICENSE_KEY",
-        log_name: "maxmind-geolite2-city"
+        log_name: "maxmind-geolite2-city",
+        provider_key: "maxmind"
       },
       %{
         name: "ipapi.is VPN (Enumerated)",
         provider: "ipapi.is ($79/mo)",
         loaded: Geolix.lookup({1, 1, 1, 1}, where: :vpn_enumerated) != nil,
         env_var: "IPAPI_API_KEY",
-        log_name: "ipapi-vpn-enumerated"
+        log_name: "ipapi-vpn-enumerated",
+        provider_key: "ipapi_vpn"
       },
       %{
         name: "ipapi.is VPN (Interpolated)",
         provider: "ipapi.is ($79/mo)",
         loaded: Geolix.lookup({1, 1, 1, 1}, where: :vpn_interpolated) != nil,
         env_var: "IPAPI_API_KEY",
-        log_name: "ipapi-vpn-interpolated"
+        log_name: "ipapi-vpn-interpolated",
+        provider_key: "ipapi_vpn"
       }
     ]
   end

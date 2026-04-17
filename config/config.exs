@@ -55,8 +55,8 @@ config :spectabas, Oban,
     Oban.Plugins.Pruner,
     {Oban.Plugins.Cron,
      crontab: [
-       # 1st and 15th of each month at 06:00 UTC — refresh GeoIP databases
-       {"0 6 1,15 * *", Spectabas.Workers.GeoIPRefresh},
+       # Weekly on Monday at 06:00 UTC — refresh all GeoIP databases
+       {"0 6 * * 1", Spectabas.Workers.GeoIPRefresh},
        # Every 5 minutes — retry dead-lettered events when ClickHouse recovers
        {"*/5 * * * *", Spectabas.Workers.DeadLetterRetry},
        # Every 5 minutes — close stale sessions (idle > 30 minutes)

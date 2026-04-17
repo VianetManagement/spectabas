@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.52.0", "2026-04-18T05:00:00Z",
+       [
+         %{
+           title: "Feat: Unified GeoIP database management with VPN pills",
+           description:
+             "All databases (DB-IP, MaxMind, ipapi.is VPN) now auto-download at boot from their APIs and refresh weekly (Monday 06:00 UTC). Admin page at /admin/geoip with per-database re-download buttons and download history. GeoIP link added to admin dashboard. VPN provider shown on visitor profile (e.g. 'VPN (NordVPN)') and realtime page (purple pill). Scraper score on visitor profile now uses last 7 days to match Scrapers page."
+         }
+       ]},
       {"v5.51.0", "2026-04-18T04:00:00Z",
        [
          %{

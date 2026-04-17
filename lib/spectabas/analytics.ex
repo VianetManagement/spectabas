@@ -2034,7 +2034,9 @@ defmodule Spectabas.Analytics do
       any(device_type) AS device_type,
       any(referrer_domain) AS referrer,
       any(visitor_intent) AS intent,
-      anyIf(click_id_type, click_id_type != '') AS click_id_type
+      anyIf(click_id_type, click_id_type != '') AS click_id_type,
+      any(ip_is_vpn) AS is_vpn,
+      any(ip_vpn_provider) AS vpn_provider
     FROM events
     WHERE site_id = #{ClickHouse.param(site.id)}
       AND timestamp >= now() - INTERVAL 5 MINUTE

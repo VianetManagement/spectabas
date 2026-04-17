@@ -147,6 +147,15 @@ defmodule SpectabasWeb.Admin.DashboardLive do
             </p>
           </.link>
         <% end %>
+        <.link
+          navigate="/admin/geoip"
+          class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"
+        >
+          <h3 class="font-semibold text-gray-900 mb-1">GeoIP Databases</h3>
+          <p class="text-sm text-gray-500">
+            DB-IP, MaxMind, ipapi.is VPN — download status, refresh, history
+          </p>
+        </.link>
         <a
           href="/health/diag"
           class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"

@@ -325,6 +325,13 @@ defmodule SpectabasWeb.Dashboard.RealtimeLive do
                   >
                     Scraper {v["scraper_score"]}
                   </span>
+                  <span
+                    :if={v["vpn_provider"] && v["vpn_provider"] != ""}
+                    class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-100 text-purple-800"
+                    title="Known VPN provider"
+                  >
+                    VPN: {v["vpn_provider"]}
+                  </span>
                 </td>
                 <td class="px-4 py-3 text-sm">
                   <.link

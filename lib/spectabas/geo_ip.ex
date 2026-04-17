@@ -1,188 +1,265 @@
 defmodule Spectabas.GeoIP do
-  @moduledoc """
-  Manages GeoIP database loading via Geolix.
-  Loads DB-IP (primary geo/ASN) and MaxMind GeoLite2 (timezone).
-  Downloads MaxMind at runtime if MAXMIND_LICENSE_KEY is set.
-  """
-
   use GenServer
   require Logger
+
+  @databases [
+    %{id: :city, filename: "dbip-city-lite.mmdb", provider: :dbip},
+    %{id: :asn, filename: "dbip-asn-lite.mmdb", provider: :dbip},
+    %{id: :maxmind_city, filename: "GeoLite2-City.mmdb", provider: :maxmind},
+    %{id: :vpn_enumerated, filename: "enumerated-vpn.mmdb", provider: :ipapi_vpn},
+    %{id: :vpn_interpolated, filename: "interpolated-vpn.mmdb", provider: :ipapi_vpn}
+  ]
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
+  def databases, do: @databases
+
+  def data_dir do
+    persistent_dir = System.get_env("PERSISTENT_DIR")
+    priv_dir = :code.priv_dir(:spectabas) |> to_string()
+
+    dir =
+      if persistent_dir,
+        do: Path.join(persistent_dir, "geoip"),
+        else: Path.join(priv_dir, "geoip")
+
+    File.mkdir_p!(dir)
+    dir
+  end
+
   @impl true
   def init(_opts) do
-    priv_dir = :code.priv_dir(:spectabas) |> to_string()
-    geoip_dir = Path.join(priv_dir, "geoip")
-    # Use persistent disk if available (survives deploys), fall back to priv
-    persistent_dir = System.get_env("PERSISTENT_DIR")
-    cache_dir = if persistent_dir, do: Path.join(persistent_dir, "geoip"), else: geoip_dir
-    File.mkdir_p!(cache_dir)
+    dir = data_dir()
+    priv_dir = Path.join(:code.priv_dir(:spectabas) |> to_string(), "geoip")
 
-    # Load DB-IP databases: prefer persistent cache, fall back to priv (Docker image)
-    load_from_cache_or_priv(cache_dir, geoip_dir, "dbip-city-lite.mmdb", :city, persistent_dir)
-    load_from_cache_or_priv(cache_dir, geoip_dir, "dbip-asn-lite.mmdb", :asn, persistent_dir)
+    # Try loading each database from persistent storage or priv (Docker fallback)
+    missing =
+      Enum.filter(@databases, fn db ->
+        path = Path.join(dir, db.filename)
+        priv_path = Path.join(priv_dir, db.filename)
 
-    # MaxMind: check persistent cache, then priv, then download
-    maxmind_file = "GeoLite2-City.mmdb"
-    maxmind_priv = Path.join(geoip_dir, maxmind_file)
-    maxmind_cache = Path.join(cache_dir, maxmind_file)
-
-    cond do
-      File.exists?(maxmind_cache) ->
-        Logger.info("[GeoIP] Loaded MaxMind from persistent cache")
-        load_db(cache_dir, maxmind_file, :maxmind_city)
-
-      File.exists?(maxmind_priv) ->
-        if persistent_dir, do: File.cp(maxmind_priv, maxmind_cache)
-        load_db(geoip_dir, maxmind_file, :maxmind_city)
-
-      true ->
-        case System.get_env("MAXMIND_LICENSE_KEY") do
-          key when is_binary(key) and key != "" ->
-            Logger.info("[GeoIP] Downloading MaxMind GeoLite2-City...")
-            target = if persistent_dir, do: maxmind_cache, else: maxmind_priv
-            download_maxmind(key, target)
-            load_db(Path.dirname(target), maxmind_file, :maxmind_city)
-
-          _ ->
-            Logger.info("[GeoIP] MAXMIND_LICENSE_KEY not set, skipping MaxMind")
-        end
-    end
-
-    # ipapi.is VPN databases (optional, $79/mo subscription)
-    # Loaded from persistent cache, priv/geoip, or downloaded on first boot if IPAPI_API_KEY is set
-    vpn_loaded =
-      for {filename, db_id} <- [
-            {"enumerated-vpn.mmdb", :vpn_enumerated},
-            {"interpolated-vpn.mmdb", :vpn_interpolated}
-          ] do
         cond do
-          File.exists?(Path.join(cache_dir, filename)) ->
-            load_db(cache_dir, filename, db_id)
-            true
+          File.exists?(path) ->
+            load_db(path, db.id)
+            false
 
-          File.exists?(Path.join(geoip_dir, filename)) ->
-            if persistent_dir,
-              do: File.cp(Path.join(geoip_dir, filename), Path.join(cache_dir, filename))
-
-            load_db(geoip_dir, filename, db_id)
-            true
+          File.exists?(priv_path) ->
+            File.cp(priv_path, path)
+            load_db(path, db.id)
+            false
 
           true ->
-            false
+            true
         end
-      end
+      end)
 
-    # If VPN databases not found locally, download from ipapi.is on first boot
-    if not Enum.all?(vpn_loaded) do
-      api_key = System.get_env("IPAPI_API_KEY")
+    # Download missing databases by provider
+    if missing != [] do
+      missing_providers = missing |> Enum.map(& &1.provider) |> Enum.uniq()
 
-      if api_key && api_key != "" do
-        Logger.info("[GeoIP] VPN databases not found, downloading from ipapi.is...")
-        download_ipapi_vpn(api_key, cache_dir)
-      else
-        Logger.info("[GeoIP] VPN databases not found (set IPAPI_API_KEY to auto-download)")
+      Logger.notice(
+        "[GeoIP] Missing databases: #{Enum.map(missing, & &1.filename) |> Enum.join(", ")}"
+      )
+
+      for provider <- missing_providers do
+        download_provider(provider, dir)
       end
     end
 
     {:ok, %{}}
   end
 
-  # Load from persistent cache if available, otherwise from priv (Docker image)
-  defp load_from_cache_or_priv(cache_dir, priv_dir, filename, id, persistent_dir) do
-    cache_path = Path.join(cache_dir, filename)
-    priv_path = Path.join(priv_dir, filename)
-
-    cond do
-      File.exists?(cache_path) ->
-        load_db(cache_dir, filename, id)
-
-      File.exists?(priv_path) ->
-        # Copy to persistent cache for next deploy
-        if persistent_dir, do: File.cp(priv_path, cache_path)
-        load_db(priv_dir, filename, id)
-
-      true ->
-        Logger.info("[GeoIP] #{filename} not found in cache or priv")
-    end
-  end
-
-  defp load_db(dir, filename, id) do
-    path = Path.join(dir, filename)
-
+  def load_db(path, id) do
     if File.exists?(path) do
       Geolix.load_database(%{id: id, adapter: Geolix.Adapter.MMDB2, source: path})
-      Logger.info("[GeoIP] Loaded #{id} from #{path}")
-    else
-      Logger.info("[GeoIP] Not found (optional): #{path}")
+      Logger.info("[GeoIP] Loaded #{id} (#{format_size(File.stat!(path).size)})")
     end
   end
 
-  defp download_ipapi_vpn(api_key, target_dir) do
-    url = "https://ipapi.is/app/getData?type=ipToVpn&format=mmdb&apiKey=#{api_key}"
+  def download_provider(provider, dir \\ nil) do
+    dir = dir || data_dir()
 
-    case Req.get(url, receive_timeout: 300_000, raw: true) do
-      {:ok, %{status: 200, body: body}} when is_binary(body) ->
-        {:ok, files} = :erl_tar.extract({:binary, body}, [:compressed, :memory])
+    case provider do
+      :dbip -> download_dbip(dir)
+      :maxmind -> download_maxmind(dir)
+      :ipapi_vpn -> download_ipapi_vpn(dir)
+    end
+  end
 
-        for {name_cl, data} <- files do
-          name = to_string(name_cl)
+  # --- DB-IP (free, monthly) ---
 
-          case name do
-            "enumerated-vpn.mmdb" ->
-              dest = Path.join(target_dir, name)
-              File.write!(dest, data)
-              load_db(target_dir, name, :vpn_enumerated)
-              Logger.info("[GeoIP] Downloaded ipapi VPN enumerated: #{byte_size(data)} bytes")
+  defp download_dbip(dir) do
+    now = Date.utc_today()
+    year = now.year
+    month = now.month |> Integer.to_string() |> String.pad_leading(2, "0")
 
-            "interpolated-vpn.mmdb" ->
-              dest = Path.join(target_dir, name)
-              File.write!(dest, data)
-              load_db(target_dir, name, :vpn_interpolated)
-              Logger.info("[GeoIP] Downloaded ipapi VPN interpolated: #{byte_size(data)} bytes")
+    for {suffix, filename, id} <- [
+          {"city-lite", "dbip-city-lite.mmdb", :city},
+          {"asn-lite", "dbip-asn-lite.mmdb", :asn}
+        ] do
+      url = "https://download.db-ip.com/free/dbip-#{suffix}-#{year}-#{month}.mmdb.gz"
+      dest = Path.join(dir, filename)
+      log_name = String.replace(filename, ".mmdb", "")
 
-            _ ->
-              :ok
-          end
+      timed_download(log_name, fn ->
+        case Req.get(url, receive_timeout: 120_000) do
+          {:ok, %{status: 200, body: body}} ->
+            data = :zlib.gunzip(body)
+            File.write!(dest, data)
+            load_db(dest, id)
+            {:ok, byte_size(data)}
+
+          {:ok, %{status: status}} ->
+            {:error, "HTTP #{status}"}
+
+          {:error, reason} ->
+            {:error, inspect(reason)}
         end
+      end)
+    end
+  end
 
-      {:ok, %{status: status}} ->
-        Logger.warning("[GeoIP] ipapi.is VPN download HTTP #{status}")
+  # --- MaxMind (free with license key) ---
+
+  defp download_maxmind(dir) do
+    key = System.get_env("MAXMIND_LICENSE_KEY")
+
+    if !key || key == "" do
+      Logger.info("[GeoIP] MAXMIND_LICENSE_KEY not set, skipping MaxMind")
+      return_skip()
+    else
+      url =
+        "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=#{key}&suffix=tar.gz"
+
+      dest = Path.join(dir, "GeoLite2-City.mmdb")
+
+      timed_download("maxmind-geolite2-city", fn ->
+        case Req.get(url, receive_timeout: 120_000, raw: true) do
+          {:ok, %{status: 200, body: body}} when is_binary(body) ->
+            {:ok, files} = :erl_tar.extract({:binary, body}, [:compressed, :memory])
+
+            case Enum.find(files, fn {n, _} -> String.ends_with?(to_string(n), ".mmdb") end) do
+              {_, data} ->
+                File.write!(dest, data)
+                load_db(dest, :maxmind_city)
+                {:ok, byte_size(data)}
+
+              nil ->
+                {:error, "No .mmdb in MaxMind archive"}
+            end
+
+          {:ok, %{status: status}} ->
+            {:error, "HTTP #{status}"}
+
+          {:error, reason} ->
+            {:error, inspect(reason)}
+        end
+      end)
+    end
+  end
+
+  # --- ipapi.is VPN (paid, $79/mo) ---
+
+  defp download_ipapi_vpn(dir) do
+    api_key = System.get_env("IPAPI_API_KEY")
+
+    if !api_key || api_key == "" do
+      Logger.info("[GeoIP] IPAPI_API_KEY not set, skipping VPN databases")
+      return_skip()
+    else
+      url = "https://ipapi.is/app/getData?type=ipToVpn&format=mmdb&apiKey=#{api_key}"
+
+      timed_download("ipapi-vpn-archive", fn ->
+        case Req.get(url, receive_timeout: 300_000, raw: true) do
+          {:ok, %{status: 200, body: body}} when is_binary(body) ->
+            {:ok, files} = :erl_tar.extract({:binary, body}, [:compressed, :memory])
+
+            targets = %{
+              "enumerated-vpn.mmdb" => :vpn_enumerated,
+              "interpolated-vpn.mmdb" => :vpn_interpolated
+            }
+
+            count =
+              Enum.reduce(files, 0, fn {name_cl, data}, acc ->
+                name = to_string(name_cl)
+
+                case Map.get(targets, name) do
+                  nil ->
+                    acc
+
+                  geolix_id ->
+                    dest = Path.join(dir, name)
+                    File.write!(dest, data)
+                    load_db(dest, geolix_id)
+                    log_sub_download(String.replace(name, ".mmdb", ""), byte_size(data))
+                    acc + 1
+                end
+              end)
+
+            {:ok, byte_size(body), "extracted #{count} MMDB files"}
+
+          {:ok, %{status: status}} ->
+            {:error, "HTTP #{status} from ipapi.is"}
+
+          {:error, reason} ->
+            {:error, inspect(reason)}
+        end
+      end)
+    end
+  end
+
+  # --- Helpers ---
+
+  defp timed_download(name, fun) do
+    start = System.monotonic_time(:millisecond)
+    Logger.notice("[GeoIP] Downloading #{name}...")
+
+    case fun.() do
+      {:ok, size} ->
+        ms = System.monotonic_time(:millisecond) - start
+        Logger.notice("[GeoIP] #{name}: #{format_size(size)} in #{ms}ms")
+
+        Spectabas.GeoIP.DownloadLog.log_download(name, "success",
+          file_size: size,
+          duration_ms: ms
+        )
+
+      {:ok, size, note} ->
+        ms = System.monotonic_time(:millisecond) - start
+        Logger.notice("[GeoIP] #{name}: #{format_size(size)} in #{ms}ms (#{note})")
+
+        Spectabas.GeoIP.DownloadLog.log_download(name, "success",
+          file_size: size,
+          duration_ms: ms
+        )
 
       {:error, reason} ->
-        Logger.warning("[GeoIP] ipapi.is VPN download failed: #{inspect(reason)}")
+        ms = System.monotonic_time(:millisecond) - start
+        msg = if is_binary(reason), do: reason, else: inspect(reason)
+        Logger.warning("[GeoIP] #{name} failed: #{msg}")
+
+        Spectabas.GeoIP.DownloadLog.log_download(name, "error",
+          error_message: msg,
+          duration_ms: ms
+        )
     end
   rescue
-    e -> Logger.warning("[GeoIP] ipapi.is VPN download error: #{Exception.message(e)}")
+    e ->
+      msg = Exception.message(e)
+      Logger.error("[GeoIP] #{name} error: #{msg}")
+      Spectabas.GeoIP.DownloadLog.log_download(name, "error", error_message: msg)
   end
 
-  defp download_maxmind(key, dest_path) do
-    url =
-      "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=#{key}&suffix=tar.gz"
-
-    case Req.get(url, receive_timeout: 120_000, raw: true) do
-      {:ok, %{status: 200, body: body}} when is_binary(body) ->
-        {:ok, files} = :erl_tar.extract({:binary, body}, [:compressed, :memory])
-
-        case Enum.find(files, fn {n, _} -> String.ends_with?(to_string(n), ".mmdb") end) do
-          {_, data} ->
-            File.write!(dest_path, data)
-            Logger.info("[GeoIP] MaxMind downloaded: #{byte_size(data)} bytes")
-
-          nil ->
-            Logger.warning("[GeoIP] No .mmdb in MaxMind archive")
-        end
-
-      {:ok, %{status: s}} ->
-        Logger.warning("[GeoIP] MaxMind download HTTP #{s}")
-
-      {:error, e} ->
-        Logger.warning("[GeoIP] MaxMind download failed: #{inspect(e)}")
-    end
-  rescue
-    e -> Logger.warning("[GeoIP] MaxMind download error: #{Exception.message(e)}")
+  defp log_sub_download(name, size) do
+    Logger.notice("[GeoIP] #{name}: #{format_size(size)}")
+    Spectabas.GeoIP.DownloadLog.log_download(name, "success", file_size: size)
   end
+
+  defp return_skip, do: :ok
+
+  defp format_size(bytes) when bytes >= 1_000_000, do: "#{Float.round(bytes / 1_000_000, 1)} MB"
+  defp format_size(bytes) when bytes >= 1_000, do: "#{Float.round(bytes / 1_000, 1)} KB"
+  defp format_size(bytes), do: "#{bytes} B"
 end

@@ -92,7 +92,18 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
         end)
         |> Enum.sort_by(& &1.started, :desc)
 
-      scraper = compute_scraper_score(profile, timeline, site)
+      # Use last 7 days of timeline for scraper score to match the Scrapers page default
+      seven_days_ago = DateTime.utc_now() |> DateTime.add(-7, :day)
+
+      recent_timeline =
+        Enum.filter(timeline, fn e ->
+          case parse_ts(e["timestamp"]) do
+            %DateTime{} = ts -> DateTime.compare(ts, seven_days_ago) != :lt
+            _ -> true
+          end
+        end)
+
+      scraper = compute_scraper_score(profile, recent_timeline, site)
 
       send(lv_pid, {:deferred_result, :timeline, timeline})
       send(lv_pid, {:deferred_result, :sessions, sessions})
@@ -384,7 +395,9 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
                   :if={@profile["is_vpn"] == "1" || @profile["is_vpn"] == 1}
                   class="px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800"
                 >
-                  VPN
+                  VPN{if @profile["vpn_provider"] && @profile["vpn_provider"] != "",
+                    do: " (#{@profile["vpn_provider"]})",
+                    else: ""}
                 </span>
                 <span
                   :if={@profile["is_bot"] == "1" || @profile["is_bot"] == 1}
