@@ -171,22 +171,24 @@ defmodule Spectabas.Analytics.ScraperCalibration do
   # --- AI analysis ---
 
   defp analyze_with_ai(site, baseline) do
-    ai_config = decrypt_ai_config(site)
-
-    if !ai_config do
-      {:error, "No AI provider configured for this site. Set up AI in Settings > Integrations."}
+    if !Spectabas.AI.Config.configured?(site) do
+      {:error,
+       "No AI provider configured for this site. Set up AI in Settings > Content > AI Analysis."}
     else
+      {provider, api_key, model} = Spectabas.AI.Config.credentials(site)
       prompt = build_prompt(site, baseline)
 
-      case Completion.generate(ai_config.provider, ai_config, prompt) do
+      ai_opts = %{provider: String.to_existing_atom(provider), api_key: api_key, model: model}
+
+      case Completion.generate(ai_opts.provider, ai_opts, prompt) do
         {:ok, response} ->
           recommendations = parse_ai_response(response.text)
 
           {:ok,
            %{
              recommendations: recommendations,
-             provider: to_string(ai_config.provider),
-             model: ai_config[:model] || "",
+             provider: provider,
+             model: model || "",
              prompt_tokens: response[:prompt_tokens],
              completion_tokens: response[:completion_tokens]
            }}
@@ -290,27 +292,5 @@ defmodule Spectabas.Analytics.ScraperCalibration do
       {:ok, parsed} when is_map(parsed) -> parsed
       _ -> %{"error" => "Failed to parse AI response", "raw" => String.slice(text, 0, 500)}
     end
-  end
-
-  defp decrypt_ai_config(site) do
-    case site.ai_config_encrypted do
-      config when is_map(config) and config != %{} ->
-        provider = config["provider"]
-
-        if provider do
-          %{
-            provider: String.to_existing_atom(provider),
-            api_key: config["api_key"],
-            model: config["model"]
-          }
-        else
-          nil
-        end
-
-      _ ->
-        nil
-    end
-  rescue
-    _ -> nil
   end
 end

@@ -161,30 +161,9 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
       send(lv_pid, {:deferred_result, :visitor_ips, ips})
     end)
 
-    # Real-time VPN provider lookup (checks live Geolix databases, not stored ClickHouse data)
+    # Real-time VPN/privacy relay lookup (checks live Geolix databases, not stored ClickHouse data)
     Task.start(fn ->
-      vpn =
-        if last_ip && last_ip != "" do
-          case :inet.parse_address(String.to_charlist(last_ip)) do
-            {:ok, parsed} ->
-              case Geolix.lookup(parsed, where: :vpn_enumerated) do
-                %{serviceName: name} when is_binary(name) and name != "" ->
-                  name
-
-                _ ->
-                  case Geolix.lookup(parsed, where: :vpn_interpolated) do
-                    %{serviceName: name} when is_binary(name) and name != "" -> name
-                    _ -> ""
-                  end
-              end
-
-            _ ->
-              ""
-          end
-        else
-          ""
-        end
-
+      vpn = Spectabas.IPEnricher.vpn_provider_for_ip(last_ip || "")
       send(lv_pid, {:deferred_result, :vpn_provider, vpn})
     end)
 

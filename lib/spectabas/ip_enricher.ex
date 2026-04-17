@@ -147,6 +147,15 @@ defmodule Spectabas.IPEnricher do
   defp format_org(nil, _), do: ""
   defp format_org(asn, org), do: "AS#{asn} #{org}"
 
+  def vpn_provider_for_ip(ip_string) when is_binary(ip_string) do
+    case :inet.parse_address(String.to_charlist(ip_string)) do
+      {:ok, parsed} -> lookup_vpn_provider(parsed)
+      _ -> ""
+    end
+  end
+
+  def vpn_provider_for_ip(_), do: ""
+
   defp empty_result do
     %{
       ip_address: "",
@@ -175,16 +184,33 @@ defmodule Spectabas.IPEnricher do
     }
   end
 
+  # Known privacy relay ASNs — CDN providers that serve as egress for
+  # consumer privacy services (Apple iCloud Private Relay, Cloudflare WARP).
+  # Not traditional VPNs but should be tagged for visibility.
+  @privacy_relay_asns %{
+    54113 => "Apple Private Relay (Fastly)",
+    13335 => "Cloudflare (WARP/Private Relay)",
+    20940 => "Akamai (CDN/Privacy Relay)",
+    63949 => "Akamai (CDN/Privacy Relay)"
+  }
+
   defp lookup_vpn_provider(parsed_ip) do
-    # Check enumerated first (highest confidence), then interpolated (broader coverage)
+    # Check enumerated first (highest confidence), then interpolated, then privacy relays
     case Geolix.lookup(parsed_ip, where: :vpn_enumerated) do
       %{serviceName: name} when is_binary(name) and name != "" ->
         name
 
       _ ->
         case Geolix.lookup(parsed_ip, where: :vpn_interpolated) do
-          %{serviceName: name} when is_binary(name) and name != "" -> name
-          _ -> ""
+          %{serviceName: name} when is_binary(name) and name != "" ->
+            name
+
+          _ ->
+            # Check if the IP belongs to a known privacy relay ASN
+            case Geolix.lookup(parsed_ip, where: :asn) do
+              %{autonomous_system_number: asn} -> Map.get(@privacy_relay_asns, asn, "")
+              _ -> ""
+            end
         end
     end
   end

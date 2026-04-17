@@ -42,22 +42,7 @@ defmodule Spectabas.Workers.BackfillVpn do
   end
 
   defp lookup_vpn(ip_string) do
-    case :inet.parse_address(String.to_charlist(ip_string)) do
-      {:ok, parsed} ->
-        case Geolix.lookup(parsed, where: :vpn_enumerated) do
-          %{serviceName: name} when is_binary(name) and name != "" ->
-            name
-
-          _ ->
-            case Geolix.lookup(parsed, where: :vpn_interpolated) do
-              %{serviceName: name} when is_binary(name) and name != "" -> name
-              _ -> ""
-            end
-        end
-
-      _ ->
-        ""
-    end
+    Spectabas.IPEnricher.vpn_provider_for_ip(ip_string)
   end
 
   defp update_vpn(ip, provider) do
