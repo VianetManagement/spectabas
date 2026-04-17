@@ -1245,6 +1245,10 @@ defmodule SpectabasWeb.DocsLive do
 
             FID requires a user interaction (click, tap, keypress) to measure. If no visitors interact before navigating away, FID data will be absent for that period — this is normal.
 
+            ### Core Web Vitals Over Time
+
+            A dual-axis trend chart showing daily LCP, FID (left axis, milliseconds) and CLS (right axis, dashed green line) over the selected date range. Use this to spot performance regressions after deploys, track improvement trends, or correlate slowdowns with traffic spikes.
+
             ### Page Load Timing
 
             Median values for: **TTFB** (time to first byte), **First Paint** (first contentful paint), **DOM Ready** (DOMContentLoaded), and **Full Load** (load event complete).

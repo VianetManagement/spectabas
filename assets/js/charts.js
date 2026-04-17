@@ -385,3 +385,126 @@ export const BubbleMap = {
     if (this.chart) this.chart.destroy()
   },
 }
+
+// --- Core Web Vitals Timeseries (dual-axis: ms left, CLS right) ---
+export const VitalsChart = {
+  mounted() {
+    this.chart = null
+
+    const raw = this.el.dataset.chart
+    if (raw) {
+      try { this.setData(JSON.parse(raw)) } catch (e) { /* ok */ }
+    }
+
+    this.handleEvent("vitals-data", (data) => this.setData(data))
+  },
+  setData(data) {
+    const canvas = this.el.querySelector("canvas")
+    if (!canvas || !data || !data.labels) return
+
+    const datasets = [
+      {
+        label: "LCP (ms)",
+        data: data.lcp,
+        borderColor: "#6366f1",
+        backgroundColor: "rgba(99, 102, 241, 0.1)",
+        fill: false,
+        tension: 0.3,
+        pointRadius: data.labels.length > 20 ? 0 : 3,
+        pointHoverRadius: 5,
+        borderWidth: 2,
+        yAxisID: "y",
+      },
+      {
+        label: "FID (ms)",
+        data: data.fid,
+        borderColor: "#f59e0b",
+        backgroundColor: "rgba(245, 158, 11, 0.1)",
+        fill: false,
+        tension: 0.3,
+        pointRadius: data.labels.length > 20 ? 0 : 3,
+        pointHoverRadius: 5,
+        borderWidth: 2,
+        yAxisID: "y",
+      },
+      {
+        label: "CLS",
+        data: data.cls,
+        borderColor: "#10b981",
+        backgroundColor: "rgba(16, 185, 129, 0.1)",
+        fill: false,
+        tension: 0.3,
+        pointRadius: data.labels.length > 20 ? 0 : 3,
+        pointHoverRadius: 5,
+        borderWidth: 2,
+        borderDash: [5, 3],
+        yAxisID: "y1",
+      },
+    ]
+
+    if (this.chart) {
+      this.chart.data.labels = data.labels
+      this.chart.data.datasets = datasets
+      this.chart.resize()
+      this.chart.update()
+      return
+    }
+
+    this.chart = new Chart(canvas, {
+      type: "line",
+      data: { labels: data.labels, datasets: datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 300 },
+        interaction: { intersect: false, mode: "index" },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { maxTicksLimit: 8, color: "#9ca3af" },
+          },
+          y: {
+            type: "linear",
+            position: "left",
+            beginAtZero: true,
+            title: { display: true, text: "ms", color: "#9ca3af", font: { size: 11 } },
+            grid: { color: "#f3f4f6" },
+            ticks: { color: "#9ca3af", precision: 0 },
+          },
+          y1: {
+            type: "linear",
+            position: "right",
+            beginAtZero: true,
+            title: { display: true, text: "CLS", color: "#10b981", font: { size: 11 } },
+            grid: { drawOnChartArea: false },
+            ticks: { color: "#10b981" },
+          },
+        },
+        plugins: {
+          tooltip: {
+            backgroundColor: "#1f2937",
+            titleColor: "#f9fafb",
+            bodyColor: "#d1d5db",
+            padding: 10,
+            cornerRadius: 8,
+            callbacks: {
+              label: function(ctx) {
+                const v = ctx.parsed.y
+                if (ctx.dataset.yAxisID === "y1") return `${ctx.dataset.label}: ${v}`
+                return `${ctx.dataset.label}: ${Math.round(v)}ms`
+              }
+            },
+          },
+          legend: {
+            display: true,
+            position: "top",
+            labels: { usePointStyle: true, pointStyle: "line", padding: 16, font: { size: 11 } },
+          },
+        },
+      },
+    })
+  },
+  destroyed() {
+    if (this.chart) this.chart.destroy()
+  },
+}

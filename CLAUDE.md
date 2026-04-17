@@ -138,7 +138,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 ### Unique Features
 - **Visitor Intent Detection** — auto-classifies visitors as buying/engaging/researching/comparing/support/returning/browsing/bot. Site-configurable path patterns in Settings (intent_config map on sites table). "engaging" = core app usage (search, listings, messaging). Also: `journey_conversion_pages` (array of URL path prefixes) defines conversion pages for the Journeys page.
 - **Row Evolution Sparklines** — click any row in the Pages table to see an inline trend chart for that page
-- **Real User Monitoring** — Core Web Vitals (LCP, CLS, FID), page load timing, per-page and per-device performance
+- **Real User Monitoring** — Core Web Vitals (LCP, CLS, FID), page load timing, per-page and per-device performance. CWV over time chart (dual-axis: LCP+FID ms left, CLS right) on Performance page.
 - **Cross-linking** — click any dimension to navigate to filtered views (ASN→visitors, page→transitions, source→visitor log)
 - **IP Cross-referencing** — visitor profiles show other visitors sharing the same IP
 - **EU Flag** — GDPR compliance indicator from MaxMind
@@ -282,7 +282,7 @@ Push to `main` triggers auto-deploy on Render. Docker build ~2-3 minutes.
 - **Mobile responsiveness** — scrollable tables, collapsible mobile nav bar
 - **Accessible top nav** — WCAG AA contrast compliance
 - **Documentation pages** — docs split into `/docs` (index), `/docs/getting-started`, `/docs/dashboard`, `/docs/conversions`, `/docs/api`, `/docs/admin` with cross-category search. Requires login (behind :require_authenticated_user). Public pages: `/privacy`, `/terms`, homepage.
-- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.46.4)
+- **Changelog** — versioned changelog at `/admin/changelog`, updated on every push (current: v5.47.0)
 - **Legal** — Privacy Policy at `/privacy` and Terms of Service at `/terms` (public, no auth required). Entity: Spectabas, Kent County MI. Contact: howdy@spectabas.com. Arbitration clause (AAA, Kent County). 18+ age restriction.
 
 ## Important Patterns

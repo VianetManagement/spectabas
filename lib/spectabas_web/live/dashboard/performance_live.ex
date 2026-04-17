@@ -48,13 +48,29 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
     vitals = safe_query(fn -> Analytics.rum_web_vitals(site, user, period) end, %{})
     by_page = safe_query(fn -> Analytics.rum_by_page(site, user, period) end)
     by_device = safe_query(fn -> Analytics.rum_by_device(site, user, period) end)
+    vitals_ts = safe_query(fn -> Analytics.rum_vitals_timeseries(site, user, period) end)
+
+    vitals_chart_data = build_vitals_chart_data(vitals_ts)
 
     socket
     |> assign(:overview, overview)
     |> assign(:vitals, vitals)
     |> assign(:by_page, by_page)
     |> assign(:by_device, by_device)
+    |> assign(:vitals_chart_data, vitals_chart_data)
+    |> assign(:vitals_chart_key, System.unique_integer([:positive]))
   end
+
+  defp build_vitals_chart_data(rows) when is_list(rows) do
+    %{
+      labels: Enum.map(rows, & &1["bucket"]),
+      lcp: Enum.map(rows, &to_num(&1["median_lcp"])),
+      cls: Enum.map(rows, &to_float(&1["median_cls"])),
+      fid: Enum.map(rows, &to_num(&1["median_fid"]))
+    }
+  end
+
+  defp build_vitals_chart_data(_), do: %{labels: [], lcp: [], cls: [], fid: []}
 
   @impl true
   def render(assigns) do
@@ -147,6 +163,21 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
                 good={100}
                 poor={300}
               />
+            </div>
+          </div>
+
+          <%!-- Core Web Vitals Over Time --%>
+          <div :if={@vitals_chart_data.labels != []} class="bg-white rounded-lg shadow p-5 mb-6">
+            <h3 class="font-semibold text-gray-900 mb-4">Core Web Vitals Over Time</h3>
+            <div
+              id={"vitals-chart-#{@vitals_chart_key}"}
+              phx-hook="VitalsChart"
+              phx-update="ignore"
+              data-chart={Jason.encode!(@vitals_chart_data)}
+            >
+              <div style="height: 280px; position: relative;">
+                <canvas></canvas>
+              </div>
             </div>
           </div>
 

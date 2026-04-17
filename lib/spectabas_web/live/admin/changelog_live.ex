@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.47.0", "2026-04-17T23:00:00Z",
+       [
+         %{
+           title: "Feat: Core Web Vitals over time chart on Performance page",
+           description:
+             "New dual-axis line chart showing LCP, FID (left axis, ms) and CLS (right axis, dashed line) trended daily over the selected date range. Appears between the CWV summary cards and Page Load Timing section. Uses race-free data-chart attribute pattern for initial render."
+         }
+       ]},
       {"v5.46.4", "2026-04-17T22:00:00Z",
        [
          %{
