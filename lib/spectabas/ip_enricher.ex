@@ -50,6 +50,8 @@ defmodule Spectabas.IPEnricher do
       get_in_safe(maxmind_result, [:country, :is_in_european_union]) ||
         get_in_safe(city_result, [:country, :is_in_european_union]) || false
 
+    vpn_provider = lookup_vpn_provider(parsed_ip)
+
     %{
       ip_address: if(gdpr_on?, do: anonymize(original_ip), else: original_ip),
       ip_country: get_in_safe(city_result, [:country, :iso_code]) || "",
@@ -68,8 +70,10 @@ defmodule Spectabas.IPEnricher do
       ip_asn_org: asn_org,
       ip_org: format_org(asn_number, asn_org),
       ip_is_datacenter: if(asn_number && ASNBlocklist.datacenter?(asn_number), do: 1, else: 0),
-      ip_is_vpn: if(asn_number && ASNBlocklist.vpn?(asn_number), do: 1, else: 0),
+      ip_is_vpn:
+        if((asn_number && ASNBlocklist.vpn?(asn_number)) || vpn_provider != "", do: 1, else: 0),
       ip_is_tor: if(asn_number && ASNBlocklist.tor?(asn_number), do: 1, else: 0),
+      ip_vpn_provider: vpn_provider,
       ip_is_bot: 0,
       ip_is_eu: if(is_eu, do: 1, else: 0),
       ip_gdpr_anonymized: if(gdpr_on?, do: 1, else: 0)
@@ -164,10 +168,25 @@ defmodule Spectabas.IPEnricher do
       ip_is_datacenter: 0,
       ip_is_vpn: 0,
       ip_is_tor: 0,
+      ip_vpn_provider: "",
       ip_is_bot: 0,
       ip_is_eu: 0,
       ip_gdpr_anonymized: 0
     }
+  end
+
+  defp lookup_vpn_provider(parsed_ip) do
+    # Check enumerated first (highest confidence), then interpolated (broader coverage)
+    case Geolix.lookup(parsed_ip, where: :vpn_enumerated) do
+      %{serviceName: name} when is_binary(name) and name != "" ->
+        name
+
+      _ ->
+        case Geolix.lookup(parsed_ip, where: :vpn_interpolated) do
+          %{serviceName: name} when is_binary(name) and name != "" -> name
+          _ -> ""
+        end
+    end
   end
 end
 

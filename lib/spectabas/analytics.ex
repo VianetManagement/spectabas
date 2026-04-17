@@ -3922,7 +3922,8 @@ defmodule Spectabas.Analytics do
         toTimezone(max(timestamp), #{tz}) AS last_seen,
         any(ip_country) AS country,
         any(ip_city) AS city,
-        max(ip_is_datacenter) AS is_datacenter
+        max(ip_is_datacenter) AS is_datacenter,
+        any(ip_vpn_provider) AS vpn_provider
       FROM events
       WHERE site_id = #{site_p}
         AND timestamp >= #{from_p}
@@ -3988,7 +3989,8 @@ defmodule Spectabas.Analytics do
       arraySlice(arrayDifference(arraySort(
         groupArrayIf(100)(toUnixTimestamp(timestamp) * 1000,
           event_type = 'pageview'))), 2) AS request_intervals_ms,
-      max(ip_is_datacenter) AS is_datacenter
+      max(ip_is_datacenter) AS is_datacenter,
+      any(ip_vpn_provider) AS vpn_provider
     FROM events
     WHERE site_id = #{site_p}
       AND timestamp >= #{from_p}
@@ -4036,9 +4038,8 @@ defmodule Spectabas.Analytics do
       referrer: row["referrer"],
       screen_resolution: row["screen_resolution"],
       request_intervals_ms: List.wrap(row["request_intervals_ms"]) |> Enum.map(&to_int/1),
-      # is_datacenter comes from the 900-entry ASNBlocklist (ip_is_datacenter column).
-      # Also used as a fallback if the 10-entry @datacenter_asns string list misses one.
-      is_datacenter: to_int(row["is_datacenter"]) == 1
+      is_datacenter: to_int(row["is_datacenter"]) == 1,
+      vpn_provider: row["vpn_provider"] || ""
     }
   end
 

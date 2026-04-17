@@ -750,13 +750,32 @@ defmodule SpectabasWeb.HealthController do
         _ -> "no_result"
       end
 
+    # Test VPN database (ipapi.is)
+    vpn_enum_loaded = Geolix.lookup({1, 1, 1, 1}, where: :vpn_enumerated) != nil
+    vpn_interp_loaded = Geolix.lookup({146, 70, 161, 1}, where: :vpn_interpolated) != nil
+
+    vpn_test =
+      case Geolix.lookup({1, 1, 1, 1}, where: :vpn_enumerated) do
+        %{serviceName: name} ->
+          name
+
+        _ ->
+          case Geolix.lookup({1, 1, 1, 1}, where: :vpn_interpolated) do
+            %{serviceName: name} -> name
+            _ -> "not_loaded"
+          end
+      end
+
     %{
       priv_dir: priv_dir,
       city_file_exists: File.exists?(city_path),
       asn_file_exists: File.exists?(asn_path),
       city_file_size: if(File.exists?(city_path), do: File.stat!(city_path).size, else: 0),
       test_lookup_8888: country,
-      test_lookup_174: test_full_lookup("174.252.144.194")
+      test_lookup_174: test_full_lookup("174.252.144.194"),
+      vpn_enumerated_loaded: vpn_enum_loaded,
+      vpn_interpolated_loaded: vpn_interp_loaded,
+      vpn_test_1111: vpn_test
     }
   end
 

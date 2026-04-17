@@ -99,7 +99,15 @@ defmodule Spectabas.Analytics.ScraperDetector do
     # Check BOTH the 10-entry @datacenter_asns string list AND the
     # caller-supplied `is_datacenter` boolean (from the comprehensive 900-entry
     # ASNBlocklist). Either match fires the signal.
-    if datacenter_asn?(profile[:asn]) or profile[:is_datacenter] == true do
+    #
+    # SUPPRESS when the IP belongs to a known consumer VPN provider (e.g.
+    # NordVPN, Mullvad, ExpressVPN). These run on datacenter infrastructure
+    # but serve legitimate users. The vpn_provider field comes from the
+    # ipapi.is VPN MMDB database.
+    is_dc = datacenter_asn?(profile[:asn]) or profile[:is_datacenter] == true
+    on_known_vpn = known_vpn_provider?(profile[:vpn_provider])
+
+    if is_dc and not on_known_vpn do
       {points + 35, [:datacenter_asn | signals]}
     else
       {points, signals}
@@ -108,11 +116,12 @@ defmodule Spectabas.Analytics.ScraperDetector do
 
   # Only fires if we ALSO match the datacenter signal — a mobile UA on a
   # residential ISP is normal; a mobile UA on an OVH IP is almost certainly
-  # spoofed.
+  # spoofed. Also suppressed when on a known consumer VPN.
   defp add_spoofed_ua_signal(points, signals, profile) do
-    dc? = datacenter_asn?(profile[:asn]) or profile[:is_datacenter] == true
+    is_dc = datacenter_asn?(profile[:asn]) or profile[:is_datacenter] == true
+    on_known_vpn = known_vpn_provider?(profile[:vpn_provider])
 
-    if dc? and mobile_ua?(profile[:user_agent]) do
+    if is_dc and not on_known_vpn and mobile_ua?(profile[:user_agent]) do
       {points + 20, [:spoofed_mobile_ua | signals]}
     else
       {points, signals}
@@ -239,4 +248,11 @@ defmodule Spectabas.Analytics.ScraperDetector do
   end
 
   defp std_dev(_), do: 0.0
+
+  # A known consumer VPN provider — suppress the datacenter_asn signal
+  # because these run on datacenter infrastructure but serve legitimate users.
+  defp known_vpn_provider?(nil), do: false
+  defp known_vpn_provider?(""), do: false
+  defp known_vpn_provider?(name) when is_binary(name), do: true
+  defp known_vpn_provider?(_), do: false
 end

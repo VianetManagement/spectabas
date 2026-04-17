@@ -1086,7 +1086,8 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
       referrer: profile["referrer_domain"],
       screen_resolution: "#{profile["screen_width"] || 0}x#{profile["screen_height"] || 0}",
       request_intervals_ms: intervals,
-      is_datacenter: to_num(profile["ip_is_datacenter"]) == 1
+      is_datacenter: to_num(profile["ip_is_datacenter"]) == 1,
+      vpn_provider: profile["ip_vpn_provider"] || ""
     }
 
     Spectabas.Analytics.ScraperDetector.score(detector_profile)

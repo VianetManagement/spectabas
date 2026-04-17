@@ -480,7 +480,8 @@ defmodule Spectabas.ClickHouse do
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_click_id click_id TYPE bloom_filter GRANULARITY 4",
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_utm_source utm_source TYPE bloom_filter GRANULARITY 4",
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_utm_medium utm_medium TYPE bloom_filter GRANULARITY 4",
-      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_utm_campaign utm_campaign TYPE bloom_filter GRANULARITY 4"
+      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_utm_campaign utm_campaign TYPE bloom_filter GRANULARITY 4",
+      "ALTER TABLE #{db}.events ADD COLUMN IF NOT EXISTS ip_vpn_provider LowCardinality(String) DEFAULT '' AFTER ip_is_tor"
     ]
 
     if connected do

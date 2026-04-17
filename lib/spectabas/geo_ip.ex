@@ -52,6 +52,34 @@ defmodule Spectabas.GeoIP do
         end
     end
 
+    # ipapi.is VPN databases (optional, $79/mo subscription)
+    # Place enumerated-vpn.mmdb and interpolated-vpn.mmdb in priv/geoip/ or set IPAPI_VPN_DIR
+    vpn_dir = System.get_env("IPAPI_VPN_DIR")
+
+    for {filename, db_id} <- [
+          {"enumerated-vpn.mmdb", :vpn_enumerated},
+          {"interpolated-vpn.mmdb", :vpn_interpolated}
+        ] do
+      cond do
+        vpn_dir && File.exists?(Path.join(vpn_dir, filename)) ->
+          load_db(vpn_dir, filename, db_id)
+
+        File.exists?(Path.join(cache_dir, filename)) ->
+          load_db(cache_dir, filename, db_id)
+
+        File.exists?(Path.join(geoip_dir, filename)) ->
+          if persistent_dir,
+            do: File.cp(Path.join(geoip_dir, filename), Path.join(cache_dir, filename))
+
+          load_db(geoip_dir, filename, db_id)
+
+        true ->
+          Logger.info(
+            "[GeoIP] #{filename} not found (optional — place in priv/geoip/ or set IPAPI_VPN_DIR)"
+          )
+      end
+    end
+
     {:ok, %{}}
   end
 

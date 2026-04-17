@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.49.0", "2026-04-18T02:00:00Z",
+       [
+         %{
+           title: "Feat: VPN provider detection — suppresses false-positive scraper signals",
+           description:
+             "Integrated ipapi.is IP to VPN database (enumerated + interpolated MMDB). Visitors on known consumer VPNs (NordVPN, Mullvad, ProtonVPN, etc.) no longer trigger the datacenter_asn (+35) or spoofed_mobile_ua (+20) scraper signals. New ip_vpn_provider column in ClickHouse events. Health diagnostic endpoint shows VPN database status. Set IPAPI_VPN_DIR env var to the directory containing the MMDB files."
+         }
+       ]},
       {"v5.48.1", "2026-04-18T01:00:00Z",
        [
          %{
