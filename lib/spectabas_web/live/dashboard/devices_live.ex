@@ -19,30 +19,36 @@ defmodule SpectabasWeb.Dashboard.DevicesLive do
        |> put_flash(:error, "Unauthorized")
        |> redirect(to: ~p"/")}
     else
-      {:ok,
-       socket
-       |> assign(:page_title, "Devices - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:user, user)
-       |> assign(:date_range, "7d")
-       |> assign(:tab, "device_type")
-       |> load_devices()}
+      socket =
+        socket
+        |> assign(:page_title, "Devices - #{site.name}")
+        |> assign(:site, site)
+        |> assign(:user, user)
+        |> assign(:date_range, "7d")
+        |> assign(:tab, "device_type")
+        |> assign(:loading, true)
+        |> assign(:devices, [])
+        |> assign(:total_visitors, 0)
+
+      if connected?(socket), do: send(self(), :load_data)
+      {:ok, socket}
     end
   end
 
   @impl true
   def handle_event("change_range", %{"range" => range}, socket) do
-    {:noreply,
-     socket
-     |> assign(:date_range, range)
-     |> load_devices()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:date_range, range) |> assign(:loading, true)}
   end
 
   def handle_event("change_tab", %{"tab" => tab}, socket) do
-    {:noreply,
-     socket
-     |> assign(:tab, tab)
-     |> load_devices()}
+    send(self(), :load_data)
+    {:noreply, socket |> assign(:tab, tab) |> assign(:loading, true)}
+  end
+
+  @impl true
+  def handle_info(:load_data, socket) do
+    {:noreply, socket |> load_devices() |> assign(:loading, false)}
   end
 
   defp load_devices(socket) do
@@ -84,10 +90,13 @@ defmodule SpectabasWeb.Dashboard.DevicesLive do
     labels = Enum.map(devices, &(Map.get(&1, tab, "Unknown") || "Unknown"))
     values = Enum.map(devices, &to_num(&1["unique_visitors"]))
 
-    socket
-    |> assign(:devices, devices)
-    |> assign(:total_visitors, total)
-    |> push_event("pie-data", %{labels: Enum.take(labels, 8), values: Enum.take(values, 8)})
+    socket = socket |> assign(:devices, devices) |> assign(:total_visitors, total)
+
+    if connected?(socket) do
+      push_event(socket, "pie-data", %{labels: Enum.take(labels, 8), values: Enum.take(values, 8)})
+    else
+      socket
+    end
   end
 
   @impl true
@@ -143,60 +152,83 @@ defmodule SpectabasWeb.Dashboard.DevicesLive do
           </button>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <%!-- Pie Chart --%>
-          <div :if={@devices != []} class="bg-white rounded-lg shadow p-6">
-            <div id="pie-chart" phx-hook="PieChart" class="h-64">
-              <canvas></canvas>
+        <%= if @loading do %>
+          <div class="bg-white rounded-lg shadow p-12 text-center">
+            <div class="inline-flex items-center gap-3 text-gray-600">
+              <svg class="animate-spin h-5 w-5 text-indigo-600" viewBox="0 0 24 24" fill="none">
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              <span class="text-sm">Loading...</span>
             </div>
           </div>
+        <% else %>
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <%!-- Pie Chart --%>
+            <div :if={@devices != []} class="bg-white rounded-lg shadow p-6">
+              <div id="pie-chart" phx-hook="PieChart" class="h-64">
+                <canvas></canvas>
+              </div>
+            </div>
 
-          <%!-- Table --%>
-          <div class={[
-            "bg-white rounded-lg shadow overflow-x-auto",
-            if(@devices != [], do: "lg:col-span-2", else: "lg:col-span-3")
-          ]}>
-            <table class="min-w-full divide-y divide-gray-200">
-              <thead class="bg-gray-50">
-                <tr>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    {String.replace(@tab, "_", " ") |> String.capitalize()}
-                  </th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Visitors
-                  </th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    %
-                  </th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Pageviews
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="bg-white divide-y divide-gray-200">
-                <tr :if={@devices == []}>
-                  <td colspan="4" class="px-6 py-8 text-center text-gray-500">
-                    No data for this period.
-                  </td>
-                </tr>
-                <tr :for={device <- @devices} class="hover:bg-gray-50">
-                  <td class="px-6 py-4 text-sm text-gray-900 font-medium">
-                    {Map.get(device, @tab, "Unknown") || "Unknown"}
-                  </td>
-                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                    {format_number(to_num(device["unique_visitors"]))}
-                  </td>
-                  <td class="px-6 py-4 text-sm text-gray-500 text-right tabular-nums">
-                    {device["pct"]}%
-                  </td>
-                  <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                    {format_number(to_num(device["pageviews"]))}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+            <%!-- Table --%>
+            <div class={[
+              "bg-white rounded-lg shadow overflow-x-auto",
+              if(@devices != [], do: "lg:col-span-2", else: "lg:col-span-3")
+            ]}>
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      {String.replace(@tab, "_", " ") |> String.capitalize()}
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Visitors
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      %
+                    </th>
+                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Pageviews
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                  <tr :if={@devices == []}>
+                    <td colspan="4" class="px-6 py-8 text-center text-gray-500">
+                      No data for this period.
+                    </td>
+                  </tr>
+                  <tr :for={device <- @devices} class="hover:bg-gray-50">
+                    <td class="px-6 py-4 text-sm text-gray-900 font-medium">
+                      {Map.get(device, @tab, "Unknown") || "Unknown"}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                      {format_number(to_num(device["unique_visitors"]))}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-500 text-right tabular-nums">
+                      {device["pct"]}%
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                      {format_number(to_num(device["pageviews"]))}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        <% end %>
       </div>
     </.dashboard_layout>
     """

@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.46.3", "2026-04-17T21:00:00Z",
+       [
+         %{
+           title: "Perf: All dashboard pages now load instantly with deferred data",
+           description:
+             "Converted Pages, Geography, Devices, Network, and Ecommerce from synchronous to deferred loading. All 39 dashboard pages now render instantly with a loading spinner, then fill in data asynchronously. No more blank screens while ClickHouse queries run."
+         }
+       ]},
       {"v5.46.2", "2026-04-17T20:00:00Z",
        [
          %{
