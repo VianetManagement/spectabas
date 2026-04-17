@@ -53,6 +53,15 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.55.0", "2026-04-18T08:00:00Z",
+       [
+         %{
+           title:
+             "Feat: Scraper detection overhaul — VPN/privacy relay protection, AI calibration, extreme pageviews",
+           description:
+             "Major scraper detection improvements: VPN provider detection via ipapi.is MMDB (NordVPN, Mullvad, etc.). Privacy relay ASNs (Akamai, Fastly, Cloudflare) suppress datacenter signal and clear DC flag. New extreme_pageviews_1000 tier (+50) for 1000+ unique pages — catches residential scrapers. Rebalanced weights: datacenter_asn +40, no_referrer +10, escalating pageview tiers. AI-powered per-site score calibration with approve/reject workflow. VPN backfill job for historical data. GeoIP admin page with per-database re-download buttons."
+         }
+       ]},
       {"v5.54.0", "2026-04-18T07:00:00Z",
        [
          %{

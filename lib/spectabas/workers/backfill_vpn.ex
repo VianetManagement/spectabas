@@ -91,30 +91,33 @@ defmodule Spectabas.Workers.BackfillVpn do
     end
   end
 
-  # Single mutation for all IPs of one provider
   defp batch_update_vpn(ips, provider) do
-    in_clause = ips |> Enum.map(&ClickHouse.param/1) |> Enum.join(", ")
+    ips
+    |> Enum.chunk_every(500)
+    |> Enum.each(fn chunk ->
+      in_clause = chunk |> Enum.map(&ClickHouse.param/1) |> Enum.join(", ")
 
-    sql = """
-    ALTER TABLE events UPDATE
-      ip_vpn_provider = #{ClickHouse.param(provider)},
-      ip_is_vpn = 1,
-      ip_is_datacenter = 0
-    WHERE ip_address IN (#{in_clause})
-    SETTINGS mutations_sync = 0
-    """
+      sql = """
+      ALTER TABLE events UPDATE
+        ip_vpn_provider = #{ClickHouse.param(provider)},
+        ip_is_vpn = 1,
+        ip_is_datacenter = 0
+      WHERE ip_address IN (#{in_clause})
+      SETTINGS mutations_sync = 0
+      """
 
-    case ClickHouse.execute(sql) do
-      :ok -> :ok
-      {:error, e} -> Logger.warning("[BackfillVpn] Batch update failed: #{inspect(e)}")
-    end
+      case ClickHouse.execute(sql) do
+        :ok -> :ok
+        {:error, e} -> Logger.warning("[BackfillVpn] Batch update failed: #{inspect(e)}")
+      end
+    end)
   end
 
   # Single mutation for all non-VPN IPs
   defp batch_mark_checked(ips) do
-    # Process in chunks of 5000 to avoid overly long IN clauses
+    # Process in chunks of 500 to stay under ClickHouse HTTP field length limit
     ips
-    |> Enum.chunk_every(5000)
+    |> Enum.chunk_every(500)
     |> Enum.each(fn chunk ->
       in_clause = chunk |> Enum.map(&ClickHouse.param/1) |> Enum.join(", ")
 
