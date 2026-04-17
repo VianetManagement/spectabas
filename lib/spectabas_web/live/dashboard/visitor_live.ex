@@ -92,18 +92,14 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
         end)
         |> Enum.sort_by(& &1.started, :desc)
 
-      # Use last 7 days of timeline for scraper score to match the Scrapers page default
-      seven_days_ago = DateTime.utc_now() |> DateTime.add(-7, :day)
-
-      recent_timeline =
-        Enum.filter(timeline, fn e ->
-          case parse_ts(e["timestamp"]) do
-            %DateTime{} = ts -> DateTime.compare(ts, seven_days_ago) != :lt
-            _ -> true
-          end
-        end)
-
-      scraper = compute_scraper_score(profile, recent_timeline, site)
+      # Use dedicated ClickHouse aggregation for scraper score — matches the
+      # Scrapers page exactly. The timeline-based computation was limited to
+      # ~1000 events and undercounted unique pages for heavy scrapers.
+      scraper =
+        case Analytics.scraper_score_for_visitor(site, visitor_id) do
+          {:ok, result} -> result
+          _ -> %{score: 0, signals: [], verdict: :normal, unique_pages: 0, ip_count: 0}
+        end
 
       send(lv_pid, {:deferred_result, :timeline, timeline})
       send(lv_pid, {:deferred_result, :sessions, sessions})
@@ -1070,48 +1066,4 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
   defp click_platform_class("linkedin_ads"), do: "bg-blue-100 text-blue-900"
   defp click_platform_class("snapchat_ads"), do: "bg-yellow-100 text-yellow-800"
   defp click_platform_class(_), do: "bg-gray-100 text-gray-800"
-
-  defp compute_scraper_score(profile, timeline, site) do
-    pageviews = timeline |> Enum.filter(&(&1["event_type"] == "pageview"))
-    ip_count = timeline |> Enum.map(& &1["ip_address"]) |> Enum.uniq() |> length()
-    page_paths = pageviews |> Enum.map(& &1["url_path"]) |> Enum.reject(&is_nil/1)
-
-    intervals =
-      pageviews
-      |> Enum.map(& &1["timestamp"])
-      |> Enum.reject(&is_nil/1)
-      |> Enum.sort()
-      |> Enum.chunk_every(2, 1, :discard)
-      |> Enum.map(fn [a, b] ->
-        case {parse_ts(a), parse_ts(b)} do
-          {%DateTime{} = da, %DateTime{} = db} -> DateTime.diff(db, da, :millisecond)
-          _ -> 0
-        end
-      end)
-
-    detector_profile = %{
-      asn: profile["org"] || profile["ip_org"] || "",
-      user_agent: profile["user_agent"] || "",
-      visitor_ip_count: ip_count,
-      session_pageviews: page_paths |> Enum.uniq() |> length(),
-      page_paths: page_paths,
-      content_path_prefixes: List.wrap(site.scraper_content_prefixes),
-      referrer: profile["referrer_domain"],
-      screen_resolution: "#{profile["screen_width"] || 0}x#{profile["screen_height"] || 0}",
-      request_intervals_ms: intervals,
-      is_datacenter: to_num(profile["is_datacenter"] || profile["ip_is_datacenter"]) == 1,
-      vpn_provider: profile["vpn_provider"] || profile["ip_vpn_provider"] || ""
-    }
-
-    Spectabas.Analytics.ScraperDetector.score(detector_profile)
-  end
-
-  defp parse_ts(ts) when is_binary(ts) do
-    case DateTime.from_iso8601(ts) do
-      {:ok, dt, _} -> dt
-      _ -> nil
-    end
-  end
-
-  defp parse_ts(_), do: nil
 end

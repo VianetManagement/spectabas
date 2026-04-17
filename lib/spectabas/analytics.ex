@@ -4046,6 +4046,55 @@ defmodule Spectabas.Analytics do
     }
   end
 
+  def scraper_score_for_visitor(%Site{} = site, visitor_id) do
+    site_p = ClickHouse.param(site.id)
+    vid_p = ClickHouse.param(visitor_id)
+    prefixes = List.wrap(site.scraper_content_prefixes)
+
+    sql = """
+    SELECT
+      visitor_id,
+      any(ip_org) AS asn,
+      any(user_agent) AS user_agent,
+      uniq(ip_address) AS visitor_ip_count,
+      uniqIf(url_path, event_type = 'pageview') AS session_pageviews,
+      arrayFilter(p -> p != '',
+        groupArrayIf(50)(url_path, event_type = 'pageview')) AS page_paths,
+      any(referrer_domain) AS referrer,
+      concat(toString(any(screen_width)), 'x', toString(any(screen_height))) AS screen_resolution,
+      arraySlice(arrayDifference(arraySort(
+        groupArrayIf(100)(toUnixTimestamp(timestamp) * 1000,
+          event_type = 'pageview'))), 2) AS request_intervals_ms,
+      max(ip_is_datacenter) AS is_datacenter,
+      any(ip_vpn_provider) AS vpn_provider
+    FROM events
+    WHERE site_id = #{site_p}
+      AND visitor_id = #{vid_p}
+    GROUP BY visitor_id
+    """
+
+    case ClickHouse.query(sql) do
+      {:ok, [row]} ->
+        profile = row_to_profile(row, prefixes)
+        result = Spectabas.Analytics.ScraperDetector.score(profile)
+
+        {:ok,
+         %{
+           score: result.score,
+           signals: result.signals,
+           verdict: Spectabas.Analytics.ScraperDetector.verdict(result.score),
+           unique_pages: to_int(row["session_pageviews"]),
+           ip_count: to_int(row["visitor_ip_count"])
+         }}
+
+      {:ok, []} ->
+        {:ok, %{score: 0, signals: [], verdict: :normal, unique_pages: 0, ip_count: 0}}
+
+      error ->
+        error
+    end
+  end
+
   # ---- Visitor Log ----
 
   @doc """
