@@ -326,77 +326,89 @@ defmodule SpectabasWeb.DocsLive do
   defp render_block(block) do
     block = String.trim(block)
 
-    cond do
-      String.starts_with?(block, "### ") ->
-        "<h4 class=\"text-base font-semibold text-gray-900 mt-6 mb-2\">#{render_inline(escape(String.trim_leading(block, "### ")))}</h4>"
+    # Split blocks that have a label line followed by list items (e.g., "Title:\n- item1\n- item2")
+    # The label renders as a paragraph, list items as a proper <ul>
+    lines = String.split(block, "\n")
+    first_list_idx = Enum.find_index(lines, fn l -> String.starts_with?(String.trim(l), "- ") end)
 
-      String.starts_with?(block, "## ") ->
-        "<h3 class=\"text-lg font-semibold text-gray-900 mt-6 mb-2\">#{render_inline(escape(String.trim_leading(block, "## ")))}</h3>"
+    if first_list_idx && first_list_idx > 0 do
+      {label_lines, list_lines} = Enum.split(lines, first_list_idx)
 
-      String.starts_with?(block, "```") ->
-        # Extract code: strip opening/closing fences and language tag
-        lines = String.split(block, "\n")
-        # First line is ```language, last line is ```
-        inner = lines |> Enum.drop(1) |> Enum.drop(-1)
-        # Strip common leading whitespace (heredoc indentation)
-        code = dedent(inner)
-        code_id = "code-#{:erlang.phash2(code)}"
+      render_block(Enum.join(label_lines, "\n")) <>
+        "\n" <> render_block(Enum.join(list_lines, "\n"))
+    else
+      cond do
+        String.starts_with?(block, "### ") ->
+          "<h4 class=\"text-base font-semibold text-gray-900 mt-6 mb-2\">#{render_inline(escape(String.trim_leading(block, "### ")))}</h4>"
 
-        """
-        <div class="relative my-3">
-          <pre class="bg-gray-900 text-gray-100 rounded-lg p-4 pr-16 text-xs overflow-x-auto"><code id="#{code_id}">#{escape(code)}</code></pre>
-          <button onclick="navigator.clipboard.writeText(document.getElementById('#{code_id}').textContent);this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)" class="absolute top-2 right-2 px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs hover:bg-gray-600 hover:text-white">Copy</button>
-        </div>
-        """
+        String.starts_with?(block, "## ") ->
+          "<h3 class=\"text-lg font-semibold text-gray-900 mt-6 mb-2\">#{render_inline(escape(String.trim_leading(block, "## ")))}</h3>"
 
-      String.starts_with?(block, "- ") ->
-        items =
-          block
-          |> String.split("\n")
-          |> Enum.map(&String.trim/1)
-          |> Enum.reject(&(&1 == ""))
-          |> Enum.map(fn line ->
-            "<li class=\"ml-4\">#{render_inline(escape(String.trim_leading(line, "- ")))}</li>"
-          end)
-          |> Enum.join()
+        String.starts_with?(block, "```") ->
+          # Extract code: strip opening/closing fences and language tag
+          lines = String.split(block, "\n")
+          # First line is ```language, last line is ```
+          inner = lines |> Enum.drop(1) |> Enum.drop(-1)
+          # Strip common leading whitespace (heredoc indentation)
+          code = dedent(inner)
+          code_id = "code-#{:erlang.phash2(code)}"
 
-        "<ul class=\"list-disc space-y-1 my-2 text-gray-700\">#{items}</ul>"
+          """
+          <div class="relative my-3">
+            <pre class="bg-gray-900 text-gray-100 rounded-lg p-4 pr-16 text-xs overflow-x-auto"><code id="#{code_id}">#{escape(code)}</code></pre>
+            <button onclick="navigator.clipboard.writeText(document.getElementById('#{code_id}').textContent);this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)" class="absolute top-2 right-2 px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs hover:bg-gray-600 hover:text-white">Copy</button>
+          </div>
+          """
 
-      Regex.match?(~r/^\d+\.\s/, block) ->
-        items =
-          block
-          |> String.split("\n")
-          |> Enum.map(&String.trim/1)
-          |> Enum.reject(&(&1 == ""))
-          |> Enum.map(fn line ->
-            text = Regex.replace(~r/^\d+\.\s+/, line, "")
-            "<li class=\"ml-4\">#{render_inline(escape(text))}</li>"
-          end)
-          |> Enum.join()
+        String.starts_with?(block, "- ") ->
+          items =
+            block
+            |> String.split("\n")
+            |> Enum.map(&String.trim/1)
+            |> Enum.reject(&(&1 == ""))
+            |> Enum.map(fn line ->
+              "<li class=\"ml-4\">#{render_inline(escape(String.trim_leading(line, "- ")))}</li>"
+            end)
+            |> Enum.join()
 
-        "<ol class=\"list-decimal space-y-1 my-2 text-gray-700 pl-4\">#{items}</ol>"
+          "<ul class=\"list-disc space-y-1 my-2 text-gray-700\">#{items}</ul>"
 
-      String.starts_with?(block, "| ") ->
-        render_table(block)
+        Regex.match?(~r/^\d+\.\s/, block) ->
+          items =
+            block
+            |> String.split("\n")
+            |> Enum.map(&String.trim/1)
+            |> Enum.reject(&(&1 == ""))
+            |> Enum.map(fn line ->
+              text = Regex.replace(~r/^\d+\.\s+/, line, "")
+              "<li class=\"ml-4\">#{render_inline(escape(text))}</li>"
+            end)
+            |> Enum.join()
 
-      String.starts_with?(block, "> ") ->
-        content =
-          block
-          |> String.split("\n")
-          |> Enum.map(fn line ->
-            line |> String.trim() |> String.trim_leading("> ") |> escape() |> render_inline()
-          end)
-          |> Enum.reject(&(&1 == ""))
-          |> Enum.join("<br/>")
+          "<ol class=\"list-decimal space-y-1 my-2 text-gray-700 pl-4\">#{items}</ol>"
 
-        "<div class=\"border-l-4 border-indigo-400 bg-indigo-50 px-4 py-3 my-3 text-sm text-indigo-800\">#{content}</div>"
+        String.starts_with?(block, "| ") ->
+          render_table(block)
 
-      block == "---" ->
-        "<hr class=\"my-6 border-gray-200\" />"
+        String.starts_with?(block, "> ") ->
+          content =
+            block
+            |> String.split("\n")
+            |> Enum.map(fn line ->
+              line |> String.trim() |> String.trim_leading("> ") |> escape() |> render_inline()
+            end)
+            |> Enum.reject(&(&1 == ""))
+            |> Enum.join("<br/>")
 
-      true ->
-        text = block |> escape() |> render_inline()
-        "<p class=\"text-gray-700 my-2 leading-relaxed\">#{text}</p>"
+          "<div class=\"border-l-4 border-indigo-400 bg-indigo-50 px-4 py-3 my-3 text-sm text-indigo-800\">#{content}</div>"
+
+        block == "---" ->
+          "<hr class=\"my-6 border-gray-200\" />"
+
+        true ->
+          text = block |> escape() |> render_inline()
+          "<p class=\"text-gray-700 my-2 leading-relaxed\">#{text}</p>"
+      end
     end
   end
 
