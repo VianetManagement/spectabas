@@ -141,11 +141,12 @@ defmodule Spectabas.Analytics.ScraperDetector do
     is_dc_asn = datacenter_asn?(profile[:asn])
     is_dc = is_dc_asn or profile[:is_datacenter] == true
     on_vpn = known_vpn_provider?(profile[:vpn_provider]) or profile[:is_vpn] == true
+    is_privacy_relay = privacy_relay_asn?(profile[:asn])
 
-    # Suppress for VPN users unless they're on a KNOWN datacenter ASN.
-    # This handles: VPN on OVH (still datacenter) vs iCloud Private Relay
-    # on Akamai (not datacenter, is_datacenter=1 is stale data).
-    suppressed = on_vpn and not is_dc_asn
+    # Suppress for VPN users unless they're on a datacenter ASN that is NOT
+    # also a privacy relay. Akamai is both datacenter (in blocklist) and
+    # privacy relay (iCloud Private Relay) — treat as privacy relay.
+    suppressed = on_vpn and (not is_dc_asn or is_privacy_relay)
 
     if is_dc and not suppressed do
       {points + w.datacenter_asn, [:datacenter_asn | signals]}
@@ -158,7 +159,8 @@ defmodule Spectabas.Analytics.ScraperDetector do
     is_dc_asn = datacenter_asn?(profile[:asn])
     is_dc = is_dc_asn or profile[:is_datacenter] == true
     on_vpn = known_vpn_provider?(profile[:vpn_provider]) or profile[:is_vpn] == true
-    suppressed = on_vpn and not is_dc_asn
+    is_privacy_relay = privacy_relay_asn?(profile[:asn])
+    suppressed = on_vpn and (not is_dc_asn or is_privacy_relay)
 
     if is_dc and not suppressed and mobile_ua?(profile[:user_agent]) do
       {points + w.spoofed_mobile_ua, [:spoofed_mobile_ua | signals]}
@@ -355,6 +357,17 @@ defmodule Spectabas.Analytics.ScraperDetector do
   end
 
   defp datacenter_asn?(_), do: false
+
+  @privacy_relay_asns [54113, 13335, 20940, 36183, 63949, 200_005, 32787]
+
+  defp privacy_relay_asn?(nil), do: false
+
+  defp privacy_relay_asn?(asn) when is_binary(asn) do
+    num = extract_asn_number(asn)
+    num > 0 and num in @privacy_relay_asns
+  end
+
+  defp privacy_relay_asn?(_), do: false
 
   defp extract_asn_number(asn) when is_binary(asn) do
     case Regex.run(~r/^AS(\d+)/, asn) do

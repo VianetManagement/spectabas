@@ -53,12 +53,12 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
-      {"v5.69.0", "2026-04-18T19:00:00Z",
+      {"v5.70.0", "2026-04-18T20:00:00Z",
        [
          %{
-           title: "Fix: is_vpn in all scraper queries + docs list formatting",
+           title: "Fix: Privacy relay ASNs in datacenter blocklist no longer flag real users",
            description:
-             "VPN suppression was broken on visitor profiles and webhook scans — is_vpn column was missing from 2 of 3 scraper queries. Also fixed docs markdown renderer to properly split label lines followed by list items (20 instances across all doc pages)."
+             "Akamai ASNs (20940, 36183, 63949) are in both the datacenter blocklist and the privacy relay list. The suppression logic now checks both — if an ASN is a known privacy relay, VPN suppression applies even if the ASN is also in the datacenter list. Fixes iCloud Private Relay users being scored 70+ instead of ~10."
          }
        ]},
       {"v5.67.0", "2026-04-18T17:00:00Z",
