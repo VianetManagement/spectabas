@@ -632,6 +632,29 @@ defmodule SpectabasWeb.HealthController do
     json(conn, %{status: "queued", message: "VPN backfill job queued on maintenance queue"})
   end
 
+  def backfill_akamai_privacy_relay(conn, _params) do
+    alias Spectabas.ClickHouse
+
+    sql = """
+    ALTER TABLE events UPDATE
+      ip_is_datacenter = 0,
+      ip_is_vpn = 1,
+      ip_vpn_provider = 'Akamai (CDN/Privacy Relay)'
+    WHERE ip_asn IN (36183, 200005, 32787)
+      AND ip_is_datacenter = 1
+      AND ip_is_vpn = 0
+    SETTINGS mutations_sync = 0
+    """
+
+    case ClickHouse.execute(sql) do
+      :ok ->
+        json(conn, %{status: "ok", message: "Akamai privacy relay backfill mutation submitted"})
+
+      {:error, reason} ->
+        json(conn, %{status: "error", error: inspect(reason)})
+    end
+  end
+
   def backfill_headless_bots(conn, _params) do
     alias Spectabas.ClickHouse
 

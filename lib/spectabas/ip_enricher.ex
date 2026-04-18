@@ -195,7 +195,10 @@ defmodule Spectabas.IPEnricher do
     54113 => "Apple Private Relay (Fastly)",
     13335 => "Cloudflare (WARP/Private Relay)",
     20940 => "Akamai (CDN/Privacy Relay)",
-    63949 => "Akamai (CDN/Privacy Relay)"
+    36183 => "Akamai (CDN/Privacy Relay)",
+    63949 => "Akamai (CDN/Privacy Relay)",
+    200_005 => "Akamai (CDN/Privacy Relay)",
+    32787 => "Akamai (CDN/Privacy Relay)"
   }
 
   defp lookup_vpn_provider(parsed_ip) do
