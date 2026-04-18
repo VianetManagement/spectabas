@@ -39,6 +39,14 @@ defmodule SpectabasWeb.Dashboard.GoalDetailLive do
     end
   end
 
+  @default_stats %{
+    total_completions: 0,
+    unique_completers: 0,
+    conversion_rate: 0.0,
+    avg_per_visitor: 0.0,
+    total_visitors: 0
+  }
+
   @impl true
   def handle_info(:load_data, socket) do
     site = socket.assigns.site
@@ -46,12 +54,13 @@ defmodule SpectabasWeb.Dashboard.GoalDetailLive do
     goal = socket.assigns.goal
     range = socket.assigns.range
 
-    stats = safe_query(fn -> Analytics.goal_detail_stats(site, user, goal, range) end, %{})
+    stats =
+      safe_query(fn -> Analytics.goal_detail_stats(site, user, goal, range) end, @default_stats)
 
     stats =
       if is_map(stats) and Map.has_key?(stats, :total_completions),
         do: stats,
-        else: unwrap_ok(stats)
+        else: @default_stats
 
     timeseries =
       safe_query(fn -> Analytics.goal_completion_timeseries(site, user, goal, range) end)
@@ -111,9 +120,6 @@ defmodule SpectabasWeb.Dashboard.GoalDetailLive do
        s
      end)}
   end
-
-  defp unwrap_ok({:ok, val}), do: val
-  defp unwrap_ok(val), do: val
 
   defp goal_type_label("pageview"), do: "Pageview"
   defp goal_type_label("custom_event"), do: "Custom Event"
