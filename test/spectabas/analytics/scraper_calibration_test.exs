@@ -28,9 +28,30 @@ defmodule Spectabas.Analytics.ScraperCalibrationTest do
       %{type: "Tablet", visitors: 500}
     ],
     top_asns: [
-      %{asn: "AS7922", datacenter: false, vpn: false, visitors: 1200, total_pages: 3400},
-      %{asn: "AS14618", datacenter: true, vpn: false, visitors: 180, total_pages: 14200},
-      %{asn: "AS9009", datacenter: true, vpn: true, visitors: 90, total_pages: 450}
+      %{
+        asn: "AS7922",
+        org: "Comcast Cable",
+        datacenter: false,
+        vpn: false,
+        visitors: 1200,
+        total_pages: 3400
+      },
+      %{
+        asn: "AS14618",
+        org: "Amazon.com Inc.",
+        datacenter: true,
+        vpn: false,
+        visitors: 180,
+        total_pages: 14200
+      },
+      %{
+        asn: "AS9009",
+        org: "M247 Ltd",
+        datacenter: true,
+        vpn: true,
+        visitors: 90,
+        total_pages: 450
+      }
     ],
     session_duration: %{
       p25: 8,

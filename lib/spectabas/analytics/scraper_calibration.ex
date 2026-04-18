@@ -148,13 +148,14 @@ defmodule Spectabas.Analytics.ScraperCalibration do
     asn_sql = """
     SELECT
       ip_asn,
+      ip_asn_org,
       ip_is_datacenter,
       ip_is_vpn,
       count(DISTINCT visitor_id) AS visitors,
       uniqIf(url_path, event_type = 'pageview') AS total_pages
     FROM events
-    WHERE #{base_where} AND ip_asn != ''
-    GROUP BY ip_asn, ip_is_datacenter, ip_is_vpn
+    WHERE #{base_where} AND ip_asn > 0
+    GROUP BY ip_asn, ip_asn_org, ip_is_datacenter, ip_is_vpn
     ORDER BY visitors DESC
     LIMIT 20
     """
@@ -280,7 +281,8 @@ defmodule Spectabas.Analytics.ScraperCalibration do
          top_asns:
            Enum.map(asns, fn a ->
              %{
-               asn: a["ip_asn"],
+               asn: "AS#{a["ip_asn"]}",
+               org: a["ip_asn_org"] || "",
                datacenter: to_num(a["ip_is_datacenter"]) == 1,
                vpn: to_num(a["ip_is_vpn"]) == 1,
                visitors: to_num(a["visitors"]),
@@ -557,7 +559,8 @@ defmodule Spectabas.Analytics.ScraperCalibration do
     if asns == [] do
       "No ASN data available."
     else
-      header = "| ASN | Type | Visitors | Total pages |\n|-----|------|---------|------------|\n"
+      header =
+        "| ASN | Organization | Type | Visitors | Total pages |\n|-----|-------------|------|---------|------------|\n"
 
       rows =
         Enum.map(asns, fn a ->
@@ -569,7 +572,8 @@ defmodule Spectabas.Analytics.ScraperCalibration do
               true -> "Residential"
             end
 
-          "| #{a.asn} | #{type} | #{a.visitors} | #{a.total_pages} |"
+          org = if a.org != "", do: a.org, else: "Unknown"
+          "| #{a.asn} | #{org} | #{type} | #{a.visitors} | #{a.total_pages} |"
         end)
         |> Enum.join("\n")
 
