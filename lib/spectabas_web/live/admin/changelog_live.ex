@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.80.0", "2026-04-19T10:00:00Z",
+       [
+         %{
+           title: "Fix: Funnel/goal detail date ranges + icon-only button detection",
+           description:
+             "Fixed ensure_date_range crashing on string periods ('7d', '30d', '90d') — both funnel and goal detail pages showed empty data because the rescue silently swallowed the FunctionClauseError. Icon-only buttons (no text, no ID, no aria-label) are now detected by the tracker via child element icon classes (hero-*, icon-*, fa-*, lucide-*) and shown as e.g. [hero-paper-airplane-solid] in Click Elements."
+         }
+       ]},
       {"v5.79.0", "2026-04-19T08:00:00Z",
        [
          %{
