@@ -32,11 +32,56 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
        |> assign(:form_name, "")
        |> assign(:form_steps, [%{name: "", type: "pageview", value: ""}])
        |> assign(:discovered_elements, [])
-       |> assign(:goals, Goals.list_goals(site))}
+       |> assign(:goals, Goals.list_goals(site))
+       |> assign(:suggestions, nil)
+       |> assign(:suggestions_loading, true)
+       |> then(fn s ->
+         send(self(), :load_suggestions)
+         s
+       end)}
     end
   end
 
   @impl true
+  def handle_info(:load_suggestions, socket) do
+    suggestions =
+      safe_query(fn -> Analytics.suggested_funnels(socket.assigns.site, socket.assigns.user) end)
+
+    {:noreply, assign(socket, suggestions: suggestions, suggestions_loading: false)}
+  rescue
+    _ -> {:noreply, assign(socket, suggestions: [], suggestions_loading: false)}
+  end
+
+  @impl true
+  def handle_event("create_suggested", %{"index" => index}, socket) do
+    idx = String.to_integer(index)
+    suggestion = Enum.at(socket.assigns.suggestions || [], idx)
+
+    if suggestion do
+      paths = suggestion["path_sequence"]
+      # path_sequence comes back as a ClickHouse Array(String)
+      paths = if is_list(paths), do: paths, else: []
+
+      steps = Enum.map(paths, fn path -> %{"type" => "pageview", "value" => path} end)
+      name = paths |> Enum.map(&String.trim_leading(&1, "/")) |> Enum.join(" → ")
+
+      case Goals.create_funnel(socket.assigns.site, %{"name" => name, "steps" => steps}) do
+        {:ok, _funnel} ->
+          funnels = Goals.list_funnels(socket.assigns.site)
+
+          {:noreply,
+           socket
+           |> put_flash(:info, "Funnel created from suggestion.")
+           |> assign(:funnels, funnels)}
+
+        {:error, _} ->
+          {:noreply, put_flash(socket, :error, "Failed to create funnel.")}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
   def handle_event("toggle_form", _params, socket) do
     socket =
       if !socket.assigns.show_form do
@@ -345,6 +390,49 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
           <p :if={!@funnel_data || @funnel_data == []} class="text-sm text-gray-500">
             No funnel data available.
           </p>
+        </div>
+
+        <%!-- Suggested Funnels --%>
+        <div :if={@suggestions && @suggestions != []} class="bg-white rounded-lg shadow p-6 mb-8">
+          <h2 class="text-sm font-semibold text-gray-700 mb-3">Suggested Funnels</h2>
+          <p class="text-xs text-gray-400 mb-4">
+            Common page paths taken by converting visitors in the last 30 days.
+          </p>
+          <div class="space-y-2">
+            <div
+              :for={{suggestion, idx} <- Enum.with_index(@suggestions)}
+              class="flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:border-indigo-200 hover:bg-indigo-50/50 transition-colors"
+            >
+              <div class="flex items-center gap-2 min-w-0 flex-1">
+                <div class="flex items-center gap-1 flex-wrap">
+                  <span
+                    :for={{path, pidx} <- Enum.with_index(suggestion["path_sequence"] || [])}
+                    class="flex items-center gap-1"
+                  >
+                    <span :if={pidx > 0} class="text-gray-300 text-xs">→</span>
+                    <span class="inline-flex px-2 py-0.5 rounded bg-gray-100 text-xs font-mono text-gray-700 truncate max-w-[140px]">
+                      {path}
+                    </span>
+                  </span>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 shrink-0 ml-3">
+                <span class="text-xs text-gray-500 tabular-nums">
+                  {format_number(to_num(suggestion["converters"]))} converters
+                </span>
+                <button
+                  phx-click="create_suggested"
+                  phx-value-index={idx}
+                  class="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-lg text-indigo-600 border border-indigo-300 hover:bg-indigo-600 hover:text-white transition-colors"
+                >
+                  Create
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div :if={@suggestions_loading} class="bg-white rounded-lg shadow p-6 mb-8">
+          <p class="text-sm text-gray-400">Analyzing conversion paths...</p>
         </div>
 
         <%!-- Funnel List --%>

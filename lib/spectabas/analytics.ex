@@ -3342,6 +3342,78 @@ defmodule Spectabas.Analytics do
 
   defp click_element_condition(_), do: "1 = 0"
 
+  # ---- Suggested Funnels ----
+
+  def suggested_funnels(%Site{} = site, %User{} = user) do
+    with :ok <- authorize(site, user) do
+      goals = Spectabas.Goals.list_goals(site)
+
+      # Build a UNION of all goal conditions to find converting visitors
+      goal_filter =
+        if goals == [] do
+          # No goals — use ecommerce orders as conversion signal
+          if site.ecommerce_enabled do
+            "visitor_id IN (SELECT DISTINCT visitor_id FROM ecommerce_events WHERE site_id = #{ClickHouse.param(site.id)} AND timestamp >= now() - INTERVAL 30 DAY)"
+          else
+            nil
+          end
+        else
+          conditions =
+            goals
+            |> Enum.map(&goal_condition/1)
+            |> Enum.reject(&(&1 == "1 = 0"))
+            |> Enum.map(fn c -> "(#{c})" end)
+            |> Enum.join(" OR ")
+
+          if conditions == "" do
+            nil
+          else
+            "visitor_id IN (SELECT DISTINCT visitor_id FROM events WHERE site_id = #{ClickHouse.param(site.id)} AND (#{conditions}) AND ip_is_bot = 0 AND timestamp >= now() - INTERVAL 30 DAY)"
+          end
+        end
+
+      if is_nil(goal_filter) do
+        {:ok, []}
+      else
+        sql = """
+        SELECT
+          path_sequence,
+          count() AS converters,
+          length(path_sequence) AS steps
+        FROM (
+          SELECT
+            visitor_id,
+            arrayDistinct(
+              arraySlice(
+                groupArray(url_path),
+                greatest(1, length(groupArray(url_path)) - 4)
+              )
+            ) AS path_sequence
+          FROM (
+            SELECT visitor_id, url_path, timestamp
+            FROM events
+            WHERE site_id = #{ClickHouse.param(site.id)}
+              AND event_type = 'pageview'
+              AND ip_is_bot = 0
+              AND url_path != ''
+              AND timestamp >= now() - INTERVAL 30 DAY
+              AND #{goal_filter}
+            ORDER BY visitor_id, timestamp
+          )
+          GROUP BY visitor_id
+          HAVING length(path_sequence) >= 2
+        )
+        GROUP BY path_sequence
+        HAVING converters >= 3
+        ORDER BY converters DESC
+        LIMIT 10
+        """
+
+        ClickHouse.query(sql)
+      end
+    end
+  end
+
   # ---- Goal Detail Queries ----
 
   def goal_completion_timeseries(%Site{} = site, %User{} = user, goal, date_range) do

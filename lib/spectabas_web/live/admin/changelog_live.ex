@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.81.0", "2026-04-19T11:00:00Z",
+       [
+         %{
+           title: "Feature: Auto-suggested funnels from conversion paths",
+           description:
+             "The Funnels page now shows suggested funnels mined from real visitor data. Identifies converting visitors (goal completers or purchasers), extracts their last 2-5 page sequences before conversion, groups by common paths, and ranks by converter volume. One-click 'Create' button turns any suggestion into a funnel. Requires at least 3 converters sharing a path to suggest."
+         }
+       ]},
       {"v5.80.0", "2026-04-19T10:00:00Z",
        [
          %{
