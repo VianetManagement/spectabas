@@ -4,6 +4,7 @@ defmodule SpectabasWeb.Dashboard.FunnelDetailLive do
   alias Spectabas.{Accounts, Sites, Goals, Analytics, Visitors}
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers
+  require Logger
 
   @impl true
   def mount(%{"site_id" => site_id, "funnel_id" => funnel_id}, _session, socket) do
@@ -42,8 +43,14 @@ defmodule SpectabasWeb.Dashboard.FunnelDetailLive do
     funnel = socket.assigns.funnel
     range = socket.assigns.range
 
+    result = Analytics.funnel_stats(site, user, funnel, range)
+
+    Logger.notice(
+      "[FunnelDetail] funnel=#{funnel.id} steps=#{inspect(funnel.steps)} result=#{inspect(result)}"
+    )
+
     raw_data =
-      case Analytics.funnel_stats(site, user, funnel, range) do
+      case result do
         {:ok, data} -> data
         _ -> []
       end

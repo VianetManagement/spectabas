@@ -3119,10 +3119,18 @@ defmodule Spectabas.Analytics do
 
         "goal" ->
           try do
-            goal = Spectabas.Goals.get_goal!(String.to_integer(value))
-            goal_condition(goal)
+            goal_id = String.to_integer(to_string(value))
+            goal = Spectabas.Goals.get_goal!(goal_id)
+            condition = goal_condition(goal)
+            Logger.notice("[Funnel] Resolved goal #{goal_id} (#{goal.name}) -> #{condition}")
+            condition
           rescue
-            _ -> "1=0"
+            e ->
+              Logger.warning(
+                "[Funnel] Failed to resolve goal value=#{inspect(value)}: #{Exception.message(e)}"
+              )
+
+              "1=0"
           end
 
         _ ->
@@ -3143,6 +3151,8 @@ defmodule Spectabas.Analytics do
     with :ok <- authorize(site, user) do
       step_conditions = build_funnel_conditions(steps)
 
+      Logger.notice("[Funnel] steps=#{inspect(steps)} conditions=#{step_conditions}")
+
       num_steps = length(steps)
 
       level_selects =
@@ -3160,6 +3170,7 @@ defmodule Spectabas.Analytics do
         WHERE site_id = #{ClickHouse.param(site.id)}
           AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
           AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+          AND ip_is_bot = 0
         GROUP BY visitor_id
       )
       """
