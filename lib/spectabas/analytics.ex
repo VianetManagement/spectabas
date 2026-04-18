@@ -2124,7 +2124,7 @@ defmodule Spectabas.Analytics do
           "first" ->
             """
             SELECT visitor_id,
-              argMin(#{source_expr}, timestamp) AS source,
+              ifNull(nullIf(argMin(#{source_expr}, timestamp), ''), 'Direct') AS source,
               argMin(click_id_type, timestamp) AS ad_platform
             #{events_base}
             GROUP BY visitor_id
@@ -2134,7 +2134,7 @@ defmodule Spectabas.Analytics do
             # "last" touch
             """
             SELECT visitor_id,
-              argMax(#{source_expr}, timestamp) AS source,
+              ifNull(nullIf(argMax(#{source_expr}, timestamp), ''), 'Direct') AS source,
               argMax(click_id_type, timestamp) AS ad_platform
             #{events_base}
             GROUP BY visitor_id

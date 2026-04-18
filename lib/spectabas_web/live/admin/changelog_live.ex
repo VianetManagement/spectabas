@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.83.0", "2026-04-19T13:00:00Z",
+       [
+         %{
+           title: "Fix: First/last touch revenue attribution now works",
+           description:
+             "argMin/argMax in first/last touch queries returned empty strings when a visitor's attribution event had a click_id but no referrer/UTM — the empty string grouped as a blank source. Wrapped with ifNull(nullIf(..., ''), 'Direct') per the ClickHouse argMinIf gotcha pattern. Any touch was unaffected because it groups per-row before aggregation."
+         }
+       ]},
       {"v5.82.0", "2026-04-19T12:00:00Z",
        [
          %{
