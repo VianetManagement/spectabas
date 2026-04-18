@@ -14,6 +14,8 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
   import Spectabas.TypeHelpers
   import SpectabasWeb.Dashboard.DateHelpers
 
+  @valid_tabs ~w(scrapers webhook_log calibration)
+
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
     user = socket.assigns.current_scope.user
@@ -61,6 +63,34 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
   end
 
   @impl true
+  def handle_params(params, _uri, socket) do
+    tab = if params["tab"] in @valid_tabs, do: params["tab"], else: socket.assigns.tab
+
+    socket =
+      case tab do
+        "calibration" ->
+          calibrations =
+            Spectabas.Analytics.ScraperCalibration.latest_for_site(socket.assigns.site.id)
+
+          has_pending_job = calibration_job_running?(socket.assigns.site.id)
+
+          socket
+          |> assign(:tab, tab)
+          |> assign(:calibrations, calibrations)
+          |> assign(:calibrating, has_pending_job)
+
+        "webhook_log" ->
+          log = Spectabas.Webhooks.ScraperWebhook.list_deliveries(socket.assigns.site.id)
+          socket |> assign(:tab, tab) |> assign(:webhook_log, log)
+
+        _ ->
+          assign(socket, :tab, tab)
+      end
+
+    {:noreply, socket}
+  end
+
+  @impl true
   def handle_info(:load_data, socket) do
     {:noreply, load_data(socket)}
   end
@@ -82,24 +112,15 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
   end
 
   @impl true
-  def handle_event("switch_tab", %{"tab" => "webhook_log"}, socket) do
-    log = Spectabas.Webhooks.ScraperWebhook.list_deliveries(socket.assigns.site.id)
-    {:noreply, socket |> assign(:tab, "webhook_log") |> assign(:webhook_log, log)}
-  end
-
-  def handle_event("switch_tab", %{"tab" => "calibration"}, socket) do
-    calibrations = Spectabas.Analytics.ScraperCalibration.latest_for_site(socket.assigns.site.id)
-    has_pending_job = calibration_job_running?(socket.assigns.site.id)
-
-    {:noreply,
-     socket
-     |> assign(:tab, "calibration")
-     |> assign(:calibrations, calibrations)
-     |> assign(:calibrating, has_pending_job)}
-  end
-
   def handle_event("switch_tab", %{"tab" => tab}, socket) do
-    {:noreply, assign(socket, :tab, tab)}
+    site_id = socket.assigns.site.id
+
+    path =
+      if tab == "scrapers",
+        do: "/sites/#{site_id}/scrapers",
+        else: "/sites/#{site_id}/scrapers?tab=#{tab}"
+
+    {:noreply, push_patch(socket, to: path)}
   end
 
   def handle_event("run_calibration", _params, socket) do
