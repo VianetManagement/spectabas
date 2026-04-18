@@ -59,6 +59,7 @@ defmodule SpectabasWeb.Router do
     get "/backfill-vpn", HealthController, :backfill_vpn
     get "/backfill-headless-bots", HealthController, :backfill_headless_bots
     get "/backfill-akamai", HealthController, :backfill_akamai_privacy_relay
+    get "/backfill-datacenter-vpn", HealthController, :backfill_datacenter_vpn
     get "/backfill-asn-flags", HealthController, :backfill_asn_flags
     get "/dedupe-search-console", HealthController, :dedupe_search_console
     get "/test-attribution", HealthController, :test_attribution

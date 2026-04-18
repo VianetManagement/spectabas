@@ -70,7 +70,7 @@ defmodule Spectabas.IPEnricher do
       ip_asn_org: asn_org,
       ip_org: format_org(asn_number, asn_org),
       ip_is_datacenter:
-        if(asn_number && ASNBlocklist.datacenter?(asn_number) && vpn_provider == "",
+        if(asn_number && ASNBlocklist.datacenter?(asn_number),
           do: 1,
           else: 0
         ),

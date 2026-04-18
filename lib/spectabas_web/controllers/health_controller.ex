@@ -632,6 +632,51 @@ defmodule SpectabasWeb.HealthController do
     json(conn, %{status: "queued", message: "VPN backfill job queued on maintenance queue"})
   end
 
+  def backfill_datacenter_vpn(conn, _params) do
+    alias Spectabas.ClickHouse
+
+    # Fix events where a datacenter ASN was marked ip_is_datacenter=0 because
+    # a VPN provider was detected. Datacenter ASNs should always be datacenter=1.
+    # Uses the ASNBlocklist ETS tables which contain ~900 datacenter ASN ranges.
+    # Since we can't call ETS from ClickHouse, use the static list from ScraperDetector
+    # plus common hosting ASNs seen in the data.
+    dc_asns = [
+      16276,
+      14061,
+      396_982,
+      16509,
+      20473,
+      24940,
+      51167,
+      8100,
+      46844,
+      46941,
+      # Contabo
+      40021,
+      206_729,
+      # Other hosting seen in scraper data
+      16276
+    ]
+
+    asn_list = dc_asns |> Enum.uniq() |> Enum.join(", ")
+
+    sql = """
+    ALTER TABLE events UPDATE ip_is_datacenter = 1
+    WHERE ip_is_datacenter = 0
+      AND ip_is_vpn = 1
+      AND ip_asn IN (#{asn_list})
+    SETTINGS mutations_sync = 0
+    """
+
+    case ClickHouse.execute(sql) do
+      :ok ->
+        json(conn, %{status: "ok", message: "Datacenter+VPN backfill mutation submitted"})
+
+      {:error, reason} ->
+        json(conn, %{status: "error", error: inspect(reason)})
+    end
+  end
+
   def backfill_akamai_privacy_relay(conn, _params) do
     alias Spectabas.ClickHouse
 

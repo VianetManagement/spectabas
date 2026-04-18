@@ -35,6 +35,7 @@ defmodule Spectabas.Analytics.ScraperDetector do
     AS20473
     AS24940
     AS51167
+    AS40021
     AS8100
     AS46844
     AS46941
