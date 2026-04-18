@@ -78,4 +78,8 @@ if config_env() == :prod do
   if slack_url = System.get_env("SLACK_WEBHOOK_URL") do
     config :spectabas, slack_webhook_url: slack_url
   end
+
+  if help_ai_key = System.get_env("HELP_AI_API_KEY") do
+    config :spectabas, help_ai_api_key: help_ai_key
+  end
 end

@@ -539,6 +539,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
             </div>
           </div>
           {render_slot(@inner_block)}
+          <.live_component
+            :if={Spectabas.AI.HelpChat.configured?()}
+            module={SpectabasWeb.Dashboard.ChatComponent}
+            id="help-chat"
+          />
         </main>
       </div>
     </div>

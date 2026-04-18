@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.72.0", "2026-04-18T23:00:00Z",
+       [
+         %{
+           title: "Feature: AI help chatbot on dashboard",
+           description:
+             "Floating chat widget on all dashboard pages — ask questions about Spectabas features, setup, goals, integrations, and more. Powered by Claude Haiku via platform-level HELP_AI_API_KEY. Multi-turn conversation with markdown rendering, auto-scroll, and bouncing loading dots. Only appears when the env var is set."
+         }
+       ]},
       {"v5.71.0", "2026-04-18T22:00:00Z",
        [
          %{

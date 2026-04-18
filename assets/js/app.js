@@ -339,6 +339,11 @@ const LocalTime = {
   }
 }
 
+const ChatScroll = {
+  mounted() { this.el.scrollTop = this.el.scrollHeight },
+  updated() { this.el.scrollTop = this.el.scrollHeight }
+}
+
 const Hooks = {
   TimeseriesChart,
   BarChart,
@@ -353,6 +358,7 @@ const Hooks = {
   PieChart,
   IdleTimeout,
   LocalTime,
+  ChatScroll,
 }
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
