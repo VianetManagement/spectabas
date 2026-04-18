@@ -51,7 +51,10 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
       # Load asynchronously — the ClickHouse query can take 10-30s on large
       # sites. Loading in mount would timeout the LiveView and cause infinite
       # reconnect loops.
-      if connected?(socket), do: send(self(), :load_data)
+      if connected?(socket) do
+        send(self(), :load_data)
+        Phoenix.PubSub.subscribe(Spectabas.PubSub, "calibration:#{site.id}")
+      end
 
       {:ok, socket}
     end
@@ -86,12 +89,13 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
 
   def handle_event("switch_tab", %{"tab" => "calibration"}, socket) do
     calibrations = Spectabas.Analytics.ScraperCalibration.latest_for_site(socket.assigns.site.id)
+    has_pending_job = calibration_job_running?(socket.assigns.site.id)
 
     {:noreply,
      socket
      |> assign(:tab, "calibration")
      |> assign(:calibrations, calibrations)
-     |> assign(:calibrating, false)}
+     |> assign(:calibrating, has_pending_job)}
   end
 
   def handle_event("switch_tab", %{"tab" => tab}, socket) do
@@ -99,16 +103,11 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
   end
 
   def handle_event("run_calibration", _params, socket) do
-    socket = assign(socket, :calibrating, true)
-    site = socket.assigns.site
-    lv_pid = self()
+    %{"site_id" => socket.assigns.site.id}
+    |> Spectabas.Workers.ScraperCalibrationWorker.new()
+    |> Oban.insert()
 
-    Task.start(fn ->
-      result = Spectabas.Analytics.ScraperCalibration.run(site)
-      send(lv_pid, {:calibration_done, result})
-    end)
-
-    {:noreply, socket}
+    {:noreply, assign(socket, :calibrating, true)}
   end
 
   def handle_event("approve_calibration", %{"id" => id_str}, socket) do
@@ -242,6 +241,16 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
              socket |> assign(:webhook_result, {:error, detail}) |> assign(:webhook_log, log)}
         end
     end
+  end
+
+  defp calibration_job_running?(site_id) do
+    import Ecto.Query
+
+    Oban.Job
+    |> where([j], j.worker == "Spectabas.Workers.ScraperCalibrationWorker")
+    |> where([j], j.state in ["available", "executing", "scheduled"])
+    |> where([j], fragment("?->>'site_id' = ?", j.args, ^to_string(site_id)))
+    |> Spectabas.ObanRepo.exists?()
   end
 
   defp load_data(socket) do

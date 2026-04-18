@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.56.0", "2026-04-17T12:00:00Z",
+       [
+         %{
+           title: "Fix: Scraper AI calibration runs as background job (Oban)",
+           description:
+             "AI calibration now runs as an Oban background job instead of an unlinked Task. Results persist to the database and appear even if you navigate away from the page. PubSub pushes live updates if you stay on the Scrapers page."
+         }
+       ]},
       {"v5.55.0", "2026-04-18T08:00:00Z",
        [
          %{
