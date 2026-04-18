@@ -136,10 +136,16 @@ defmodule Spectabas.Analytics.ScraperDetector do
   # ---------------- Signal helpers ----------------
 
   defp add_datacenter_signal(points, signals, profile, w) do
-    is_dc = datacenter_asn?(profile[:asn]) or profile[:is_datacenter] == true
-    on_known_vpn = known_vpn_provider?(profile[:vpn_provider])
+    is_dc_asn = datacenter_asn?(profile[:asn])
+    is_dc = is_dc_asn or profile[:is_datacenter] == true
+    on_vpn = known_vpn_provider?(profile[:vpn_provider]) or profile[:is_vpn] == true
 
-    if is_dc and not on_known_vpn do
+    # Suppress for VPN users unless they're on a KNOWN datacenter ASN.
+    # This handles: VPN on OVH (still datacenter) vs iCloud Private Relay
+    # on Akamai (not datacenter, is_datacenter=1 is stale data).
+    suppressed = on_vpn and not is_dc_asn
+
+    if is_dc and not suppressed do
       {points + w.datacenter_asn, [:datacenter_asn | signals]}
     else
       {points, signals}
@@ -147,10 +153,12 @@ defmodule Spectabas.Analytics.ScraperDetector do
   end
 
   defp add_spoofed_ua_signal(points, signals, profile, w) do
-    is_dc = datacenter_asn?(profile[:asn]) or profile[:is_datacenter] == true
-    on_known_vpn = known_vpn_provider?(profile[:vpn_provider])
+    is_dc_asn = datacenter_asn?(profile[:asn])
+    is_dc = is_dc_asn or profile[:is_datacenter] == true
+    on_vpn = known_vpn_provider?(profile[:vpn_provider]) or profile[:is_vpn] == true
+    suppressed = on_vpn and not is_dc_asn
 
-    if is_dc and not on_known_vpn and mobile_ua?(profile[:user_agent]) do
+    if is_dc and not suppressed and mobile_ua?(profile[:user_agent]) do
       {points + w.spoofed_mobile_ua, [:spoofed_mobile_ua | signals]}
     else
       {points, signals}

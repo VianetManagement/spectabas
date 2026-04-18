@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.65.0", "2026-04-18T15:30:00Z",
+       [
+         %{
+           title: "Fix: Smart VPN suppression — distinguishes consumer VPNs from datacenter VPNs",
+           description:
+             "VPN suppression for datacenter/spoofed_mobile signals now checks both is_vpn flag AND whether the ASN is a known datacenter. VPN on OVH/Contabo (PublicVpnConfigs) still fires datacenter signal. VPN on Akamai/Fastly/Cloudflare (iCloud Private Relay) is correctly suppressed. Handles stale ip_is_datacenter flags from pre-Akamai-fix events."
+         }
+       ]},
       {"v5.64.0", "2026-04-18T15:00:00Z",
        [
          %{
