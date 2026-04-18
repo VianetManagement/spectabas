@@ -56,9 +56,9 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
       {"v5.66.0", "2026-04-18T16:00:00Z",
        [
          %{
-           title: "Tune: 10 hosting ASNs added to datacenter blocklist",
+           title: "Enhancement: Scraper detector now uses full ~900-entry ASN blocklist",
            description:
-             "Added WorldStream, Datacamp, GTHost, Limestone, Tier.Net, Hop One, CYBERCON, HostRoyale to datacenter ASN list. Found via audit of high-pageview visitors on hosting IPs not previously flagged. Also fixed VPN suppression to distinguish consumer VPNs from datacenter VPNs."
+             "The datacenter_asn signal now uses the ASNBlocklist ETS table (~900 datacenter ASNs from priv/asn_lists/) instead of a hardcoded 21-entry list. Automatically stays current when blocklist files are updated. Falls back to the static list in tests."
          }
        ]},
       {"v5.65.0", "2026-04-18T15:30:00Z",

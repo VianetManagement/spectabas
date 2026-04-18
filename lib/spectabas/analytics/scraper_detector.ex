@@ -27,7 +27,9 @@ defmodule Spectabas.Analytics.ScraperDetector do
   provided `page_paths` are empty, the `:systematic_crawl` signal is skipped.
   """
 
-  @datacenter_asns ~w(
+  # Static fallback list — used only when ASNBlocklist ETS is not available (e.g., tests).
+  # In production, datacenter_asn? uses ASNBlocklist.datacenter?/1 which has ~900 entries.
+  @datacenter_asns_fallback ~w(
     AS16276
     AS14061
     AS396982
@@ -39,17 +41,6 @@ defmodule Spectabas.Analytics.ScraperDetector do
     AS8100
     AS46844
     AS46941
-    AS49981
-    AS212238
-    AS60068
-    AS63023
-    AS46475
-    AS397423
-    AS397391
-    AS7393
-    AS207990
-    AS203020
-    AS39486
   )
 
   @suspicious_resolutions ~w(
@@ -73,8 +64,8 @@ defmodule Spectabas.Analytics.ScraperDetector do
   @score_suspicious 60
   @score_certain 85
 
-  @doc "List of ASN prefixes classified as datacenter/hosting providers."
-  def datacenter_asns, do: @datacenter_asns
+  @doc "List of ASN prefixes classified as datacenter/hosting providers (fallback list)."
+  def datacenter_asns, do: @datacenter_asns_fallback
 
   @doc "List of screen resolutions commonly used by headless browsers/emulators."
   def suspicious_resolutions, do: @suspicious_resolutions
@@ -348,12 +339,37 @@ defmodule Spectabas.Analytics.ScraperDetector do
   defp datacenter_asn?(nil), do: false
 
   defp datacenter_asn?(asn) when is_binary(asn) do
-    Enum.any?(@datacenter_asns, fn prefix ->
-      String.starts_with?(asn, prefix)
-    end)
+    asn_number = extract_asn_number(asn)
+
+    if asn_number > 0 do
+      # Use the full ~900-entry blocklist from ETS if available (production)
+      try do
+        Spectabas.IPEnricher.ASNBlocklist.datacenter?(asn_number)
+      rescue
+        # Fallback to static list in tests or if ETS not available
+        _ -> Enum.any?(@datacenter_asns_fallback, &String.starts_with?(asn, &1))
+      end
+    else
+      false
+    end
   end
 
   defp datacenter_asn?(_), do: false
+
+  defp extract_asn_number(asn) when is_binary(asn) do
+    case Regex.run(~r/^AS(\d+)/, asn) do
+      [_, num] ->
+        case Integer.parse(num) do
+          {n, _} -> n
+          :error -> 0
+        end
+
+      _ ->
+        0
+    end
+  end
+
+  defp extract_asn_number(_), do: 0
 
   defp mobile_ua?(nil), do: false
 
