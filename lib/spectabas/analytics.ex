@@ -3910,26 +3910,26 @@ defmodule Spectabas.Analytics do
       sql = """
       SELECT
         visitor_id,
-        any(ip_org) AS asn,
-        any(user_agent) AS user_agent,
+        argMax(ip_org, timestamp) AS asn,
+        argMax(user_agent, timestamp) AS user_agent,
         uniq(ip_address) AS visitor_ip_count,
         uniqIf(url_path, event_type = 'pageview') AS session_pageviews,
         arrayFilter(p -> p != '',
           groupArrayIf(50)(url_path, event_type = 'pageview')) AS page_paths,
-        any(referrer_domain) AS referrer,
-        concat(toString(any(screen_width)), 'x', toString(any(screen_height))) AS screen_resolution,
+        argMax(referrer_domain, timestamp) AS referrer,
+        concat(toString(argMax(screen_width, timestamp)), 'x', toString(argMax(screen_height, timestamp))) AS screen_resolution,
         arraySlice(arrayDifference(arraySort(
           groupArrayIf(100)(toUnixTimestamp(timestamp) * 1000,
             event_type = 'pageview'))), 2) AS request_intervals_ms,
         toTimezone(min(timestamp), #{tz}) AS first_seen,
         toTimezone(max(timestamp), #{tz}) AS last_seen,
-        any(ip_country) AS country,
-        any(ip_city) AS city,
+        argMax(ip_country, timestamp) AS country,
+        argMax(ip_city, timestamp) AS city,
         max(ip_is_datacenter) AS is_datacenter,
-        any(ip_vpn_provider) AS vpn_provider,
-        any(browser) AS browser,
-        any(browser_version) AS browser_version,
-        any(device_type) AS device_type
+        argMax(ip_vpn_provider, timestamp) AS vpn_provider,
+        argMax(browser, timestamp) AS browser,
+        argMax(browser_version, timestamp) AS browser_version,
+        argMax(device_type, timestamp) AS device_type
       FROM events
       WHERE site_id = #{site_p}
         AND timestamp >= #{from_p}
@@ -3985,22 +3985,22 @@ defmodule Spectabas.Analytics do
     sql = """
     SELECT
       visitor_id,
-      any(ip_org) AS asn,
-      any(user_agent) AS user_agent,
+      argMax(ip_org, timestamp) AS asn,
+      argMax(user_agent, timestamp) AS user_agent,
       uniq(ip_address) AS visitor_ip_count,
       uniqIf(url_path, event_type = 'pageview') AS session_pageviews,
       arrayFilter(p -> p != '',
         groupArrayIf(50)(url_path, event_type = 'pageview')) AS page_paths,
-      any(referrer_domain) AS referrer,
-      concat(toString(any(screen_width)), 'x', toString(any(screen_height))) AS screen_resolution,
+      argMax(referrer_domain, timestamp) AS referrer,
+      concat(toString(argMax(screen_width, timestamp)), 'x', toString(argMax(screen_height, timestamp))) AS screen_resolution,
       arraySlice(arrayDifference(arraySort(
         groupArrayIf(100)(toUnixTimestamp(timestamp) * 1000,
           event_type = 'pageview'))), 2) AS request_intervals_ms,
       max(ip_is_datacenter) AS is_datacenter,
-      any(ip_vpn_provider) AS vpn_provider,
-      any(browser) AS browser,
-      any(browser_version) AS browser_version,
-      any(device_type) AS device_type
+      argMax(ip_vpn_provider, timestamp) AS vpn_provider,
+      argMax(browser, timestamp) AS browser,
+      argMax(browser_version, timestamp) AS browser_version,
+      argMax(device_type, timestamp) AS device_type
     FROM events
     WHERE site_id = #{site_p}
       AND timestamp >= #{from_p}
@@ -4062,25 +4062,27 @@ defmodule Spectabas.Analytics do
     vid_p = ClickHouse.param(visitor_id)
     prefixes = List.wrap(site.scraper_content_prefixes)
 
+    # Use argMax to pick values from the MOST RECENT event, ensuring consistency
+    # with whatever time window the scraper candidates page uses.
     sql = """
     SELECT
       visitor_id,
-      any(ip_org) AS asn,
-      any(user_agent) AS user_agent,
+      argMax(ip_org, timestamp) AS asn,
+      argMax(user_agent, timestamp) AS user_agent,
       uniq(ip_address) AS visitor_ip_count,
       uniqIf(url_path, event_type = 'pageview') AS session_pageviews,
       arrayFilter(p -> p != '',
         groupArrayIf(50)(url_path, event_type = 'pageview')) AS page_paths,
-      any(referrer_domain) AS referrer,
-      concat(toString(any(screen_width)), 'x', toString(any(screen_height))) AS screen_resolution,
+      argMax(referrer_domain, timestamp) AS referrer,
+      concat(toString(argMax(screen_width, timestamp)), 'x', toString(argMax(screen_height, timestamp))) AS screen_resolution,
       arraySlice(arrayDifference(arraySort(
         groupArrayIf(100)(toUnixTimestamp(timestamp) * 1000,
           event_type = 'pageview'))), 2) AS request_intervals_ms,
       max(ip_is_datacenter) AS is_datacenter,
-      any(ip_vpn_provider) AS vpn_provider,
-      any(browser) AS browser,
-      any(browser_version) AS browser_version,
-      any(device_type) AS device_type
+      argMax(ip_vpn_provider, timestamp) AS vpn_provider,
+      argMax(browser, timestamp) AS browser,
+      argMax(browser_version, timestamp) AS browser_version,
+      argMax(device_type, timestamp) AS device_type
     FROM events
     WHERE site_id = #{site_p}
       AND visitor_id = #{vid_p}
