@@ -5451,16 +5451,37 @@ defmodule Spectabas.Analytics do
     # Include cross-domain sites as internal (e.g. idenfy.com, payment providers)
     cross = site.cross_domain_sites || []
 
-    domains =
+    # Exact matches (analytics domain, parent, www.parent, plus cross-domain entries)
+    exact =
       ([domain, parent, "www.#{parent}"] ++ cross)
       |> Enum.uniq()
       |> Enum.reject(&(&1 == ""))
-      |> Enum.map(&ClickHouse.param/1)
 
-    case domains do
-      [] -> "referrer_domain"
-      list -> "if(referrer_domain NOT IN (#{Enum.join(list, ", ")}), referrer_domain, '')"
-    end
+    # Subdomain matches: cross-domain entries also match *.domain
+    # e.g. "idenfy.com" matches "ui.idenfy.com"
+    subdomain_clauses =
+      cross
+      |> Enum.reject(&(&1 == ""))
+      |> Enum.map(fn d -> "referrer_domain LIKE #{ClickHouse.param("%.#{d}")}" end)
+
+    exact_params = Enum.map(exact, &ClickHouse.param/1)
+
+    conditions =
+      case {exact_params, subdomain_clauses} do
+        {[], []} ->
+          nil
+
+        {list, []} ->
+          "referrer_domain IN (#{Enum.join(list, ", ")})"
+
+        {[], subs} ->
+          Enum.join(subs, " OR ")
+
+        {list, subs} ->
+          "referrer_domain IN (#{Enum.join(list, ", ")}) OR #{Enum.join(subs, " OR ")}"
+      end
+
+    if conditions, do: "if(NOT (#{conditions}), referrer_domain, '')", else: "referrer_domain"
   end
 
   defp parent_domain(domain) do
@@ -5748,7 +5769,7 @@ defmodule Spectabas.Analytics do
         _ -> nil
       end
 
-    cross = site.cross_domain_sites || []
+    cross = (site.cross_domain_sites || []) |> Enum.flat_map(fn d -> [d, "www.#{d}"] end)
 
     [domain, "www.spectabas.com", "spectabas.com"]
     |> then(fn list -> if parent, do: [parent, "www.#{parent}" | list], else: list end)

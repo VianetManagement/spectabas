@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.85.0", "2026-04-19T15:00:00Z",
+       [
+         %{
+           title: "Enhancement: Cross-domain exclusion now matches subdomains",
+           description:
+             "Adding 'idenfy.com' to cross-domain sites now also excludes 'ui.idenfy.com' and any other subdomain. The referrer cleaning SQL uses LIKE '%.domain' for subdomain matching alongside exact IN() matching. Previously required adding each subdomain individually."
+         }
+       ]},
       {"v5.84.0", "2026-04-19T14:00:00Z",
        [
          %{
