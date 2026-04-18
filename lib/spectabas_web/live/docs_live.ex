@@ -1464,22 +1464,30 @@ defmodule SpectabasWeb.DocsLive do
             id: "scrapers",
             title: "Scraper Detection",
             body: """
-            Identifies likely scraper visitors using a weighted-signal scoring model. Each visitor is scored 0-100 based on multiple signals:
+            Identifies likely scraper visitors using a weighted-signal scoring model. Each visitor is scored 0-100 based on 15 signals:
 
-            - **Datacenter ASN (+40)** — visitor's IP belongs to a known hosting provider (OVH, AWS, Hetzner, DigitalOcean, etc.). **Suppressed** when the IP belongs to a known consumer VPN or privacy relay.
-            - **Spoofed Mobile UA (+20)** — mobile user agent string coming from a datacenter IP. Also suppressed for known VPN users.
-            - **IP Rotation (+20)** — same cookie/visitor ID seen from 3+ distinct IPs
-            - **Extreme Pageviews (+50)** — 1,000+ unique pages. Definitive scraping regardless of network type.
-            - **Very High Pageviews (+20-25)** — 100-999 unique pages (200+ = +25, 100+ = +20)
-            - **High Pageviews (+10-15)** — 20-99 unique pages (50+ = +15, 20+ = +10)
+            **Network signals** (suppressed for VPN/privacy relay users not on datacenter ASNs):
+            - **Datacenter ASN (+40)** — visitor's IP belongs to a known hosting provider (~900 ASNs from blocklist + auto-discovered). Suppressed for consumer VPN and privacy relay users, but NOT suppressed for VPNs running on datacenter infrastructure.
+            - **Spoofed Mobile UA (+20)** — mobile user agent from a datacenter IP. Same suppression rules.
+            - **IP Rotation (+20)** — same visitor seen from 3+ distinct IPs. Suppressed for VPN/privacy relay users (they rotate IPs by design).
+
+            **Behavioral signals:**
+            - **Extreme Pageviews (+50)** — 1,000+ unique pages
+            - **High Pageviews (+10-20)** — 100+ unique pages (100+ = +10, 200+ = +15, 500+ = +20). Calibrated from 642k visitors: thresholds set where residential traffic is <90%.
             - **Systematic Crawl (+15)** — over 80% of visited pages match your configured content path prefixes
-            - **Robotic Timing (+10)** — request interval standard deviation under 300ms (evenly paced, programmatic)
+            - **Robotic Timing (+10)** — inter-pageview interval standard deviation under 300ms (programmatic pacing)
             - **No Referrer (+10)** — direct entry with no referrer
-            - **Emulator Resolution (+5)** — screen resolution matches a known headless browser default
+
+            **Fingerprint signals:**
+            - **Square Resolution (+15)** — screen width equals height (e.g., 1024x1024, 2000x2000). No real screen is square. Excludes social crawler ASNs (Facebook, Google, etc.) to preserve link previews.
+            - **Stale Browser (+15)** — Chrome major version below 100 (4+ years old). No real user runs Chrome that old.
+            - **Resolution-Device Mismatch (+10)** — smartphone user agent with desktop screen resolution (width >= 1024)
+            - **Headless Resolution (+5)** — screen resolution matches headless browser defaults (800x600, 1024x768)
+
+            **Bot detection at ingest:**
+            - HeadlessChrome, PhantomJS, and puppeteer user agents are automatically flagged as `ip_is_bot = 1` at ingest and excluded from all analytics.
 
             ### Score Tiers
-
-            Scores drive a three-tier response when delivered via webhook to your application:
 
             | Score | Tier | Recommended action |
             |-------|------|--------------------|
@@ -1488,32 +1496,47 @@ defmodule SpectabasWeb.DocsLive do
             | 40-69 | **Watching** | Log and observe — no user-facing action |
             | < 40 | Normal | Not flagged |
 
+            Webhooks fire at score 40+ and re-fire on tier escalation. **Automatic downgrade notifications**: when signal weights change or data is corrected, flagged visitors are re-scored every 15 minutes. If their score drops to a lower tier, a downgrade webhook is sent. Dropping below 40 sends a full deactivation.
+
             ### VPN & Privacy Relay Protection
 
-            Visitors on known consumer VPNs and privacy relays are protected from false positives:
+            Visitors on known consumer VPNs and privacy relays are protected from false positives. Three signals are suppressed: datacenter ASN, spoofed mobile UA, and IP rotation.
 
-            - **VPN providers** (NordVPN, Mullvad, ProtonVPN, etc.) — detected via ipapi.is VPN database (enumerated + interpolated MMDB). The datacenter ASN and spoofed mobile UA signals are suppressed.
-            - **Privacy relays** (Apple iCloud Private Relay via Fastly, Cloudflare WARP, Akamai CDN) — detected by ASN. Same suppression behavior.
-            - VPN provider names are shown on visitor profiles (purple badge) and the Realtime page.
-            - The ipapi.is VPN databases auto-download on boot and refresh weekly. Status visible at Admin > GeoIP Databases.
+            - **VPN providers** (NordVPN, Mullvad, ProtonVPN, etc.) — detected via ipapi.is VPN database. Suppressed when `is_vpn` flag is set and the ASN is NOT a known datacenter.
+            - **Privacy relays** (Apple iCloud Private Relay via Fastly/Akamai, Cloudflare WARP) — detected by ASN. Same suppression.
+            - **Datacenter VPNs** (e.g., "PublicVpnConfigs" on OVH) — NOT suppressed. A VPN on a hosting provider is still a datacenter.
+
+            ### ASN Management
+
+            Admin > ASN Management provides a self-managing system for datacenter ASN detection:
+
+            - **Auto-discovery**: Weekly scan analyzes 30 days of traffic for unclassified hosting ASNs. Uses behavioral scoring: org name keywords, low engagement, high bounce rate, IP-to-visitor ratio.
+            - **Auto-add**: High-confidence ASNs (score >= 80) are automatically added to the datacenter list with ClickHouse backfill.
+            - **Candidates**: Medium-confidence ASNs (score 50-79) are logged as inactive candidates for manual review.
+            - **Manual control**: Add or deactivate ASN overrides manually with audit trail.
+            - **Full audit**: Every change is logged with timestamp, source (auto/manual), evidence, and backfill status.
+            - **Run Discovery**: On-demand scan button for immediate results.
+
+            The scraper detector uses the full ~900-entry ASN blocklist from `priv/asn_lists/asn_datacenter.txt` plus any auto-discovered overrides.
 
             ### AI Score Calibration
 
-            The **Calibration** tab lets you analyze your site's visitor behavior with AI and get per-site weight recommendations:
+            The **Calibration** tab analyzes your site's traffic with AI and recommends per-site weight adjustments:
 
-            1. Click **Run AI Calibration** — gathers 30-day baseline stats (pageview distribution, network breakdown, referrer mix) from ClickHouse
-            2. Sends the baseline + current weights to your configured AI provider
-            3. AI returns recommended weight adjustments with reasoning and confidence level
+            1. Click **Run AI Calibration** — gathers 14 data dimensions from ClickHouse (pageview distribution, session duration, network breakdown, device types, top ASNs, IP rotation, referrers, VPN providers, request timing, screen resolutions, Chrome versions, content crawl patterns)
+            2. AI analyzes each signal with per-signal reasoning and confidence level
+            3. Weight cards show current → recommended with color coding (green = decreased, red = increased)
             4. **Approve** to apply as per-site overrides, or **Reject** to dismiss
-            5. **Reset to Defaults** clears all per-site overrides
 
-            Per-site weight overrides are used automatically for all scoring — Scrapers page, visitor profiles, and webhook notifications.
+            Per-site weight overrides apply to all scoring — Scrapers page, visitor profiles, and webhook notifications.
 
-            **Configure content prefixes** in Site Settings to enable the systematic-crawl signal. Add URL path prefixes like `/listings` or `/profiles` that represent your valuable content pages. Without this, the systematic-crawl signal will not fire but all other signals still work.
+            ### Visitor Profile Integration
 
-            **Click any row** to see full details including the complete user agent string, all visited page paths, signal explanations, and a link to the full visitor profile (opens in new tab). Score, Pageviews, IPs, and Last Seen columns are sortable.
+            Visitor profile pages show real-time scraper scores with signal explanations. An **Unflag** button on the scraper webhook banner sends a deactivation webhook and clears the flags.
 
-            Scraper detection runs retroactively on past traffic. It scores visitors at query time from stored event data, not at ingest time.
+            **Configure content prefixes** in Site Settings for the systematic-crawl signal. Click any row for full details. Score, Pageviews, IPs, and Last Seen columns are sortable.
+
+            Scraper detection runs retroactively on past traffic — scores are computed at query time from stored event data.
             """
           },
           %{

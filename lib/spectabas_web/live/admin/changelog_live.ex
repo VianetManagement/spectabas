@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.67.0", "2026-04-18T17:00:00Z",
+       [
+         %{
+           title: "Feature: Self-managing ASN discovery system with admin dashboard",
+           description:
+             "Weekly Oban worker scans 30 days of traffic to find unclassified hosting ASNs using behavioral scoring (engagement, bounce rate, org name keywords). High-confidence ASNs auto-added to datacenter blocklist with automatic ClickHouse backfill. Lower-confidence candidates logged for review. Admin page at /admin/asn-management with full audit trail, manual add/approve/deactivate, and evidence display."
+         }
+       ]},
       {"v5.66.0", "2026-04-18T16:00:00Z",
        [
          %{
