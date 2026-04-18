@@ -187,13 +187,13 @@ defmodule SpectabasWeb.Dashboard.OrganicLiftLive do
                   <div class="flex justify-between">
                     <span class="text-gray-500">Avg Organic Visitors</span>
                     <span class="font-bold text-green-600">
-                      {@high_spend["avg_organic_visitors"] || 0}
+                      {format_number(to_num(@high_spend["avg_organic_visitors"]))}
                     </span>
                   </div>
                   <div class="flex justify-between">
                     <span class="text-gray-500">Avg Direct Visitors</span>
                     <span class="font-bold text-indigo-600">
-                      {@high_spend["avg_direct_visitors"] || 0}
+                      {format_number(to_num(@high_spend["avg_direct_visitors"]))}
                     </span>
                   </div>
                 </div>
@@ -214,13 +214,13 @@ defmodule SpectabasWeb.Dashboard.OrganicLiftLive do
                   <div class="flex justify-between">
                     <span class="text-gray-500">Avg Organic Visitors</span>
                     <span class="font-bold text-green-600">
-                      {@low_spend["avg_organic_visitors"] || 0}
+                      {format_number(to_num(@low_spend["avg_organic_visitors"]))}
                     </span>
                   </div>
                   <div class="flex justify-between">
                     <span class="text-gray-500">Avg Direct Visitors</span>
                     <span class="font-bold text-indigo-600">
-                      {@low_spend["avg_direct_visitors"] || 0}
+                      {format_number(to_num(@low_spend["avg_direct_visitors"]))}
                     </span>
                   </div>
                 </div>

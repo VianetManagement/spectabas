@@ -104,16 +104,18 @@ defmodule SpectabasWeb.Dashboard.ChurnRiskLive do
           <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
             <div class="bg-white rounded-lg shadow p-4">
               <dt class="text-xs font-medium text-gray-500 uppercase">At-Risk Customers</dt>
-              <dd class="mt-1 text-3xl font-bold text-red-600">{@at_risk_count}</dd>
+              <dd class="mt-1 text-3xl font-bold text-red-600">{format_number(@at_risk_count)}</dd>
             </div>
             <div class="bg-white rounded-lg shadow p-4">
               <dt class="text-xs font-medium text-gray-500 uppercase">Identified (have email)</dt>
-              <dd class="mt-1 text-3xl font-bold text-indigo-600">{@identified_count}</dd>
+              <dd class="mt-1 text-3xl font-bold text-indigo-600">
+                {format_number(@identified_count)}
+              </dd>
             </div>
             <div class="bg-white rounded-lg shadow p-4">
               <dt class="text-xs font-medium text-gray-500 uppercase">Anonymous</dt>
               <dd class="mt-1 text-3xl font-bold text-gray-600">
-                {@at_risk_count - @identified_count}
+                {format_number(@at_risk_count - @identified_count)}
               </dd>
             </div>
           </div>
@@ -164,10 +166,10 @@ defmodule SpectabasWeb.Dashboard.ChurnRiskLive do
                     </.link>
                   </td>
                   <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                    {to_num(row["prior_sessions"])}
+                    {format_number(to_num(row["prior_sessions"]))}
                   </td>
                   <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                    {to_num(row["recent_sessions"])}
+                    {format_number(to_num(row["recent_sessions"]))}
                   </td>
                   <td class="px-6 py-4 text-sm text-right tabular-nums">
                     <span class={decline_color(row["session_decline_pct"])}>
@@ -175,10 +177,10 @@ defmodule SpectabasWeb.Dashboard.ChurnRiskLive do
                     </span>
                   </td>
                   <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                    {to_num(row["prior_pages"])}
+                    {format_number(to_num(row["prior_pages"]))}
                   </td>
                   <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
-                    {to_num(row["recent_pages"])}
+                    {format_number(to_num(row["recent_pages"]))}
                   </td>
                   <td class="px-6 py-4 text-right">
                     <span class={[

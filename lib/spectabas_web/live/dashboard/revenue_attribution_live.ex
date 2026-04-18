@@ -434,7 +434,7 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
                 {Spectabas.Currency.format(ch["total_revenue"], @site.currency)}
               </dd>
               <dd class="text-xs text-gray-500">
-                {to_num(ch["orders"])} orders &middot; {ch["conversion_rate"]}%
+                {format_number(to_num(ch["orders"]))} orders &middot; {ch["conversion_rate"]}%
               </dd>
             </div>
           </div>

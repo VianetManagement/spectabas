@@ -456,7 +456,7 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
                     {Spectabas.Currency.format(c["net_revenue"], @site.currency)}
                   </td>
                   <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
-                    {to_num(c["order_count"])}
+                    {format_number(to_num(c["order_count"]))}
                   </td>
                   <td class="px-6 py-3 text-sm text-gray-500 hidden sm:table-cell">
                     {format_date(c["first_order"])}

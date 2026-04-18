@@ -323,6 +323,15 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
               </p>
 
               <%!-- Discovered elements from recent click data --%>
+              <div
+                :if={@discovered_elements == []}
+                class="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200 text-sm text-gray-500"
+              >
+                <p class="font-medium text-gray-600 mb-1">No elements detected yet</p>
+                <p>
+                  Buttons and links on your site will appear here automatically once visitors start clicking them. This typically takes a few hours after the tracker is installed.
+                </p>
+              </div>
               <div :if={@discovered_elements != []} class="mt-3">
                 <p class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
                   Detected on your site (last 30 days)
@@ -438,10 +447,10 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
                     conversion_rate: 0.0
                   }) %>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right font-semibold tabular-nums">
-                  {stats.completions}
+                  {format_number(stats.completions)}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
-                  {stats.unique_completers}
+                  {format_number(stats.unique_completers)}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
                   {stats.conversion_rate}%

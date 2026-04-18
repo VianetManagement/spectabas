@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.73.0", "2026-04-19T01:00:00Z",
+       [
+         %{
+           title: "Fix: Comma formatting on all dashboard numbers + click element empty state",
+           description:
+             "Fixed 18 places across 8 dashboard pages where visitor/session/order counts displayed without comma separators (e.g. 12345 instead of 12,345). Affected: Goals completions, Churn Risk stats, Campaigns counts, Ecommerce order counts, Organic Lift visitor counts, Revenue Attribution orders, Scrapers IP counts. Also added helpful empty state message for click element discovery explaining that elements appear after visitors click."
+         }
+       ]},
       {"v5.72.0", "2026-04-18T23:00:00Z",
        [
          %{

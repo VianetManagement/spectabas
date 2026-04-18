@@ -543,7 +543,7 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
                     {format_number(to_num(c["session_pageviews"]))}
                   </td>
                   <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums">
-                    {to_num(c["visitor_ip_count"])}
+                    {format_number(to_num(c["visitor_ip_count"]))}
                   </td>
                   <td class="px-4 py-3 text-xs text-gray-600 truncate max-w-xs hidden md:table-cell">
                     {blank_to_dash(c["asn"])}
@@ -624,7 +624,9 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
                   </div>
                   <div>
                     <div class="text-xs text-gray-500">Unique IPs</div>
-                    <div class="font-semibold text-gray-900">{to_num(v["visitor_ip_count"])}</div>
+                    <div class="font-semibold text-gray-900">
+                      {format_number(to_num(v["visitor_ip_count"]))}
+                    </div>
                   </div>
                   <div>
                     <div class="text-xs text-gray-500">Screen</div>
