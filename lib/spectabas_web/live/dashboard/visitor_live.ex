@@ -210,6 +210,37 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
     {:noreply, assign(socket, :show_ip_panel, !socket.assigns.show_ip_panel)}
   end
 
+  def handle_event("unflag_scraper", _params, socket) do
+    site = socket.assigns.site
+    visitor = socket.assigns.visitor
+
+    result =
+      if site.scraper_webhook_enabled && site.scraper_webhook_url do
+        Spectabas.Webhooks.ScraperWebhook.send_deactivate(site, visitor)
+      else
+        {:ok, %{status: "no webhook configured"}}
+      end
+
+    case result do
+      {:ok, _} ->
+        visitor
+        |> Spectabas.Visitors.Visitor.changeset(%{
+          scraper_webhook_sent_at: nil,
+          scraper_webhook_score: nil
+        })
+        |> Spectabas.Repo.update()
+
+        {:noreply,
+         socket
+         |> assign(:visitor, Spectabas.Repo.get!(Spectabas.Visitors.Visitor, visitor.id))
+         |> assign(:status, :deactivated)
+         |> put_flash(:info, "Visitor unflagged — deactivation webhook sent.")}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to send deactivation webhook.")}
+    end
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -847,12 +878,21 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
                 else: ""} with score {@visitor.scraper_webhook_score || "?"}.
             </p>
           </div>
-          <.link
-            navigate={~p"/dashboard/sites/#{@site.id}/scrapers"}
-            class="text-xs text-red-700 hover:text-red-900 font-medium shrink-0"
-          >
-            View Scrapers &rarr;
-          </.link>
+          <div class="flex items-center gap-2 shrink-0">
+            <button
+              phx-click="unflag_scraper"
+              data-confirm="This will send a deactivation webhook and clear the scraper flag. Continue?"
+              class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg text-white bg-green-600 hover:bg-green-700 shadow-sm"
+            >
+              Unflag
+            </button>
+            <.link
+              navigate={~p"/dashboard/sites/#{@site.id}/scrapers"}
+              class="text-xs text-red-700 hover:text-red-900 font-medium"
+            >
+              View Scrapers &rarr;
+            </.link>
+          </div>
         </div>
       <% :deactivated -> %>
         <div class="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 flex items-center gap-3">
