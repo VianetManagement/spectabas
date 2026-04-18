@@ -122,7 +122,7 @@ defmodule SpectabasWeb.Dashboard.EmailReportsLive do
                 <label class="block text-sm font-medium text-gray-700 mb-1">Frequency</label>
                 <select
                   name="report[frequency]"
-                  class="block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                  class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                 >
                   <option value="off" selected={@report_frequency == "off"}>Off</option>
                   <option value="daily" selected={@report_frequency == "daily"}>Daily</option>
@@ -134,7 +134,7 @@ defmodule SpectabasWeb.Dashboard.EmailReportsLive do
                 <label class="block text-sm font-medium text-gray-700 mb-1">Send Time</label>
                 <select
                   name="report[send_hour]"
-                  class="block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                  class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                 >
                   <option :for={h <- 0..23} value={h} selected={@report_hour == h}>
                     {String.pad_leading(to_string(h), 2, "0")}:00

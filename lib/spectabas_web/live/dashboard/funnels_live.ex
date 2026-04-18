@@ -30,13 +30,26 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
        |> assign(:funnel_data, nil)
        |> assign(:show_form, false)
        |> assign(:form_name, "")
-       |> assign(:form_steps, [%{name: "", type: "pageview", value: ""}])}
+       |> assign(:form_steps, [%{name: "", type: "pageview", value: ""}])
+       |> assign(:discovered_elements, [])}
     end
   end
 
   @impl true
   def handle_event("toggle_form", _params, socket) do
-    {:noreply, assign(socket, :show_form, !socket.assigns.show_form)}
+    if socket.assigns.show_form do
+      {:noreply, assign(socket, :show_form, false)}
+    else
+      elements =
+        safe_query(fn ->
+          Analytics.discovered_click_elements(socket.assigns.site, socket.assigns.user)
+        end)
+
+      {:noreply,
+       socket
+       |> assign(:show_form, true)
+       |> assign(:discovered_elements, elements)}
+    end
   end
 
   def handle_event("add_step", _params, socket) do
@@ -58,6 +71,11 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
 
   def handle_event("update_name", %{"value" => name}, socket) do
     {:noreply, assign(socket, :form_name, name)}
+  end
+
+  def handle_event("add_click_step", %{"selector" => selector}, socket) do
+    steps = socket.assigns.form_steps ++ [%{name: "", type: "click_element", value: selector}]
+    {:noreply, assign(socket, :form_steps, steps)}
   end
 
   def handle_event("create_funnel", _params, socket) do
@@ -179,7 +197,7 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
                 type="text"
                 phx-blur="update_name"
                 value={@form_name}
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                 required
               />
             </div>
@@ -195,7 +213,7 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
                     phx-change="update_step"
                     phx-value-index={idx}
                     phx-value-field="type"
-                    class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    class="rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                   >
                     <option
                       value="pageview"
@@ -211,6 +229,14 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
                     >
                       Custom Event
                     </option>
+                    <option
+                      value="click_element"
+                      selected={
+                        step["type"] == "click_element" || Map.get(step, :type) == "click_element"
+                      }
+                    >
+                      Click Element
+                    </option>
                   </select>
                   <input
                     type="text"
@@ -218,13 +244,8 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
                     phx-value-index={idx}
                     phx-value-field="value"
                     value={step["value"] || Map.get(step, :value, "")}
-                    placeholder={
-                      if(Map.get(step, :type, "pageview") == "pageview",
-                        do: "/path",
-                        else: "event_name"
-                      )
-                    }
-                    class="flex-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    placeholder={step_placeholder(step)}
+                    class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                   />
                   <button
                     :if={length(@form_steps) > 1}
@@ -239,6 +260,38 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
               <button phx-click="add_step" class="mt-3 text-sm text-indigo-600 hover:text-indigo-800">
                 + Add step
               </button>
+
+              <%!-- Discovered click elements --%>
+              <div :if={@discovered_elements != []} class="mt-4 border-t border-gray-200 pt-3">
+                <p class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                  Detected click elements (last 30 days)
+                </p>
+                <div class="flex flex-wrap gap-2">
+                  <button
+                    :for={el <- Enum.take(@discovered_elements, 12)}
+                    type="button"
+                    phx-click="add_click_step"
+                    phx-value-selector={
+                      if(to_string(el["element_id"]) != "",
+                        do: "##{el["element_id"]}",
+                        else: "text:#{el["element_text"]}"
+                      )
+                    }
+                    class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
+                  >
+                    <span class={[
+                      "px-1 py-0.5 rounded font-mono text-[10px]",
+                      element_tag_classes(el["element_tag"])
+                    ]}>
+                      {el["element_tag"]}
+                    </span>
+                    <span class="font-medium text-gray-700 truncate max-w-[120px]">
+                      {el["element_text"] |> to_string() |> String.slice(0..29)}
+                    </span>
+                    <span class="text-gray-400">{format_number(to_num(el["clicks"]))}</span>
+                  </button>
+                </div>
+              </div>
             </div>
             <div class="flex justify-end">
               <button
@@ -384,6 +437,24 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
         step
       end
     end)
+  end
+
+  defp step_placeholder(step) do
+    case Map.get(step, :type, Map.get(step, "type", "pageview")) do
+      "pageview" -> "/path"
+      "custom_event" -> "event_name"
+      "click_element" -> "#id or text:Button Text"
+      _ -> "/path"
+    end
+  end
+
+  defp element_tag_classes(tag) do
+    case to_string(tag) |> String.downcase() do
+      "a" -> "bg-blue-100 text-blue-700"
+      "button" -> "bg-green-100 text-green-700"
+      "input" -> "bg-amber-100 text-amber-700"
+      _ -> "bg-gray-100 text-gray-700"
+    end
   end
 
   defp format_money(n) when is_number(n), do: :erlang.float_to_binary(n / 1, decimals: 2)

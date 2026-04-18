@@ -315,7 +315,7 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
                     type="text"
                     name="campaign[name]"
                     value={@form[:name].value}
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
+                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm sm:text-sm"
                     placeholder="e.g. Spring Sale 2026"
                     required
                   />
@@ -326,7 +326,7 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
                     type="url"
                     name="campaign[destination_url]"
                     value={@form[:destination_url].value}
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
+                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm sm:text-sm"
                     placeholder="https://example.com/landing-page"
                   />
                 </div>
@@ -336,7 +336,7 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
                     type="text"
                     name="campaign[utm_source]"
                     value={@form[:utm_source].value}
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
+                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm sm:text-sm"
                     placeholder="google, newsletter, facebook"
                   />
                 </div>
@@ -346,7 +346,7 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
                     type="text"
                     name="campaign[utm_medium]"
                     value={@form[:utm_medium].value}
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
+                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm sm:text-sm"
                     placeholder="cpc, email, social, banner"
                   />
                 </div>
@@ -356,7 +356,7 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
                     type="text"
                     name="campaign[utm_campaign]"
                     value={@form[:utm_campaign].value}
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
+                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm sm:text-sm"
                     placeholder="spring_sale, product_launch"
                   />
                 </div>
@@ -368,7 +368,7 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
                     type="text"
                     name="campaign[utm_term]"
                     value={@form[:utm_term].value}
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
+                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm sm:text-sm"
                     placeholder="paid search keywords"
                   />
                 </div>
@@ -380,7 +380,7 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
                     type="text"
                     name="campaign[utm_content]"
                     value={@form[:utm_content].value}
-                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm"
+                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm sm:text-sm"
                     placeholder="header_banner, sidebar_cta"
                   />
                 </div>

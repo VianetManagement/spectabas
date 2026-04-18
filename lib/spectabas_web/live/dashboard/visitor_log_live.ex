@@ -239,7 +239,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
               name="ip"
               value={@ip_search}
               placeholder="e.g., 192.168.1.1"
-              class="rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 py-2 px-3 w-full sm:w-48"
+              class="rounded-lg border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 py-2 px-3 w-full sm:w-48"
               inputmode="decimal"
             />
             <button

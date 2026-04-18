@@ -229,7 +229,7 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
                 type="text"
                 name="goal[name]"
                 value={@form[:name].value}
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                 required
               />
               <p
@@ -272,7 +272,7 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
                 name="goal[page_path]"
                 value={@form[:page_path].value}
                 placeholder="/pricing*"
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
               />
               <p
                 :for={msg <- Enum.map(@form[:page_path].errors, &translate_error/1)}
@@ -288,7 +288,7 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
                 name="goal[event_name]"
                 value={@form[:event_name].value}
                 placeholder="signup_complete"
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
               />
               <p
                 :for={msg <- Enum.map(@form[:event_name].errors, &translate_error/1)}
@@ -306,7 +306,7 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
                 name="goal[element_selector]"
                 value={@form[:element_selector].value}
                 placeholder="#signup-btn or text:Add to Cart"
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
               />
               <p class="mt-1 text-xs text-gray-500">
                 Use <code class="bg-gray-100 px-1 rounded">#element-id</code>

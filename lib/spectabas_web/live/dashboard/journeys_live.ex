@@ -158,7 +158,7 @@ defmodule SpectabasWeb.Dashboard.JourneysLive do
                   <textarea
                     name="prefixes"
                     rows="4"
-                    class="block w-full rounded-md border-gray-300 shadow-sm text-xs font-mono"
+                    class="block w-full rounded-lg border-gray-300 shadow-sm text-xs font-mono"
                     placeholder="/listings&#10;/premier&#10;/breeds"
                   ><%= Enum.join(@site.scraper_content_prefixes || [], "\n") %></textarea>
                 </div>
@@ -174,7 +174,7 @@ defmodule SpectabasWeb.Dashboard.JourneysLive do
                   <textarea
                     name="conversions"
                     rows="4"
-                    class="block w-full rounded-md border-gray-300 shadow-sm text-xs font-mono"
+                    class="block w-full rounded-lg border-gray-300 shadow-sm text-xs font-mono"
                     placeholder="/contact&#10;/checkout&#10;/signup"
                   ><%= Enum.join(@site.journey_conversion_pages || [], "\n") %></textarea>
                 </div>

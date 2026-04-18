@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.74.0", "2026-04-19T02:00:00Z",
+       [
+         %{
+           title: "Feature: Click element steps in funnels + UI consistency pass",
+           description:
+             "Funnel creation now supports click element steps alongside pageview and custom event. Detected click elements show as pills below the steps list — click to add as a step. Also standardized all form inputs and dropdowns to rounded-lg across 12 dashboard pages for visual consistency."
+         }
+       ]},
       {"v5.73.0", "2026-04-19T01:00:00Z",
        [
          %{

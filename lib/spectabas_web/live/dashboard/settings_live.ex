@@ -1227,7 +1227,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                 <textarea
                   name="buying_paths"
                   rows="4"
-                  class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-xs font-mono"
+                  class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-xs font-mono"
                   placeholder="/pricing&#10;/checkout&#10;/subscribe"
                 >{paths_to_text((@site.intent_config || %{})["buying_paths"])}</textarea>
               </div>
@@ -1238,7 +1238,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                 <textarea
                   name="engaging_paths"
                   rows="4"
-                  class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-xs font-mono"
+                  class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-xs font-mono"
                   placeholder="/search&#10;/listings&#10;/messages"
                 >{paths_to_text((@site.intent_config || %{})["engaging_paths"])}</textarea>
               </div>
@@ -1249,7 +1249,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                 <textarea
                   name="support_paths"
                   rows="4"
-                  class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-xs font-mono"
+                  class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-xs font-mono"
                   placeholder="/help&#10;/contact&#10;/faq"
                 >{paths_to_text((@site.intent_config || %{})["support_paths"])}</textarea>
               </div>
@@ -1263,7 +1263,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                   value={(@site.intent_config || %{})["researching_threshold"] || 2}
                   min="2"
                   max="10"
-                  class="block w-24 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  class="block w-24 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                 />
                 <p class="text-[10px] text-gray-400 mt-1">
                   Sessions with this many+ pageviews classified as "researching"

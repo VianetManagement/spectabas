@@ -99,7 +99,7 @@ defmodule SpectabasWeb.Dashboard.VisitorsLive do
               name="search"
               value={@search}
               placeholder="Search by email, user ID, or cookie ID..."
-              class="block w-full md:w-96 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              class="block w-full md:w-96 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
               phx-debounce="300"
             />
           </form>

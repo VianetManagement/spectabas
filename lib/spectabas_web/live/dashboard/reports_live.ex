@@ -103,7 +103,7 @@ defmodule SpectabasWeb.Dashboard.ReportsLive do
                   type="text"
                   name="report[name]"
                   value={@form[:name].value}
-                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                   required
                 />
               </div>
@@ -111,7 +111,7 @@ defmodule SpectabasWeb.Dashboard.ReportsLive do
                 <label class="block text-sm font-medium text-gray-700">Schedule</label>
                 <select
                   name="report[schedule]"
-                  class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                 >
                   <option value="">No schedule (manual only)</option>
                   <option value="daily">Daily</option>
@@ -125,7 +125,7 @@ defmodule SpectabasWeb.Dashboard.ReportsLive do
               <textarea
                 name="report[description]"
                 rows="2"
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
               ><%= @form[:description].value %></textarea>
             </div>
             <div>
@@ -135,7 +135,7 @@ defmodule SpectabasWeb.Dashboard.ReportsLive do
               <input
                 type="text"
                 name="report[recipients_text]"
-                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                 placeholder="alice@example.com, bob@example.com"
               />
             </div>

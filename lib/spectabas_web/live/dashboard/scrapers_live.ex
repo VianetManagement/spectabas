@@ -318,7 +318,7 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
             <form phx-change="change_min_score">
               <select
                 name="min_score"
-                class="text-sm rounded-md border-gray-300 py-1.5 pr-8"
+                class="text-sm rounded-lg border-gray-300 py-1.5 pr-8"
               >
                 <option value="60" selected={@min_score == 60}>Score ≥ 60 (suspicious)</option>
                 <option value="85" selected={@min_score == 85}>Score ≥ 85 (certain)</option>

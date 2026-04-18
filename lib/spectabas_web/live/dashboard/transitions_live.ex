@@ -115,7 +115,7 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
                 type="text"
                 name="page"
                 value={@current_page}
-                class="block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 font-mono"
+                class="block w-full rounded-lg border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 font-mono"
                 placeholder="/pricing"
               />
             </div>
