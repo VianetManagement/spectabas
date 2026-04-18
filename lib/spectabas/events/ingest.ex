@@ -143,6 +143,9 @@ defmodule Spectabas.Events.Ingest do
   end
 
   # Single UA parse for both data extraction and bot detection (was 2-3 parses before)
+  # Also catches headless browsers that UAInspector doesn't classify as bots
+  @headless_ua_patterns ["HeadlessChrome", "PhantomJS", "Headless", "puppeteer"]
+
   defp parse_and_detect("", client_bot_hint),
     do:
       {%{device_type: "", browser: "", browser_version: "", os: "", os_version: ""},
@@ -162,12 +165,17 @@ defmodule Spectabas.Events.Ingest do
           os_version: get_in_result(result, [:os, :version]) || ""
         }
 
-        {data, client_bot_hint}
+        is_bot = client_bot_hint or headless_ua?(ua_string)
+        {data, is_bot}
 
       _ ->
         {%{device_type: "", browser: "", browser_version: "", os: "", os_version: ""},
-         client_bot_hint}
+         client_bot_hint or headless_ua?(ua_string)}
     end
+  end
+
+  defp headless_ua?(ua_string) do
+    Enum.any?(@headless_ua_patterns, &String.contains?(ua_string, &1))
   end
 
   defp get_in_result(result, keys) do

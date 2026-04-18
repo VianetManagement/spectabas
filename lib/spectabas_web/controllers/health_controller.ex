@@ -632,6 +632,27 @@ defmodule SpectabasWeb.HealthController do
     json(conn, %{status: "queued", message: "VPN backfill job queued on maintenance queue"})
   end
 
+  def backfill_headless_bots(conn, _params) do
+    alias Spectabas.ClickHouse
+
+    sql = """
+    ALTER TABLE events UPDATE ip_is_bot = 1
+    WHERE ip_is_bot = 0
+      AND (user_agent LIKE '%HeadlessChrome%'
+        OR user_agent LIKE '%PhantomJS%'
+        OR user_agent LIKE '%puppeteer%')
+    SETTINGS mutations_sync = 0
+    """
+
+    case ClickHouse.execute(sql) do
+      :ok ->
+        json(conn, %{status: "ok", message: "Headless bot backfill mutation submitted"})
+
+      {:error, reason} ->
+        json(conn, %{status: "error", error: inspect(reason)})
+    end
+  end
+
   def test_dashboard(conn, _params) do
     alias Spectabas.{Sites, Analytics, Accounts}
 
