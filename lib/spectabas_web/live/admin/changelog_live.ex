@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.62.0", "2026-04-18T12:00:00Z",
+       [
+         %{
+           title: "Feature: Automatic scraper webhook downgrade notifications",
+           description:
+             "When signal weights change or data is corrected, previously-flagged visitors are automatically re-scored every 15 minutes. If their score drops to a lower tier, a downgrade webhook is sent. Dropping below score 40 sends a full deactivation. Also fixed: datacenter ASNs now always set ip_is_datacenter=1 even when VPN is detected (scrapers using open VPN configs on OVH/Contabo were evading detection), and scraper scores now use argMax for deterministic values across time windows."
+         }
+       ]},
       {"v5.61.0", "2026-04-18T10:00:00Z",
        [
          %{
