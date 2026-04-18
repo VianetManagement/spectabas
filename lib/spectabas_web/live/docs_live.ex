@@ -2211,7 +2211,9 @@ defmodule SpectabasWeb.DocsLive do
 
             ### AI Weekly Insights Email
 
-            If you've configured an AI provider in Site Settings, you'll also receive a separate **Weekly AI Insights** email every Monday morning. This uses AI to analyze all your data (traffic, SEO, revenue, ad spend) and generate prioritized action items. Configure your AI provider under Settings > AI Analysis.
+            If you've configured an AI provider in Site Settings, you'll also receive a separate **Weekly AI Insights** email every Monday morning. This uses AI to analyze all your data and generate prioritized action items. Configure your AI provider under Settings > AI Analysis.
+
+            The AI analysis includes: traffic summary, engagement metrics, top pages, traffic sources, geography, device split, search console data, new keywords, revenue trends, ad spend, scraper activity, **goal performance** (completions and conversion rates), **funnel drop-off analysis** (biggest bottleneck per funnel), **top clicked elements**, and **auto-detected conversion paths**.
 
             Daily reports compare today vs yesterday. Weekly reports compare the last 7 days vs the prior 7 days. Monthly reports compare this month vs last month.
 

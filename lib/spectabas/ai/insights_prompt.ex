@@ -5,9 +5,10 @@ defmodule Spectabas.AI.InsightsPrompt do
   for the AI provider. Never sends raw visitor data — only aggregates.
   """
 
-  alias Spectabas.ClickHouse
+  alias Spectabas.{ClickHouse, Analytics, Goals}
   alias Spectabas.Analytics.AnomalyDetector
   import Spectabas.TypeHelpers, only: [to_num: 1, to_float: 1]
+  require Logger
 
   @system_prompt """
   You are an analytics advisor for a website. You analyze weekly metrics and provide
@@ -29,7 +30,10 @@ defmodule Spectabas.AI.InsightsPrompt do
   ## Revenue & Advertising
   Revenue trends and ad performance observations (only if data exists).
 
-  Keep it concise — under 800 words total. Use specific numbers from the data.
+  ## Conversion & Goals
+  Goal performance, funnel bottlenecks, and click element insights (only if data exists).
+
+  Keep it concise — under 1000 words total. Use specific numbers from the data.
   If a section has no relevant data, skip it entirely.
   Focus on CHANGES and ACTIONABLE items, not just restating the numbers.
   """
@@ -68,7 +72,11 @@ defmodule Spectabas.AI.InsightsPrompt do
         with_header("New Keywords (appeared this week)", query_new_keywords(site_p)),
         with_header("Revenue (7d vs prior 7d)", query_revenue_summary(site_p)),
         with_header("Ad Spend by Platform", query_ad_spend_summary(site_p)),
-        with_header("Scraper Activity", query_scraper_summary(site_p))
+        with_header("Scraper Activity", query_scraper_summary(site_p)),
+        with_header("Goal Performance (7d vs prior 7d)", query_goal_performance(site, user)),
+        with_header("Funnel Drop-off Analysis", query_funnel_analysis(site, user)),
+        with_header("Top Clicked Elements (7d)", query_click_elements(site_p)),
+        with_header("Suggested Conversion Paths", query_suggested_paths(site, user))
       ]
       |> Enum.reject(&is_nil/1)
       |> Enum.join("\n\n")
@@ -378,6 +386,117 @@ defmodule Spectabas.AI.InsightsPrompt do
       _ ->
         nil
     end
+  end
+
+  defp query_goal_performance(site, user) do
+    goals = Goals.list_goals(site)
+    if goals == [], do: nil, else: do_query_goal_performance(site, user, goals)
+  rescue
+    _ -> nil
+  end
+
+  defp do_query_goal_performance(site, user, _goals) do
+    case Analytics.goal_completions(site, user, :week) do
+      {:ok, results} when results != [] ->
+        Enum.map_join(results, "\n", fn r ->
+          "#{r.name} (#{r.goal_type}): #{r.completions} completions, #{r.unique_completers} unique, #{r.conversion_rate}% conv rate"
+        end)
+
+      _ ->
+        nil
+    end
+  end
+
+  defp query_funnel_analysis(site, user) do
+    funnels = Goals.list_funnels(site)
+    if funnels == [], do: nil, else: do_query_funnel_analysis(site, user, funnels)
+  rescue
+    _ -> nil
+  end
+
+  defp do_query_funnel_analysis(site, user, funnels) do
+    results =
+      funnels
+      |> Enum.take(5)
+      |> Enum.map(fn funnel ->
+        case Analytics.funnel_stats(site, user, funnel, :month) do
+          {:ok, [row | _]} ->
+            steps = funnel.steps || []
+            num_steps = length(steps)
+            entered = to_num(row["step_1"] || 0)
+            completed = to_num(row["step_#{num_steps}"] || 0)
+            rate = if entered > 0, do: Float.round(completed / entered * 100, 1), else: 0.0
+
+            biggest_drop =
+              Enum.reduce(2..num_steps, {0, 0}, fn i, {worst_drop, worst_step} ->
+                prev = to_num(row["step_#{i - 1}"] || 0)
+                curr = to_num(row["step_#{i}"] || 0)
+                drop = if prev > 0, do: prev - curr, else: 0
+                if drop > worst_drop, do: {drop, i}, else: {worst_drop, worst_step}
+              end)
+
+            {worst_drop, worst_step} = biggest_drop
+            step_name = Enum.at(steps, worst_step - 1)
+
+            step_label =
+              if step_name,
+                do: step_name["value"] || "step #{worst_step}",
+                else: "step #{worst_step}"
+
+            "#{funnel.name}: #{entered} entered → #{completed} completed (#{rate}%). Biggest drop: #{worst_drop} at #{step_label}"
+
+          _ ->
+            nil
+        end
+      end)
+      |> Enum.reject(&is_nil/1)
+
+    if results == [], do: nil, else: Enum.join(results, "\n")
+  end
+
+  defp query_click_elements(site_p) do
+    case ClickHouse.query("""
+         SELECT
+           JSONExtractString(properties, '_text') AS element_text,
+           JSONExtractString(properties, '_tag') AS element_tag,
+           count() AS clicks,
+           uniq(visitor_id) AS visitors
+         FROM events
+         WHERE site_id = #{site_p}
+           AND event_type = 'custom'
+           AND event_name = '_click'
+           AND ip_is_bot = 0
+           AND timestamp >= now() - INTERVAL 7 DAY
+         GROUP BY element_text, element_tag
+         HAVING clicks >= 5
+         ORDER BY clicks DESC
+         LIMIT 10
+         """) do
+      {:ok, rows} when rows != [] ->
+        Enum.map_join(rows, "\n", fn r ->
+          "#{r["element_tag"]} \"#{r["element_text"]}\": #{r["clicks"]} clicks by #{r["visitors"]} visitors"
+        end)
+
+      _ ->
+        nil
+    end
+  end
+
+  defp query_suggested_paths(site, user) do
+    case Analytics.suggested_funnels(site, user) do
+      {:ok, rows} when rows != [] ->
+        rows
+        |> Enum.take(5)
+        |> Enum.map_join("\n", fn r ->
+          paths = r["path_sequence"] || []
+          "#{Enum.join(paths, " → ")}: #{r["converters"]} converters"
+        end)
+
+      _ ->
+        nil
+    end
+  rescue
+    _ -> nil
   end
 
   defp with_header(_title, nil), do: nil

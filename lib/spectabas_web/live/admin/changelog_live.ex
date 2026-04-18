@@ -53,6 +53,15 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.82.0", "2026-04-19T12:00:00Z",
+       [
+         %{
+           title:
+             "Enhancement: AI insights now include goals, funnels, click elements, and conversion paths",
+           description:
+             "The weekly AI analysis prompt now sends 4 new data sections: goal performance (completions + conversion rates, 7d vs prior), funnel drop-off analysis (biggest bottleneck per funnel), top clicked elements (7d, 5+ clicks), and auto-detected conversion paths. System prompt updated with a Conversion & Goals section. Word limit raised from 800 to 1000."
+         }
+       ]},
       {"v5.81.0", "2026-04-19T11:00:00Z",
        [
          %{
