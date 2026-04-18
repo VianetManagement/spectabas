@@ -1022,16 +1022,28 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
               <%!-- AI recommendations --%>
               <div :if={cal.recommendations}>
                 <h4 class="text-xs font-semibold text-gray-500 uppercase mb-2">
-                  Recommended Weights
+                  Weight Changes
                 </h4>
                 <%= if cal.recommendations["weights"] do %>
+                  <% defaults = weight_defaults_string_keys() %>
                   <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                     <div
                       :for={{key, val} <- cal.recommendations["weights"]}
-                      class="bg-gray-50 rounded p-2"
+                      class={[
+                        "rounded p-2 border",
+                        cond do
+                          val == defaults[key] -> "bg-gray-50 border-gray-100"
+                          val > (defaults[key] || 0) -> "bg-red-50 border-red-200"
+                          true -> "bg-green-50 border-green-200"
+                        end
+                      ]}
                     >
                       <div class="text-xs text-gray-500">{key}</div>
-                      <div class="text-sm font-bold text-gray-900">+{val}</div>
+                      <div class="flex items-center gap-1.5">
+                        <span class="text-xs text-gray-400">+{defaults[key] || "?"}</span>
+                        <span class="text-xs text-gray-400">&rarr;</span>
+                        <span class="text-sm font-bold text-gray-900">+{val}</span>
+                      </div>
                     </div>
                   </div>
                 <% end %>
@@ -1176,6 +1188,12 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
 
   defp verdict_label(:normal), do: "Normal"
   defp verdict_label(_), do: "—"
+
+  defp weight_defaults_string_keys do
+    Spectabas.Analytics.ScraperDetector.default_weights()
+    |> Enum.map(fn {k, v} -> {to_string(k), v} end)
+    |> Map.new()
+  end
 
   defp active_weight(nil, _key, default), do: default
 
