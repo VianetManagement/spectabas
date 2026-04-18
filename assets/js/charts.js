@@ -285,6 +285,7 @@ const MAP_REGIONS = {
 export const BubbleMap = {
   mounted() {
     this.chart = null
+    console.log("[BubbleMap] mounted", this.el.id)
 
     // Always initialize the chart immediately so the world map outline renders,
     // even before any data arrives. setData with empty points creates the chart.
@@ -293,18 +294,26 @@ export const BubbleMap = {
     // Race-free initial data from data-chart attribute (if server pre-loaded data)
     const raw = this.el.dataset.chart
     if (raw) {
-      try { this.setData(JSON.parse(raw)) } catch (e) { /* ok */ }
+      try { this.setData(JSON.parse(raw)) } catch (e) { console.warn("[BubbleMap] data-chart parse error", e) }
     }
 
     // Subsequent updates via push_event
-    this.handleEvent("map-data", (data) => this.setData(data))
+    this.handleEvent("map-data", (data) => {
+      console.log("[BubbleMap] map-data event", data?.points?.length, "points")
+      this.setData(data)
+    })
     this.handleEvent("map-zoom", ({region}) => this.zoomTo(region))
   },
   updated() {
+    console.log("[BubbleMap] updated", this.el.id, "chart exists:", !!this.chart)
     // LiveView may re-render the container; ensure chart persists
     if (!this.chart) {
       this.setData({ points: [] })
     }
+  },
+  destroyed() {
+    console.log("[BubbleMap] destroyed", this.el.id)
+    if (this.chart) this.chart.destroy()
   },
   zoomTo(region) {
     if (!this.chart) return
