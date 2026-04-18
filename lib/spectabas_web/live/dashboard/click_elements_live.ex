@@ -30,6 +30,7 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
        |> assign(:sort_dir, "DESC")
        |> assign(:editing_key, nil)
        |> assign(:edit_name, "")
+       |> assign(:show_hidden, false)
        |> assign(:loading, true)
        |> then(fn s ->
          send(self(), :load_data)
@@ -103,6 +104,10 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
        send(self(), :load_data)
        s
      end)}
+  end
+
+  def handle_event("toggle_hidden", _params, socket) do
+    {:noreply, assign(socket, show_hidden: !socket.assigns.show_hidden, page: 1)}
   end
 
   def handle_event("search", %{"search" => query}, socket) do
@@ -266,6 +271,18 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
               <option value="a" selected={@tag_filter == "a"}>Links</option>
               <option value="input" selected={@tag_filter == "input"}>Inputs</option>
             </select>
+            <button
+              phx-click="toggle_hidden"
+              class={[
+                "px-3 py-1.5 text-sm rounded-lg border",
+                if(@show_hidden,
+                  do: "bg-amber-50 border-amber-300 text-amber-700",
+                  else: "border-gray-300 text-gray-500 hover:bg-gray-50"
+                )
+              ]}
+            >
+              {if @show_hidden, do: "Showing hidden", else: "Show hidden"}
+            </button>
           </div>
         </div>
 
@@ -280,7 +297,9 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
 
         <% visible =
           filtered_elements(@elements, @search, @element_names)
-          |> Enum.reject(&element_is_ignored?(&1, @element_names))
+          |> then(fn els ->
+            if @show_hidden, do: els, else: Enum.reject(els, &element_is_ignored?(&1, @element_names))
+          end)
 
         pages = total_pages(length(visible), @per_page)
         paged = paginate(visible, @page, @per_page) %>
@@ -450,9 +469,15 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
                     <button
                       phx-click="toggle_ignore"
                       phx-value-key={element_key(el)}
-                      class="text-xs text-gray-400 hover:text-gray-600"
+                      class={[
+                        "text-xs",
+                        if(element_is_ignored?(el, @element_names),
+                          do: "text-amber-600 hover:text-amber-800",
+                          else: "text-gray-400 hover:text-gray-600"
+                        )
+                      ]}
                     >
-                      Hide
+                      {if element_is_ignored?(el, @element_names), do: "Unhide", else: "Hide"}
                     </button>
                   </div>
                 </td>

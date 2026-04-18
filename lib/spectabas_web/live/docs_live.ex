@@ -2299,7 +2299,7 @@ defmodule SpectabasWeb.DocsLive do
             - Assign friendly names to elements for easier identification
             - See which goals reference each element
             - One-click goal creation from any element
-            - Hide irrelevant elements from the list
+            - Hide irrelevant elements from the list (toggle "Show hidden" to see and unhide them)
 
             ### Funnels
 

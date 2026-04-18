@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.87.0", "2026-04-19T17:00:00Z",
+       [
+         %{
+           title: "Enhancement: Unhide hidden click elements",
+           description:
+             "Click Elements page now has a 'Show hidden' toggle in the filter bar. When active, hidden elements appear with an amber 'Unhide' button. Previously hidden elements were permanently invisible with no way to restore them."
+         }
+       ]},
       {"v5.86.0", "2026-04-19T16:00:00Z",
        [
          %{
