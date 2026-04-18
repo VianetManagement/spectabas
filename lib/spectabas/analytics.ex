@@ -5548,6 +5548,12 @@ defmodule Spectabas.Analytics do
   defp ensure_date_range(period) when is_atom(period), do: period_to_date_range(period)
   defp ensure_date_range(%{from: _, to: _} = dr), do: dr
 
+  defp ensure_date_range("7d"), do: period_to_date_range(:week)
+  defp ensure_date_range("30d"), do: period_to_date_range(:month)
+  defp ensure_date_range("90d"), do: period_to_date_range(:quarter)
+  defp ensure_date_range("24h"), do: period_to_date_range(:day)
+  defp ensure_date_range(_), do: period_to_date_range(:month)
+
   defp period_to_date_range(period), do: period_to_date_range(period, "UTC")
 
   @doc false
