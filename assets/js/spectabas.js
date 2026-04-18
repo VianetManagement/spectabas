@@ -100,7 +100,15 @@
 
     var tag = el.tagName.toLowerCase();
     var text = (el.textContent || el.value || el.getAttribute("aria-label") || "").trim().replace(/\s+/g, " ").substring(0, 100);
-    if (!text && !el.id) return; // skip elements with no identifiable content
+    // Fallback: derive label from child icon class (hero-*, icon-*, fa-*, etc.)
+    if (!text) {
+      var icon = el.querySelector("[class*='hero-'], [class*='icon-'], [class*='fa-'], [class*='lucide-']");
+      if (icon) {
+        var m = icon.className.match(/(?:hero|icon|fa|lucide)-([a-z0-9-]+)/);
+        if (m) text = "[" + m[0] + "]";
+      }
+    }
+    if (!text && !el.id) return;
 
     lastClickTime = now;
 
