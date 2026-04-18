@@ -3609,7 +3609,7 @@ defmodule Spectabas.Analytics do
       GROUP BY element_text, element_id, element_tag, element_href, element_classes
       HAVING clicks >= 2
       ORDER BY #{sort_col} #{dir}
-      LIMIT 100
+      LIMIT 500
       """
 
       ClickHouse.query(sql)

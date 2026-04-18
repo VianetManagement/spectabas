@@ -23,6 +23,9 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
        |> assign(:goals, [])
        |> assign(:funnels, [])
        |> assign(:tag_filter, nil)
+       |> assign(:search, "")
+       |> assign(:page, 1)
+       |> assign(:per_page, 20)
        |> assign(:sort_by, "clicks")
        |> assign(:sort_dir, "DESC")
        |> assign(:editing_key, nil)
@@ -102,6 +105,14 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
      end)}
   end
 
+  def handle_event("search", %{"search" => query}, socket) do
+    {:noreply, assign(socket, search: query, page: 1)}
+  end
+
+  def handle_event("page", %{"page" => page}, socket) do
+    {:noreply, assign(socket, :page, String.to_integer(page))}
+  end
+
   def handle_event("edit_name", %{"key" => key}, socket) do
     current = Map.get(socket.assigns.element_names, key)
     name = if current, do: current.friendly_name, else: ""
@@ -151,6 +162,36 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
         {:noreply, put_flash(socket, :error, "Failed to create goal.")}
     end
   end
+
+  defp filtered_elements(elements, search, names) do
+    if search == "" do
+      elements
+    else
+      q = String.downcase(search)
+
+      Enum.filter(elements, fn el ->
+        text = to_string(el["element_text"]) |> String.downcase()
+        id = to_string(el["element_id"]) |> String.downcase()
+        key = element_key(el)
+
+        name =
+          case Map.get(names, key) do
+            %{friendly_name: n} -> String.downcase(n)
+            _ -> ""
+          end
+
+        String.contains?(text, q) or String.contains?(id, q) or String.contains?(name, q)
+      end)
+    end
+  end
+
+  defp paginate(list, page, per_page) do
+    list
+    |> Enum.drop((page - 1) * per_page)
+    |> Enum.take(per_page)
+  end
+
+  defp total_pages(count, per_page), do: max(ceil(count / per_page), 1)
 
   defp element_key(el) do
     id = to_string(el["element_id"])
@@ -205,6 +246,16 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
         <div class="flex items-center justify-between mb-6">
           <h1 class="text-2xl font-bold text-gray-900">Click Elements</h1>
           <div class="flex items-center gap-3">
+            <form phx-change="search" class="flex">
+              <input
+                type="text"
+                name="search"
+                value={@search}
+                placeholder="Search elements..."
+                phx-debounce="200"
+                class="rounded-lg border-gray-300 text-sm focus:border-indigo-500 focus:ring-indigo-500 w-56"
+              />
+            </form>
             <select
               phx-change="filter_tag"
               name="tag"
@@ -227,6 +278,12 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
           </p>
         </div>
 
+        <% visible =
+          filtered_elements(@elements, @search, @element_names)
+          |> Enum.reject(&element_is_ignored?(&1, @element_names))
+
+        pages = total_pages(length(visible), @per_page)
+        paged = paginate(visible, @page, @per_page) %>
         <div :if={!@loading && @elements != []} class="bg-white rounded-lg shadow overflow-x-auto">
           <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
@@ -258,11 +315,7 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200">
-              <tr
-                :for={el <- @elements}
-                :if={!element_is_ignored?(el, @element_names)}
-                class="hover:bg-gray-50"
-              >
+              <tr :for={el <- paged} class="hover:bg-gray-50">
                 <td class="px-4 py-3">
                   <span class={[
                     "px-1.5 py-0.5 rounded text-xs font-mono",
@@ -406,6 +459,44 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
               </tr>
             </tbody>
           </table>
+          <%!-- Pagination --%>
+          <div class="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
+            <span class="text-sm text-gray-500">
+              {format_number(length(visible))} elements {if @search != "", do: "(filtered)", else: ""}
+            </span>
+            <div :if={pages > 1} class="flex items-center gap-1">
+              <button
+                :if={@page > 1}
+                phx-click="page"
+                phx-value-page={@page - 1}
+                class="px-2.5 py-1 text-xs rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100"
+              >
+                Prev
+              </button>
+              <button
+                :for={p <- max(1, @page - 2)..min(pages, @page + 2)//1}
+                phx-click="page"
+                phx-value-page={p}
+                class={[
+                  "px-2.5 py-1 text-xs rounded-lg border",
+                  if(p == @page,
+                    do: "bg-indigo-600 text-white border-indigo-600",
+                    else: "border-gray-300 text-gray-600 hover:bg-gray-100"
+                  )
+                ]}
+              >
+                {p}
+              </button>
+              <button
+                :if={@page < pages}
+                phx-click="page"
+                phx-value-page={@page + 1}
+                class="px-2.5 py-1 text-xs rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100"
+              >
+                Next
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </.dashboard_layout>
