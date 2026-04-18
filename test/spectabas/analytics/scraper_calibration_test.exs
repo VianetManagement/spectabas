@@ -99,7 +99,7 @@ defmodule Spectabas.Analytics.ScraperCalibrationTest do
       %{resolution: "375x667", visitors: 1800, suspicious: false},
       %{resolution: "1440x900", visitors: 1200, suspicious: false},
       %{resolution: "412x915", visitors: 900, suspicious: false},
-      %{resolution: "0x0", visitors: 45, suspicious: true}
+      %{resolution: "0x0", visitors: 45, suspicious: false}
     ],
     chrome_versions: [
       %{version: 146, visitors: 53000, stale: false},

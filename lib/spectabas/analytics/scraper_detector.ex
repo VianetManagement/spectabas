@@ -44,7 +44,6 @@ defmodule Spectabas.Analytics.ScraperDetector do
   @suspicious_resolutions ~w(
     800x600
     1024x768
-    0x0
   )
 
   # Social/platform crawler ASNs — exempt from square_resolution signal
@@ -157,9 +156,19 @@ defmodule Spectabas.Analytics.ScraperDetector do
   end
 
   defp add_ip_rotation_signal(points, signals, profile, w) do
+    on_vpn = known_vpn_provider?(profile[:vpn_provider]) or profile[:is_vpn] == true
+
     case profile[:visitor_ip_count] do
-      n when is_integer(n) and n >= 3 -> {points + w.ip_rotation, [:ip_rotation | signals]}
-      _ -> {points, signals}
+      n when is_integer(n) and n >= 3 ->
+        if on_vpn do
+          # VPN/privacy relay users rotate IPs by design — not suspicious
+          {points, signals}
+        else
+          {points + w.ip_rotation, [:ip_rotation | signals]}
+        end
+
+      _ ->
+        {points, signals}
     end
   end
 

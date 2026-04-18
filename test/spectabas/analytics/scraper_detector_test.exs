@@ -171,7 +171,7 @@ defmodule Spectabas.Analytics.ScraperDetectorTest do
                ScraperDetector.score(%{screen_resolution: "800x600", referrer: "google.com"})
 
       assert %{score: 5, signals: [:suspicious_resolution]} =
-               ScraperDetector.score(%{screen_resolution: "0x0", referrer: "google.com"})
+               ScraperDetector.score(%{screen_resolution: "1024x768", referrer: "google.com"})
     end
 
     test ":suspicious_resolution does not fire for normal resolutions" do
@@ -356,7 +356,8 @@ defmodule Spectabas.Analytics.ScraperDetectorTest do
     test "suspicious_resolutions/0 returns a non-empty list of strings" do
       res = ScraperDetector.suspicious_resolutions()
       assert is_list(res) and res != []
-      assert "0x0" in res
+      assert "800x600" in res
+      assert "0x0" not in res
       assert "375x667" not in res
     end
 

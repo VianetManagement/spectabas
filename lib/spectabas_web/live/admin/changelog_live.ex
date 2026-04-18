@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.63.0", "2026-04-18T14:00:00Z",
+       [
+         %{
+           title: "Fix: iCloud Private Relay users no longer flagged as scrapers",
+           description:
+             "IP rotation signal now suppressed for VPN/privacy relay visitors (they rotate IPs by design). Removed 0x0 from suspicious resolution list (iOS in-app webviews, not headless browsers). Also passes is_vpn flag to scraper profile for accurate VPN detection."
+         }
+       ]},
       {"v5.62.0", "2026-04-18T12:00:00Z",
        [
          %{
