@@ -35,14 +35,7 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
 
       goals = Goals.list_goals(site)
 
-      completions =
-        case Analytics.goal_completions(site, user, :week) do
-          {:ok, data} -> Map.new(data, fn r -> {r.goal_id, r} end)
-          _ -> %{}
-        end
-
-      # Load top 3 sources per goal in parallel
-      source_attribution = load_source_attribution(goals, site, user)
+      send(self(), :load_analytics)
 
       {:ok,
        socket
@@ -50,13 +43,41 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
        |> assign(:site, site)
        |> assign(:user, user)
        |> assign(:goals, goals)
-       |> assign(:completions, completions)
-       |> assign(:source_attribution, source_attribution)
+       |> assign(:completions, %{})
+       |> assign(:source_attribution, %{})
        |> assign(:show_form, false)
        |> assign(:form, to_form(goal_changeset()))
        |> assign(:goal_type, "pageview")
        |> assign(:discovered_elements, [])}
     end
+  end
+
+  @impl true
+  def handle_info(:load_analytics, socket) do
+    site = socket.assigns.site
+    user = socket.assigns.user
+    goals = socket.assigns.goals
+
+    # Run completions + source attribution in parallel
+    completions_task =
+      Task.async(fn ->
+        case Analytics.goal_completions(site, user, :week) do
+          {:ok, data} -> Map.new(data, fn r -> {r.goal_id, r} end)
+          _ -> %{}
+        end
+      end)
+
+    sources_task = Task.async(fn -> load_source_attribution(goals, site, user) end)
+
+    completions = Task.await(completions_task, 15_000)
+    source_attribution = Task.await(sources_task, 15_000)
+
+    {:noreply,
+     socket
+     |> assign(:completions, completions)
+     |> assign(:source_attribution, source_attribution)}
+  rescue
+    _ -> {:noreply, socket}
   end
 
   @impl true

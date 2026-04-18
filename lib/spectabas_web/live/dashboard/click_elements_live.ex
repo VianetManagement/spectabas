@@ -40,18 +40,25 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
     site = socket.assigns.site
     user = socket.assigns.user
 
-    elements =
-      safe_query(fn ->
-        Analytics.discovered_click_elements_full(site, user,
-          tag_filter: socket.assigns.tag_filter,
-          sort_by: socket.assigns.sort_by,
-          sort_dir: socket.assigns.sort_dir
-        )
+    # Run ClickHouse + Postgres queries in parallel
+    ch_task =
+      Task.async(fn ->
+        safe_query(fn ->
+          Analytics.discovered_click_elements_full(site, user,
+            tag_filter: socket.assigns.tag_filter,
+            sort_by: socket.assigns.sort_by,
+            sort_dir: socket.assigns.sort_dir
+          )
+        end)
       end)
 
-    names = Goals.element_names_map(site)
-    goals = Goals.list_goals(site)
-    funnels = Goals.list_funnels(site)
+    pg_task =
+      Task.async(fn ->
+        {Goals.element_names_map(site), Goals.list_goals(site), Goals.list_funnels(site)}
+      end)
+
+    elements = Task.await(ch_task, 15_000)
+    {names, goals, funnels} = Task.await(pg_task, 15_000)
 
     {:noreply,
      socket
@@ -60,6 +67,8 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
      |> assign(:goals, goals)
      |> assign(:funnels, funnels)
      |> assign(:loading, false)}
+  rescue
+    _ -> {:noreply, assign(socket, :loading, false)}
   end
 
   @impl true

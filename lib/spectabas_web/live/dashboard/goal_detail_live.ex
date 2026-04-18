@@ -54,16 +54,51 @@ defmodule SpectabasWeb.Dashboard.GoalDetailLive do
     goal = socket.assigns.goal
     range = socket.assigns.range
 
-    stats =
-      safe_query(fn -> Analytics.goal_detail_stats(site, user, goal, range) end, @default_stats)
+    # Run all 7 ClickHouse queries in parallel
+    tasks = %{
+      stats:
+        Task.async(fn ->
+          safe_query(
+            fn -> Analytics.goal_detail_stats(site, user, goal, range) end,
+            @default_stats
+          )
+        end),
+      timeseries:
+        Task.async(fn ->
+          safe_query(fn -> Analytics.goal_completion_timeseries(site, user, goal, range) end)
+        end),
+      sources:
+        Task.async(fn ->
+          safe_query(fn -> Analytics.goal_source_attribution(site, user, goal, range) end)
+        end),
+      pages:
+        Task.async(fn ->
+          safe_query(fn -> Analytics.goal_top_pages(site, user, goal, range) end)
+        end),
+      devices:
+        Task.async(fn ->
+          safe_query(fn -> Analytics.goal_device_breakdown(site, user, goal, range) end)
+        end),
+      geo:
+        Task.async(fn ->
+          safe_query(fn -> Analytics.goal_geo_breakdown(site, user, goal, range) end)
+        end),
+      completers:
+        Task.async(fn ->
+          safe_query(fn -> Analytics.goal_recent_completers(site, user, goal, range) end)
+        end)
+    }
+
+    results = Map.new(tasks, fn {key, task} -> {key, Task.await(task, 15_000)} end)
+
+    stats = results.stats
 
     stats =
       if is_map(stats) and Map.has_key?(stats, :total_completions),
         do: stats,
         else: @default_stats
 
-    timeseries =
-      safe_query(fn -> Analytics.goal_completion_timeseries(site, user, goal, range) end)
+    timeseries = results.timeseries
 
     timeseries_json =
       try do
@@ -77,15 +112,7 @@ defmodule SpectabasWeb.Dashboard.GoalDetailLive do
         _ -> "{}"
       end
 
-    sources =
-      safe_query(fn -> Analytics.goal_source_attribution(site, user, goal, range) end)
-      |> Enum.take(10)
-
-    pages = safe_query(fn -> Analytics.goal_top_pages(site, user, goal, range) end)
-    devices = safe_query(fn -> Analytics.goal_device_breakdown(site, user, goal, range) end)
-    geo = safe_query(fn -> Analytics.goal_geo_breakdown(site, user, goal, range) end)
-    completers = safe_query(fn -> Analytics.goal_recent_completers(site, user, goal, range) end)
-
+    completers = results.completers
     visitor_ids = Enum.map(completers, & &1["visitor_id"]) |> Enum.reject(&is_nil/1)
     email_map = if visitor_ids != [], do: Visitors.emails_for_visitor_ids(visitor_ids), else: %{}
 
@@ -99,14 +126,16 @@ defmodule SpectabasWeb.Dashboard.GoalDetailLive do
      socket
      |> assign(:stats, stats)
      |> assign(:timeseries_json, timeseries_json)
-     |> assign(:top_sources, sources)
-     |> assign(:top_pages, pages)
-     |> assign(:devices, devices)
-     |> assign(:geo, geo)
+     |> assign(:top_sources, Enum.take(results.sources, 10))
+     |> assign(:top_pages, results.pages)
+     |> assign(:devices, results.devices)
+     |> assign(:geo, results.geo)
      |> assign(:recent_completers, completers)
      |> assign(:email_map, email_map)
      |> assign(:click_element_info, click_info)
      |> assign(:loading, false)}
+  rescue
+    _ -> {:noreply, assign(socket, :loading, false)}
   end
 
   @impl true
