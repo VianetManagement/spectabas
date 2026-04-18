@@ -968,10 +968,10 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         </div>
 
         <%!-- Identified Users + Ecommerce Row --%>
-        <div
-          :if={@identified_users > 0 || @ecommerce}
-          class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"
-        >
+        <div class={[
+          "grid grid-cols-2 md:grid-cols-4 gap-4 mb-6",
+          !(@identified_users > 0 || @ecommerce) && "hidden"
+        ]}>
           <div :if={@identified_users > 0} class="bg-white rounded-lg shadow p-3 sm:p-4">
             <dt class="text-xs sm:text-sm font-medium text-gray-500 truncate">Identified Users</dt>
             <dd class="mt-1 text-xl sm:text-2xl font-bold text-indigo-600">
@@ -1164,7 +1164,10 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
         </div>
 
         <%!-- Visitor Intent --%>
-        <div :if={@intents && @intents != []} class="bg-white rounded-lg shadow overflow-hidden mt-6">
+        <div class={[
+          "bg-white rounded-lg shadow overflow-hidden mt-6",
+          !(@intents && @intents != []) && "hidden"
+        ]}>
           <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
             <h3 class="font-semibold text-gray-900">Visitor Intent</h3>
             <.link
@@ -1177,7 +1180,7 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           <div class="px-5 py-4">
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
               <.link
-                :for={intent <- @intents}
+                :for={intent <- @intents || []}
                 navigate={
                   ~p"/dashboard/sites/#{@site.id}/visitor-log?filter_field=visitor_intent&filter_value=#{intent["intent"]}"
                 }

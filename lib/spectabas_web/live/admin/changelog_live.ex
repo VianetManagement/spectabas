@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.58.0", "2026-04-18T01:30:00Z",
+       [
+         %{
+           title: "Fix: Visitor map disappearing on dashboard after deferred stats load",
+           description:
+             "Conditional :if blocks (Visitor Intent, Identified Users) were adding/removing DOM elements when deferred results arrived, causing morphdom to lose track of the phx-update=\"ignore\" map element. Switched to CSS hidden class so the DOM structure stays stable. Also fixed calibration tab template crash when AI reasoning is a map."
+         }
+       ]},
       {"v5.57.0", "2026-04-17T20:30:00Z",
        [
          %{
