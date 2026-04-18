@@ -285,7 +285,6 @@ const MAP_REGIONS = {
 export const BubbleMap = {
   mounted() {
     this.chart = null
-    console.log("[BubbleMap] mounted", this.el.id)
 
     // Always initialize the chart immediately so the world map outline renders,
     // even before any data arrives. setData with empty points creates the chart.
@@ -294,25 +293,20 @@ export const BubbleMap = {
     // Race-free initial data from data-chart attribute (if server pre-loaded data)
     const raw = this.el.dataset.chart
     if (raw) {
-      try { this.setData(JSON.parse(raw)) } catch (e) { console.warn("[BubbleMap] data-chart parse error", e) }
+      try { this.setData(JSON.parse(raw)) } catch (e) { /* ok */ }
     }
 
     // Subsequent updates via push_event
-    this.handleEvent("map-data", (data) => {
-      console.log("[BubbleMap] map-data event", data?.points?.length, "points")
-      this.setData(data)
-    })
+    this.handleEvent("map-data", (data) => this.setData(data))
     this.handleEvent("map-zoom", ({region}) => this.zoomTo(region))
   },
   updated() {
-    console.log("[BubbleMap] updated", this.el.id, "chart exists:", !!this.chart)
     // LiveView may re-render the container; ensure chart persists
     if (!this.chart) {
       this.setData({ points: [] })
     }
   },
   destroyed() {
-    console.log("[BubbleMap] destroyed", this.el.id)
     if (this.chart) this.chart.destroy()
   },
   zoomTo(region) {
@@ -338,7 +332,7 @@ export const BubbleMap = {
     const points = rawPoints.filter(p => p && typeof p.lon === "number" && typeof p.lat === "number").map((p) => ({
       x: p.lon,
       y: p.lat,
-      r: Math.max(4, Math.sqrt(p.visitors || 0) * 4),
+      r: Math.min(30, Math.max(4, Math.sqrt(p.visitors || 0) * 2)),
       label: p.label || "",
       visitors: p.visitors || 0,
     }))
@@ -368,6 +362,7 @@ export const BubbleMap = {
         responsive: true,
         maintainAspectRatio: false,
         animation: { duration: 300 },
+        layout: { padding: 0 },
         scales: {
           x: {
             min: -180,
