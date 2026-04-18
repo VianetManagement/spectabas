@@ -3926,7 +3926,10 @@ defmodule Spectabas.Analytics do
         any(ip_country) AS country,
         any(ip_city) AS city,
         max(ip_is_datacenter) AS is_datacenter,
-        any(ip_vpn_provider) AS vpn_provider
+        any(ip_vpn_provider) AS vpn_provider,
+        any(browser) AS browser,
+        any(browser_version) AS browser_version,
+        any(device_type) AS device_type
       FROM events
       WHERE site_id = #{site_p}
         AND timestamp >= #{from_p}
@@ -3994,7 +3997,10 @@ defmodule Spectabas.Analytics do
         groupArrayIf(100)(toUnixTimestamp(timestamp) * 1000,
           event_type = 'pageview'))), 2) AS request_intervals_ms,
       max(ip_is_datacenter) AS is_datacenter,
-      any(ip_vpn_provider) AS vpn_provider
+      any(ip_vpn_provider) AS vpn_provider,
+      any(browser) AS browser,
+      any(browser_version) AS browser_version,
+      any(device_type) AS device_type
     FROM events
     WHERE site_id = #{site_p}
       AND timestamp >= #{from_p}
@@ -4044,7 +4050,10 @@ defmodule Spectabas.Analytics do
       screen_resolution: row["screen_resolution"],
       request_intervals_ms: List.wrap(row["request_intervals_ms"]) |> Enum.map(&to_int/1),
       is_datacenter: to_int(row["is_datacenter"]) == 1,
-      vpn_provider: row["vpn_provider"] || ""
+      vpn_provider: row["vpn_provider"] || "",
+      browser: row["browser"] || "",
+      browser_version: row["browser_version"] || "",
+      device_type: row["device_type"] || ""
     }
   end
 
@@ -4068,7 +4077,10 @@ defmodule Spectabas.Analytics do
         groupArrayIf(100)(toUnixTimestamp(timestamp) * 1000,
           event_type = 'pageview'))), 2) AS request_intervals_ms,
       max(ip_is_datacenter) AS is_datacenter,
-      any(ip_vpn_provider) AS vpn_provider
+      any(ip_vpn_provider) AS vpn_provider,
+      any(browser) AS browser,
+      any(browser_version) AS browser_version,
+      any(device_type) AS device_type
     FROM events
     WHERE site_id = #{site_p}
       AND visitor_id = #{vid_p}

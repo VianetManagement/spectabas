@@ -45,6 +45,18 @@ defmodule Spectabas.Analytics.ScraperDetector do
     0x0
   )
 
+  # Social/platform crawler ASNs — exempt from square_resolution signal
+  @social_crawler_asns ~w(
+    AS32934
+    AS63293
+    AS13414
+    AS15169
+    AS36459
+  )
+
+  # Chrome major version threshold — anything below this is considered stale
+  @stale_chrome_version 100
+
   @score_watching 40
   @score_suspicious 60
   @score_certain 85
@@ -77,7 +89,10 @@ defmodule Spectabas.Analytics.ScraperDetector do
     systematic_crawl: 15,
     robotic_timing: 10,
     no_referrer: 10,
-    suspicious_resolution: 5
+    suspicious_resolution: 5,
+    square_resolution: 15,
+    stale_browser: 15,
+    resolution_device_mismatch: 10
   }
 
   def default_weights, do: @default_weights
@@ -99,6 +114,9 @@ defmodule Spectabas.Analytics.ScraperDetector do
     {points, signals} = add_referrer_signal(points, signals, profile, w)
     {points, signals} = add_robotic_timing_signal(points, signals, profile, w)
     {points, signals} = add_resolution_signal(points, signals, profile, w)
+    {points, signals} = add_square_resolution_signal(points, signals, profile, w)
+    {points, signals} = add_stale_browser_signal(points, signals, profile, w)
+    {points, signals} = add_resolution_device_mismatch_signal(points, signals, profile, w)
 
     %{score: min(points, 100), signals: Enum.reverse(signals)}
   end
@@ -217,7 +235,86 @@ defmodule Spectabas.Analytics.ScraperDetector do
     end
   end
 
+  defp add_square_resolution_signal(points, signals, profile, w) do
+    res = profile[:screen_resolution] || ""
+
+    case String.split(res, "x") do
+      [w_str, h_str] ->
+        width = String.to_integer(w_str)
+        height = String.to_integer(h_str)
+
+        if width == height and width > 0 and not social_crawler_asn?(profile[:asn]) do
+          {points + w.square_resolution, [:square_resolution | signals]}
+        else
+          {points, signals}
+        end
+
+      _ ->
+        {points, signals}
+    end
+  rescue
+    _ -> {points, signals}
+  end
+
+  defp add_stale_browser_signal(points, signals, profile, w) do
+    browser = profile[:browser] || ""
+    version = profile[:browser_version] || ""
+
+    if String.contains?(browser, "Chrome") do
+      major = version |> String.split(".") |> List.first() |> to_integer_safe()
+
+      if major > 0 and major < @stale_chrome_version do
+        {points + w.stale_browser, [:stale_browser | signals]}
+      else
+        {points, signals}
+      end
+    else
+      {points, signals}
+    end
+  end
+
+  defp add_resolution_device_mismatch_signal(points, signals, profile, w) do
+    device = profile[:device_type] || ""
+    res = profile[:screen_resolution] || ""
+
+    case String.split(res, "x") do
+      [w_str, _h_str] ->
+        width = String.to_integer(w_str)
+
+        if device == "smartphone" and width >= 1024 do
+          {points + w.resolution_device_mismatch, [:resolution_device_mismatch | signals]}
+        else
+          {points, signals}
+        end
+
+      _ ->
+        {points, signals}
+    end
+  rescue
+    _ -> {points, signals}
+  end
+
   # ---------------- Predicates ----------------
+
+  defp social_crawler_asn?(nil), do: false
+
+  defp social_crawler_asn?(asn) when is_binary(asn) do
+    Enum.any?(@social_crawler_asns, fn prefix -> String.starts_with?(asn, prefix) end)
+  end
+
+  defp social_crawler_asn?(_), do: false
+
+  defp to_integer_safe(nil), do: 0
+  defp to_integer_safe(""), do: 0
+
+  defp to_integer_safe(str) when is_binary(str) do
+    case Integer.parse(str) do
+      {n, _} -> n
+      :error -> 0
+    end
+  end
+
+  defp to_integer_safe(_), do: 0
 
   defp datacenter_asn?(nil), do: false
 

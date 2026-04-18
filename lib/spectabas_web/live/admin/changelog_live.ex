@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.60.0", "2026-04-18T02:30:00Z",
+       [
+         %{
+           title: "Feature: Three new scraper detection signals from real traffic analysis",
+           description:
+             "Mined 21M+ ClickHouse events to identify bot patterns. Added: square_resolution (+15, no real screen is square — excludes Facebook/social crawlers), stale_browser (+15, Chrome < v100 is 4+ years old), resolution_device_mismatch (+10, smartphone UA + desktop resolution). Immediately catches Xairnet bot farm (7k+ fake visitors/month with 1280x1024 + Chrome 58). Suspicious resolution list trimmed to headless-only (800x600, 1024x768, 0x0)."
+         }
+       ]},
       {"v5.59.0", "2026-04-18T02:00:00Z",
        [
          %{

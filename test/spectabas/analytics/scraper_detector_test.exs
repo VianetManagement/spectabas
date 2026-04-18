@@ -178,6 +178,91 @@ defmodule Spectabas.Analytics.ScraperDetectorTest do
       assert %{score: 0, signals: []} =
                ScraperDetector.score(%{screen_resolution: "1920x1080", referrer: "google.com"})
     end
+
+    test ":square_resolution fires for square screens" do
+      result = ScraperDetector.score(%{screen_resolution: "1024x1024", referrer: "google.com"})
+      assert :square_resolution in result.signals
+      assert result.score == 15
+    end
+
+    test ":square_resolution skips social crawler ASNs" do
+      result =
+        ScraperDetector.score(%{
+          screen_resolution: "2000x2000",
+          referrer: "google.com",
+          asn: "AS32934 Facebook"
+        })
+
+      refute :square_resolution in result.signals
+    end
+
+    test ":stale_browser fires for old Chrome versions" do
+      result =
+        ScraperDetector.score(%{
+          browser: "Chrome Mobile",
+          browser_version: "58.0.3029.83",
+          referrer: "google.com"
+        })
+
+      assert :stale_browser in result.signals
+      assert result.score == 15
+    end
+
+    test ":stale_browser does not fire for current Chrome" do
+      result =
+        ScraperDetector.score(%{
+          browser: "Chrome",
+          browser_version: "146.0.0.0",
+          referrer: "google.com"
+        })
+
+      refute :stale_browser in result.signals
+    end
+
+    test ":stale_browser does not fire for non-Chrome browsers" do
+      result =
+        ScraperDetector.score(%{
+          browser: "Firefox",
+          browser_version: "59.0",
+          referrer: "google.com"
+        })
+
+      refute :stale_browser in result.signals
+    end
+
+    test ":resolution_device_mismatch fires for smartphone with desktop resolution" do
+      result =
+        ScraperDetector.score(%{
+          device_type: "smartphone",
+          screen_resolution: "1280x1024",
+          referrer: "google.com"
+        })
+
+      assert :resolution_device_mismatch in result.signals
+      assert result.score == 10
+    end
+
+    test ":resolution_device_mismatch does not fire for desktop with desktop resolution" do
+      result =
+        ScraperDetector.score(%{
+          device_type: "desktop",
+          screen_resolution: "1280x1024",
+          referrer: "google.com"
+        })
+
+      refute :resolution_device_mismatch in result.signals
+    end
+
+    test ":resolution_device_mismatch does not fire for smartphone with mobile resolution" do
+      result =
+        ScraperDetector.score(%{
+          device_type: "smartphone",
+          screen_resolution: "414x896",
+          referrer: "google.com"
+        })
+
+      refute :resolution_device_mismatch in result.signals
+    end
   end
 
   describe "composite scoring" do

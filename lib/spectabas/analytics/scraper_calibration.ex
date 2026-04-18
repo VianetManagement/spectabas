@@ -493,7 +493,14 @@ defmodule Spectabas.Analytics.ScraperCalibration do
     ## 9. Screen Resolution Distribution
     #{format_resolutions(baseline.resolutions)}
 
-    The suspicious_resolution signal fires (+5) for these resolutions commonly used by headless browsers: #{Enum.join(ScraperDetector.suspicious_resolutions(), ", ")}. However, many of these (375x667, 375x812, 412x915) are also real iPhone/Android resolutions. If a large percentage of real visitors have these resolutions, the signal adds noise. The "Flagged" column shows which resolutions trigger the signal.
+    Three resolution-based signals:
+    - **suspicious_resolution** (+5): Fires for headless browser defaults: #{Enum.join(ScraperDetector.suspicious_resolutions(), ", ")}. Only truly suspicious resolutions — common mobile sizes (375x667 etc.) were removed.
+    - **square_resolution** (+15): Fires when width == height (e.g., 1024x1024, 2000x2000). Real screens are never square. Excludes social crawler ASNs (Facebook, Twitter, Google, LinkedIn, Pinterest) to avoid blocking link preview crawlers.
+    - **resolution_device_mismatch** (+10): Fires when device_type is "smartphone" but screen_width >= 1024. Real phones don't report desktop resolutions.
+
+    Additionally, **stale_browser** (+15) fires for Chrome major version < #{100} (Chrome 99 = March 2022, 4+ years ago). No real user runs Chrome that old.
+
+    The "Flagged" column shows which resolutions trigger the suspicious_resolution signal.
 
     ## Current Scoring Model
 
@@ -542,7 +549,10 @@ defmodule Spectabas.Analytics.ScraperCalibration do
         "systematic_crawl": <n>,
         "robotic_timing": <n>,
         "no_referrer": <n>,
-        "suspicious_resolution": <n>
+        "suspicious_resolution": <n>,
+        "square_resolution": <n>,
+        "stale_browser": <n>,
+        "resolution_device_mismatch": <n>
       },
       "reasoning": {
         "datacenter_asn": "<1-2 sentences>",
@@ -556,7 +566,10 @@ defmodule Spectabas.Analytics.ScraperCalibration do
         "systematic_crawl": "<1-2 sentences>",
         "robotic_timing": "<1-2 sentences>",
         "no_referrer": "<1-2 sentences>",
-        "suspicious_resolution": "<1-2 sentences>"
+        "suspicious_resolution": "<1-2 sentences>",
+        "square_resolution": "<1-2 sentences>",
+        "stale_browser": "<1-2 sentences>",
+        "resolution_device_mismatch": "<1-2 sentences>"
       },
       "overall_confidence": "<high|medium|low>",
       "key_risks": ["<risk 1>", "<risk 2>", "<risk 3>"]
