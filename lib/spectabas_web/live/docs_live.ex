@@ -2431,6 +2431,10 @@ defmodule SpectabasWeb.DocsLive do
 
             > **Any Touch note:** A single conversion can appear under multiple sources, so totals may exceed actual revenue. This is expected — it answers "was this source involved?" not "how much credit does it get?"
 
+            ### Excluding Internal Referrers
+
+            Your analytics subdomain and its parent domain are automatically excluded as referrer sources. To exclude additional domains (payment processors, identity verification, OAuth providers), add them to the **Cross-domain sites** list in Settings > General. Adding a base domain (e.g. `idenfy.com`) automatically excludes all subdomains (e.g. `ui.idenfy.com`). These domains are excluded from all attribution models, source lists, and channel breakdowns — no backfill needed, works retroactively.
+
             ### Ad Spend Overview
 
             When ad platforms are connected (Google Ads, Bing, Meta), an **Ad Spend Overview** card appears at the top:
