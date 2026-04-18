@@ -1046,21 +1046,51 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
                   </div>
                 <% end %>
 
-                <div
-                  :if={cal.recommendations["reasoning"]}
-                  class="mt-3 text-sm text-gray-700 bg-blue-50 border border-blue-100 rounded-lg p-3"
-                >
-                  <span class="font-medium text-blue-800">AI reasoning:</span>
-                  {cal.recommendations["reasoning"]}
-                </div>
+                <%= if is_map(cal.recommendations["reasoning"]) do %>
+                  <div class="mt-3 space-y-2">
+                    <h4 class="text-xs font-semibold text-gray-500 uppercase">AI Reasoning</h4>
+                    <div class="grid grid-cols-1 gap-1.5">
+                      <div
+                        :for={{signal, reason} <- cal.recommendations["reasoning"]}
+                        class="text-sm text-gray-700 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2"
+                      >
+                        <span class="font-medium text-blue-800">{signal}:</span>
+                        {reason}
+                      </div>
+                    </div>
+                  </div>
+                <% else %>
+                  <div
+                    :if={cal.recommendations["reasoning"]}
+                    class="mt-3 text-sm text-gray-700 bg-blue-50 border border-blue-100 rounded-lg p-3"
+                  >
+                    <span class="font-medium text-blue-800">AI reasoning:</span>
+                    {cal.recommendations["reasoning"]}
+                  </div>
+                <% end %>
 
                 <div class="flex gap-4 mt-2 text-xs text-gray-500">
+                  <span :if={cal.recommendations["overall_confidence"]}>
+                    Confidence:
+                    <span class="font-medium">{cal.recommendations["overall_confidence"]}</span>
+                  </span>
                   <span :if={cal.recommendations["confidence"]}>
                     Confidence: <span class="font-medium">{cal.recommendations["confidence"]}</span>
                   </span>
-                  <span :if={cal.recommendations["warnings"]}>
-                    Warnings: <span class="text-amber-600">{cal.recommendations["warnings"]}</span>
-                  </span>
+                </div>
+
+                <%= if is_list(cal.recommendations["key_risks"]) do %>
+                  <div class="mt-2 text-xs text-amber-700">
+                    <span class="font-medium">Risks:</span>
+                    {Enum.join(cal.recommendations["key_risks"], " · ")}
+                  </div>
+                <% end %>
+
+                <div
+                  :if={is_binary(cal.recommendations["warnings"])}
+                  class="mt-2 text-xs text-amber-600"
+                >
+                  Warnings: {cal.recommendations["warnings"]}
                 </div>
 
                 <div
