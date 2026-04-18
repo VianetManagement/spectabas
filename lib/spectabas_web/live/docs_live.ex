@@ -497,7 +497,7 @@ defmodule SpectabasWeb.DocsLive do
 
   # ---- Documentation Content ----
 
-  defp sections do
+  def sections do
     [
       %{
         category: "Getting Started",
