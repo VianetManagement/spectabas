@@ -65,31 +65,32 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
   @impl true
   def handle_params(params, _uri, socket) do
     tab = if params["tab"] in @valid_tabs, do: params["tab"], else: "scrapers"
-    {:noreply, apply_tab(socket, tab)}
+
+    if connected?(socket) do
+      send(self(), {:load_tab_data, tab})
+    end
+
+    {:noreply, assign(socket, :tab, tab)}
   end
 
-  defp apply_tab(socket, "calibration") do
+  @impl true
+  def handle_info({:load_tab_data, "calibration"}, socket) do
     calibrations = Spectabas.Analytics.ScraperCalibration.latest_for_site(socket.assigns.site.id)
     has_pending_job = calibration_job_running?(socket.assigns.site.id)
 
-    socket
-    |> assign(:tab, "calibration")
-    |> assign(:calibrations, calibrations)
-    |> assign(:calibrating, has_pending_job)
-  rescue
-    _ -> assign(socket, :tab, "calibration")
+    {:noreply,
+     socket
+     |> assign(:calibrations, calibrations)
+     |> assign(:calibrating, has_pending_job)}
   end
 
-  defp apply_tab(socket, "webhook_log") do
+  def handle_info({:load_tab_data, "webhook_log"}, socket) do
     log = Spectabas.Webhooks.ScraperWebhook.list_deliveries(socket.assigns.site.id)
-    socket |> assign(:tab, "webhook_log") |> assign(:webhook_log, log)
-  rescue
-    _ -> assign(socket, :tab, "webhook_log")
+    {:noreply, assign(socket, :webhook_log, log)}
   end
 
-  defp apply_tab(socket, tab), do: assign(socket, :tab, tab)
+  def handle_info({:load_tab_data, _}, socket), do: {:noreply, socket}
 
-  @impl true
   def handle_info(:load_data, socket) do
     {:noreply, load_data(socket)}
   end
