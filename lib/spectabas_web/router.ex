@@ -197,6 +197,8 @@ defmodule SpectabasWeb.Router do
       live "/sites/:site_id/visitors/:visitor_id", Dashboard.VisitorLive, :show
       live "/sites/:site_id/ip/:ip", Dashboard.IpProfileLive, :show
       live "/sites/:site_id/goals", Dashboard.GoalsLive, :index
+      live "/sites/:site_id/goals/:goal_id", Dashboard.GoalDetailLive, :show
+      live "/sites/:site_id/click-elements", Dashboard.ClickElementsLive, :index
       live "/sites/:site_id/funnels", Dashboard.FunnelsLive, :index
       live "/sites/:site_id/ecommerce", Dashboard.EcommerceLive, :index
       live "/sites/:site_id/mrr", Dashboard.MrrLive, :index

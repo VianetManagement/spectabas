@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.75.0", "2026-04-19T03:00:00Z",
+       [
+         %{
+           title: "Feature: Goal detail pages + Click Element registry",
+           description:
+             "Each goal is now clickable — opens a dedicated detail page with completion trend chart, stat cards (total/unique/conversion rate/avg per visitor), top sources, top pages, device and geographic breakdown, and recent completers with email lookup. Click element goals also show element metadata (tag, text, classes, pages). New Click Elements page under Conversions: browse all auto-detected buttons/links with click counts, assign friendly names, see which goals reference each element, filter by tag type, sort by clicks/visitors, and create goals with one click."
+         }
+       ]},
       {"v5.74.0", "2026-04-19T02:00:00Z",
        [
          %{

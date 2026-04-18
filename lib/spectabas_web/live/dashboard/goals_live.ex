@@ -413,7 +413,12 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
               </tr>
               <tr :for={goal <- @goals} class="hover:bg-gray-50">
                 <td class="px-6 py-4">
-                  <div class="text-sm font-medium text-gray-900">{goal.name}</div>
+                  <.link
+                    navigate={~p"/dashboard/sites/#{@site.id}/goals/#{goal.id}"}
+                    class="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                  >
+                    {goal.name}
+                  </.link>
                   <div
                     :if={Map.get(@source_attribution, goal.id, []) != []}
                     class="mt-1 text-xs text-gray-500"

@@ -257,6 +257,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
               active={@active == "goals"}
             />
             <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/click-elements"}
+              label="Click Elements"
+              active={@active == "click-elements"}
+            />
+            <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/funnels"}
               label="Funnels"
               active={@active == "funnels"}
@@ -666,6 +671,8 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
     "churn-risk" => "Audience",
     # Conversions
     "goals" => "Conversions",
+    "goal-detail" => "Conversions",
+    "click-elements" => "Conversions",
     "funnels" => "Conversions",
     "ecommerce" => "Conversions",
     "mrr" => "Conversions",

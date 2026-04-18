@@ -3329,6 +3329,278 @@ defmodule Spectabas.Analytics do
 
   defp click_element_condition(_), do: "1 = 0"
 
+  # ---- Goal Detail Queries ----
+
+  def goal_completion_timeseries(%Site{} = site, %User{} = user, goal, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      condition = goal_condition(goal)
+
+      sql = """
+      SELECT
+        toDate(timestamp) AS day,
+        count() AS completions,
+        uniq(visitor_id) AS unique_completers
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+        AND #{condition}
+      GROUP BY day
+      ORDER BY day ASC
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  def goal_detail_stats(%Site{} = site, %User{} = user, goal, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      condition = goal_condition(goal)
+
+      total_visitors =
+        case ClickHouse.query("""
+               SELECT uniq(visitor_id) AS total
+               FROM events
+               WHERE site_id = #{ClickHouse.param(site.id)}
+                 AND event_type = 'pageview' AND ip_is_bot = 0
+                 AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+                 AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+             """) do
+          {:ok, [%{"total" => t}]} -> to_int(t)
+          _ -> 0
+        end
+
+      sql = """
+      SELECT
+        count() AS total_completions,
+        uniq(visitor_id) AS unique_completers,
+        round(count() / greatest(uniq(visitor_id), 1), 2) AS avg_per_visitor
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+        AND #{condition}
+      """
+
+      case ClickHouse.query(sql) do
+        {:ok, [row]} ->
+          completers = to_int(row["unique_completers"])
+
+          conv_rate =
+            if total_visitors > 0,
+              do: Float.round(completers / total_visitors * 100, 2),
+              else: 0.0
+
+          {:ok,
+           %{
+             total_completions: to_int(row["total_completions"]),
+             unique_completers: completers,
+             conversion_rate: conv_rate,
+             avg_per_visitor: to_float(row["avg_per_visitor"]),
+             total_visitors: total_visitors
+           }}
+
+        _ ->
+          {:ok,
+           %{
+             total_completions: 0,
+             unique_completers: 0,
+             conversion_rate: 0.0,
+             avg_per_visitor: 0.0,
+             total_visitors: 0
+           }}
+      end
+    end
+  end
+
+  def goal_top_pages(%Site{} = site, %User{} = user, goal, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      condition = goal_condition(goal)
+
+      sql = """
+      SELECT
+        url_path,
+        count() AS completions,
+        uniq(visitor_id) AS unique_completers
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+        AND #{condition}
+        AND url_path != ''
+      GROUP BY url_path
+      ORDER BY completions DESC
+      LIMIT 20
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  def goal_device_breakdown(%Site{} = site, %User{} = user, goal, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      condition = goal_condition(goal)
+
+      sql = """
+      SELECT
+        if(device_type != '', device_type, 'Unknown') AS device,
+        count() AS completions,
+        uniq(visitor_id) AS unique_completers
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+        AND #{condition}
+      GROUP BY device
+      ORDER BY completions DESC
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  def goal_geo_breakdown(%Site{} = site, %User{} = user, goal, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      condition = goal_condition(goal)
+
+      sql = """
+      SELECT
+        ip_country_name AS country,
+        ip_country AS country_code,
+        count() AS completions,
+        uniq(visitor_id) AS unique_completers
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+        AND #{condition}
+        AND ip_country_name != ''
+      GROUP BY country, country_code
+      ORDER BY completions DESC
+      LIMIT 20
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  def goal_recent_completers(%Site{} = site, %User{} = user, goal, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      condition = goal_condition(goal)
+
+      sql = """
+      SELECT
+        visitor_id,
+        max(timestamp) AS last_completed,
+        count() AS completion_count,
+        any(url_path) AS last_url,
+        any(device_type) AS device,
+        any(ip_country_name) AS country
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+        AND #{condition}
+      GROUP BY visitor_id
+      ORDER BY last_completed DESC
+      LIMIT 50
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  def goal_click_element_details(%Site{} = site, %User{} = user, goal) do
+    with :ok <- authorize(site, user) do
+      condition = click_element_condition(goal.element_selector)
+
+      sql = """
+      SELECT
+        JSONExtractString(properties, '_tag') AS element_tag,
+        JSONExtractString(properties, '_text') AS element_text,
+        JSONExtractString(properties, '_id') AS element_id,
+        JSONExtractString(properties, '_classes') AS element_classes,
+        JSONExtractString(properties, '_href') AS element_href,
+        groupUniqArray(10)(url_path) AS pages_clicked,
+        count() AS total_clicks,
+        uniq(visitor_id) AS unique_clickers
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND ip_is_bot = 0
+        AND timestamp >= now() - INTERVAL 30 DAY
+        AND #{condition}
+      GROUP BY element_tag, element_text, element_id, element_classes, element_href
+      ORDER BY total_clicks DESC
+      LIMIT 1
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  def discovered_click_elements_full(%Site{} = site, %User{} = user, opts \\ []) do
+    with :ok <- authorize(site, user) do
+      tag_filter = Keyword.get(opts, :tag_filter)
+      sort_by = Keyword.get(opts, :sort_by, "clicks")
+      sort_dir = Keyword.get(opts, :sort_dir, "DESC")
+
+      tag_clause =
+        if tag_filter && tag_filter != "",
+          do: "AND JSONExtractString(properties, '_tag') = #{ClickHouse.param(tag_filter)}",
+          else: ""
+
+      sort_col =
+        if sort_by in ~w(clicks visitors first_seen last_seen), do: sort_by, else: "clicks"
+
+      dir = if sort_dir in ~w(ASC DESC), do: sort_dir, else: "DESC"
+
+      sql = """
+      SELECT
+        JSONExtractString(properties, '_text') AS element_text,
+        JSONExtractString(properties, '_id') AS element_id,
+        JSONExtractString(properties, '_tag') AS element_tag,
+        JSONExtractString(properties, '_href') AS element_href,
+        JSONExtractString(properties, '_classes') AS element_classes,
+        count() AS clicks,
+        uniq(visitor_id) AS visitors,
+        min(timestamp) AS first_seen,
+        max(timestamp) AS last_seen,
+        groupUniqArray(10)(url_path) AS sample_pages
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND event_type = 'custom'
+        AND event_name = '_click'
+        AND ip_is_bot = 0
+        AND timestamp >= now() - INTERVAL 90 DAY
+        #{tag_clause}
+      GROUP BY element_text, element_id, element_tag, element_href, element_classes
+      HAVING clicks >= 2
+      ORDER BY #{sort_col} #{dir}
+      LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
   @doc """
   Ecommerce stats: total revenue, orders, avg order value, top products.
   """

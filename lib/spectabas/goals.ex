@@ -6,7 +6,7 @@ defmodule Spectabas.Goals do
   import Ecto.Query, warn: false
 
   alias Spectabas.Repo
-  alias Spectabas.Goals.{Goal, Funnel}
+  alias Spectabas.Goals.{Goal, Funnel, ClickElementName}
   alias Spectabas.Analytics
 
   @doc """
@@ -45,6 +45,30 @@ defmodule Spectabas.Goals do
   """
   def get_goal!(id), do: Repo.get!(Goal, id)
 
+  def get_goal_for_site!(site, goal_id) do
+    Repo.one!(from(g in Goal, where: g.id == ^goal_id and g.site_id == ^site.id))
+  end
+
+  def goals_referencing_element(site, element_key) do
+    Repo.all(
+      from(g in Goal,
+        where:
+          g.site_id == ^site.id and g.goal_type == "click_element" and
+            g.element_selector == ^element_key
+      )
+    )
+  end
+
+  def funnels_referencing_element(site, element_key) do
+    funnels = list_funnels(site)
+
+    Enum.filter(funnels, fn funnel ->
+      Enum.any?(funnel.steps || [], fn step ->
+        step["type"] == "click_element" and step["value"] == element_key
+      end)
+    end)
+  end
+
   @doc """
   Check if an event matches a goal.
   Returns true if the event satisfies the goal's conditions.
@@ -76,7 +100,7 @@ defmodule Spectabas.Goals do
   """
   def create_funnel(site, attrs) do
     %Funnel{}
-    |> Funnel.changeset(Map.put(attrs, :site_id, site.id))
+    |> Funnel.changeset(Map.put(attrs, "site_id", site.id))
     |> Repo.insert()
   end
 
@@ -98,6 +122,63 @@ defmodule Spectabas.Goals do
   """
   def evaluate_funnel(site, user, funnel) do
     Analytics.funnel_stats(site, user, funnel)
+  end
+
+  # --- Click Element Names ---
+
+  def list_element_names(site) do
+    Repo.all(
+      from(n in ClickElementName,
+        where: n.site_id == ^site.id,
+        order_by: [asc: n.friendly_name]
+      )
+    )
+  end
+
+  def element_names_map(site) do
+    list_element_names(site)
+    |> Map.new(fn n -> {n.element_key, n} end)
+  end
+
+  def upsert_element_name(site, attrs) do
+    key = attrs["element_key"] || Map.get(attrs, :element_key)
+
+    case Repo.one(
+           from(n in ClickElementName, where: n.site_id == ^site.id and n.element_key == ^key)
+         ) do
+      nil ->
+        %ClickElementName{}
+        |> ClickElementName.changeset(Map.put(attrs, "site_id", site.id))
+        |> Repo.insert()
+
+      existing ->
+        existing
+        |> ClickElementName.changeset(attrs)
+        |> Repo.update()
+    end
+  end
+
+  def ignore_element(site, element_key) do
+    case Repo.one(
+           from(n in ClickElementName,
+             where: n.site_id == ^site.id and n.element_key == ^element_key
+           )
+         ) do
+      nil ->
+        %ClickElementName{}
+        |> ClickElementName.changeset(%{
+          "site_id" => site.id,
+          "element_key" => element_key,
+          "friendly_name" => element_key,
+          "ignored" => true
+        })
+        |> Repo.insert()
+
+      existing ->
+        existing
+        |> ClickElementName.changeset(%{"ignored" => !existing.ignored})
+        |> Repo.update()
+    end
   end
 
   # --- Private helpers ---

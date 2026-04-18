@@ -215,7 +215,14 @@ defmodule SpectabasWeb.Dashboard.CategoryLive do
           path: "goals",
           label: "Goals",
           desc:
-            "Track specific actions: pageview goals (URL match with wildcards) and custom event goals (from Spectabas.track()). See completion count and conversion rate. Each goal shows its top traffic sources."
+            "Track specific actions: pageview goals, custom event goals, and click element goals (auto-detected buttons/links). Click any goal for detailed analytics — completion trends, source attribution, device/geo breakdown, and recent completers."
+        },
+        %{
+          key: "click-elements",
+          path: "click-elements",
+          label: "Click Elements",
+          desc:
+            "Auto-detected buttons and links from your site. Browse by tag type, assign friendly names, see which pages each element appears on, and create goals with one click."
         },
         %{
           key: "funnels",

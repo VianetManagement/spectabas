@@ -2272,6 +2272,31 @@ defmodule SpectabasWeb.DocsLive do
 
             When creating a click element goal, the form shows buttons and links recently detected on your site (last 30 days). Click any to auto-populate the goal name and selector.
 
+            #### Goal Detail Pages
+
+            Click any goal name to open its detail page with:
+
+            - **Completion trend chart** — daily completions over the selected period
+            - **Stat cards** — total completions, unique visitors, conversion rate, average per visitor
+            - **Top sources** — which referrers and UTM sources drive the most completions
+            - **Top pages** — which pages the goal was completed on
+            - **Device breakdown** — desktop, mobile, tablet split
+            - **Geographic breakdown** — top countries
+            - **Recent completers** — visitor log with email (if identified), completion count, device, country
+            - **Element details** (click element goals only) — tag, text, CSS classes, and pages where the element appears
+
+            #### Click Element Registry
+
+            The **Click Elements** page (Conversions > Click Elements) shows all auto-detected buttons and links from your site:
+
+            - Browse elements with click counts and visitor counts
+            - Filter by tag type (button, link, input)
+            - Sort by clicks or visitors
+            - Assign friendly names to elements for easier identification
+            - See which goals reference each element
+            - One-click goal creation from any element
+            - Hide irrelevant elements from the list
+
             ### Funnels
 
             Define multi-step conversion paths to see where visitors drop off. Each step can be a pageview (URL path match), a custom event, or a click element.

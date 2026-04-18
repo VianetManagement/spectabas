@@ -68,7 +68,7 @@ DB-IP + MaxMind refresh via Oban cron (1st/15th monthly, 06:00 UTC). DB-IP cache
 - **Behavior**: Pages (device split, row evolution sparklines), Entry/Exit, Page Transitions, Site Search, Outbound Links, Downloads, Events (ARRAY JOIN property breakdown), Performance (RUM/CWV)
 - **Acquisition**: Acquisition (channels + sources + UTM tabs), Campaigns, Search Keywords (GSC + Bing)
 - **Audience**: Geography, Visitor Map, Devices, Network, Bot Traffic, Scrapers, Visitor Log, Cohort Retention, Churn Risk
-- **Conversions**: Goals (pageview, custom event, click element with auto-detection), Funnels (with revenue + abandoned export), Ecommerce, Revenue Attribution (ROAS, click ID), Revenue Cohorts, Buyer Patterns, MRR & Subscriptions
+- **Conversions**: Goals (pageview, custom event, click element — each clickable for detail page), Click Elements (registry with naming, filtering, goal cross-refs), Funnels (with revenue + abandoned export), Ecommerce, Revenue Attribution (ROAS, click ID), Revenue Cohorts, Buyer Patterns, MRR & Subscriptions
 - **Ad Effectiveness**: Visitor Quality, Time to Convert, Ad Visitor Paths, Ad-to-Churn, Organic Lift
 - **Tools**: Reports, Email Reports (daily/weekly/monthly + AI weekly), Exports, Settings (4 tabs)
 - Category landing pages at `/sites/:id/c/:category`. Sidebar anomaly badges from `AnomalyDetector`.
@@ -185,4 +185,4 @@ Weighted-signal scoring (15 signals, cap 100). Tiers: watching (40-69), suspicio
 - **Backpressure**: 503 at buffer 5,000. Health "overloaded" at buffer 8,000 or Oban queue 500k.
 - **AI**: Per-site config in `ai_config_encrypted`. `AI.Completion.generate/3` abstracts providers. `InsightsCache` (24h). Weekly email Monday 9am UTC. Platform-level help chatbot via `HELP_AI_API_KEY` (Anthropic Haiku) — `AI.HelpChat` module, `ChatComponent` LiveComponent in dashboard_layout.
 - **fix-ch-schema**: Uses `execute_admin` for DDL (writer may lack ALTER privileges).
-- **Changelog**: v5.74.0 at `/admin/changelog`. Updated every push.
+- **Changelog**: v5.75.0 at `/admin/changelog`. Updated every push.
