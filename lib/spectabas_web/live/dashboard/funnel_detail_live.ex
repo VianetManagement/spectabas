@@ -43,11 +43,12 @@ defmodule SpectabasWeb.Dashboard.FunnelDetailLive do
     funnel = socket.assigns.funnel
     range = socket.assigns.range
 
-    result = Analytics.funnel_stats(site, user, funnel, range)
-
     Logger.notice(
-      "[FunnelDetail] funnel=#{funnel.id} steps=#{inspect(funnel.steps)} result=#{inspect(result)}"
+      "[FunnelDetail] Loading funnel=#{funnel.id} name=#{funnel.name} steps=#{inspect(funnel.steps)} range=#{range}"
     )
+
+    result = Analytics.funnel_stats(site, user, funnel, range)
+    Logger.notice("[FunnelDetail] Result: #{inspect(result)}")
 
     raw_data =
       case result do
@@ -62,7 +63,12 @@ defmodule SpectabasWeb.Dashboard.FunnelDetailLive do
      |> assign(:funnel_data, funnel_data)
      |> assign(:loading, false)}
   rescue
-    _ -> {:noreply, assign(socket, loading: false, funnel_data: [])}
+    e ->
+      Logger.warning(
+        "[FunnelDetail] CRASHED: #{Exception.message(e)}\n#{Exception.format_stacktrace(__STACKTRACE__)}"
+      )
+
+      {:noreply, assign(socket, loading: false, funnel_data: [])}
   end
 
   @impl true
