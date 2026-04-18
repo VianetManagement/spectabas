@@ -39,6 +39,17 @@ defmodule Spectabas.Analytics.ScraperDetector do
     AS8100
     AS46844
     AS46941
+    AS49981
+    AS212238
+    AS60068
+    AS63023
+    AS46475
+    AS397423
+    AS397391
+    AS7393
+    AS207990
+    AS203020
+    AS39486
   )
 
   @suspicious_resolutions ~w(
