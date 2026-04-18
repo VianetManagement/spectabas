@@ -48,7 +48,9 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
        |> assign(:show_form, false)
        |> assign(:form, to_form(goal_changeset()))
        |> assign(:goal_type, "pageview")
-       |> assign(:discovered_elements, [])}
+       |> assign(:discovered_elements, [])
+       |> assign(:sort_by, "name")
+       |> assign(:sort_dir, :asc)}
     end
   end
 
@@ -81,6 +83,15 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
   end
 
   @impl true
+  def handle_event("sort", %{"col" => col}, socket) do
+    dir =
+      if socket.assigns.sort_by == col and socket.assigns.sort_dir == :asc,
+        do: :desc,
+        else: :asc
+
+    {:noreply, assign(socket, sort_by: col, sort_dir: dir)}
+  end
+
   def handle_event("toggle_form", _params, socket) do
     if socket.assigns.show_form do
       {:noreply, assign(socket, :show_form, false)}
@@ -196,6 +207,34 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
       "click_element" -> "click"
       other -> other
     end
+  end
+
+  defp sorted_goals(goals, completions, sort_by, sort_dir) do
+    sorted =
+      Enum.sort_by(goals, fn goal ->
+        stats =
+          Map.get(completions, goal.id, %{
+            completions: 0,
+            unique_completers: 0,
+            conversion_rate: 0.0
+          })
+
+        case sort_by do
+          "name" -> goal.name |> String.downcase()
+          "type" -> goal.goal_type
+          "target" -> goal.page_path || goal.event_name || goal.element_selector || ""
+          "completions" -> stats.completions
+          "visitors" -> stats.unique_completers
+          "conv_rate" -> stats.conversion_rate
+          _ -> goal.name |> String.downcase()
+        end
+      end)
+
+    if sort_dir == :desc, do: Enum.reverse(sorted), else: sorted
+  end
+
+  defp sort_indicator(col, sort_by, sort_dir) do
+    if col == sort_by, do: if(sort_dir == :asc, do: " ↑", else: " ↓"), else: ""
   end
 
   defp goal_changeset do
@@ -405,23 +444,47 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
           <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
               <tr>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Name
+                <th
+                  phx-click="sort"
+                  phx-value-col="name"
+                  class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
+                >
+                  Name{sort_indicator("name", @sort_by, @sort_dir)}
                 </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Type
+                <th
+                  phx-click="sort"
+                  phx-value-col="type"
+                  class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
+                >
+                  Type{sort_indicator("type", @sort_by, @sort_dir)}
                 </th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Target
+                <th
+                  phx-click="sort"
+                  phx-value-col="target"
+                  class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
+                >
+                  Target{sort_indicator("target", @sort_by, @sort_dir)}
                 </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Completions (7d)
+                <th
+                  phx-click="sort"
+                  phx-value-col="completions"
+                  class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
+                >
+                  Completions (7d){sort_indicator("completions", @sort_by, @sort_dir)}
                 </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Unique Visitors
+                <th
+                  phx-click="sort"
+                  phx-value-col="visitors"
+                  class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
+                >
+                  Unique Visitors{sort_indicator("visitors", @sort_by, @sort_dir)}
                 </th>
-                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Conv Rate
+                <th
+                  phx-click="sort"
+                  phx-value-col="conv_rate"
+                  class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700"
+                >
+                  Conv Rate{sort_indicator("conv_rate", @sort_by, @sort_dir)}
                 </th>
                 <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
@@ -432,7 +495,10 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
               <tr :if={@goals == []}>
                 <td colspan="7" class="px-6 py-8 text-center text-gray-500">No goals configured.</td>
               </tr>
-              <tr :for={goal <- @goals} class="hover:bg-gray-50">
+              <tr
+                :for={goal <- sorted_goals(@goals, @completions, @sort_by, @sort_dir)}
+                class="hover:bg-gray-50"
+              >
                 <td class="px-6 py-4">
                   <.link
                     navigate={~p"/dashboard/sites/#{@site.id}/goals/#{goal.id}"}
