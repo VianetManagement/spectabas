@@ -5448,8 +5448,11 @@ defmodule Spectabas.Analytics do
     domain = site.domain || ""
     parent = parent_domain(domain)
 
+    # Include cross-domain sites as internal (e.g. idenfy.com, payment providers)
+    cross = site.cross_domain_sites || []
+
     domains =
-      [domain, parent, "www.#{parent}"]
+      ([domain, parent, "www.#{parent}"] ++ cross)
       |> Enum.uniq()
       |> Enum.reject(&(&1 == ""))
       |> Enum.map(&ClickHouse.param/1)
@@ -5736,7 +5739,8 @@ defmodule Spectabas.Analytics do
     end
   end
 
-  defp self_referrer_domains(%Site{domain: domain}) when is_binary(domain) and domain != "" do
+  defp self_referrer_domains(%Site{domain: domain} = site)
+       when is_binary(domain) and domain != "" do
     # The site's analytics subdomain (e.g. b.example.com) and its parent domain
     parent =
       case String.split(domain, ".", parts: 2) do
@@ -5744,8 +5748,11 @@ defmodule Spectabas.Analytics do
         _ -> nil
       end
 
+    cross = site.cross_domain_sites || []
+
     [domain, "www.spectabas.com", "spectabas.com"]
     |> then(fn list -> if parent, do: [parent, "www.#{parent}" | list], else: list end)
+    |> Kernel.++(cross)
     |> Kernel.++(Spectabas.Analytics.SpamFilter.all_domains())
     |> Enum.uniq()
   end

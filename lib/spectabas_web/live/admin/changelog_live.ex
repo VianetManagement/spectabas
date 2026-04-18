@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.84.0", "2026-04-19T14:00:00Z",
+       [
+         %{
+           title: "Enhancement: Cross-domain sites excluded from referrer attribution",
+           description:
+             "Domains listed in a site's cross-domain sites (Settings > Advanced) are now treated as internal — excluded from referrer attribution, source lists, and channel breakdowns. This prevents third-party service providers (payment processors, identity verification, OAuth redirects) from appearing as traffic sources. Both clean_referrer_sql and self_referrer_domains updated."
+         }
+       ]},
       {"v5.83.0", "2026-04-19T13:00:00Z",
        [
          %{
