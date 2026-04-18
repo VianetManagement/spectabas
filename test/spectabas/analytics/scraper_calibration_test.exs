@@ -59,7 +59,8 @@ defmodule Spectabas.Analytics.ScraperCalibrationTest do
       p75: 180,
       p90: 420,
       p95: 720,
-      avg: 112.3
+      avg: 112.3,
+      sessions_with_data: 8200
     },
     ip_rotation: %{
       rotating_3plus: 45,
@@ -82,6 +83,13 @@ defmodule Spectabas.Analytics.ScraperCalibrationTest do
     vpn_providers: [
       %{name: "NordVPN", visitors: 320, avg_pages: 3.1},
       %{name: "ProtonVPN", visitors: 180, avg_pages: 2.8}
+    ],
+    resolutions: [
+      %{resolution: "1920x1080", visitors: 3200, suspicious: false},
+      %{resolution: "375x667", visitors: 1800, suspicious: true},
+      %{resolution: "1440x900", visitors: 1200, suspicious: false},
+      %{resolution: "412x915", visitors: 900, suspicious: true},
+      %{resolution: "0x0", visitors: 45, suspicious: true}
     ],
     current_weights: Spectabas.Analytics.ScraperDetector.default_weights(),
     current_overrides: nil
@@ -111,6 +119,9 @@ defmodule Spectabas.Analytics.ScraperCalibrationTest do
       assert String.contains?(prompt, "AS14618")
       assert String.contains?(prompt, "datacenter_asn")
       assert String.contains?(prompt, "key_risks")
+      assert String.contains?(prompt, "1920x1080")
+      assert String.contains?(prompt, "375x667")
+      assert String.contains?(prompt, "YES")
     end
 
     test "prompt handles empty data gracefully" do
@@ -128,7 +139,8 @@ defmodule Spectabas.Analytics.ScraperCalibrationTest do
           devices: [],
           top_asns: [],
           bounce_by_network: [],
-          vpn_providers: []
+          vpn_providers: [],
+          resolutions: []
       }
 
       prompt = build_prompt_via_send(site, baseline)
@@ -136,6 +148,7 @@ defmodule Spectabas.Analytics.ScraperCalibrationTest do
       assert String.contains?(prompt, "No device data available")
       assert String.contains?(prompt, "No ASN data available")
       assert String.contains?(prompt, "No VPN provider data")
+      assert String.contains?(prompt, "No screen resolution data")
     end
 
     test "prompt includes overrides when present" do

@@ -160,7 +160,7 @@ defmodule Spectabas.Analytics.ScraperCalibration do
     LIMIT 20
     """
 
-    # 6. Session duration distribution (bots tend to have very short or very long sessions)
+    # 6. Session duration distribution — duration lives on event_type='duration' rows
     session_sql = """
     SELECT
       quantile(0.25)(dur) AS p25_duration,
@@ -168,12 +168,14 @@ defmodule Spectabas.Analytics.ScraperCalibration do
       quantile(0.75)(dur) AS p75_duration,
       quantile(0.90)(dur) AS p90_duration,
       quantile(0.95)(dur) AS p95_duration,
-      avg(dur) AS avg_duration
+      avg(dur) AS avg_duration,
+      count(*) AS sessions_with_duration
     FROM (
-      SELECT session_id, max(duration_s) AS dur
+      SELECT session_id, maxIf(duration_s, event_type = 'duration' AND duration_s > 0) AS dur
       FROM events
-      WHERE #{base_where} AND event_type = 'pageview' AND session_id != ''
+      WHERE #{base_where} AND session_id != ''
       GROUP BY session_id
+      HAVING dur > 0
     )
     """
 
@@ -244,16 +246,32 @@ defmodule Spectabas.Analytics.ScraperCalibration do
     LIMIT 15
     """
 
+    # 11. Screen resolution distribution (for suspicious_resolution signal)
+    resolution_sql = """
+    SELECT
+      concat(toString(screen_width), 'x', toString(screen_height)) AS resolution,
+      count(DISTINCT visitor_id) AS visitors
+    FROM events
+    WHERE #{base_where} AND event_type = 'pageview' AND screen_width > 0
+    GROUP BY resolution
+    ORDER BY visitors DESC
+    LIMIT 20
+    """
+
     with {:ok, [stats]} <- ClickHouse.query(stats_sql),
          {:ok, [network]} <- ClickHouse.query(network_sql),
          {:ok, [referrer]} <- ClickHouse.query(referrer_sql),
          {:ok, devices} <- ClickHouse.query(device_sql),
          {:ok, asns} <- ClickHouse.query(asn_sql),
-         {:ok, [session]} <- ClickHouse.query(session_sql),
+         {:ok, session_rows} <- ClickHouse.query(session_sql),
          {:ok, [rotation]} <- ClickHouse.query(rotation_sql),
          {:ok, [flagged]} <- ClickHouse.query(flagged_sql),
          {:ok, bounces} <- ClickHouse.query(bounce_sql),
-         {:ok, vpns} <- ClickHouse.query(vpn_sql) do
+         {:ok, vpns} <- ClickHouse.query(vpn_sql),
+         {:ok, resolutions} <- ClickHouse.query(resolution_sql) do
+      # session query may return [] if no duration events exist (HAVING dur > 0 filters all)
+      session = List.first(session_rows) || %{}
+
       {:ok,
        %{
          total_visitors: to_num(stats["total_visitors"]),
@@ -295,7 +313,8 @@ defmodule Spectabas.Analytics.ScraperCalibration do
            p75: to_num(session["p75_duration"]),
            p90: to_num(session["p90_duration"]),
            p95: to_num(session["p95_duration"]),
-           avg: to_float(session["avg_duration"])
+           avg: to_float(session["avg_duration"]),
+           sessions_with_data: to_num(session["sessions_with_duration"])
          },
          ip_rotation: %{
            rotating_3plus: to_num(rotation["rotating_visitors"]),
@@ -327,6 +346,16 @@ defmodule Spectabas.Analytics.ScraperCalibration do
                name: v["ip_vpn_provider"],
                visitors: to_num(v["visitors"]),
                avg_pages: to_float(v["avg_pages"])
+             }
+           end),
+         resolutions:
+           Enum.map(resolutions, fn r ->
+             res = r["resolution"]
+
+             %{
+               resolution: res,
+               visitors: to_num(r["visitors"]),
+               suspicious: res in Enum.map(ScraperDetector.suspicious_resolutions(), &to_string/1)
              }
            end),
          current_weights: ScraperDetector.default_weights(),
@@ -409,7 +438,8 @@ defmodule Spectabas.Analytics.ScraperCalibration do
     KEY QUESTION: What percentage of the 20+ page visitors are likely legitimate power users vs scrapers? If p95 is already near 20, many real users are crossing that threshold.
 
     ## 2. Session Duration Distribution
-    Short sessions (<5s) with many pageviews = bot. Long sessions with proportional pageviews = human. Zero-duration single-page visits = bounces (normal).
+    Duration is measured via browser visibilitychange events (foreground time). Only sessions with at least one duration ping are included (#{dur.sessions_with_data} sessions had duration data).
+    #{if dur.sessions_with_data == 0, do: "WARNING: No sessions have duration data. This means duration pings may not be reaching ClickHouse for this site. The robotic_timing signal cannot be calibrated without this data.", else: ""}
 
     | Percentile | Duration (seconds) |
     |-----------|-------------------|
@@ -419,6 +449,8 @@ defmodule Spectabas.Analytics.ScraperCalibration do
     | p90 | #{dur.p90} |
     | p95 | #{dur.p95} |
     | Average | #{Float.round(dur.avg, 1)} |
+
+    Note: The robotic_timing signal actually uses inter-pageview timestamp intervals (millisecond-level request timing), NOT session duration. Duration data here is context for understanding overall session behavior.
 
     ## 3. Network Breakdown
     | Network type | Visitors | % of total |
@@ -457,6 +489,11 @@ defmodule Spectabas.Analytics.ScraperCalibration do
     #{format_vpn_providers(baseline.vpn_providers)}
 
     VPN suppression: The scoring model already suppresses datacenter_asn and spoofed_mobile_ua signals for visitors on known consumer VPN providers (NordVPN, ProtonVPN, etc). This section shows whether VPN users behave like real users or scrapers.
+
+    ## 9. Screen Resolution Distribution
+    #{format_resolutions(baseline.resolutions)}
+
+    The suspicious_resolution signal fires (+5) for these resolutions commonly used by headless browsers: #{Enum.join(ScraperDetector.suspicious_resolutions(), ", ")}. However, many of these (375x667, 375x812, 412x915) are also real iPhone/Android resolutions. If a large percentage of real visitors have these resolutions, the signal adds noise. The "Flagged" column shows which resolutions trigger the signal.
 
     ## Current Scoring Model
 
@@ -614,6 +651,25 @@ defmodule Spectabas.Analytics.ScraperCalibration do
       rows =
         Enum.map(vpns, fn v ->
           "| #{v.name} | #{v.visitors} | #{Float.round(v.avg_pages, 1)} |"
+        end)
+        |> Enum.join("\n")
+
+      header <> rows
+    end
+  end
+
+  defp format_resolutions(resolutions) do
+    if resolutions == [] do
+      "No screen resolution data available (screen_width = 0 on all events)."
+    else
+      total = Enum.reduce(resolutions, 0, fn r, acc -> acc + r.visitors end)
+
+      header = "| Resolution | Visitors | % | Flagged |\n|-----------|---------|---|--------|\n"
+
+      rows =
+        Enum.map(resolutions, fn r ->
+          flag = if r.suspicious, do: "YES", else: ""
+          "| #{r.resolution} | #{r.visitors} | #{pct(r.visitors, total)}% | #{flag} |"
         end)
         |> Enum.join("\n")
 
