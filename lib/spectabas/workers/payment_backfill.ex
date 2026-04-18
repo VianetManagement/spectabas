@@ -13,6 +13,9 @@ defmodule Spectabas.Workers.PaymentBackfill do
   alias Spectabas.AdIntegrations.SyncLog
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(300)
+
+  @impl Oban.Worker
   def perform(%Oban.Job{args: %{"integration_id" => integration_id, "num_days" => num_days}}) do
     integration =
       AdIntegrations.get!(integration_id)

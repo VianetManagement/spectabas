@@ -12,6 +12,9 @@ defmodule Spectabas.Workers.SpamDetector do
   alias Spectabas.Analytics.SpamFilter
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(60)
+
+  @impl Oban.Worker
   def perform(_job) do
     candidates = SpamFilter.detect_spam_candidates()
 

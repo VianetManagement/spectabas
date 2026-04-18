@@ -14,6 +14,9 @@ defmodule Spectabas.Workers.SearchConsoleSync do
   alias Spectabas.Notifications.Slack
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(300)
+
+  @impl Oban.Worker
   def perform(%Oban.Job{args: %{"backfill_days" => days, "integration_id" => id}}) do
     # Historical backfill mode: pull one day at a time going backwards from
     # 2 days ago for `days` total days. GSC data has a 2-3 day delay so we

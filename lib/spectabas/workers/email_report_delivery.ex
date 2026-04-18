@@ -9,6 +9,9 @@ defmodule Spectabas.Workers.EmailReportDelivery do
   alias Spectabas.Accounts.UserNotifier
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(60)
+
+  @impl Oban.Worker
   def perform(%Oban.Job{args: %{"subscription_id" => sub_id}}) do
     sub = Reports.get_email_subscription!(sub_id)
     site = sub.site

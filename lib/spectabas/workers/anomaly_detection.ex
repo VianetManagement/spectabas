@@ -16,6 +16,9 @@ defmodule Spectabas.Workers.AnomalyDetection do
   @spike_multiplier 5
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(60)
+
+  @impl Oban.Worker
   def perform(_job) do
     sites = Sites.list_sites()
 

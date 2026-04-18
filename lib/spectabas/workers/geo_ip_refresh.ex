@@ -4,6 +4,9 @@ defmodule Spectabas.Workers.GeoIPRefresh do
   require Logger
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(300)
+
+  @impl Oban.Worker
   def perform(%Oban.Job{args: %{"provider" => provider}}) do
     Spectabas.GeoIP.download_provider(String.to_existing_atom(provider))
 

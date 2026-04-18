@@ -5,6 +5,9 @@ defmodule Spectabas.Workers.VisitorAttributionRollup do
   alias Spectabas.ClickHouse
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(600)
+
+  @impl Oban.Worker
   def perform(%Oban.Job{args: %{"backfill" => true}}) do
     Logger.notice("[VisitorAttributionRollup] Historical backfill starting")
     run_for_all_sites()

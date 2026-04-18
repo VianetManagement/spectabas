@@ -15,6 +15,9 @@ defmodule Spectabas.Workers.DeadLetterMonitor do
   @warning_threshold 100
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(60)
+
+  @impl Oban.Worker
   def perform(_job) do
     count = Repo.aggregate(from(f in FailedEvent), :count)
 

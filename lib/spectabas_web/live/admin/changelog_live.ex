@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.88.0", "2026-04-19T18:00:00Z",
+       [
+         %{
+           title: "Fix: All Oban workers now have timeouts — prevents stuck jobs",
+           description:
+             "All 29 Oban workers now have timeout callbacks. Previously no worker had a timeout, so hung API calls or stalled ClickHouse queries would keep jobs in 'executing' state indefinitely. Timeouts: 60s for emails/cleanup/webhooks, 120s for exports, 300s for API syncs (Stripe/Braintree/ad platforms/GSC), 600s for heavy ClickHouse maintenance (rollups/backfills/ASN discovery)."
+         }
+       ]},
       {"v5.87.0", "2026-04-19T17:00:00Z",
        [
          %{

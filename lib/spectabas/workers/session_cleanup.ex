@@ -15,6 +15,9 @@ defmodule Spectabas.Workers.SessionCleanup do
   @idle_threshold_minutes 30
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(60)
+
+  @impl Oban.Worker
   def perform(_job) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
     threshold = DateTime.add(now, -@idle_threshold_minutes * 60, :second)

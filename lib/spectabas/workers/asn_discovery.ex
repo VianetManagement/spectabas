@@ -12,6 +12,9 @@ defmodule Spectabas.Workers.ASNDiscovery do
                        azure microsoft oracle rackspace hostinger godaddy bluehost)
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(600)
+
+  @impl Oban.Worker
   def perform(_job) do
     Logger.notice("[ASNDiscovery] Starting weekly scan")
 

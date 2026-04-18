@@ -12,6 +12,9 @@ defmodule Spectabas.Workers.DataExport do
   alias Spectabas.Reports
   alias Spectabas.Reports.Export
 
+  @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(120)
+
   @max_rows 1_000_000
 
   @chunk_size 10_000

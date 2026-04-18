@@ -9,6 +9,9 @@ defmodule Spectabas.Workers.ApiLogCleanup do
   @retention_days 30
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(60)
+
+  @impl Oban.Worker
   def perform(_job) do
     cutoff = DateTime.add(DateTime.utc_now(), -@retention_days, :day)
 

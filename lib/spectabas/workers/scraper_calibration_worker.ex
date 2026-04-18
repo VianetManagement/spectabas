@@ -7,6 +7,9 @@ defmodule Spectabas.Workers.ScraperCalibrationWorker do
   alias Spectabas.Sites
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(60)
+
+  @impl Oban.Worker
   def perform(%Oban.Job{args: %{"site_id" => site_id}}) do
     site = Sites.get_site!(site_id)
 

@@ -7,6 +7,9 @@ defmodule Spectabas.Workers.AdSetupEmail do
   alias Spectabas.Mailer
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(60)
+
+  @impl Oban.Worker
   def perform(_job) do
     html = ad_setup_html()
     text = ad_setup_text()

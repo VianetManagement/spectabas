@@ -10,6 +10,9 @@ defmodule Spectabas.Workers.BackfillGeo do
   require Logger
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(600)
+
+  @impl Oban.Worker
   def perform(_job) do
     Logger.info("[BackfillGeo] Starting geo backfill...")
 

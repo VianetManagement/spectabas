@@ -13,6 +13,9 @@ defmodule Spectabas.Workers.DeadLetterRetry do
   alias Spectabas.{Repo, ClickHouse}
   alias Spectabas.Events.FailedEvent
 
+  @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(120)
+
   @max_attempts 10
   @batch_size 500
   @retry_delay_minutes 5

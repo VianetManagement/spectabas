@@ -8,6 +8,9 @@ defmodule Spectabas.Workers.BackfillVpn do
   @batch_size 50000
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(600)
+
+  @impl Oban.Worker
   def perform(_job) do
     start = System.monotonic_time(:millisecond)
     Logger.notice("[BackfillVpn] Starting VPN provider backfill...")

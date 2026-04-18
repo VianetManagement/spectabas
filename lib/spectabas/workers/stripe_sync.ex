@@ -19,6 +19,9 @@ defmodule Spectabas.Workers.StripeSync do
   @catchup_threshold_hours 6
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(300)
+
+  @impl Oban.Worker
   def perform(_job) do
     integrations =
       AdIntegrations.list_active()

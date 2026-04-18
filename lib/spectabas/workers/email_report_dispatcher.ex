@@ -5,6 +5,9 @@ defmodule Spectabas.Workers.EmailReportDispatcher do
   require Logger
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(60)
+
+  @impl Oban.Worker
   def perform(_job) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
     due = Spectabas.Reports.list_due_subscriptions(now)

@@ -28,6 +28,9 @@ defmodule Spectabas.Workers.DailyRollup do
   @rollup_tables ~w(daily_rollup daily_page_rollup daily_source_rollup daily_geo_rollup daily_device_rollup daily_campaign_rollup)
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(600)
+
+  @impl Oban.Worker
   def perform(%Oban.Job{args: %{"backfill" => true}}) do
     Logger.notice("[DailyRollup] Historical backfill starting")
 

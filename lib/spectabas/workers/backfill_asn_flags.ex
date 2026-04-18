@@ -20,6 +20,9 @@ defmodule Spectabas.Workers.BackfillASNFlags do
   alias Spectabas.{ClickHouse, IPEnricher.ASNBlocklist}
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(600)
+
+  @impl Oban.Worker
   def perform(_job) do
     Logger.notice("[BackfillASNFlags] starting")
 

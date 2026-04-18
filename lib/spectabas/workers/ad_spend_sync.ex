@@ -15,6 +15,9 @@ defmodule Spectabas.Workers.AdSpendSync do
   import Spectabas.TypeHelpers, only: [to_int: 1]
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(300)
+
+  @impl Oban.Worker
   def perform(_job) do
     # Only process ad platforms — Stripe/Braintree/GSC/Bing have their own sync workers
     integrations =

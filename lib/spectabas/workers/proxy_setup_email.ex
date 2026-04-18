@@ -7,6 +7,9 @@ defmodule Spectabas.Workers.ProxySetupEmail do
   alias Spectabas.Mailer
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(60)
+
+  @impl Oban.Worker
   def perform(_job) do
     html = proxy_setup_html()
     text = proxy_setup_text()

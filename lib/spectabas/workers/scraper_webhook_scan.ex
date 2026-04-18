@@ -11,6 +11,9 @@ defmodule Spectabas.Workers.ScraperWebhookScan do
   import Ecto.Query
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(60)
+
+  @impl Oban.Worker
   def perform(_job) do
     sites = sites_with_webhooks()
 

@@ -15,6 +15,9 @@ defmodule Spectabas.Workers.ScheduledReports do
   alias Spectabas.Reports.Report
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(60)
+
+  @impl Oban.Worker
   def perform(_job) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 

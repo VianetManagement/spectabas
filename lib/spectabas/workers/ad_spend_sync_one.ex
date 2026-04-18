@@ -8,7 +8,11 @@ defmodule Spectabas.Workers.AdSpendSyncOne do
   alias Spectabas.{AdIntegrations, Repo}
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(300)
+
   @ad_platforms ~w(google_ads bing_ads meta_ads)
+
+  @impl Oban.Worker
 
   def perform(%Oban.Job{args: %{"integration_id" => id}}) do
     integration = AdIntegrations.get!(id) |> Repo.preload(:site)

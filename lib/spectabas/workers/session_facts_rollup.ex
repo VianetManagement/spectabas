@@ -5,6 +5,9 @@ defmodule Spectabas.Workers.SessionFactsRollup do
   alias Spectabas.ClickHouse
 
   @impl Oban.Worker
+  def timeout(_job), do: :timer.seconds(600)
+
+  @impl Oban.Worker
   def perform(%Oban.Job{args: %{"backfill" => true}}) do
     Logger.notice("[SessionFactsRollup] Historical backfill starting")
 
