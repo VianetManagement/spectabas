@@ -2224,7 +2224,7 @@ defmodule Spectabas.Analytics do
       cond do
         touch == "any" ->
           """
-          SELECT visitor_id, click_id_type
+          SELECT visitor_id, click_id_type AS platform
           FROM (
             SELECT visitor_id, click_id_type
             FROM events
@@ -2240,7 +2240,7 @@ defmodule Spectabas.Analytics do
         touch == "first_ever" ->
           # Look across ALL visitor history for their very first click ID
           """
-          SELECT visitor_id, argMin(click_id_type, timestamp) AS click_id_type
+          SELECT visitor_id, argMin(click_id_type, timestamp) AS platform
           FROM events
           WHERE site_id = #{ClickHouse.param(site.id)}
             AND click_id != '' AND click_id_type != ''
@@ -2260,7 +2260,7 @@ defmodule Spectabas.Analytics do
           agg_fn = if touch == "last", do: "argMax", else: "argMin"
 
           """
-          SELECT visitor_id, #{agg_fn}(click_id_type, timestamp) AS click_id_type
+          SELECT visitor_id, #{agg_fn}(click_id_type, timestamp) AS platform
           FROM events
           WHERE site_id = #{ClickHouse.param(site.id)}
             AND click_id != '' AND click_id_type != ''
@@ -2274,7 +2274,7 @@ defmodule Spectabas.Analytics do
     with :ok <- authorize(site, user) do
       sql = """
       SELECT
-        click_id_type AS platform,
+        e.platform AS platform,
         uniq(e.visitor_id) AS visitors,
         countDistinct(ec.order_id) AS orders,
         sum(ec.revenue) AS total_revenue
@@ -2289,7 +2289,7 @@ defmodule Spectabas.Analytics do
           AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
           AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
       ) AS ec ON e.visitor_id = ec.visitor_id
-      GROUP BY click_id_type
+      GROUP BY e.platform
       ORDER BY total_revenue DESC
       """
 

@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.86.0", "2026-04-19T16:00:00Z",
+       [
+         %{
+           title: "Fix: Ad revenue by platform — alias collision crashed first/last touch",
+           description:
+             "ad_revenue_by_platform subquery aliased argMin/argMax result AS click_id_type, shadowing the source column. ClickHouse resolved the outer GROUP BY click_id_type to the aggregate function, throwing ILLEGAL_AGGREGATION (Code 184). 'Any' touch worked because it passed the raw column. Fixed by aliasing to 'platform' in all subqueries and referencing e.platform in the outer query."
+         }
+       ]},
       {"v5.85.0", "2026-04-19T15:00:00Z",
        [
          %{
