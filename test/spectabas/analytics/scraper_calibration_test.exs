@@ -86,9 +86,9 @@ defmodule Spectabas.Analytics.ScraperCalibrationTest do
     ],
     resolutions: [
       %{resolution: "1920x1080", visitors: 3200, suspicious: false},
-      %{resolution: "375x667", visitors: 1800, suspicious: true},
+      %{resolution: "375x667", visitors: 1800, suspicious: false},
       %{resolution: "1440x900", visitors: 1200, suspicious: false},
-      %{resolution: "412x915", visitors: 900, suspicious: true},
+      %{resolution: "412x915", visitors: 900, suspicious: false},
       %{resolution: "0x0", visitors: 45, suspicious: true}
     ],
     current_weights: Spectabas.Analytics.ScraperDetector.default_weights(),

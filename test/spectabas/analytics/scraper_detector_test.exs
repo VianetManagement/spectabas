@@ -168,7 +168,7 @@ defmodule Spectabas.Analytics.ScraperDetectorTest do
 
     test ":suspicious_resolution fires for known headless defaults" do
       assert %{score: 5, signals: [:suspicious_resolution]} =
-               ScraperDetector.score(%{screen_resolution: "375x667", referrer: "google.com"})
+               ScraperDetector.score(%{screen_resolution: "800x600", referrer: "google.com"})
 
       assert %{score: 5, signals: [:suspicious_resolution]} =
                ScraperDetector.score(%{screen_resolution: "0x0", referrer: "google.com"})
@@ -195,7 +195,7 @@ defmodule Spectabas.Analytics.ScraperDetectorTest do
           page_paths: paths,
           content_path_prefixes: ["/listings", "/premier"],
           referrer: nil,
-          screen_resolution: "375x667",
+          screen_resolution: "1024x768",
           request_intervals_ms: intervals
         })
 
@@ -271,7 +271,8 @@ defmodule Spectabas.Analytics.ScraperDetectorTest do
     test "suspicious_resolutions/0 returns a non-empty list of strings" do
       res = ScraperDetector.suspicious_resolutions()
       assert is_list(res) and res != []
-      assert "375x667" in res
+      assert "0x0" in res
+      assert "375x667" not in res
     end
 
     test "thresholds expose the documented values" do

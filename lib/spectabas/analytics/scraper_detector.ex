@@ -40,10 +40,6 @@ defmodule Spectabas.Analytics.ScraperDetector do
   )
 
   @suspicious_resolutions ~w(
-    375x667
-    375x812
-    412x915
-    360x640
     800x600
     1024x768
     0x0
