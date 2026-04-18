@@ -31,7 +31,8 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
        |> assign(:show_form, false)
        |> assign(:form_name, "")
        |> assign(:form_steps, [%{name: "", type: "pageview", value: ""}])
-       |> assign(:discovered_elements, [])}
+       |> assign(:discovered_elements, [])
+       |> assign(:goals, Goals.list_goals(site))}
     end
   end
 
@@ -209,36 +210,85 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
                   class="flex items-center gap-3"
                 >
                   <span class="text-sm font-medium text-gray-500 w-6">{idx + 1}.</span>
+                  <% step_type = step["type"] || Map.get(step, :type, "pageview") %>
                   <select
                     phx-change="update_step"
                     phx-value-index={idx}
                     phx-value-field="type"
-                    class="rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    class="shrink-0 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                   >
-                    <option
-                      value="pageview"
-                      selected={step["type"] == "pageview" || Map.get(step, :type) == "pageview"}
-                    >
-                      Pageview
-                    </option>
-                    <option
-                      value="custom_event"
-                      selected={
-                        step["type"] == "custom_event" || Map.get(step, :type) == "custom_event"
-                      }
-                    >
+                    <option value="pageview" selected={step_type == "pageview"}>Pageview</option>
+                    <option value="custom_event" selected={step_type == "custom_event"}>
                       Custom Event
                     </option>
-                    <option
-                      value="click_element"
-                      selected={
-                        step["type"] == "click_element" || Map.get(step, :type) == "click_element"
-                      }
-                    >
+                    <option value="click_element" selected={step_type == "click_element"}>
                       Click Element
                     </option>
+                    <option value="goal" selected={step_type == "goal"}>Goal</option>
                   </select>
+                  <%!-- Goal selector --%>
+                  <select
+                    :if={step_type == "goal"}
+                    phx-change="update_step"
+                    phx-value-index={idx}
+                    phx-value-field="value"
+                    class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  >
+                    <option value="">Select a goal...</option>
+                    <option
+                      :for={g <- @goals}
+                      value={to_string(g.id)}
+                      selected={
+                        to_string(g.id) == to_string(step["value"] || Map.get(step, :value, ""))
+                      }
+                    >
+                      {g.name} ({g.goal_type})
+                    </option>
+                  </select>
+                  <%!-- Click element selector --%>
+                  <select
+                    :if={step_type == "click_element" && @discovered_elements != []}
+                    phx-change="update_step"
+                    phx-value-index={idx}
+                    phx-value-field="value"
+                    class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  >
+                    <option value="">Select an element...</option>
+                    <option
+                      :for={el <- @discovered_elements}
+                      value={
+                        if(to_string(el["element_id"]) != "",
+                          do: "##{el["element_id"]}",
+                          else: "text:#{el["element_text"]}"
+                        )
+                      }
+                      selected={
+                        (step["value"] || Map.get(step, :value, "")) ==
+                          if(to_string(el["element_id"]) != "",
+                            do: "##{el["element_id"]}",
+                            else: "text:#{el["element_text"]}"
+                          )
+                      }
+                    >
+                      {el["element_tag"]} — {el["element_text"] |> to_string() |> String.slice(0..39)} ({format_number(
+                        to_num(el["clicks"])
+                      )} clicks)
+                    </option>
+                  </select>
+                  <%!-- Text input for click element (manual) or when no elements detected --%>
                   <input
+                    :if={step_type == "click_element" && @discovered_elements == []}
+                    type="text"
+                    phx-blur="update_step"
+                    phx-value-index={idx}
+                    phx-value-field="value"
+                    value={step["value"] || Map.get(step, :value, "")}
+                    placeholder="#id or text:Button Text"
+                    class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  />
+                  <%!-- Text input for pageview/custom_event --%>
+                  <input
+                    :if={step_type in ["pageview", "custom_event"]}
                     type="text"
                     phx-blur="update_step"
                     phx-value-index={idx}

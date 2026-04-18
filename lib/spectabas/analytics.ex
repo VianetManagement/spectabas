@@ -3107,10 +3107,25 @@ defmodule Spectabas.Analytics do
       value = step["value"] || Map.get(step, :value, "")
 
       case type do
-        "pageview" -> "event_type = 'pageview' AND url_path = #{ClickHouse.param(value)}"
-        "custom_event" -> "event_type = 'custom' AND event_name = #{ClickHouse.param(value)}"
-        "click_element" -> click_element_condition(value)
-        _ -> "1=0"
+        "pageview" ->
+          "event_type = 'pageview' AND url_path = #{ClickHouse.param(value)}"
+
+        "custom_event" ->
+          "event_type = 'custom' AND event_name = #{ClickHouse.param(value)}"
+
+        "click_element" ->
+          click_element_condition(value)
+
+        "goal" ->
+          try do
+            goal = Spectabas.Goals.get_goal!(String.to_integer(value))
+            goal_condition(goal)
+          rescue
+            _ -> "1=0"
+          end
+
+        _ ->
+          "1=0"
       end
     end)
     |> Enum.join(", ")
