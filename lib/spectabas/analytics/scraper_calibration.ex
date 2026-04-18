@@ -630,7 +630,7 @@ defmodule Spectabas.Analytics.ScraperCalibration do
     #{format_weights(weights)}
 
     ### How Signals Combine
-    - Signals are additive: a visitor hitting datacenter_asn (40) + spoofed_mobile_ua (20) + high_pageviews_20 (10) = score 70 (suspicious tier)
+    - Signals are additive: a visitor hitting datacenter_asn (40) + spoofed_mobile_ua (20) + high_pageviews_100 (10) = score 70 (suspicious tier)
     - Score is capped at 100
     - Tiers determine automated response:
       * Score 85-100 (Certain): Full countermeasures deployed (tarpit + data poisoning)
@@ -664,10 +664,9 @@ defmodule Spectabas.Analytics.ScraperCalibration do
         "spoofed_mobile_ua": <n>,
         "ip_rotation": <n>,
         "extreme_pageviews_1000": <n>,
-        "very_high_pageviews_200": <n>,
-        "very_high_pageviews_100": <n>,
-        "high_pageviews_50": <n>,
-        "high_pageviews_20": <n>,
+        "high_pageviews_500": <n>,
+        "high_pageviews_200": <n>,
+        "high_pageviews_100": <n>,
         "systematic_crawl": <n>,
         "robotic_timing": <n>,
         "no_referrer": <n>,
@@ -681,10 +680,9 @@ defmodule Spectabas.Analytics.ScraperCalibration do
         "spoofed_mobile_ua": "<1-2 sentences>",
         "ip_rotation": "<1-2 sentences>",
         "extreme_pageviews_1000": "<1-2 sentences>",
-        "very_high_pageviews_200": "<1-2 sentences>",
-        "very_high_pageviews_100": "<1-2 sentences>",
-        "high_pageviews_50": "<1-2 sentences>",
-        "high_pageviews_20": "<1-2 sentences>",
+        "high_pageviews_500": "<1-2 sentences>",
+        "high_pageviews_200": "<1-2 sentences>",
+        "high_pageviews_100": "<1-2 sentences>",
         "systematic_crawl": "<1-2 sentences>",
         "robotic_timing": "<1-2 sentences>",
         "no_referrer": "<1-2 sentences>",

@@ -78,15 +78,17 @@ defmodule Spectabas.Analytics.ScraperDetector do
   def score_certain, do: @score_certain
 
   # Default signal weights
+  # Pageview thresholds calibrated from 642k visitors (30d):
+  #   p95=16, p99=47, p99.9=173, p99.99=388
+  #   20-49 pages: 92% residential, 50-99: 90%, 100-199: 90%, 200-999: 84%, 1000+: 75% DC
   @default_weights %{
     datacenter_asn: 40,
     spoofed_mobile_ua: 20,
     ip_rotation: 20,
     extreme_pageviews_1000: 50,
-    very_high_pageviews_200: 25,
-    very_high_pageviews_100: 20,
-    high_pageviews_50: 15,
-    high_pageviews_20: 10,
+    high_pageviews_500: 20,
+    high_pageviews_200: 15,
+    high_pageviews_100: 10,
     systematic_crawl: 15,
     robotic_timing: 10,
     no_referrer: 10,
@@ -177,17 +179,14 @@ defmodule Spectabas.Analytics.ScraperDetector do
       n when is_integer(n) and n >= 1000 ->
         {points + w.extreme_pageviews_1000, [:extreme_pageviews | signals]}
 
+      n when is_integer(n) and n >= 500 ->
+        {points + w.high_pageviews_500, [:high_pageviews | signals]}
+
       n when is_integer(n) and n >= 200 ->
-        {points + w.very_high_pageviews_200, [:very_high_pageviews | signals]}
+        {points + w.high_pageviews_200, [:high_pageviews | signals]}
 
       n when is_integer(n) and n >= 100 ->
-        {points + w.very_high_pageviews_100, [:very_high_pageviews | signals]}
-
-      n when is_integer(n) and n >= 50 ->
-        {points + w.high_pageviews_50, [:high_pageviews | signals]}
-
-      n when is_integer(n) and n >= 20 ->
-        {points + w.high_pageviews_20, [:high_pageviews | signals]}
+        {points + w.high_pageviews_100, [:high_pageviews | signals]}
 
       _ ->
         {points, signals}

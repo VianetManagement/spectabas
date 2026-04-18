@@ -76,19 +76,26 @@ defmodule Spectabas.Analytics.ScraperDetectorTest do
                ScraperDetector.score(%{visitor_ip_count: 2, referrer: "google.com"})
     end
 
-    test ":high_pageviews fires at 20+ unique pages with escalating score" do
-      assert %{score: 10, signals: [:high_pageviews]} =
-               ScraperDetector.score(%{session_pageviews: 25, referrer: "google.com"})
-
-      assert %{score: 15, signals: [:high_pageviews]} =
+    test ":high_pageviews fires at 100+ unique pages with escalating thresholds" do
+      # Under 100 — no pageview signal
+      assert %{score: 0, signals: []} =
                ScraperDetector.score(%{session_pageviews: 50, referrer: "google.com"})
-    end
 
-    test ":very_high_pageviews replaces :high_pageviews at 100+ unique pages" do
-      result = ScraperDetector.score(%{session_pageviews: 150, referrer: "google.com"})
-      assert result.score == 20
-      assert :very_high_pageviews in result.signals
-      refute :high_pageviews in result.signals
+      # 100+ pages → +10
+      assert %{score: 10, signals: [:high_pageviews]} =
+               ScraperDetector.score(%{session_pageviews: 150, referrer: "google.com"})
+
+      # 200+ pages → +15
+      assert %{score: 15, signals: [:high_pageviews]} =
+               ScraperDetector.score(%{session_pageviews: 300, referrer: "google.com"})
+
+      # 500+ pages → +20
+      assert %{score: 20, signals: [:high_pageviews]} =
+               ScraperDetector.score(%{session_pageviews: 600, referrer: "google.com"})
+
+      # 1000+ pages → +50
+      assert %{score: 50, signals: [:extreme_pageviews]} =
+               ScraperDetector.score(%{session_pageviews: 1500, referrer: "google.com"})
     end
 
     test ":systematic_crawl fires when >80% of paths match a content prefix" do
@@ -290,7 +297,7 @@ defmodule Spectabas.Analytics.ScraperDetectorTest do
       assert :datacenter_asn in result.signals
       assert :spoofed_mobile_ua in result.signals
       assert :ip_rotation in result.signals
-      assert :very_high_pageviews in result.signals
+      assert :high_pageviews in result.signals
       assert :systematic_crawl in result.signals
       assert :no_referrer in result.signals
       assert :robotic_timing in result.signals

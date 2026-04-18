@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.64.0", "2026-04-18T15:00:00Z",
+       [
+         %{
+           title: "Tune: Pageview thresholds recalibrated from 642k visitor analysis",
+           description:
+             "Removed 20-page and 50-page scraper signals (92% and 90% residential). New thresholds: 100+ (+10), 200+ (+15), 500+ (+20), 1000+ (+50). Pageview signals alone can no longer push a visitor past the watching threshold without other signals combining."
+         }
+       ]},
       {"v5.63.0", "2026-04-18T14:00:00Z",
        [
          %{
