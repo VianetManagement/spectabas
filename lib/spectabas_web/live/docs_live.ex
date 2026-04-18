@@ -2305,10 +2305,12 @@ defmodule SpectabasWeb.DocsLive do
 
             > **Example funnel:** Homepage → Features → Pricing → Signup. If 1000 visitors start at Homepage but only 50 reach Signup, you can see exactly where the drop-off happens.
 
-            The funnel visualization shows:
-            - **Step count** — visitors who reached each step
-            - **Drop-off rate** — percentage that didn't continue to the next step
-            - **Completion rate** — percentage that completed the entire funnel
+            Click any funnel name to open its detail page, which shows:
+            - **Summary cards** — entered, completed, completion rate, total drop-off
+            - **Visual funnel** — progress bars with drop-off indicators between steps
+            - **Step breakdown table** — visitor counts, percentage of entry, drop-off count and percentage per step
+            - **Date range selector** — 7d, 30d, 90d
+            - **CSV export** — export abandoned visitors at each step for remarketing
 
             ### Funnel Revenue (Ecommerce)
 

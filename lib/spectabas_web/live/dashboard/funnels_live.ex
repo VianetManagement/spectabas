@@ -369,13 +369,15 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
                   No funnels configured.
                 </td>
               </tr>
-              <tr
-                :for={funnel <- @funnels}
-                phx-click="view_funnel"
-                phx-value-id={funnel.id}
-                class="hover:bg-indigo-50 cursor-pointer transition-colors"
-              >
-                <td class="px-6 py-4 text-sm font-medium text-gray-900">{funnel.name}</td>
+              <tr :for={funnel <- @funnels} class="hover:bg-gray-50">
+                <td class="px-6 py-4">
+                  <.link
+                    navigate={~p"/dashboard/sites/#{@site.id}/funnels/#{funnel.id}"}
+                    class="text-sm font-medium text-indigo-600 hover:text-indigo-800"
+                  >
+                    {funnel.name}
+                  </.link>
+                </td>
                 <td class="px-6 py-4 text-sm text-gray-500">{length(funnel.steps || [])} steps</td>
                 <td class="px-6 py-4">
                   <span class={[

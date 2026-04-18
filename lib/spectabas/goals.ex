@@ -45,6 +45,10 @@ defmodule Spectabas.Goals do
   """
   def get_goal!(id), do: Repo.get!(Goal, id)
 
+  def get_funnel_for_site!(site, funnel_id) do
+    Repo.one!(from(f in Funnel, where: f.id == ^funnel_id and f.site_id == ^site.id))
+  end
+
   def get_goal_for_site!(site, goal_id) do
     Repo.one!(from(g in Goal, where: g.id == ^goal_id and g.site_id == ^site.id))
   end

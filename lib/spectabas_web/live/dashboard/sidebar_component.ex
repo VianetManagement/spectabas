@@ -674,6 +674,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
     "goal-detail" => "Conversions",
     "click-elements" => "Conversions",
     "funnels" => "Conversions",
+    "funnel-detail" => "Conversions",
     "ecommerce" => "Conversions",
     "mrr" => "Conversions",
     "revenue-attribution" => "Conversions",

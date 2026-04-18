@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.78.0", "2026-04-19T07:00:00Z",
+       [
+         %{
+           title: "Feature: Funnel detail pages",
+           description:
+             "Each funnel is now clickable — opens a dedicated detail page with summary cards (entered, completed, completion rate, total drop-off), visual funnel with progress bars and drop-off indicators between steps, step breakdown table with visitor counts and drop-off percentages, date range selector (7d/30d/90d), and CSV export of abandoned visitors at each step. Goal-type steps resolve to goal names."
+         }
+       ]},
       {"v5.77.0", "2026-04-19T06:00:00Z",
        [
          %{
