@@ -2311,6 +2311,8 @@ defmodule SpectabasWeb.DocsLive do
             - **Step breakdown table** — visitor counts, percentage of entry, drop-off count and percentage per step
             - **Date range selector** — 7d, 30d, 90d
             - **CSV export** — export abandoned visitors at each step for remarketing
+            - **Edit** — rename the funnel, add/remove/reorder steps, change step types
+            - **Delete** — remove the funnel with confirmation
 
             ### Funnel Revenue (Ecommerce)
 

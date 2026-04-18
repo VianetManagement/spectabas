@@ -3104,7 +3104,8 @@ defmodule Spectabas.Analytics do
     steps
     |> Enum.map(fn step ->
       type = step["type"] || Map.get(step, :type, "pageview")
-      value = step["value"] || Map.get(step, :value, "")
+      # Support both "value" key (new form) and "path"/"name" keys (legacy)
+      value = step["value"] || step["path"] || step["name"] || Map.get(step, :value, "")
 
       case type do
         "pageview" ->
@@ -3140,21 +3141,7 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
-      step_conditions =
-        steps
-        |> Enum.with_index(1)
-        |> Enum.map_join(", ", fn {step, _idx} ->
-          case step do
-            %{"type" => "pageview", "path" => path} ->
-              "url_path = #{ClickHouse.param(path)}"
-
-            %{"type" => "custom_event", "name" => name} ->
-              "event_name = #{ClickHouse.param(name)}"
-
-            _ ->
-              "1 = 0"
-          end
-        end)
+      step_conditions = build_funnel_conditions(steps)
 
       num_steps = length(steps)
 

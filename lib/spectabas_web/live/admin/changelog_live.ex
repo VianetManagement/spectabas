@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.79.0", "2026-04-19T08:00:00Z",
+       [
+         %{
+           title: "Fix: Funnel data now displays + edit/delete funnels",
+           description:
+             "Fixed funnel_stats using wrong step key names ('path'/'name' vs 'value') — all steps matched 1=0 and returned no data. Now uses shared build_funnel_conditions with backward compatibility for both key formats. Added funnel editing: rename, add/remove/reorder steps, change step types. Delete button with confirmation. Edit form uses the same proper <form phx-change> pattern as creation."
+         }
+       ]},
       {"v5.78.0", "2026-04-19T07:00:00Z",
        [
          %{

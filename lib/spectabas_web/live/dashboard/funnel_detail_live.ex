@@ -24,6 +24,10 @@ defmodule SpectabasWeb.Dashboard.FunnelDetailLive do
        |> assign(:range, "30d")
        |> assign(:funnel_data, nil)
        |> assign(:loading, true)
+       |> assign(:editing, false)
+       |> assign(:edit_name, funnel.name)
+       |> assign(:edit_steps, funnel.steps || [])
+       |> assign(:goals, Goals.list_goals(site))
        |> then(fn s ->
          send(self(), :load_data)
          s
@@ -96,6 +100,86 @@ defmodule SpectabasWeb.Dashboard.FunnelDetailLive do
         {:noreply, put_flash(socket, :error, "Could not export abandoned visitors.")}
     end
   end
+
+  def handle_event("toggle_edit", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(:editing, !socket.assigns.editing)
+     |> assign(:edit_name, socket.assigns.funnel.name)
+     |> assign(:edit_steps, socket.assigns.funnel.steps || [])}
+  end
+
+  def handle_event("edit_form_changed", %{"funnel" => params}, socket) do
+    name = params["name"] || socket.assigns.edit_name
+
+    steps =
+      (params["steps"] || %{})
+      |> Enum.sort_by(fn {k, _v} -> String.to_integer(k) end)
+      |> Enum.map(fn {_idx, step} -> step end)
+
+    steps =
+      if length(steps) < length(socket.assigns.edit_steps),
+        do: steps ++ Enum.drop(socket.assigns.edit_steps, length(steps)),
+        else: steps
+
+    {:noreply, assign(socket, edit_name: name, edit_steps: steps)}
+  end
+
+  def handle_event("add_edit_step", _params, socket) do
+    steps = socket.assigns.edit_steps ++ [%{"type" => "pageview", "value" => ""}]
+    {:noreply, assign(socket, :edit_steps, steps)}
+  end
+
+  def handle_event("remove_edit_step", %{"index" => index}, socket) do
+    steps = List.delete_at(socket.assigns.edit_steps, String.to_integer(index))
+    {:noreply, assign(socket, :edit_steps, steps)}
+  end
+
+  def handle_event("save_funnel", %{"funnel" => params}, socket) do
+    steps =
+      (params["steps"] || %{})
+      |> Enum.sort_by(fn {k, _v} -> String.to_integer(k) end)
+      |> Enum.map(fn {_idx, step} -> step end)
+
+    case Goals.update_funnel(socket.assigns.funnel, %{"name" => params["name"], "steps" => steps}) do
+      {:ok, funnel} ->
+        {:noreply,
+         socket
+         |> assign(:funnel, funnel)
+         |> assign(:editing, false)
+         |> assign(:loading, true)
+         |> put_flash(:info, "Funnel updated.")
+         |> then(fn s ->
+           send(self(), :load_data)
+           s
+         end)}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to update funnel.")}
+    end
+  end
+
+  def handle_event("delete_funnel", _params, socket) do
+    case Goals.delete_funnel(socket.assigns.site, socket.assigns.funnel.id) do
+      {:ok, _} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Funnel deleted.")
+         |> redirect(to: ~p"/dashboard/sites/#{socket.assigns.site.id}/funnels")}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to delete funnel.")}
+    end
+  end
+
+  defp step_placeholder("pageview"), do: "/path"
+  defp step_placeholder("custom_event"), do: "event_name"
+  defp step_placeholder(_), do: "/path"
+
+  defp goal_type_label("pageview"), do: "pageview"
+  defp goal_type_label("custom_event"), do: "custom event"
+  defp goal_type_label("click_element"), do: "click"
+  defp goal_type_label(t), do: t
 
   defp process_funnel_data(funnel, raw_data, _site) do
     steps = funnel.steps || []
@@ -184,23 +268,130 @@ defmodule SpectabasWeb.Dashboard.FunnelDetailLive do
               <h1 class="text-2xl font-bold text-gray-900">{@funnel.name}</h1>
               <span class="text-sm text-gray-500">{length(@funnel.steps || [])} steps</span>
             </div>
-            <div class="flex gap-1">
+            <div class="flex items-center gap-3">
+              <div class="flex gap-1">
+                <button
+                  :for={r <- ~w(7d 30d 90d)}
+                  phx-click="change_range"
+                  phx-value-range={r}
+                  class={[
+                    "px-3 py-1.5 text-sm font-medium rounded-lg",
+                    if(@range == r,
+                      do: "bg-indigo-600 text-white",
+                      else: "text-gray-600 hover:bg-gray-100"
+                    )
+                  ]}
+                >
+                  {r}
+                </button>
+              </div>
               <button
-                :for={r <- ~w(7d 30d 90d)}
-                phx-click="change_range"
-                phx-value-range={r}
-                class={[
-                  "px-3 py-1.5 text-sm font-medium rounded-lg",
-                  if(@range == r,
-                    do: "bg-indigo-600 text-white",
-                    else: "text-gray-600 hover:bg-gray-100"
-                  )
-                ]}
+                phx-click="toggle_edit"
+                class="px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100"
               >
-                {r}
+                {if @editing, do: "Cancel", else: "Edit"}
+              </button>
+              <button
+                phx-click="delete_funnel"
+                data-confirm="Delete this funnel?"
+                class="px-3 py-1.5 text-sm font-medium rounded-lg text-red-600 hover:bg-red-50"
+              >
+                Delete
               </button>
             </div>
           </div>
+        </div>
+
+        <%!-- Edit Form --%>
+        <div :if={@editing} class="bg-white rounded-lg shadow p-6 mb-8">
+          <h2 class="text-lg font-semibold text-gray-900 mb-4">Edit Funnel</h2>
+          <form
+            phx-change="edit_form_changed"
+            phx-submit="save_funnel"
+            id="edit-funnel-form"
+            class="space-y-4"
+          >
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Funnel Name</label>
+              <input
+                type="text"
+                name="funnel[name]"
+                value={@edit_name}
+                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                required
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Steps</label>
+              <div class="space-y-3">
+                <div
+                  :for={{step, idx} <- Enum.with_index(@edit_steps)}
+                  class="flex items-center gap-3"
+                >
+                  <span class="text-sm font-medium text-gray-500 w-6">{idx + 1}.</span>
+                  <% step_type = step["type"] || Map.get(step, :type, "pageview") %>
+                  <select
+                    name={"funnel[steps][#{idx}][type]"}
+                    class="shrink-0 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  >
+                    <option value="pageview" selected={step_type == "pageview"}>Pageview</option>
+                    <option value="custom_event" selected={step_type == "custom_event"}>
+                      Custom Event
+                    </option>
+                    <option value="goal" selected={step_type == "goal"}>Goal</option>
+                  </select>
+                  <select
+                    :if={step_type == "goal"}
+                    name={"funnel[steps][#{idx}][value]"}
+                    class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  >
+                    <option value="">Select a goal...</option>
+                    <option
+                      :for={g <- @goals}
+                      value={to_string(g.id)}
+                      selected={
+                        to_string(g.id) == to_string(step["value"] || Map.get(step, :value, ""))
+                      }
+                    >
+                      {g.name} ({goal_type_label(g.goal_type)})
+                    </option>
+                  </select>
+                  <input
+                    :if={step_type in ["pageview", "custom_event"]}
+                    type="text"
+                    name={"funnel[steps][#{idx}][value]"}
+                    value={step["value"] || Map.get(step, :value, "")}
+                    placeholder={step_placeholder(step_type)}
+                    class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  />
+                  <button
+                    :if={length(@edit_steps) > 1}
+                    type="button"
+                    phx-click="remove_edit_step"
+                    phx-value-index={idx}
+                    class="text-red-500 hover:text-red-700 text-sm"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+              <button
+                type="button"
+                phx-click="add_edit_step"
+                class="mt-3 text-sm text-indigo-600 hover:text-indigo-800"
+              >
+                + Add step
+              </button>
+            </div>
+            <div class="flex justify-end">
+              <button
+                type="submit"
+                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
+              >
+                Save Changes
+              </button>
+            </div>
+          </form>
         </div>
 
         <div :if={@loading} class="text-center py-16 text-gray-400">Loading...</div>

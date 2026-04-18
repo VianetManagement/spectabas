@@ -45,6 +45,19 @@ defmodule Spectabas.Goals do
   """
   def get_goal!(id), do: Repo.get!(Goal, id)
 
+  def update_funnel(funnel, attrs) do
+    funnel
+    |> Funnel.changeset(attrs)
+    |> Repo.update()
+  end
+
+  def delete_funnel(site, funnel_id) do
+    case Repo.one(from(f in Funnel, where: f.id == ^funnel_id and f.site_id == ^site.id)) do
+      nil -> {:error, :not_found}
+      funnel -> Repo.delete(funnel)
+    end
+  end
+
   def get_funnel_for_site!(site, funnel_id) do
     Repo.one!(from(f in Funnel, where: f.id == ^funnel_id and f.site_id == ^site.id))
   end
