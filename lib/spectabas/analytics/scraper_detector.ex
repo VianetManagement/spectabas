@@ -37,6 +37,7 @@ defmodule Spectabas.Analytics.ScraperDetector do
     AS51167
     AS8100
     AS46844
+    AS46941
   )
 
   @suspicious_resolutions ~w(
