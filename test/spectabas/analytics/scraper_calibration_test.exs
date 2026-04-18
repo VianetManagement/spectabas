@@ -84,6 +84,16 @@ defmodule Spectabas.Analytics.ScraperCalibrationTest do
       %{name: "NordVPN", visitors: 320, avg_pages: 3.1},
       %{name: "ProtonVPN", visitors: 180, avg_pages: 2.8}
     ],
+    request_timing: %{
+      visitors_with_data: 4200,
+      robotic_count: 35,
+      low_variance_count: 180,
+      normal_count: 3985,
+      p5_stddev: 820,
+      p25_stddev: 4500,
+      p50_stddev: 12000,
+      p75_stddev: 28000
+    },
     resolutions: [
       %{resolution: "1920x1080", visitors: 3200, suspicious: false},
       %{resolution: "375x667", visitors: 1800, suspicious: false},
@@ -140,6 +150,16 @@ defmodule Spectabas.Analytics.ScraperCalibrationTest do
           top_asns: [],
           bounce_by_network: [],
           vpn_providers: [],
+          request_timing: %{
+            visitors_with_data: 0,
+            robotic_count: 0,
+            low_variance_count: 0,
+            normal_count: 0,
+            p5_stddev: 0,
+            p25_stddev: 0,
+            p50_stddev: 0,
+            p75_stddev: 0
+          },
           resolutions: []
       }
 

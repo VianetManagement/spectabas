@@ -258,6 +258,37 @@ defmodule Spectabas.Analytics.ScraperCalibration do
     LIMIT 20
     """
 
+    # 12. Request timing distribution (for robotic_timing signal)
+    # Computes std dev of inter-pageview intervals per visitor (5+ pageviews)
+    # Signal fires when stddev < 300ms (machine-like consistent timing)
+    timing_sql = """
+    SELECT
+      count(*) AS visitors_with_timing,
+      countIf(sd < 300) AS robotic_count,
+      countIf(sd >= 300 AND sd < 1000) AS low_variance_count,
+      countIf(sd >= 1000) AS normal_count,
+      quantile(0.05)(sd) AS p5_stddev,
+      quantile(0.25)(sd) AS p25_stddev,
+      quantile(0.50)(sd) AS p50_stddev,
+      quantile(0.75)(sd) AS p75_stddev
+    FROM (
+      SELECT
+        visitor_id,
+        stddevPop(diff) AS sd
+      FROM (
+        SELECT
+          visitor_id,
+          toUnixTimestamp(timestamp) * 1000 - lagInFrame(toUnixTimestamp(timestamp) * 1000)
+            OVER (PARTITION BY visitor_id ORDER BY timestamp) AS diff
+        FROM events
+        WHERE #{base_where} AND event_type = 'pageview'
+      )
+      WHERE diff > 0 AND diff < 3600000
+      GROUP BY visitor_id
+      HAVING count() >= 4
+    )
+    """
+
     with {:ok, [stats]} <- ClickHouse.query(stats_sql),
          {:ok, [network]} <- ClickHouse.query(network_sql),
          {:ok, [referrer]} <- ClickHouse.query(referrer_sql),
@@ -268,7 +299,9 @@ defmodule Spectabas.Analytics.ScraperCalibration do
          {:ok, [flagged]} <- ClickHouse.query(flagged_sql),
          {:ok, bounces} <- ClickHouse.query(bounce_sql),
          {:ok, vpns} <- ClickHouse.query(vpn_sql),
-         {:ok, resolutions} <- ClickHouse.query(resolution_sql) do
+         {:ok, resolutions} <- ClickHouse.query(resolution_sql),
+         {:ok, timing_rows} <- ClickHouse.query(timing_sql) do
+      timing = List.first(timing_rows) || %{}
       # session query may return [] if no duration events exist (HAVING dur > 0 filters all)
       session = List.first(session_rows) || %{}
 
@@ -348,6 +381,16 @@ defmodule Spectabas.Analytics.ScraperCalibration do
                avg_pages: to_float(v["avg_pages"])
              }
            end),
+         request_timing: %{
+           visitors_with_data: to_num(timing["visitors_with_timing"]),
+           robotic_count: to_num(timing["robotic_count"]),
+           low_variance_count: to_num(timing["low_variance_count"]),
+           normal_count: to_num(timing["normal_count"]),
+           p5_stddev: to_num(timing["p5_stddev"]),
+           p25_stddev: to_num(timing["p25_stddev"]),
+           p50_stddev: to_num(timing["p50_stddev"]),
+           p75_stddev: to_num(timing["p75_stddev"])
+         },
          resolutions:
            Enum.map(resolutions, fn r ->
              res = r["resolution"]
@@ -490,7 +533,12 @@ defmodule Spectabas.Analytics.ScraperCalibration do
 
     VPN suppression: The scoring model already suppresses datacenter_asn and spoofed_mobile_ua signals for visitors on known consumer VPN providers (NordVPN, ProtonVPN, etc). This section shows whether VPN users behave like real users or scrapers.
 
-    ## 9. Screen Resolution Distribution
+    ## 9. Request Timing (inter-pageview intervals)
+    #{format_timing(baseline.request_timing)}
+
+    The robotic_timing signal (+10) fires when a visitor's inter-pageview interval standard deviation is < 300ms — meaning their page requests are spaced with machine-like consistency. Human browsing has irregular timing (stddev typically 5,000-30,000ms). Bots using fixed delays show stddev < 300ms. Visitors need 5+ pageviews for this signal to have enough data points.
+
+    ## 10. Screen Resolution Distribution
     #{format_resolutions(baseline.resolutions)}
 
     Three resolution-based signals:
@@ -668,6 +716,24 @@ defmodule Spectabas.Analytics.ScraperCalibration do
         |> Enum.join("\n")
 
       header <> rows
+    end
+  end
+
+  defp format_timing(timing) do
+    if timing.visitors_with_data == 0 do
+      "No timing data available (no visitors with 5+ pageviews in the period)."
+    else
+      total = timing.visitors_with_data
+
+      """
+      Visitors with 5+ pageviews (enough for timing analysis): #{total}
+      - Robotic (stddev < 300ms): #{timing.robotic_count} (#{pct(timing.robotic_count, total)}%)
+      - Low variance (300-1000ms): #{timing.low_variance_count} (#{pct(timing.low_variance_count, total)}%)
+      - Normal human (> 1000ms): #{timing.normal_count} (#{pct(timing.normal_count, total)}%)
+
+      Interval stddev distribution:
+      - p5: #{timing.p5_stddev}ms | p25: #{timing.p25_stddev}ms | p50: #{timing.p50_stddev}ms | p75: #{timing.p75_stddev}ms
+      """
     end
   end
 
