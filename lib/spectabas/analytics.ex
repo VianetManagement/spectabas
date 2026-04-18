@@ -3592,8 +3592,8 @@ defmodule Spectabas.Analytics do
         JSONExtractString(properties, '_text') AS element_text,
         JSONExtractString(properties, '_id') AS element_id,
         JSONExtractString(properties, '_tag') AS element_tag,
-        JSONExtractString(properties, '_href') AS element_href,
-        JSONExtractString(properties, '_classes') AS element_classes,
+        any(JSONExtractString(properties, '_href')) AS element_href,
+        any(JSONExtractString(properties, '_classes')) AS element_classes,
         count() AS clicks,
         uniq(visitor_id) AS visitors,
         min(timestamp) AS first_seen,
@@ -3606,7 +3606,7 @@ defmodule Spectabas.Analytics do
         AND ip_is_bot = 0
         AND timestamp >= now() - INTERVAL 90 DAY
         #{tag_clause}
-      GROUP BY element_text, element_id, element_tag, element_href, element_classes
+      GROUP BY element_text, element_id, element_tag
       HAVING clicks >= 2
       ORDER BY #{sort_col} #{dir}
       LIMIT 500
@@ -4936,7 +4936,7 @@ defmodule Spectabas.Analytics do
         JSONExtractString(properties, '_text') AS element_text,
         JSONExtractString(properties, '_id') AS element_id,
         JSONExtractString(properties, '_tag') AS element_tag,
-        JSONExtractString(properties, '_href') AS element_href,
+        any(JSONExtractString(properties, '_href')) AS element_href,
         count() AS clicks,
         uniq(visitor_id) AS visitors
       FROM events
@@ -4945,7 +4945,7 @@ defmodule Spectabas.Analytics do
         AND event_name = '_click'
         AND ip_is_bot = 0
         AND timestamp >= now() - INTERVAL 30 DAY
-      GROUP BY element_text, element_id, element_tag, element_href
+      GROUP BY element_text, element_id, element_tag
       HAVING clicks >= 2
       ORDER BY clicks DESC
       LIMIT 50
