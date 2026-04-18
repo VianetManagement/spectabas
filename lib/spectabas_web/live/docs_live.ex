@@ -2299,7 +2299,7 @@ defmodule SpectabasWeb.DocsLive do
 
             ### Funnels
 
-            Define multi-step conversion paths to see where visitors drop off. Each step can be a pageview (URL path match), a custom event, or a click element.
+            Define multi-step conversion paths to see where visitors drop off. Each step can be a pageview (URL path match), a custom event, or a goal (including click element goals). To track button clicks in a funnel, create a click element goal first, then add it as a Goal step.
 
             > **Example funnel:** Homepage → Features → Pricing → Signup. If 1000 visitors start at Homepage but only 50 reach Signup, you can see exactly where the drop-off happens.
 

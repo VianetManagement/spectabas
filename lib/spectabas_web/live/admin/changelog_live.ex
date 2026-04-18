@@ -53,6 +53,15 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.76.0", "2026-04-19T05:00:00Z",
+       [
+         %{
+           title:
+             "Fix: Funnel form — goal dropdown, sortable goals, click element dedup, search/pagination",
+           description:
+             "Funnel creation form rewritten to use proper <form phx-change> — selects now work correctly. Goal step type shows a dropdown of existing goals. Removed Click Element as a direct funnel step (use Goal steps for click tracking). Goals page has sortable columns. Click Elements page has live search + pagination (20/page). Click element dedup fixed — GROUP BY no longer splits on href/classes. Multiple number formatting fixes across dashboard."
+         }
+       ]},
       {"v5.75.0", "2026-04-19T03:00:00Z",
        [
          %{

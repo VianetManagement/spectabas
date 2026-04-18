@@ -59,43 +59,39 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
     {:noreply, assign(socket, :form_steps, steps)}
   end
 
-  def handle_event("update_step", %{"index" => index, "field" => field, "value" => value}, socket) do
-    idx = String.to_integer(index)
-    steps = List.update_at(socket.assigns.form_steps, idx, &Map.put(&1, field, value))
-    {:noreply, assign(socket, :form_steps, steps)}
-  end
+  def handle_event("form_changed", %{"funnel" => params}, socket) do
+    name = params["name"] || socket.assigns.form_name
+    steps_params = params["steps"] || %{}
 
-  def handle_event("update_step_type", %{"value" => type, "index" => index}, socket) do
-    idx = String.to_integer(index)
-
+    # Rebuild steps from form params, preserving order
     steps =
-      List.update_at(socket.assigns.form_steps, idx, fn step ->
-        Map.merge(step, %{"type" => type, "value" => ""})
-      end)
+      steps_params
+      |> Enum.sort_by(fn {k, _v} -> String.to_integer(k) end)
+      |> Enum.map(fn {_idx, step} -> step end)
 
-    {:noreply, assign(socket, :form_steps, steps)}
+    # Pad with existing steps if new steps were added via add_step but not yet in form data
+    steps =
+      if length(steps) < length(socket.assigns.form_steps) do
+        steps ++ Enum.drop(socket.assigns.form_steps, length(steps))
+      else
+        steps
+      end
+
+    {:noreply, assign(socket, form_name: name, form_steps: steps)}
   end
 
-  def handle_event("update_step_value", %{"value" => value, "index" => index}, socket) do
-    idx = String.to_integer(index)
-    steps = List.update_at(socket.assigns.form_steps, idx, &Map.put(&1, "value", value))
-    {:noreply, assign(socket, :form_steps, steps)}
-  end
-
-  def handle_event("update_name", %{"value" => name}, socket) do
-    {:noreply, assign(socket, :form_name, name)}
-  end
-
-  def handle_event("create_funnel", _params, socket) do
+  def handle_event("create_funnel", %{"funnel" => params}, socket) do
     if !Accounts.can_write?(socket.assigns.current_scope.user) do
       {:noreply, put_flash(socket, :error, "Viewers have read-only access.")}
     else
-      params = %{
-        "name" => socket.assigns.form_name,
-        "steps" => socket.assigns.form_steps
-      }
+      steps =
+        (params["steps"] || %{})
+        |> Enum.sort_by(fn {k, _v} -> String.to_integer(k) end)
+        |> Enum.map(fn {_idx, step} -> step end)
 
-      case Goals.create_funnel(socket.assigns.site, params) do
+      funnel_params = %{"name" => params["name"], "steps" => steps}
+
+      case Goals.create_funnel(socket.assigns.site, funnel_params) do
         {:ok, _funnel} ->
           funnels = Goals.list_funnels(socket.assigns.site)
 
@@ -198,12 +194,17 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
         <%!-- Create Form --%>
         <div :if={@show_form} class="bg-white rounded-lg shadow p-6 mb-8">
           <h2 class="text-lg font-semibold text-gray-900 mb-4">Create Funnel</h2>
-          <div class="space-y-4">
+          <form
+            phx-change="form_changed"
+            phx-submit="create_funnel"
+            class="space-y-4"
+            id="funnel-form"
+          >
             <div>
               <label class="block text-sm font-medium text-gray-700">Funnel Name</label>
               <input
                 type="text"
-                phx-blur="update_name"
+                name="funnel[name]"
                 value={@form_name}
                 class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                 required
@@ -219,9 +220,7 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
                   <span class="text-sm font-medium text-gray-500 w-6">{idx + 1}.</span>
                   <% step_type = step["type"] || Map.get(step, :type, "pageview") %>
                   <select
-                    phx-change="update_step_type"
-                    phx-value-index={idx}
-                    name="value"
+                    name={"funnel[steps][#{idx}][type]"}
                     class="shrink-0 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                   >
                     <option value="pageview" selected={step_type == "pageview"}>Pageview</option>
@@ -233,9 +232,7 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
                   <%!-- Goal selector --%>
                   <select
                     :if={step_type == "goal"}
-                    phx-change="update_step_value"
-                    phx-value-index={idx}
-                    name="value"
+                    name={"funnel[steps][#{idx}][value]"}
                     class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                   >
                     <option value="">Select a goal...</option>
@@ -253,15 +250,14 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
                   <input
                     :if={step_type in ["pageview", "custom_event"]}
                     type="text"
-                    phx-blur="update_step"
-                    phx-value-index={idx}
-                    phx-value-field="value"
+                    name={"funnel[steps][#{idx}][value]"}
                     value={step["value"] || Map.get(step, :value, "")}
                     placeholder={step_placeholder(step)}
                     class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                   />
                   <button
                     :if={length(@form_steps) > 1}
+                    type="button"
                     phx-click="remove_step"
                     phx-value-index={idx}
                     class="text-red-500 hover:text-red-700 text-sm"
@@ -270,7 +266,11 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
                   </button>
                 </div>
               </div>
-              <button phx-click="add_step" class="mt-3 text-sm text-indigo-600 hover:text-indigo-800">
+              <button
+                type="button"
+                phx-click="add_step"
+                class="mt-3 text-sm text-indigo-600 hover:text-indigo-800"
+              >
                 + Add step
               </button>
               <p :if={@goals != []} class="mt-2 text-xs text-gray-400">
@@ -279,13 +279,13 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
             </div>
             <div class="flex justify-end">
               <button
-                phx-click="create_funnel"
-                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
+                type="submit"
+                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-indigo-600 hover:bg-indigo-700"
               >
                 Create Funnel
               </button>
             </div>
-          </div>
+          </form>
         </div>
 
         <%!-- Funnel Visualization --%>
