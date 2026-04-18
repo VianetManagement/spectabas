@@ -294,12 +294,56 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
                     </form>
                   </div>
                   <div :if={@editing_key != element_key(el)}>
+                    <div
+                      :if={element_display_name(el, @element_names)}
+                      class="flex items-center gap-1.5"
+                    >
+                      <span class="text-sm font-medium text-gray-900">
+                        {element_display_name(el, @element_names)}
+                      </span>
+                      <button
+                        phx-click="edit_name"
+                        phx-value-key={element_key(el)}
+                        class="text-gray-400 hover:text-indigo-600"
+                        title="Edit name"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          class="w-3.5 h-3.5"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          stroke-width="2"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125"
+                          />
+                        </svg>
+                      </button>
+                    </div>
                     <button
+                      :if={!element_display_name(el, @element_names)}
                       phx-click="edit_name"
                       phx-value-key={element_key(el)}
-                      class="text-sm text-gray-600 hover:text-indigo-600"
+                      class="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 border border-dashed border-indigo-300 rounded-lg px-2 py-1 hover:bg-indigo-50"
                     >
-                      {element_display_name(el, @element_names) || "—"}
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        class="w-3 h-3"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        stroke-width="2"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M12 4.5v15m7.5-7.5h-15"
+                        />
+                      </svg>
+                      Add name
                     </button>
                   </div>
                 </td>
