@@ -21,6 +21,10 @@ defmodule SpectabasWeb.Router do
     plug SpectabasWeb.Plugs.ApiLogger
   end
 
+  pipeline :accepts_json do
+    plug :accepts, ["json"]
+  end
+
   pipeline :collect do
     plug :accepts, ["json"]
     plug SpectabasWeb.Plugs.AllowCors
@@ -248,6 +252,12 @@ defmodule SpectabasWeb.Router do
   end
 
   # API routes
+  scope "/api/admin", SpectabasWeb.API do
+    pipe_through [:accepts_json]
+
+    post "/query", QueryController, :query
+  end
+
   scope "/api/v1", SpectabasWeb.API do
     pipe_through :api
 

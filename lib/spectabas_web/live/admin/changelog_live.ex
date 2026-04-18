@@ -53,6 +53,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.59.0", "2026-04-18T02:00:00Z",
+       [
+         %{
+           title: "Feature: Admin ClickHouse query endpoint for diagnostics",
+           description:
+             "POST /api/admin/query accepts read-only SELECT queries authenticated via UTILITY_TOKEN Bearer header. Returns JSON rows. Used for scraper signal analysis and ad-hoc diagnostics."
+         },
+         %{
+           title: "Fix: AI calibration session duration was always 0",
+           description:
+             "Duration data lives on event_type='duration' rows, not pageviews. Fixed calibration query to use maxIf(duration_s, event_type='duration'). Also added screen resolution distribution as calibration input, and trimmed suspicious resolutions to only truly headless defaults (800x600, 1024x768, 0x0)."
+         }
+       ]},
       {"v5.58.0", "2026-04-18T01:30:00Z",
        [
          %{
