@@ -2258,12 +2258,23 @@ defmodule SpectabasWeb.DocsLive do
 
             - **Pageview goals** — triggered when a visitor views a specific page (supports wildcards: `/blog/*`)
             - **Custom event goals** — triggered when your JavaScript calls `Spectabas.track("event_name")`
+            - **Click element goals** — triggered when a visitor clicks a button or link on your site. No custom code required — the tracker auto-detects clicks on buttons, internal links, form submits, and `role="button"` elements.
 
             Goals appear on the Conversions > Goals page with total completions and conversion rate for the selected period. Each goal also shows its top 3 traffic sources — which referrers and UTM sources drive the most completions.
 
+            #### Click Element Goals
+
+            Click element goals match by element ID or visible text:
+
+            - **By ID:** `#signup-btn` — matches clicks on the element with `id="signup-btn"`
+            - **By text:** `text:Add to Cart` — matches clicks on elements showing "Add to Cart"
+            - **Wildcards:** `text:Add to*` — matches "Add to Cart", "Add to Wishlist", etc.
+
+            When creating a click element goal, the form shows buttons and links recently detected on your site (last 30 days). Click any to auto-populate the goal name and selector.
+
             ### Funnels
 
-            Define multi-step conversion paths to see where visitors drop off. Each step can be a pageview (URL path match) or a custom event.
+            Define multi-step conversion paths to see where visitors drop off. Each step can be a pageview (URL path match), a custom event, or a click element.
 
             > **Example funnel:** Homepage → Features → Pricing → Signup. If 1000 visitors start at Homepage but only 50 reach Signup, you can see exactly where the drop-off happens.
 

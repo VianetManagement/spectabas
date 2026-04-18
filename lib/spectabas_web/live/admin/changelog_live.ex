@@ -53,6 +53,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.71.0", "2026-04-18T22:00:00Z",
+       [
+         %{
+           title: "Feature: Click element goals with auto-detection",
+           description:
+             "New goal type: track button and link clicks without custom code. The tracker auto-captures clicks on buttons, internal links, form submits, and role=\"button\" elements — sending element text, ID, classes, and tag as event properties. Create goals by element ID (#signup-btn) or visible text (text:Add to Cart, wildcards supported). The goal creation form shows elements detected on your site in the last 30 days, click to auto-populate. Works in funnels too."
+         },
+         %{
+           title: "Fix: Goal creation form was silently failing",
+           description:
+             "Goals.create_goal used an atom key (:site_id) in a string-keyed map. Ecto's cast detected the atom first and ignored all string keys, so name/type/path were never cast — validation silently failed with no error display. Fixed by using string key. Also fixed: delete_goal handler passed wrong arguments (goal struct + user instead of site + id), and added form validation error display."
+         }
+       ]},
       {"v5.70.0", "2026-04-18T20:00:00Z",
        [
          %{

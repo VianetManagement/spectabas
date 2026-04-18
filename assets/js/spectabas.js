@@ -81,6 +81,42 @@
     }
   });
 
+  // Auto-click tracking for interactive elements
+  var lastClickTime = 0;
+  document.addEventListener("click", function (e) {
+    var now = Date.now();
+    if (now - lastClickTime < 500) return; // debounce 500ms
+
+    var el = e.target.closest("button, a, input[type='submit'], [role='button']");
+    if (!el) return;
+
+    // Skip outbound links (already tracked separately)
+    if (el.tagName === "A" && el.href) {
+      try {
+        var linkHost = new URL(el.href, window.location.origin).hostname;
+        if (linkHost !== window.location.hostname) return;
+      } catch (ex) {}
+    }
+
+    var tag = el.tagName.toLowerCase();
+    var text = (el.textContent || el.value || el.getAttribute("aria-label") || "").trim().replace(/\s+/g, " ").substring(0, 100);
+    if (!text && !el.id) return; // skip elements with no identifiable content
+
+    lastClickTime = now;
+
+    var props = { _tag: tag, _text: text };
+    if (el.id) props._id = el.id;
+    if (el.className && typeof el.className === "string") {
+      var classes = el.className.trim();
+      if (classes) props._classes = classes.substring(0, 200);
+    }
+    if (el.tagName === "A" && el.getAttribute("href")) {
+      props._href = el.getAttribute("href").substring(0, 256);
+    }
+
+    sendEvent("custom", { n: "_click", p: props });
+  }, true);
+
   // Public API
   window.Spectabas = {
     track: function (name, props) {

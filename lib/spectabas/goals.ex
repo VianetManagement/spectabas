@@ -14,7 +14,7 @@ defmodule Spectabas.Goals do
   """
   def create_goal(site, attrs) do
     %Goal{}
-    |> Goal.changeset(Map.put(attrs, :site_id, site.id))
+    |> Goal.changeset(Map.put(attrs, "site_id", site.id))
     |> Repo.insert()
   end
 
@@ -62,6 +62,13 @@ defmodule Spectabas.Goals do
     event_name == name
   end
 
+  def check_goal(%Goal{goal_type: "click_element", element_selector: selector}, _site, event) do
+    event_name = Map.get(event, :event_name, Map.get(event, "event_name", ""))
+    props = Map.get(event, :props, Map.get(event, "props", %{}))
+
+    event_name == "_click" && element_matches?(selector, props)
+  end
+
   def check_goal(_, _, _), do: false
 
   @doc """
@@ -94,6 +101,23 @@ defmodule Spectabas.Goals do
   end
 
   # --- Private helpers ---
+
+  defp element_matches?(selector, props) when is_binary(selector) and is_map(props) do
+    cond do
+      String.starts_with?(selector, "#") ->
+        Map.get(props, "_id", Map.get(props, :_id, "")) == String.slice(selector, 1..-1//1)
+
+      String.starts_with?(selector, "text:") ->
+        pattern = String.slice(selector, 5..-1//1)
+        text = Map.get(props, "_text", Map.get(props, :_text, ""))
+        if String.contains?(pattern, "*"), do: path_matches?(pattern, text), else: text == pattern
+
+      true ->
+        false
+    end
+  end
+
+  defp element_matches?(_, _), do: false
 
   defp path_matches?(pattern, path) when is_binary(pattern) and is_binary(path) do
     regex =

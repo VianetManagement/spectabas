@@ -453,6 +453,33 @@ defmodule Spectabas.TrackerScriptTest do
     end
   end
 
+  describe "click element tracking" do
+    test "sends _click event for interactive elements", %{js: js} do
+      assert js =~ "\"_click\""
+    end
+
+    test "captures element tag, text, id, classes", %{js: js} do
+      assert js =~ "_tag"
+      assert js =~ "_text"
+      assert js =~ "_id"
+      assert js =~ "_classes"
+    end
+
+    test "targets buttons, links, submit inputs, and role=button", %{js: js} do
+      assert js =~ "button"
+      assert js =~ "role='button'" || js =~ "role=\"button\""
+    end
+
+    test "skips outbound links (different hostname)", %{js: js} do
+      # The click handler checks hostname to avoid double-tracking with _outbound
+      assert js =~ "window.location.hostname"
+    end
+
+    test "debounces rapid clicks", %{js: js} do
+      assert js =~ "500"
+    end
+  end
+
   describe "cookie utilities" do
     test "getCookie parses document.cookie correctly", %{js: js} do
       assert js =~ "document.cookie"

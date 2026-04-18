@@ -3109,6 +3109,7 @@ defmodule Spectabas.Analytics do
       case type do
         "pageview" -> "event_type = 'pageview' AND url_path = #{ClickHouse.param(value)}"
         "custom_event" -> "event_type = 'custom' AND event_name = #{ClickHouse.param(value)}"
+        "click_element" -> click_element_condition(value)
         _ -> "1=0"
       end
     end)
@@ -3255,33 +3256,16 @@ defmodule Spectabas.Analytics do
 
     with :ok <- authorize(site, user) do
       # Build the subquery to find sessions that completed this goal
-      session_filter =
-        case goal.goal_type do
-          "pageview" ->
-            path_pattern = goal.page_path |> to_string() |> String.replace("*", "%")
+      condition = goal_condition(goal)
 
-            """
-            SELECT DISTINCT session_id FROM events
-            WHERE site_id = #{ClickHouse.param(site.id)}
-              AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-              AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-              AND event_type = 'pageview' AND ip_is_bot = 0
-              AND url_path LIKE #{ClickHouse.param(path_pattern)}
-            """
-
-          "custom_event" ->
-            """
-            SELECT DISTINCT session_id FROM events
-            WHERE site_id = #{ClickHouse.param(site.id)}
-              AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-              AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-              AND event_type = 'custom' AND ip_is_bot = 0
-              AND event_name = #{ClickHouse.param(to_string(goal.event_name))}
-            """
-
-          _ ->
-            "SELECT '' AS session_id WHERE 1 = 0"
-        end
+      session_filter = """
+      SELECT DISTINCT session_id FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+        AND #{condition}
+      """
 
       sql = """
       SELECT
@@ -3312,10 +3296,38 @@ defmodule Spectabas.Analytics do
       "custom_event" ->
         "event_type = 'custom' AND event_name = #{ClickHouse.param(to_string(goal.event_name))}"
 
+      "click_element" ->
+        click_element_condition(goal.element_selector)
+
       _ ->
         "1 = 0"
     end
   end
+
+  defp click_element_condition(selector) when is_binary(selector) do
+    base = "event_type = 'custom' AND event_name = '_click'"
+
+    cond do
+      String.starts_with?(selector, "#") ->
+        id = String.slice(selector, 1..-1//1)
+        "#{base} AND JSONExtractString(properties, '_id') = #{ClickHouse.param(id)}"
+
+      String.starts_with?(selector, "text:") ->
+        text = String.slice(selector, 5..-1//1)
+
+        if String.contains?(text, "*") do
+          pattern = text |> String.replace("*", "%")
+          "#{base} AND JSONExtractString(properties, '_text') LIKE #{ClickHouse.param(pattern)}"
+        else
+          "#{base} AND JSONExtractString(properties, '_text') = #{ClickHouse.param(text)}"
+        end
+
+      true ->
+        "1 = 0"
+    end
+  end
+
+  defp click_element_condition(_), do: "1 = 0"
 
   @doc """
   Ecommerce stats: total revenue, orders, avg order value, top products.
@@ -4624,6 +4636,32 @@ defmodule Spectabas.Analytics do
       GROUP BY prop_key, prop_value
       ORDER BY prop_key ASC, occurrences DESC
       LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  def discovered_click_elements(%Site{} = site, %User{} = user) do
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        JSONExtractString(properties, '_text') AS element_text,
+        JSONExtractString(properties, '_id') AS element_id,
+        JSONExtractString(properties, '_tag') AS element_tag,
+        JSONExtractString(properties, '_href') AS element_href,
+        count() AS clicks,
+        uniq(visitor_id) AS visitors
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND event_type = 'custom'
+        AND event_name = '_click'
+        AND ip_is_bot = 0
+        AND timestamp >= now() - INTERVAL 30 DAY
+      GROUP BY element_text, element_id, element_tag, element_href
+      HAVING clicks >= 2
+      ORDER BY clicks DESC
+      LIMIT 50
       """
 
       ClickHouse.query(sql)

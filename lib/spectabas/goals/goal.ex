@@ -12,6 +12,7 @@ defmodule Spectabas.Goals.Goal do
     field :goal_type, :string, default: "pageview"
     field :page_path, :string
     field :event_name, :string
+    field :element_selector, :string
     field :active, :boolean, default: true
 
     belongs_to :site, Spectabas.Sites.Site
@@ -20,13 +21,13 @@ defmodule Spectabas.Goals.Goal do
   end
 
   @required_fields ~w(name goal_type site_id)a
-  @optional_fields ~w(page_path event_name active)a
+  @optional_fields ~w(page_path event_name element_selector active)a
 
   def changeset(goal, attrs) do
     goal
     |> cast(attrs, @required_fields ++ @optional_fields)
     |> validate_required(@required_fields)
-    |> validate_inclusion(:goal_type, ~w(pageview custom_event))
+    |> validate_inclusion(:goal_type, ~w(pageview custom_event click_element))
     |> validate_goal_fields()
     |> foreign_key_constraint(:site_id)
   end
@@ -38,6 +39,11 @@ defmodule Spectabas.Goals.Goal do
 
       "custom_event" ->
         validate_required(changeset, [:event_name])
+
+      "click_element" ->
+        changeset
+        |> validate_required([:element_selector])
+        |> validate_length(:element_selector, max: 500)
 
       _ ->
         changeset

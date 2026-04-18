@@ -54,17 +54,27 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
        |> assign(:source_attribution, source_attribution)
        |> assign(:show_form, false)
        |> assign(:form, to_form(goal_changeset()))
-       |> assign(:goal_type, "pageview")}
+       |> assign(:goal_type, "pageview")
+       |> assign(:discovered_elements, [])}
     end
   end
 
   @impl true
   def handle_event("toggle_form", _params, socket) do
-    {:noreply, assign(socket, :show_form, !socket.assigns.show_form)}
-  end
+    if socket.assigns.show_form do
+      {:noreply, assign(socket, :show_form, false)}
+    else
+      # Load discovered elements when opening the form
+      elements =
+        safe_query(fn ->
+          Analytics.discovered_click_elements(socket.assigns.site, socket.assigns.user)
+        end)
 
-  def handle_event("change_goal_type", %{"goal_type" => type}, socket) do
-    {:noreply, assign(socket, :goal_type, type)}
+      {:noreply,
+       socket
+       |> assign(:show_form, true)
+       |> assign(:discovered_elements, elements)}
+    end
   end
 
   def handle_event("create_goal", %{"goal" => params}, socket) do
@@ -87,24 +97,83 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
   end
 
   def handle_event("validate_goal", %{"goal" => params}, socket) do
+    goal_type = Map.get(params, "goal_type", socket.assigns.goal_type)
+
     changeset =
       %Goals.Goal{}
       |> Goals.Goal.changeset(params)
       |> Map.put(:action, :validate)
 
-    {:noreply, assign(socket, :form, to_form(changeset))}
+    {:noreply,
+     socket
+     |> assign(:form, to_form(changeset))
+     |> assign(:goal_type, goal_type)}
+  end
+
+  def handle_event("select_element", %{"selector" => selector, "name" => name}, socket) do
+    changeset =
+      %Goals.Goal{}
+      |> Goals.Goal.changeset(%{
+        "name" => name,
+        "goal_type" => "click_element",
+        "element_selector" => selector
+      })
+      |> Map.put(:action, :validate)
+
+    {:noreply,
+     socket
+     |> assign(:form, to_form(changeset))
+     |> assign(:goal_type, "click_element")}
   end
 
   def handle_event("delete_goal", %{"id" => id}, socket) do
-    goal = Goals.get_goal!(id)
-
-    case Goals.delete_goal(goal, socket.assigns.user) do
+    case Goals.delete_goal(socket.assigns.site, id) do
       {:ok, _} ->
         goals = Goals.list_goals(socket.assigns.site)
         {:noreply, socket |> put_flash(:info, "Goal deleted.") |> assign(:goals, goals)}
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Failed to delete goal.")}
+    end
+  end
+
+  defp element_selector_value(el) do
+    id = el["element_id"] |> to_string()
+    text = el["element_text"] |> to_string()
+    if id != "", do: "##{id}", else: "text:#{text}"
+  end
+
+  defp element_goal_name(el) do
+    text = el["element_text"] |> to_string() |> String.slice(0..39)
+    tag = el["element_tag"] |> to_string() |> String.downcase()
+
+    "Click: #{text}"
+    |> String.trim()
+    |> then(fn n -> if String.ends_with?(n, ":"), do: "Click #{tag}", else: n end)
+  end
+
+  defp element_tag_classes(tag) do
+    case to_string(tag) |> String.downcase() do
+      "a" -> "bg-blue-100 text-blue-700"
+      "button" -> "bg-green-100 text-green-700"
+      "input" -> "bg-amber-100 text-amber-700"
+      _ -> "bg-gray-100 text-gray-700"
+    end
+  end
+
+  defp goal_type_classes(type) do
+    case type do
+      "pageview" -> "bg-blue-100 text-blue-800"
+      "custom_event" -> "bg-purple-100 text-purple-800"
+      "click_element" -> "bg-green-100 text-green-800"
+      _ -> "bg-gray-100 text-gray-800"
+    end
+  end
+
+  defp goal_type_label(type) do
+    case type do
+      "click_element" -> "click"
+      other -> other
     end
   end
 
@@ -163,23 +232,34 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                 required
               />
+              <p
+                :for={msg <- Enum.map(@form[:name].errors, &translate_error/1)}
+                class="mt-1 text-sm text-red-600"
+              >
+                {msg}
+              </p>
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-2">Goal Type</label>
-              <div class="flex gap-4">
-                <label :for={t <- ["pageview", "custom_event"]} class="flex items-center gap-2">
+              <div class="flex flex-wrap gap-4">
+                <label
+                  :for={
+                    {t, label} <- [
+                      {"pageview", "Pageview"},
+                      {"custom_event", "Custom event"},
+                      {"click_element", "Click element"}
+                    ]
+                  }
+                  class="flex items-center gap-2"
+                >
                   <input
                     type="radio"
                     name="goal[goal_type]"
                     value={t}
                     checked={@goal_type == t}
-                    phx-click="change_goal_type"
-                    phx-value-goal_type={t}
                     class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300"
                   />
-                  <span class="text-sm text-gray-700">
-                    {String.replace(t, "_", " ") |> String.capitalize()}
-                  </span>
+                  <span class="text-sm text-gray-700">{label}</span>
                 </label>
               </div>
             </div>
@@ -194,6 +274,12 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
                 placeholder="/pricing*"
                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
               />
+              <p
+                :for={msg <- Enum.map(@form[:page_path].errors, &translate_error/1)}
+                class="mt-1 text-sm text-red-600"
+              >
+                {msg}
+              </p>
             </div>
             <div :if={@goal_type == "custom_event"}>
               <label class="block text-sm font-medium text-gray-700">Event Name</label>
@@ -204,6 +290,75 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
                 placeholder="signup_complete"
                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
               />
+              <p
+                :for={msg <- Enum.map(@form[:event_name].errors, &translate_error/1)}
+                class="mt-1 text-sm text-red-600"
+              >
+                {msg}
+              </p>
+            </div>
+            <div :if={@goal_type == "click_element"}>
+              <label class="block text-sm font-medium text-gray-700">
+                Element Selector
+              </label>
+              <input
+                type="text"
+                name="goal[element_selector]"
+                value={@form[:element_selector].value}
+                placeholder="#signup-btn or text:Add to Cart"
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              />
+              <p class="mt-1 text-xs text-gray-500">
+                Use <code class="bg-gray-100 px-1 rounded">#element-id</code>
+                to match by ID,
+                or <code class="bg-gray-100 px-1 rounded">text:Button Text</code>
+                to match by visible text
+                (<code class="bg-gray-100 px-1 rounded">*</code> wildcard supported).
+              </p>
+              <p
+                :for={msg <- Enum.map(@form[:element_selector].errors, &translate_error/1)}
+                class="mt-1 text-sm text-red-600"
+              >
+                {msg}
+              </p>
+
+              <%!-- Discovered elements from recent click data --%>
+              <div :if={@discovered_elements != []} class="mt-3">
+                <p class="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                  Detected on your site (last 30 days)
+                </p>
+                <div class="space-y-1 max-h-48 overflow-y-auto">
+                  <button
+                    :for={el <- @discovered_elements}
+                    type="button"
+                    phx-click="select_element"
+                    phx-value-selector={element_selector_value(el)}
+                    phx-value-name={element_goal_name(el)}
+                    class="w-full text-left px-3 py-2 text-sm rounded-lg border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 transition-colors flex items-center justify-between gap-2"
+                  >
+                    <span class="flex items-center gap-2 min-w-0">
+                      <span class={[
+                        "shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-mono",
+                        element_tag_classes(el["element_tag"])
+                      ]}>
+                        {el["element_tag"]}
+                      </span>
+                      <span class="truncate font-medium text-gray-900">
+                        {el["element_text"] |> to_string() |> String.slice(0..59)}
+                      </span>
+                      <span
+                        :if={el["element_id"] != ""}
+                        class="shrink-0 text-xs text-gray-400 font-mono"
+                      >
+                        #{el["element_id"]}
+                      </span>
+                    </span>
+                    <span class="shrink-0 text-xs text-gray-500 tabular-nums">
+                      {format_number(to_num(el["clicks"]))} clicks
+                    </span>
+                  </button>
+                </div>
+              </div>
             </div>
             <div class="flex justify-end">
               <button
@@ -268,16 +423,13 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
                 <td class="px-6 py-4">
                   <span class={[
                     "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
-                    if(goal.goal_type == "pageview",
-                      do: "bg-blue-100 text-blue-800",
-                      else: "bg-purple-100 text-purple-800"
-                    )
+                    goal_type_classes(goal.goal_type)
                   ]}>
-                    {goal.goal_type}
+                    {goal_type_label(goal.goal_type)}
                   </span>
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-500 font-mono">
-                  {goal.page_path || goal.event_name || "-"}
+                  {goal.page_path || goal.event_name || goal.element_selector || "-"}
                 </td>
                 <% stats =
                   Map.get(@completions, goal.id, %{
