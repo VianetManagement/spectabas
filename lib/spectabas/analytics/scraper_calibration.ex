@@ -345,7 +345,7 @@ defmodule Spectabas.Analytics.ScraperCalibration do
       {provider, _api_key, model} = Spectabas.AI.Config.credentials(site)
       prompt = build_prompt(site, baseline)
 
-      case Completion.generate(site, "", prompt) do
+      case Completion.generate(site, "", prompt, max_tokens: 4096) do
         {:ok, text} ->
           recommendations = parse_ai_response(text)
 
@@ -489,22 +489,10 @@ defmodule Spectabas.Analytics.ScraperCalibration do
 
     ## Response Format
 
-    Respond with ONLY a valid JSON object (no markdown fences, no commentary outside the JSON):
+    IMPORTANT: Keep reasoning to 1-2 sentences per signal. The response must be compact enough to fit within output token limits.
+
+    Respond with ONLY a valid JSON object (no markdown fences, no commentary outside the JSON). Put the weights object FIRST since it is the most critical output:
     {
-      "analysis": {
-        "datacenter_asn": {"weight": <n>, "reasoning": "<what the data shows and why this weight>", "confidence": "<high|medium|low>"},
-        "spoofed_mobile_ua": {"weight": <n>, "reasoning": "<...>", "confidence": "<...>"},
-        "ip_rotation": {"weight": <n>, "reasoning": "<...>", "confidence": "<...>"},
-        "extreme_pageviews_1000": {"weight": <n>, "reasoning": "<...>", "confidence": "<...>"},
-        "very_high_pageviews_200": {"weight": <n>, "reasoning": "<...>", "confidence": "<...>"},
-        "very_high_pageviews_100": {"weight": <n>, "reasoning": "<...>", "confidence": "<...>"},
-        "high_pageviews_50": {"weight": <n>, "reasoning": "<...>", "confidence": "<...>"},
-        "high_pageviews_20": {"weight": <n>, "reasoning": "<...>", "confidence": "<...>"},
-        "systematic_crawl": {"weight": <n>, "reasoning": "<...>", "confidence": "<...>"},
-        "robotic_timing": {"weight": <n>, "reasoning": "<...>", "confidence": "<...>"},
-        "no_referrer": {"weight": <n>, "reasoning": "<...>", "confidence": "<...>"},
-        "suspicious_resolution": {"weight": <n>, "reasoning": "<...>", "confidence": "<...>"}
-      },
       "weights": {
         "datacenter_asn": <n>,
         "spoofed_mobile_ua": <n>,
@@ -519,11 +507,22 @@ defmodule Spectabas.Analytics.ScraperCalibration do
         "no_referrer": <n>,
         "suspicious_resolution": <n>
       },
+      "reasoning": {
+        "datacenter_asn": "<1-2 sentences>",
+        "spoofed_mobile_ua": "<1-2 sentences>",
+        "ip_rotation": "<1-2 sentences>",
+        "extreme_pageviews_1000": "<1-2 sentences>",
+        "very_high_pageviews_200": "<1-2 sentences>",
+        "very_high_pageviews_100": "<1-2 sentences>",
+        "high_pageviews_50": "<1-2 sentences>",
+        "high_pageviews_20": "<1-2 sentences>",
+        "systematic_crawl": "<1-2 sentences>",
+        "robotic_timing": "<1-2 sentences>",
+        "no_referrer": "<1-2 sentences>",
+        "suspicious_resolution": "<1-2 sentences>"
+      },
       "overall_confidence": "<high|medium|low>",
-      "key_risks": ["<top 3 false-positive risks for this site>"],
-      "sample_scenarios": [
-        {"description": "<realistic visitor scenario for this site>", "signals": ["<signal1>", "<signal2>"], "score": <n>, "verdict": "<appropriate or concern?>"}
-      ]
+      "key_risks": ["<risk 1>", "<risk 2>", "<risk 3>"]
     }
     """
   end

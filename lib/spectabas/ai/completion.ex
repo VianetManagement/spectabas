@@ -11,21 +11,33 @@ defmodule Spectabas.AI.Completion do
   @doc """
   Generate a completion from the configured AI provider.
   Returns {:ok, text} or {:error, reason}.
+
+  Options:
+    - :max_tokens — override the default 2048 token limit
   """
-  def generate(site, system_prompt, user_prompt) do
+  def generate(site, system_prompt, user_prompt, opts \\ []) do
     case Spectabas.AI.Config.credentials(site) do
-      {nil, _, _} -> {:error, "No AI provider configured"}
-      {"none", _, _} -> {:error, "AI disabled"}
-      {_, nil, _} -> {:error, "No API key configured"}
-      {provider, api_key, model} -> call(provider, api_key, model, system_prompt, user_prompt)
+      {nil, _, _} ->
+        {:error, "No AI provider configured"}
+
+      {"none", _, _} ->
+        {:error, "AI disabled"}
+
+      {_, nil, _} ->
+        {:error, "No API key configured"}
+
+      {provider, api_key, model} ->
+        call(provider, api_key, model, system_prompt, user_prompt, opts)
     end
   end
 
-  defp call("anthropic", api_key, model, system_prompt, user_prompt) do
+  defp call("anthropic", api_key, model, system_prompt, user_prompt, opts) do
+    max_tokens = Keyword.get(opts, :max_tokens, 2048)
+
     body =
       Jason.encode!(%{
         model: model,
-        max_tokens: 2048,
+        max_tokens: max_tokens,
         system: system_prompt,
         messages: [%{role: "user", content: user_prompt}]
       })
@@ -57,11 +69,13 @@ defmodule Spectabas.AI.Completion do
     end
   end
 
-  defp call("openai", api_key, model, system_prompt, user_prompt) do
+  defp call("openai", api_key, model, system_prompt, user_prompt, opts) do
+    max_tokens = Keyword.get(opts, :max_tokens, 2048)
+
     body =
       Jason.encode!(%{
         model: model,
-        max_tokens: 2048,
+        max_tokens: max_tokens,
         messages: [
           %{role: "system", content: system_prompt},
           %{role: "user", content: user_prompt}
@@ -94,12 +108,14 @@ defmodule Spectabas.AI.Completion do
     end
   end
 
-  defp call("google", api_key, model, system_prompt, user_prompt) do
+  defp call("google", api_key, model, system_prompt, user_prompt, opts) do
+    max_tokens = Keyword.get(opts, :max_tokens, 2048)
+
     body =
       Jason.encode!(%{
         contents: [%{parts: [%{text: user_prompt}]}],
         systemInstruction: %{parts: [%{text: system_prompt}]},
-        generationConfig: %{maxOutputTokens: 2048}
+        generationConfig: %{maxOutputTokens: max_tokens}
       })
 
     case Req.post(
@@ -130,7 +146,7 @@ defmodule Spectabas.AI.Completion do
     end
   end
 
-  defp call(provider, _, _, _, _) do
+  defp call(provider, _, _, _, _, _opts) do
     {:error, "Unknown AI provider: #{provider}"}
   end
 end

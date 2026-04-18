@@ -110,7 +110,7 @@ defmodule Spectabas.Analytics.ScraperCalibrationTest do
       assert String.contains?(prompt, "NordVPN")
       assert String.contains?(prompt, "AS14618")
       assert String.contains?(prompt, "datacenter_asn")
-      assert String.contains?(prompt, "sample_scenarios")
+      assert String.contains?(prompt, "key_risks")
     end
 
     test "prompt handles empty data gracefully" do
