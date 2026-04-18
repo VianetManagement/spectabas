@@ -34,6 +34,7 @@ defmodule Spectabas.Workers.ScraperWebhookScan do
   end
 
   defp scan_site(site) do
+    # 1. Scan recent traffic for new/escalating scrapers
     case Analytics.scraper_candidates_system(site,
            hours: 1,
            min_score: ScraperDetector.score_watching()
@@ -50,6 +51,9 @@ defmodule Spectabas.Workers.ScraperWebhookScan do
       {:error, reason} ->
         Logger.warning("[ScraperWebhookScan] site=#{site.id} query failed: #{inspect(reason)}")
     end
+
+    # 2. Check previously-flagged visitors for score downgrades
+    check_downgrades(site)
   rescue
     e ->
       Logger.warning("[ScraperWebhookScan] site=#{site.id} error: #{inspect(e)}")
@@ -87,6 +91,74 @@ defmodule Spectabas.Workers.ScraperWebhookScan do
       Logger.warning(
         "[ScraperWebhookScan] Failed processing visitor #{row["visitor_id"]}: #{inspect(e)}"
       )
+  end
+
+  defp check_downgrades(site) do
+    # Find all visitors with an active scraper webhook flag
+    flagged =
+      Repo.all(
+        from(v in Visitor,
+          where: v.site_id == ^site.id and not is_nil(v.scraper_webhook_sent_at),
+          select: v
+        )
+      )
+
+    if flagged != [] do
+      Logger.notice(
+        "[ScraperWebhookScan] site=#{site.id} checking #{length(flagged)} flagged visitors for downgrades"
+      )
+    end
+
+    Enum.each(flagged, fn visitor ->
+      check_visitor_downgrade(site, visitor)
+    end)
+  end
+
+  defp check_visitor_downgrade(site, visitor) do
+    case Analytics.scraper_score_for_visitor(site, visitor.id) do
+      {:ok, %{score: curr_score}} ->
+        prev_score = visitor.scraper_webhook_score || 0
+        prev_tier = score_tier(prev_score)
+        curr_tier = score_tier(curr_score)
+
+        if curr_tier < prev_tier do
+          Logger.notice(
+            "[ScraperWebhookScan] Downgrade: visitor=#{visitor.id} score #{prev_score}→#{curr_score} (tier #{prev_tier}→#{curr_tier})"
+          )
+
+          if curr_score < ScraperDetector.score_watching() do
+            # Dropped below watching threshold — send deactivation
+            send_deactivation(site, visitor)
+          else
+            # Dropped tier but still flagged — update score, re-send at new level
+            send_and_record(site, visitor, curr_score, [], %{"session_pageviews" => 0})
+          end
+        end
+
+      _ ->
+        :ok
+    end
+  rescue
+    e ->
+      Logger.warning(
+        "[ScraperWebhookScan] Downgrade check failed visitor=#{visitor.id}: #{inspect(e)}"
+      )
+  end
+
+  defp send_deactivation(site, visitor) do
+    case ScraperWebhook.send_deactivate(site, visitor) do
+      {:ok, _} ->
+        visitor
+        |> Visitor.changeset(%{scraper_webhook_sent_at: nil, scraper_webhook_score: nil})
+        |> Repo.update()
+
+        Logger.notice("[ScraperWebhookScan] Deactivated visitor=#{visitor.id}")
+
+      {:error, reason} ->
+        Logger.warning(
+          "[ScraperWebhookScan] Deactivation failed visitor=#{visitor.id}: #{inspect(reason)}"
+        )
+    end
   end
 
   defp send_and_record(site, visitor, score, signals, row) do
