@@ -101,6 +101,20 @@ defmodule Spectabas.Analytics.ScraperCalibrationTest do
       %{resolution: "412x915", visitors: 900, suspicious: false},
       %{resolution: "0x0", visitors: 45, suspicious: true}
     ],
+    chrome_versions: [
+      %{version: 146, visitors: 53000, stale: false},
+      %{version: 145, visitors: 21000, stale: false},
+      %{version: 66, visitors: 8000, stale: true}
+    ],
+    crawl_pattern: %{
+      total: 1200,
+      systematic: 45,
+      moderate: 180,
+      mixed: 975,
+      avg_ratio: 0.32,
+      avg_pages: 18.5,
+      prefixes: ["/listings/", "/breeds/"]
+    },
     current_weights: Spectabas.Analytics.ScraperDetector.default_weights(),
     current_overrides: nil
   }
@@ -159,6 +173,16 @@ defmodule Spectabas.Analytics.ScraperCalibrationTest do
             p25_stddev: 0,
             p50_stddev: 0,
             p75_stddev: 0
+          },
+          chrome_versions: [],
+          crawl_pattern: %{
+            total: 0,
+            systematic: 0,
+            moderate: 0,
+            mixed: 0,
+            avg_ratio: 0.0,
+            avg_pages: 0.0,
+            prefixes: []
           },
           resolutions: []
       }

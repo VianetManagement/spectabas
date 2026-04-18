@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.61.0", "2026-04-18T10:00:00Z",
+       [
+         %{
+           title: "Enhancement: AI calibration now covers all 15 signals with real data",
+           description:
+             "Added Chrome version distribution and content crawl pattern analysis to the calibration baseline. All 15 scraper signals now have data for AI calibration — no more blind recommendations. Also: Akamai AS36183/200005/32787 added to privacy relay list (was flagging iCloud Private Relay users as scrapers), and unflag button on visitor profile page."
+         }
+       ]},
       {"v5.60.0", "2026-04-18T02:30:00Z",
        [
          %{

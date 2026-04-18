@@ -289,6 +289,53 @@ defmodule Spectabas.Analytics.ScraperCalibration do
     )
     """
 
+    # 13. Chrome version distribution (for stale_browser signal)
+    chrome_sql = """
+    SELECT
+      toUInt32OrZero(substring(browser_version, 1, position(browser_version, '.') - 1)) AS major,
+      count(DISTINCT visitor_id) AS visitors
+    FROM events
+    WHERE #{base_where} AND event_type = 'pageview'
+      AND browser LIKE '%Chrome%' AND browser_version != ''
+    GROUP BY major
+    HAVING major > 0
+    ORDER BY visitors DESC
+    LIMIT 20
+    """
+
+    # 14. Content path crawl patterns (for systematic_crawl signal)
+    content_prefixes = List.wrap(site.scraper_content_prefixes)
+
+    crawl_sql =
+      if content_prefixes != [] do
+        prefix_conditions =
+          content_prefixes
+          |> Enum.map(fn p -> "url_path LIKE #{ClickHouse.param(p <> "%")}" end)
+          |> Enum.join(" OR ")
+
+        """
+        SELECT
+          count(DISTINCT visitor_id) AS total_visitors_with_content,
+          countDistinctIf(visitor_id, content_ratio > 0.8) AS systematic_crawlers,
+          countDistinctIf(visitor_id, content_ratio > 0.5 AND content_ratio <= 0.8) AS moderate_content,
+          countDistinctIf(visitor_id, content_ratio <= 0.5) AS mixed_browsing,
+          avg(content_ratio) AS avg_content_ratio,
+          avg(pv) AS avg_pages
+        FROM (
+          SELECT
+            visitor_id,
+            uniqIf(url_path, event_type = 'pageview') AS pv,
+            countIf(#{prefix_conditions}) / greatest(countIf(event_type = 'pageview'), 1) AS content_ratio
+          FROM events
+          WHERE #{base_where}
+          GROUP BY visitor_id
+          HAVING pv >= 5
+        )
+        """
+      else
+        nil
+      end
+
     with {:ok, [stats]} <- ClickHouse.query(stats_sql),
          {:ok, [network]} <- ClickHouse.query(network_sql),
          {:ok, [referrer]} <- ClickHouse.query(referrer_sql),
@@ -300,8 +347,11 @@ defmodule Spectabas.Analytics.ScraperCalibration do
          {:ok, bounces} <- ClickHouse.query(bounce_sql),
          {:ok, vpns} <- ClickHouse.query(vpn_sql),
          {:ok, resolutions} <- ClickHouse.query(resolution_sql),
-         {:ok, timing_rows} <- ClickHouse.query(timing_sql) do
+         {:ok, timing_rows} <- ClickHouse.query(timing_sql),
+         {:ok, chrome_versions} <- ClickHouse.query(chrome_sql),
+         {:ok, crawl_rows} <- if(crawl_sql, do: ClickHouse.query(crawl_sql), else: {:ok, []}) do
       timing = List.first(timing_rows) || %{}
+      crawl = List.first(crawl_rows) || %{}
       # session query may return [] if no duration events exist (HAVING dur > 0 filters all)
       session = List.first(session_rows) || %{}
 
@@ -401,6 +451,20 @@ defmodule Spectabas.Analytics.ScraperCalibration do
                suspicious: res in Enum.map(ScraperDetector.suspicious_resolutions(), &to_string/1)
              }
            end),
+         chrome_versions:
+           Enum.map(chrome_versions, fn v ->
+             major = to_num(v["major"])
+             %{version: major, visitors: to_num(v["visitors"]), stale: major < 100}
+           end),
+         crawl_pattern: %{
+           total: to_num(crawl["total_visitors_with_content"]),
+           systematic: to_num(crawl["systematic_crawlers"]),
+           moderate: to_num(crawl["moderate_content"]),
+           mixed: to_num(crawl["mixed_browsing"]),
+           avg_ratio: to_float(crawl["avg_content_ratio"]),
+           avg_pages: to_float(crawl["avg_pages"]),
+           prefixes: content_prefixes
+         },
          current_weights: ScraperDetector.default_weights(),
          current_overrides: site.scraper_weight_overrides
        }}
@@ -538,7 +602,17 @@ defmodule Spectabas.Analytics.ScraperCalibration do
 
     The robotic_timing signal (+10) fires when a visitor's inter-pageview interval standard deviation is < 300ms — meaning their page requests are spaced with machine-like consistency. Human browsing has irregular timing (stddev typically 5,000-30,000ms). Bots using fixed delays show stddev < 300ms. Visitors need 5+ pageviews for this signal to have enough data points.
 
-    ## 10. Screen Resolution Distribution
+    ## 10. Chrome Version Distribution
+    #{format_chrome_versions(baseline.chrome_versions)}
+
+    The stale_browser signal (+15) fires for Chrome major version < 100 (March 2022, 4+ years old). The "Stale" column flags versions that would trigger the signal.
+
+    ## 11. Content Crawl Patterns
+    #{format_crawl_pattern(baseline.crawl_pattern)}
+
+    The systematic_crawl signal (+15) fires when >80% of a visitor's pageviews match the configured content prefixes, indicating sequential crawling of inventory/content pages rather than normal browsing.
+
+    ## 12. Screen Resolution Distribution
     #{format_resolutions(baseline.resolutions)}
 
     Three resolution-based signals:
@@ -734,6 +808,45 @@ defmodule Spectabas.Analytics.ScraperCalibration do
       Interval stddev distribution:
       - p5: #{timing.p5_stddev}ms | p25: #{timing.p25_stddev}ms | p50: #{timing.p50_stddev}ms | p75: #{timing.p75_stddev}ms
       """
+    end
+  end
+
+  defp format_chrome_versions(versions) do
+    if versions == [] do
+      "No Chrome version data available."
+    else
+      total = Enum.reduce(versions, 0, fn v, acc -> acc + v.visitors end)
+
+      header = "| Version | Visitors | % | Stale |\n|---------|---------|---|-------|\n"
+
+      rows =
+        Enum.map(versions, fn v ->
+          flag = if v.stale, do: "YES", else: ""
+          "| Chrome #{v.version} | #{v.visitors} | #{pct(v.visitors, total)}% | #{flag} |"
+        end)
+        |> Enum.join("\n")
+
+      header <> rows
+    end
+  end
+
+  defp format_crawl_pattern(crawl) do
+    if crawl.prefixes == [] do
+      "No content path prefixes configured — systematic_crawl signal is inactive for this site."
+    else
+      if crawl.total == 0 do
+        "Content prefixes: #{Enum.join(crawl.prefixes, ", ")}\nNo visitors with 5+ pageviews matching content paths in the period."
+      else
+        """
+        Content prefixes: #{Enum.join(crawl.prefixes, ", ")}
+        Visitors with 5+ pageviews in content areas: #{crawl.total}
+        - Systematic crawlers (>80% content pages): #{crawl.systematic} (#{pct(crawl.systematic, crawl.total)}%)
+        - Moderate content focus (50-80%): #{crawl.moderate} (#{pct(crawl.moderate, crawl.total)}%)
+        - Mixed browsing (<50% content): #{crawl.mixed} (#{pct(crawl.mixed, crawl.total)}%)
+        - Average content ratio: #{Float.round(crawl.avg_ratio, 2)}
+        - Average pages per visitor: #{Float.round(crawl.avg_pages, 1)}
+        """
+      end
     end
   end
 
