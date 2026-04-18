@@ -154,6 +154,7 @@ defmodule Spectabas.Reports do
       case DateTime.shift_zone(utc_now, tz) do
         {:ok, local_now} ->
           local_now.hour == sub.send_hour and
+            right_day_for_frequency?(sub.frequency, local_now) and
             period_key(sub.frequency, local_now) != sub.last_period_key
 
         _ ->
@@ -178,6 +179,14 @@ defmodule Spectabas.Reports do
       sub -> sub |> Ecto.Changeset.change(frequency: :off) |> Repo.update()
     end
   end
+
+  defp right_day_for_frequency?(:daily, _local_now), do: true
+
+  defp right_day_for_frequency?(:weekly, local_now),
+    do: Date.day_of_week(DateTime.to_date(local_now)) == 1
+
+  defp right_day_for_frequency?(:monthly, local_now), do: local_now.day == 1
+  defp right_day_for_frequency?(_, _), do: true
 
   @doc "Compute period key for idempotent sending."
   def period_key(:daily, local_now) do

@@ -2193,6 +2193,8 @@ defmodule SpectabasWeb.DocsLive do
             - **Frequency** — Daily, Weekly, or Monthly (or Off to disable)
             - **Send Time** — hour of day in the site's timezone (e.g., 9:00 AM)
 
+            Daily reports send every day. Weekly reports send on **Mondays only**. Monthly reports send on the **1st of each month**.
+
             Reports are personal — each user with access to the site can set their own frequency and time.
 
             ### What's Included

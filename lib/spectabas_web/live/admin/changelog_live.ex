@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.77.0", "2026-04-19T06:00:00Z",
+       [
+         %{
+           title: "Fix: Weekly email reports only send on Mondays, monthly on 1st",
+           description:
+             "Weekly email reports were sending on the first hour of any new ISO week, which could be any day. Added day-of-week gating: weekly reports only dispatch on Monday, monthly reports only on the 1st of the month. Daily reports unchanged."
+         }
+       ]},
       {"v5.76.0", "2026-04-19T05:00:00Z",
        [
          %{
