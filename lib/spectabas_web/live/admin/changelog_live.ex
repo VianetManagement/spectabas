@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.68.0", "2026-04-18T18:00:00Z",
+       [
+         %{
+           title: "Fix: is_vpn missing from 2 of 3 scraper queries — VPN suppression was broken",
+           description:
+             "scraper_candidates_system and scraper_score_for_visitor were missing max(ip_is_vpn) AS is_vpn in their SELECT. The profile always had is_vpn=false, so VPN suppression for datacenter/spoofed_mobile/ip_rotation never fired on the visitor profile or webhook scan. All three queries now include the column."
+         }
+       ]},
       {"v5.67.0", "2026-04-18T17:00:00Z",
        [
          %{

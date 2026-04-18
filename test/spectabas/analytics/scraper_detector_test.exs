@@ -272,6 +272,62 @@ defmodule Spectabas.Analytics.ScraperDetectorTest do
     end
   end
 
+  describe "VPN suppression" do
+    test "consumer VPN suppresses datacenter, spoofed_mobile, and ip_rotation" do
+      result =
+        ScraperDetector.score(%{
+          asn: "AS54113 Fastly, Inc.",
+          is_datacenter: true,
+          is_vpn: true,
+          vpn_provider: "Apple Private Relay (Fastly)",
+          user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X)",
+          visitor_ip_count: 20,
+          session_pageviews: 250,
+          referrer: nil
+        })
+
+      refute :datacenter_asn in result.signals
+      refute :spoofed_mobile_ua in result.signals
+      refute :ip_rotation in result.signals
+      assert :high_pageviews in result.signals
+      assert :no_referrer in result.signals
+    end
+
+    test "VPN on known datacenter ASN does NOT suppress datacenter signal" do
+      result =
+        ScraperDetector.score(%{
+          asn: "AS16276 OVH SAS",
+          is_datacenter: true,
+          is_vpn: true,
+          vpn_provider: "PublicVpnConfigs",
+          user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
+          visitor_ip_count: 8,
+          session_pageviews: 300,
+          referrer: nil
+        })
+
+      assert :datacenter_asn in result.signals
+      assert :spoofed_mobile_ua in result.signals
+      # ip_rotation still suppressed for all VPN
+      refute :ip_rotation in result.signals
+    end
+
+    test "is_vpn flag alone triggers suppression even without vpn_provider name" do
+      result =
+        ScraperDetector.score(%{
+          asn: "AS54113 Fastly, Inc.",
+          is_datacenter: false,
+          is_vpn: true,
+          vpn_provider: "",
+          visitor_ip_count: 10,
+          session_pageviews: 50,
+          referrer: "google.com"
+        })
+
+      refute :ip_rotation in result.signals
+    end
+  end
+
   describe "composite scoring" do
     test "OVH scraper profile scores >= 85" do
       intervals = Enum.map(1..50, fn _ -> 1200 + :rand.uniform(100) end)
