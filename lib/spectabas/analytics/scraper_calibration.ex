@@ -175,22 +175,20 @@ defmodule Spectabas.Analytics.ScraperCalibration do
       {:error,
        "No AI provider configured for this site. Set up AI in Settings > Content > AI Analysis."}
     else
-      {provider, api_key, model} = Spectabas.AI.Config.credentials(site)
+      {provider, _api_key, model} = Spectabas.AI.Config.credentials(site)
       prompt = build_prompt(site, baseline)
 
-      ai_opts = %{provider: String.to_existing_atom(provider), api_key: api_key, model: model}
-
-      case Completion.generate(ai_opts.provider, ai_opts, prompt) do
-        {:ok, response} ->
-          recommendations = parse_ai_response(response.text)
+      case Completion.generate(site, "", prompt) do
+        {:ok, text} ->
+          recommendations = parse_ai_response(text)
 
           {:ok,
            %{
              recommendations: recommendations,
              provider: provider,
              model: model || "",
-             prompt_tokens: response[:prompt_tokens],
-             completion_tokens: response[:completion_tokens]
+             prompt_tokens: nil,
+             completion_tokens: nil
            }}
 
         {:error, reason} ->
