@@ -93,8 +93,9 @@ defmodule Spectabas.Analytics.ScraperCalibration do
 
   defp gather_baseline(site) do
     site_p = ClickHouse.param(site.id)
+    base_where = "site_id = #{site_p} AND timestamp >= now() - INTERVAL 30 DAY AND ip_is_bot = 0"
 
-    # Visitor behavioral distribution (last 30 days)
+    # 1. Visitor behavioral distribution
     stats_sql = """
     SELECT
       count(DISTINCT visitor_id) AS total_visitors,
@@ -107,14 +108,12 @@ defmodule Spectabas.Analytics.ScraperCalibration do
     FROM (
       SELECT visitor_id, uniqIf(url_path, event_type = 'pageview') AS pv
       FROM events
-      WHERE site_id = #{site_p}
-        AND timestamp >= now() - INTERVAL 30 DAY
-        AND ip_is_bot = 0
+      WHERE #{base_where}
       GROUP BY visitor_id
     )
     """
 
-    # Network breakdown
+    # 2. Network breakdown
     network_sql = """
     SELECT
       count(DISTINCT visitor_id) AS total,
@@ -122,26 +121,138 @@ defmodule Spectabas.Analytics.ScraperCalibration do
       countDistinctIf(visitor_id, ip_is_vpn = 1) AS vpn_visitors,
       countDistinctIf(visitor_id, ip_is_datacenter = 0 AND ip_is_vpn = 0) AS residential_visitors
     FROM events
-    WHERE site_id = #{site_p}
-      AND timestamp >= now() - INTERVAL 30 DAY
-      AND ip_is_bot = 0
+    WHERE #{base_where}
     """
 
-    # Referrer breakdown
+    # 3. Referrer breakdown
     referrer_sql = """
     SELECT
       countDistinctIf(visitor_id, referrer_domain = '') AS direct_visitors,
       countDistinctIf(visitor_id, referrer_domain != '') AS referred_visitors
     FROM events
-    WHERE site_id = #{site_p}
-      AND timestamp >= now() - INTERVAL 30 DAY
-      AND ip_is_bot = 0
-      AND event_type = 'pageview'
+    WHERE #{base_where} AND event_type = 'pageview'
+    """
+
+    # 4. Device type breakdown (for spoofed_mobile_ua signal calibration)
+    device_sql = """
+    SELECT
+      device_type,
+      count(DISTINCT visitor_id) AS visitors
+    FROM events
+    WHERE #{base_where} AND event_type = 'pageview' AND device_type != ''
+    GROUP BY device_type
+    ORDER BY visitors DESC
+    """
+
+    # 5. Top ASNs by visitor count (shows which networks are actually sending traffic)
+    asn_sql = """
+    SELECT
+      ip_asn,
+      ip_is_datacenter,
+      ip_is_vpn,
+      count(DISTINCT visitor_id) AS visitors,
+      uniqIf(url_path, event_type = 'pageview') AS total_pages
+    FROM events
+    WHERE #{base_where} AND ip_asn != ''
+    GROUP BY ip_asn, ip_is_datacenter, ip_is_vpn
+    ORDER BY visitors DESC
+    LIMIT 20
+    """
+
+    # 6. Session duration distribution (bots tend to have very short or very long sessions)
+    session_sql = """
+    SELECT
+      quantile(0.25)(dur) AS p25_duration,
+      quantile(0.50)(dur) AS p50_duration,
+      quantile(0.75)(dur) AS p75_duration,
+      quantile(0.90)(dur) AS p90_duration,
+      quantile(0.95)(dur) AS p95_duration,
+      avg(dur) AS avg_duration
+    FROM (
+      SELECT session_id, max(duration_s) AS dur
+      FROM events
+      WHERE #{base_where} AND event_type = 'pageview' AND session_id != ''
+      GROUP BY session_id
+    )
+    """
+
+    # 7. IP rotation — visitors with multiple IPs (the ip_rotation signal trigger)
+    rotation_sql = """
+    SELECT
+      countDistinctIf(visitor_id, ip_count >= 3) AS rotating_visitors,
+      countDistinctIf(visitor_id, ip_count >= 5) AS heavy_rotating,
+      count(DISTINCT visitor_id) AS total_visitors
+    FROM (
+      SELECT visitor_id, uniq(ip_address) AS ip_count
+      FROM events
+      WHERE #{base_where}
+      GROUP BY visitor_id
+    )
+    """
+
+    # 8. Current scraper score distribution (what the model is actually flagging right now)
+    # Uses a simplified scoring approach: count visitors by signal-relevant behaviors
+    flagged_sql = """
+    SELECT
+      countDistinctIf(visitor_id, pv >= 20) AS pv20_visitors,
+      countDistinctIf(visitor_id, pv >= 50) AS pv50_visitors,
+      countDistinctIf(visitor_id, pv >= 100) AS pv100_visitors,
+      countDistinctIf(visitor_id, pv >= 200) AS pv200_visitors,
+      countDistinctIf(visitor_id, pv >= 1000) AS pv1000_visitors,
+      count(DISTINCT visitor_id) AS total
+    FROM (
+      SELECT visitor_id, uniqIf(url_path, event_type = 'pageview') AS pv
+      FROM events
+      WHERE #{base_where}
+      GROUP BY visitor_id
+    )
+    """
+
+    # 9. Bounce rate by network type (datacenter bouncers vs engaged datacenter visitors)
+    bounce_sql = """
+    SELECT
+      ip_is_datacenter,
+      ip_is_vpn,
+      countIf(pv = 1) AS single_page_sessions,
+      count(*) AS total_sessions,
+      avg(pv) AS avg_pages_per_session
+    FROM (
+      SELECT session_id, ip_is_datacenter, ip_is_vpn,
+             uniqIf(url_path, event_type = 'pageview') AS pv
+      FROM events
+      WHERE #{base_where} AND session_id != ''
+      GROUP BY session_id, ip_is_datacenter, ip_is_vpn
+    )
+    GROUP BY ip_is_datacenter, ip_is_vpn
+    """
+
+    # 10. VPN provider breakdown
+    vpn_sql = """
+    SELECT
+      ip_vpn_provider,
+      count(DISTINCT visitor_id) AS visitors,
+      avg(pv) AS avg_pages
+    FROM (
+      SELECT visitor_id, ip_vpn_provider, uniqIf(url_path, event_type = 'pageview') AS pv
+      FROM events
+      WHERE #{base_where} AND ip_is_vpn = 1 AND ip_vpn_provider != ''
+      GROUP BY visitor_id, ip_vpn_provider
+    )
+    GROUP BY ip_vpn_provider
+    ORDER BY visitors DESC
+    LIMIT 15
     """
 
     with {:ok, [stats]} <- ClickHouse.query(stats_sql),
          {:ok, [network]} <- ClickHouse.query(network_sql),
-         {:ok, [referrer]} <- ClickHouse.query(referrer_sql) do
+         {:ok, [referrer]} <- ClickHouse.query(referrer_sql),
+         {:ok, devices} <- ClickHouse.query(device_sql),
+         {:ok, asns} <- ClickHouse.query(asn_sql),
+         {:ok, [session]} <- ClickHouse.query(session_sql),
+         {:ok, [rotation]} <- ClickHouse.query(rotation_sql),
+         {:ok, [flagged]} <- ClickHouse.query(flagged_sql),
+         {:ok, bounces} <- ClickHouse.query(bounce_sql),
+         {:ok, vpns} <- ClickHouse.query(vpn_sql) do
       {:ok,
        %{
          total_visitors: to_num(stats["total_visitors"]),
@@ -162,6 +273,60 @@ defmodule Spectabas.Analytics.ScraperCalibration do
            direct: to_num(referrer["direct_visitors"]),
            referred: to_num(referrer["referred_visitors"])
          },
+         devices:
+           Enum.map(devices, fn d ->
+             %{type: d["device_type"], visitors: to_num(d["visitors"])}
+           end),
+         top_asns:
+           Enum.map(asns, fn a ->
+             %{
+               asn: a["ip_asn"],
+               datacenter: to_num(a["ip_is_datacenter"]) == 1,
+               vpn: to_num(a["ip_is_vpn"]) == 1,
+               visitors: to_num(a["visitors"]),
+               total_pages: to_num(a["total_pages"])
+             }
+           end),
+         session_duration: %{
+           p25: to_num(session["p25_duration"]),
+           p50: to_num(session["p50_duration"]),
+           p75: to_num(session["p75_duration"]),
+           p90: to_num(session["p90_duration"]),
+           p95: to_num(session["p95_duration"]),
+           avg: to_float(session["avg_duration"])
+         },
+         ip_rotation: %{
+           rotating_3plus: to_num(rotation["rotating_visitors"]),
+           rotating_5plus: to_num(rotation["heavy_rotating"]),
+           total: to_num(rotation["total_visitors"])
+         },
+         pageview_thresholds: %{
+           pv20: to_num(flagged["pv20_visitors"]),
+           pv50: to_num(flagged["pv50_visitors"]),
+           pv100: to_num(flagged["pv100_visitors"]),
+           pv200: to_num(flagged["pv200_visitors"]),
+           pv1000: to_num(flagged["pv1000_visitors"]),
+           total: to_num(flagged["total"])
+         },
+         bounce_by_network:
+           Enum.map(bounces, fn b ->
+             %{
+               datacenter: to_num(b["ip_is_datacenter"]) == 1,
+               vpn: to_num(b["ip_is_vpn"]) == 1,
+               bounce_rate:
+                 safe_pct(to_num(b["single_page_sessions"]), to_num(b["total_sessions"])),
+               total_sessions: to_num(b["total_sessions"]),
+               avg_pages: to_float(b["avg_pages_per_session"])
+             }
+           end),
+         vpn_providers:
+           Enum.map(vpns, fn v ->
+             %{
+               name: v["ip_vpn_provider"],
+               visitors: to_num(v["visitors"]),
+               avg_pages: to_float(v["avg_pages"])
+             }
+           end),
          current_weights: ScraperDetector.default_weights(),
          current_overrides: site.scraper_weight_overrides
        }}
@@ -197,88 +362,270 @@ defmodule Spectabas.Analytics.ScraperCalibration do
     end
   end
 
-  defp build_prompt(site, baseline) do
+  @doc false
+  def build_prompt(site, baseline) do
     dist = baseline.pageview_distribution
     net = baseline.network
     ref = baseline.referrer
+    dur = baseline.session_duration
+    rot = baseline.ip_rotation
+    pv_thresh = baseline.pageview_thresholds
     weights = baseline.current_weights
     overrides = baseline.current_overrides
 
     """
-    You are a web scraper detection expert. Analyze this site's visitor behavior and recommend signal weight adjustments for the scraper scoring model.
+    You are a senior web scraper detection engineer performing a forensic analysis of a site's traffic patterns. Your task is to calibrate signal weights for a scraper scoring model. This matters because miscalibrated weights either miss real scrapers (data theft, cost) or flag legitimate users (lost business).
 
-    ## Site: #{site.name} (#{site.domain})
-    Period: Last 30 days
-    Total visitors: #{baseline.total_visitors}
+    Think step-by-step through each signal. For every weight you recommend, show your reasoning chain: what the data shows → what that implies about this site's traffic → whether the default weight is appropriate → your adjusted value and why.
 
-    ## Visitor Pageview Distribution (unique pages per visitor)
-    - p50: #{dist.p50} pages
-    - p75: #{dist.p75} pages
-    - p90: #{dist.p90} pages
-    - p95: #{dist.p95} pages
-    - p99: #{dist.p99} pages
-    - Average: #{Float.round(dist.avg, 1)} pages
+    ## Site Profile
+    - Name: #{site.name}
+    - Analytics domain: #{site.domain}
+    - Period: Last 30 days
+    - Total unique visitors: #{baseline.total_visitors}
+    #{if site.scraper_content_prefixes && site.scraper_content_prefixes != [], do: "- Content path prefixes (for systematic crawl detection): #{Enum.join(site.scraper_content_prefixes, ", ")}", else: "- No content path prefixes configured (systematic_crawl signal has no prefixes to match against)"}
 
-    ## Network Breakdown
-    - Datacenter IPs: #{net.datacenter} visitors (#{pct(net.datacenter, baseline.total_visitors)}%)
-    - VPN users: #{net.vpn} visitors (#{pct(net.vpn, baseline.total_visitors)}%)
-    - Residential: #{net.residential} visitors (#{pct(net.residential, baseline.total_visitors)}%)
+    ## 1. Pageview Distribution (unique pages per visitor)
+    This is critical for calibrating the high_pageviews thresholds. If legitimate power users regularly hit 50+ pages, the thresholds need raising.
 
-    ## Referrer Breakdown
+    | Percentile | Unique pages |
+    |-----------|-------------|
+    | p50 | #{dist.p50} |
+    | p75 | #{dist.p75} |
+    | p90 | #{dist.p90} |
+    | p95 | #{dist.p95} |
+    | p99 | #{dist.p99} |
+    | Average | #{Float.round(dist.avg, 1)} |
+
+    Visitors exceeding each pageview threshold:
+    - 20+ pages: #{pv_thresh.pv20} visitors (#{pct(pv_thresh.pv20, pv_thresh.total)}% of all visitors)
+    - 50+ pages: #{pv_thresh.pv50} visitors (#{pct(pv_thresh.pv50, pv_thresh.total)}%)
+    - 100+ pages: #{pv_thresh.pv100} visitors (#{pct(pv_thresh.pv100, pv_thresh.total)}%)
+    - 200+ pages: #{pv_thresh.pv200} visitors (#{pct(pv_thresh.pv200, pv_thresh.total)}%)
+    - 1000+ pages: #{pv_thresh.pv1000} visitors (#{pct(pv_thresh.pv1000, pv_thresh.total)}%)
+
+    KEY QUESTION: What percentage of the 20+ page visitors are likely legitimate power users vs scrapers? If p95 is already near 20, many real users are crossing that threshold.
+
+    ## 2. Session Duration Distribution
+    Short sessions (<5s) with many pageviews = bot. Long sessions with proportional pageviews = human. Zero-duration single-page visits = bounces (normal).
+
+    | Percentile | Duration (seconds) |
+    |-----------|-------------------|
+    | p25 | #{dur.p25} |
+    | p50 | #{dur.p50} |
+    | p75 | #{dur.p75} |
+    | p90 | #{dur.p90} |
+    | p95 | #{dur.p95} |
+    | Average | #{Float.round(dur.avg, 1)} |
+
+    ## 3. Network Breakdown
+    | Network type | Visitors | % of total |
+    |-------------|---------|-----------|
+    | Residential | #{net.residential} | #{pct(net.residential, baseline.total_visitors)}% |
+    | Datacenter | #{net.datacenter} | #{pct(net.datacenter, baseline.total_visitors)}% |
+    | VPN | #{net.vpn} | #{pct(net.vpn, baseline.total_visitors)}% |
+
+    #{format_bounce_by_network(baseline.bounce_by_network)}
+
+    KEY QUESTION: Are datacenter visitors bouncing at a higher rate than residential? If datacenter visitors have similar engagement to residential, the datacenter_asn weight may be too aggressive. If they bounce 2x+ more, the weight is justified.
+
+    ## 4. Top ASNs (networks sending the most visitors)
+    #{format_top_asns(baseline.top_asns)}
+
+    Look for: datacenter ASNs with high page counts (likely scrapers), VPN ASNs with normal engagement (likely legitimate), residential ASNs that dominate traffic (baseline behavior).
+
+    ## 5. Device Type Breakdown
+    #{format_devices(baseline.devices)}
+
+    The spoofed_mobile_ua signal fires when a mobile User-Agent comes from a datacenter IP. If this site has very low mobile traffic, a mobile UA from a datacenter is more suspicious. If mobile is 50%+ of traffic, the signal is less discriminating.
+
+    ## 6. IP Rotation
+    - Visitors using 3+ IPs: #{rot.rotating_3plus} (#{pct(rot.rotating_3plus, rot.total)}% of visitors)
+    - Visitors using 5+ IPs: #{rot.rotating_5plus} (#{pct(rot.rotating_5plus, rot.total)}%)
+
+    The ip_rotation signal fires at 3+ IPs. Consider: VPN users may rotate IPs legitimately. Mobile users switch between WiFi and cellular. If the rotation rate is high, this signal may need dampening.
+
+    ## 7. Referrer Breakdown
     - Direct (no referrer): #{ref.direct} visitors (#{pct(ref.direct, ref.direct + ref.referred)}%)
-    - Referred: #{ref.referred} visitors
+    - Referred: #{ref.referred} visitors (#{pct(ref.referred, ref.direct + ref.referred)}%)
 
-    ## Current Scoring Weights
+    The no_referrer signal adds weight when a visitor has no referrer. If >40% of this site's real traffic is direct, this signal has weak discriminating power and should be reduced. If <10% is direct, a missing referrer is more suspicious.
+
+    ## 8. VPN Provider Breakdown
+    #{format_vpn_providers(baseline.vpn_providers)}
+
+    VPN suppression: The scoring model already suppresses datacenter_asn and spoofed_mobile_ua signals for visitors on known consumer VPN providers (NordVPN, ProtonVPN, etc). This section shows whether VPN users behave like real users or scrapers.
+
+    ## Current Scoring Model
+
+    ### Default Signal Weights
     #{format_weights(weights)}
 
-    #{if overrides, do: "## Current Per-Site Overrides\n#{format_weights(overrides)}", else: "No per-site overrides currently applied."}
+    ### How Signals Combine
+    - Signals are additive: a visitor hitting datacenter_asn (40) + spoofed_mobile_ua (20) + high_pageviews_20 (10) = score 70 (suspicious tier)
+    - Score is capped at 100
+    - Tiers determine automated response:
+      * Score 85-100 (Certain): Full countermeasures deployed (tarpit + data poisoning)
+      * Score 70-84 (Suspicious): Tarpit only (slow responses)
+      * Score 40-69 (Watching): Logged, webhook fired, no automated action
+      * Score < 40: Not flagged
 
-    ## Scoring Tiers (used by webhook recipient)
-    - Score 85+: Full countermeasures (tarpit + data poisoning)
-    - Score 70-84: Tarpit only (slow responses)
-    - Score 40-69: Watching (log only)
-    - Score < 40: Not flagged
+    #{if overrides, do: "### Active Per-Site Weight Overrides\n#{format_weights(overrides)}\nThese overrides are currently in effect. Your recommendations will REPLACE them entirely.", else: "No per-site overrides currently applied."}
 
-    ## Task
-    Based on this site's behavioral data, recommend weight adjustments. Consider:
-    1. If the p95 pageview count is high (e.g., 30+), the high_pageviews threshold may catch legitimate users
-    2. If datacenter traffic is >5%, some may be legitimate (monitoring, APIs, corporate proxies)
-    3. If direct traffic (no referrer) is >40%, the no_referrer signal has less discriminating power for this site
+    ## Analysis Instructions
 
-    Respond with ONLY a valid JSON object (no markdown, no code fences) with this structure:
+    For EACH of the 12 signals, provide:
+    1. What the data tells you about this signal's relevance to this specific site
+    2. Whether the default weight is too high (false positives), too low (missed scrapers), or appropriate
+    3. Your recommended weight (0 to disable the signal entirely, or any positive integer)
+    4. Your confidence in this specific recommendation (high/medium/low) and why
+
+    Think carefully about signal interactions:
+    - datacenter_asn (40) + spoofed_mobile_ua (20) = 60, which alone puts a visitor in the watching tier. Is that appropriate for this site?
+    - A power user hitting 50+ pages from residential IP with a referrer shouldn't be penalized. But 50+ pages from a datacenter with no referrer is 65 points. Check if this matches the site's actual patterns.
+    - If the site has very few visitors, statistical conclusions are weaker. Note when sample size limits confidence.
+
+    ## Response Format
+
+    Respond with ONLY a valid JSON object (no markdown fences, no commentary outside the JSON):
     {
-      "weights": {
-        "datacenter_asn": <number>,
-        "spoofed_mobile_ua": <number>,
-        "ip_rotation": <number>,
-        "very_high_pageviews_200": <number>,
-        "very_high_pageviews_100": <number>,
-        "high_pageviews_50": <number>,
-        "high_pageviews_20": <number>,
-        "systematic_crawl": <number>,
-        "robotic_timing": <number>,
-        "no_referrer": <number>,
-        "suspicious_resolution": <number>
+      "analysis": {
+        "datacenter_asn": {"weight": <n>, "reasoning": "<what the data shows and why this weight>", "confidence": "<high|medium|low>"},
+        "spoofed_mobile_ua": {"weight": <n>, "reasoning": "<...>", "confidence": "<...>"},
+        "ip_rotation": {"weight": <n>, "reasoning": "<...>", "confidence": "<...>"},
+        "extreme_pageviews_1000": {"weight": <n>, "reasoning": "<...>", "confidence": "<...>"},
+        "very_high_pageviews_200": {"weight": <n>, "reasoning": "<...>", "confidence": "<...>"},
+        "very_high_pageviews_100": {"weight": <n>, "reasoning": "<...>", "confidence": "<...>"},
+        "high_pageviews_50": {"weight": <n>, "reasoning": "<...>", "confidence": "<...>"},
+        "high_pageviews_20": {"weight": <n>, "reasoning": "<...>", "confidence": "<...>"},
+        "systematic_crawl": {"weight": <n>, "reasoning": "<...>", "confidence": "<...>"},
+        "robotic_timing": {"weight": <n>, "reasoning": "<...>", "confidence": "<...>"},
+        "no_referrer": {"weight": <n>, "reasoning": "<...>", "confidence": "<...>"},
+        "suspicious_resolution": {"weight": <n>, "reasoning": "<...>", "confidence": "<...>"}
       },
-      "reasoning": "<1-2 sentence explanation of each change>",
-      "confidence": "<high|medium|low>",
-      "warnings": "<any false-positive risks to watch for>"
+      "weights": {
+        "datacenter_asn": <n>,
+        "spoofed_mobile_ua": <n>,
+        "ip_rotation": <n>,
+        "extreme_pageviews_1000": <n>,
+        "very_high_pageviews_200": <n>,
+        "very_high_pageviews_100": <n>,
+        "high_pageviews_50": <n>,
+        "high_pageviews_20": <n>,
+        "systematic_crawl": <n>,
+        "robotic_timing": <n>,
+        "no_referrer": <n>,
+        "suspicious_resolution": <n>
+      },
+      "overall_confidence": "<high|medium|low>",
+      "key_risks": ["<top 3 false-positive risks for this site>"],
+      "sample_scenarios": [
+        {"description": "<realistic visitor scenario for this site>", "signals": ["<signal1>", "<signal2>"], "score": <n>, "verdict": "<appropriate or concern?>"}
+      ]
     }
     """
   end
 
   defp format_weights(weights) when is_map(weights) do
     weights
+    |> Enum.sort_by(fn {_k, v} -> -v end)
     |> Enum.map(fn {k, v} -> "- #{k}: +#{v}" end)
     |> Enum.join("\n")
   end
 
   defp format_weights(_), do: "None"
 
+  defp format_devices(devices) do
+    if devices == [] do
+      "No device data available."
+    else
+      total = Enum.reduce(devices, 0, fn d, acc -> acc + d.visitors end)
+
+      header = "| Device | Visitors | % |\n|--------|---------|---|\n"
+
+      rows =
+        Enum.map(devices, fn d ->
+          "| #{d.type} | #{d.visitors} | #{pct(d.visitors, total)}% |"
+        end)
+        |> Enum.join("\n")
+
+      header <> rows
+    end
+  end
+
+  defp format_top_asns(asns) do
+    if asns == [] do
+      "No ASN data available."
+    else
+      header = "| ASN | Type | Visitors | Total pages |\n|-----|------|---------|------------|\n"
+
+      rows =
+        Enum.map(asns, fn a ->
+          type =
+            cond do
+              a.datacenter and a.vpn -> "DC+VPN"
+              a.datacenter -> "Datacenter"
+              a.vpn -> "VPN"
+              true -> "Residential"
+            end
+
+          "| #{a.asn} | #{type} | #{a.visitors} | #{a.total_pages} |"
+        end)
+        |> Enum.join("\n")
+
+      header <> rows
+    end
+  end
+
+  defp format_bounce_by_network(bounces) do
+    if bounces == [] do
+      "No bounce data by network type available."
+    else
+      header =
+        "### Bounce Rate & Engagement by Network Type\n| Network | Sessions | Bounce rate | Avg pages/session |\n|---------|---------|------------|------------------|\n"
+
+      rows =
+        Enum.map(bounces, fn b ->
+          type =
+            cond do
+              b.datacenter and b.vpn -> "DC+VPN"
+              b.datacenter -> "Datacenter"
+              b.vpn -> "VPN"
+              true -> "Residential"
+            end
+
+          "| #{type} | #{b.total_sessions} | #{b.bounce_rate}% | #{Float.round(b.avg_pages, 1)} |"
+        end)
+        |> Enum.join("\n")
+
+      header <> rows
+    end
+  end
+
+  defp format_vpn_providers(vpns) do
+    if vpns == [] do
+      "No VPN provider data available (no VPN traffic detected)."
+    else
+      header = "| Provider | Visitors | Avg pages |\n|----------|---------|----------|\n"
+
+      rows =
+        Enum.map(vpns, fn v ->
+          "| #{v.name} | #{v.visitors} | #{Float.round(v.avg_pages, 1)} |"
+        end)
+        |> Enum.join("\n")
+
+      header <> rows
+    end
+  end
+
   defp pct(_, 0), do: 0.0
   defp pct(n, total), do: Float.round(n / total * 100, 1)
 
-  defp parse_ai_response(text) do
+  defp safe_pct(_, 0), do: 0.0
+  defp safe_pct(n, total), do: Float.round(n / total * 100, 1)
+
+  @doc false
+  def parse_ai_response(text) do
     # Strip markdown code fences if present
     cleaned =
       text

@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.57.0", "2026-04-17T20:30:00Z",
+       [
+         %{
+           title: "Enhancement: Deep AI scraper calibration with forensic traffic analysis",
+           description:
+             "AI calibration now gathers 10 data dimensions (pageview distribution, session duration, device breakdown, top ASNs, bounce rate by network, VPN providers, IP rotation, pageview thresholds) and sends a detailed forensic prompt. The AI analyzes each signal individually with per-signal confidence ratings, sample scenarios, and false-positive risk assessment."
+         }
+       ]},
       {"v5.56.0", "2026-04-17T12:00:00Z",
        [
          %{
