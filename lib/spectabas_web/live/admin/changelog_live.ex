@@ -53,6 +53,15 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.89.0", "2026-04-19T19:00:00Z",
+       [
+         %{
+           title:
+             "Enhancement: Click Element step type re-added to funnels with searchable suggestions",
+           description:
+             "Click Element is back as a funnel step type, now with a searchable autocomplete. When the input is empty, shows the top 5 detected elements. As you type, filters by element text or ID. Click any suggestion to fill the value. Also supports manual entry (#id or text:Button Text). Solves the previous problem of an overwhelming 500-item dropdown."
+         }
+       ]},
       {"v5.88.0", "2026-04-19T18:00:00Z",
        [
          %{

@@ -83,14 +83,26 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
   end
 
   def handle_event("toggle_form", _params, socket) do
-    socket =
-      if !socket.assigns.show_form do
-        assign(socket, :goals, Goals.list_goals(socket.assigns.site))
-      else
-        socket
-      end
+    if socket.assigns.show_form do
+      {:noreply, assign(socket, :show_form, false)}
+    else
+      elements =
+        safe_query(fn ->
+          Analytics.discovered_click_elements(socket.assigns.site, socket.assigns.user)
+        end)
 
-    {:noreply, assign(socket, :show_form, !socket.assigns.show_form)}
+      {:noreply,
+       socket
+       |> assign(:show_form, true)
+       |> assign(:goals, Goals.list_goals(socket.assigns.site))
+       |> assign(:discovered_elements, elements)}
+    end
+  end
+
+  def handle_event("set_step_value", %{"index" => index, "value" => value}, socket) do
+    idx = String.to_integer(index)
+    steps = List.update_at(socket.assigns.form_steps, idx, &Map.put(&1, "value", value))
+    {:noreply, assign(socket, :form_steps, steps)}
   end
 
   def handle_event("add_step", _params, socket) do
@@ -272,6 +284,9 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
                     <option value="custom_event" selected={step_type == "custom_event"}>
                       Custom Event
                     </option>
+                    <option value="click_element" selected={step_type == "click_element"}>
+                      Click Element
+                    </option>
                     <option value="goal" selected={step_type == "goal"}>Goal</option>
                   </select>
                   <%!-- Goal selector --%>
@@ -291,6 +306,47 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
                       {g.name} ({goal_type_label(g.goal_type)})
                     </option>
                   </select>
+                  <%!-- Click element: text input + filtered suggestions --%>
+                  <div :if={step_type == "click_element"} class="flex-1 relative">
+                    <% step_val = step["value"] || Map.get(step, :value, "") %>
+                    <input
+                      type="text"
+                      name={"funnel[steps][#{idx}][value]"}
+                      value={step_val}
+                      placeholder="Search elements or type #id / text:..."
+                      autocomplete="off"
+                      class="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    />
+                    <% matches = filter_elements(@discovered_elements, step_val) %>
+                    <div
+                      :if={matches != [] && step_val == ""}
+                      class="mt-1 border border-gray-200 rounded-lg bg-white shadow-sm max-h-36 overflow-y-auto"
+                    >
+                      <button
+                        :for={el <- Enum.take(matches, 5)}
+                        type="button"
+                        phx-click="set_step_value"
+                        phx-value-index={idx}
+                        phx-value-value={element_selector(el)}
+                        class="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 flex items-center justify-between gap-2 border-b border-gray-100 last:border-0"
+                      >
+                        <span class="flex items-center gap-1.5 truncate">
+                          <span class={[
+                            "px-1 py-0.5 rounded font-mono text-[10px]",
+                            element_tag_classes(el["element_tag"])
+                          ]}>
+                            {el["element_tag"]}
+                          </span>
+                          <span class="truncate">
+                            {el["element_text"] |> to_string() |> String.slice(0..39)}
+                          </span>
+                        </span>
+                        <span class="text-gray-400 shrink-0">
+                          {format_number(to_num(el["clicks"]))}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
                   <%!-- Text input for pageview/custom_event --%>
                   <input
                     :if={step_type in ["pageview", "custom_event"]}
@@ -318,8 +374,8 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
               >
                 + Add step
               </button>
-              <p :if={@goals != []} class="mt-2 text-xs text-gray-400">
-                Tip: To track button clicks in funnels, create a click element goal first, then add it as a Goal step.
+              <p class="mt-2 text-xs text-gray-400">
+                Tip: Use Click Element to search detected buttons/links, or use Goal to reference an existing goal.
               </p>
             </div>
             <div class="flex justify-end">
@@ -513,10 +569,41 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
     end)
   end
 
+  defp filter_elements(elements, query) when is_list(elements) do
+    if query == "" or is_nil(query) do
+      elements
+    else
+      q = String.downcase(to_string(query))
+
+      Enum.filter(elements, fn el ->
+        text = to_string(el["element_text"]) |> String.downcase()
+        id = to_string(el["element_id"]) |> String.downcase()
+        String.contains?(text, q) or String.contains?(id, q)
+      end)
+    end
+  end
+
+  defp filter_elements(_, _), do: []
+
+  defp element_selector(el) do
+    id = to_string(el["element_id"])
+    if id != "", do: "##{id}", else: "text:#{el["element_text"]}"
+  end
+
+  defp element_tag_classes(tag) do
+    case to_string(tag) |> String.downcase() do
+      "a" -> "bg-blue-100 text-blue-700"
+      "button" -> "bg-green-100 text-green-700"
+      "input" -> "bg-amber-100 text-amber-700"
+      _ -> "bg-gray-100 text-gray-700"
+    end
+  end
+
   defp step_placeholder(step) do
     case Map.get(step, :type, Map.get(step, "type", "pageview")) do
       "pageview" -> "/path"
       "custom_event" -> "event_name"
+      "click_element" -> "#id or text:Button Text"
       _ -> "/path"
     end
   end
