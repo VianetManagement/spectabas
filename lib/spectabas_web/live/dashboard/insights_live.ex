@@ -380,37 +380,97 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
   defp category_badge("retention"), do: "bg-red-50 text-red-700"
   defp category_badge(_), do: "bg-gray-50 text-gray-600"
 
-  # Simple markdown to HTML — handles headers, bold, lists, paragraphs
+  # Simple markdown to HTML — handles headers, bold, lists, paragraphs, tables
   defp render_markdown(text) when is_binary(text) do
     text
     |> String.split("\n")
-    |> Enum.map(fn line ->
-      line = String.trim_trailing(line)
+    |> chunk_tables()
+    |> Enum.map(fn
+      {:table, rows} ->
+        render_table(rows)
 
-      cond do
-        String.starts_with?(line, "## ") ->
-          "<h3 class=\"text-base font-semibold text-gray-900 mt-4 mb-2\">#{escape(String.trim_leading(line, "## "))}</h3>"
+      {:line, line} ->
+        line = String.trim_trailing(line)
 
-        String.starts_with?(line, "# ") ->
-          "<h2 class=\"text-lg font-bold text-gray-900 mt-4 mb-2\">#{escape(String.trim_leading(line, "# "))}</h2>"
+        cond do
+          String.starts_with?(line, "## ") ->
+            "<h3 class=\"text-base font-semibold text-gray-900 mt-4 mb-2\">#{escape(String.trim_leading(line, "## "))}</h3>"
 
-        String.match?(line, ~r/^\d+\.\s/) ->
-          "<li class=\"ml-4 text-sm text-gray-700\">#{inline_format(String.replace(line, ~r/^\d+\.\s/, ""))}</li>"
+          String.starts_with?(line, "# ") ->
+            "<h2 class=\"text-lg font-bold text-gray-900 mt-4 mb-2\">#{escape(String.trim_leading(line, "# "))}</h2>"
 
-        String.starts_with?(line, "- ") ->
-          "<li class=\"ml-4 text-sm text-gray-700\">#{inline_format(String.trim_leading(line, "- "))}</li>"
+          String.match?(line, ~r/^\d+\.\s/) ->
+            "<li class=\"ml-4 text-sm text-gray-700\">#{inline_format(String.replace(line, ~r/^\d+\.\s/, ""))}</li>"
 
-        line == "" ->
-          ""
+          String.starts_with?(line, "- ") ->
+            "<li class=\"ml-4 text-sm text-gray-700\">#{inline_format(String.trim_leading(line, "- "))}</li>"
 
-        true ->
-          "<p class=\"text-sm text-gray-700 mb-2\">#{inline_format(line)}</p>"
-      end
+          line == "" ->
+            ""
+
+          true ->
+            "<p class=\"text-sm text-gray-700 mb-2\">#{inline_format(line)}</p>"
+        end
     end)
     |> Enum.join("\n")
   end
 
   defp render_markdown(_), do: ""
+
+  # Group consecutive table lines (starting with |) into {:table, lines} chunks
+  defp chunk_tables(lines) do
+    {chunks, current} =
+      Enum.reduce(lines, {[], []}, fn line, {chunks, current_table} ->
+        if String.starts_with?(String.trim(line), "|") do
+          {chunks, current_table ++ [line]}
+        else
+          if current_table != [] do
+            {chunks ++ [{:table, current_table}, {:line, line}], []}
+          else
+            {chunks ++ [{:line, line}], []}
+          end
+        end
+      end)
+
+    if current != [], do: chunks ++ [{:table, current}], else: chunks
+  end
+
+  defp render_table(rows) do
+    parsed =
+      rows
+      |> Enum.reject(fn line -> String.match?(String.trim(line), ~r/^\|[\s\-:|]+\|$/) end)
+      |> Enum.map(fn line ->
+        line
+        |> String.trim()
+        |> String.trim_leading("|")
+        |> String.trim_trailing("|")
+        |> String.split("|")
+        |> Enum.map(&String.trim/1)
+      end)
+
+    case parsed do
+      [header | data_rows] ->
+        thead =
+          "<thead class=\"bg-gray-50\"><tr>" <>
+            Enum.map_join(header, fn col ->
+              "<th class=\"px-3 py-1.5 text-left text-xs font-medium text-gray-500\">#{escape(col)}</th>"
+            end) <> "</tr></thead>"
+
+        tbody =
+          "<tbody class=\"divide-y divide-gray-100\">" <>
+            Enum.map_join(data_rows, fn row ->
+              "<tr>" <>
+                Enum.map_join(row, fn cell ->
+                  "<td class=\"px-3 py-1.5 text-sm text-gray-700\">#{inline_format(cell)}</td>"
+                end) <> "</tr>"
+            end) <> "</tbody>"
+
+        "<table class=\"min-w-full divide-y divide-gray-200 my-3 text-sm\">#{thead}#{tbody}</table>"
+
+      _ ->
+        ""
+    end
+  end
 
   defp inline_format(text) do
     text

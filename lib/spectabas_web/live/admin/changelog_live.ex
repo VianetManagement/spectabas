@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.91.0", "2026-04-19T21:00:00Z",
+       [
+         %{
+           title: "Fix: AI insights markdown now renders tables properly",
+           description:
+             "The insights page markdown renderer didn't handle tables — pipe-delimited rows and separator lines were rendered as raw text in <p> tags. Added table parsing: consecutive lines starting with | are chunked, separator rows stripped, and rendered as a proper HTML table with thead/tbody, styled to match the dashboard."
+         }
+       ]},
       {"v5.90.0", "2026-04-19T20:00:00Z",
        [
          %{
