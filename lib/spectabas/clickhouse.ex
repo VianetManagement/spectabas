@@ -425,6 +425,20 @@ defmodule Spectabas.ClickHouse do
       ORDER BY (site_id, date, utm_campaign, utm_source, utm_medium)
       SETTINGS index_granularity = 8192
       """,
+      # Per-event-name rollup for custom event goals and click element tracking.
+      """
+      CREATE TABLE IF NOT EXISTS #{db}.daily_event_rollup (
+        site_id UInt64,
+        date Date,
+        event_type LowCardinality(String),
+        event_name String,
+        cnt_state AggregateFunction(countIf, UInt8),
+        vis_state AggregateFunction(uniqExactIf, String, UInt8)
+      ) ENGINE = AggregatingMergeTree()
+      PARTITION BY toYYYYMM(date)
+      ORDER BY (site_id, date, event_type, event_name)
+      SETTINGS index_granularity = 8192
+      """,
       # Pre-computed per-session facts for entry/exit pages and channel breakdown.
       """
       CREATE TABLE IF NOT EXISTS #{db}.daily_session_facts (
@@ -677,7 +691,7 @@ defmodule Spectabas.ClickHouse do
     "'#{e}'"
   end
 
-  @allowed_tables ~w(events daily_stats daily_rollup daily_page_rollup daily_source_rollup daily_geo_rollup daily_device_rollup daily_campaign_rollup daily_session_facts visitor_attribution source_stats country_stats device_stats network_stats ecommerce_events subscription_events search_console imported_daily_stats imported_pages imported_sources imported_countries imported_devices ad_spend)
+  @allowed_tables ~w(events daily_stats daily_rollup daily_page_rollup daily_source_rollup daily_geo_rollup daily_device_rollup daily_campaign_rollup daily_event_rollup daily_session_facts visitor_attribution source_stats country_stats device_stats network_stats ecommerce_events subscription_events search_console imported_daily_stats imported_pages imported_sources imported_countries imported_devices ad_spend)
   defp sanitize_table(t) when t in @allowed_tables, do: t
   defp sanitize_table(t), do: raise(ArgumentError, "Unknown ClickHouse table: #{t}")
 

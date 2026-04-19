@@ -3119,18 +3119,10 @@ defmodule Spectabas.Analytics do
 
         "goal" ->
           try do
-            goal_id = String.to_integer(to_string(value))
-            goal = Spectabas.Goals.get_goal!(goal_id)
-            condition = goal_condition(goal)
-            Logger.notice("[Funnel] Resolved goal #{goal_id} (#{goal.name}) -> #{condition}")
-            condition
+            goal = Spectabas.Goals.get_goal!(String.to_integer(to_string(value)))
+            goal_condition(goal)
           rescue
-            e ->
-              Logger.warning(
-                "[Funnel] Failed to resolve goal value=#{inspect(value)}: #{Exception.message(e)}"
-              )
-
-              "1=0"
+            _ -> "1=0"
           end
 
         _ ->
@@ -3150,9 +3142,6 @@ defmodule Spectabas.Analytics do
 
     with :ok <- authorize(site, user) do
       step_conditions = build_funnel_conditions(steps)
-
-      Logger.notice("[Funnel] steps=#{inspect(steps)} conditions=#{step_conditions}")
-
       num_steps = length(steps)
 
       level_selects =

@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.93.0", "2026-04-19T23:00:00Z",
+       [
+         %{
+           title: "Perf: Remove debug logging + add daily_event_rollup table",
+           description:
+             "Removed debug Logger.notice calls from funnel_stats and funnel_detail_live that serialized large data structures on every page load. Added daily_event_rollup AggregatingMergeTree table for custom event counts per (site_id, date, event_type, event_name) — populated by DailyRollup worker. Reduces raw event scanning for custom event goals and click element queries. ClickHouse Finch pool already right-sized at 10 connections."
+         }
+       ]},
       {"v5.92.0", "2026-04-19T22:00:00Z",
        [
          %{

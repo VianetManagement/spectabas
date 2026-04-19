@@ -25,7 +25,7 @@ defmodule Spectabas.Workers.DailyRollup do
   require Logger
   alias Spectabas.ClickHouse
 
-  @rollup_tables ~w(daily_rollup daily_page_rollup daily_source_rollup daily_geo_rollup daily_device_rollup daily_campaign_rollup)
+  @rollup_tables ~w(daily_rollup daily_page_rollup daily_source_rollup daily_geo_rollup daily_device_rollup daily_campaign_rollup daily_event_rollup)
 
   @impl Oban.Worker
   def timeout(_job), do: :timer.seconds(600)
@@ -212,6 +212,22 @@ defmodule Spectabas.Workers.DailyRollup do
     FROM events
     WHERE #{where_range} AND utm_campaign != ''
     GROUP BY site_id, date, utm_campaign, utm_source, utm_medium
+    """
+  end
+
+  defp build_insert_sql("daily_event_rollup", where_range) do
+    """
+    INSERT INTO daily_event_rollup
+    SELECT
+      site_id,
+      toDate(timestamp) AS date,
+      event_type,
+      event_name,
+      countIfState(ip_is_bot = 0) AS cnt_state,
+      uniqExactIfState(visitor_id, ip_is_bot = 0) AS vis_state
+    FROM events
+    WHERE #{where_range} AND event_type = 'custom' AND event_name != ''
+    GROUP BY site_id, date, event_type, event_name
     """
   end
 

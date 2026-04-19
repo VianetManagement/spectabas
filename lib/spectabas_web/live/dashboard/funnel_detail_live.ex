@@ -4,7 +4,6 @@ defmodule SpectabasWeb.Dashboard.FunnelDetailLive do
   alias Spectabas.{Accounts, Sites, Goals, Analytics, Visitors}
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers
-  require Logger
 
   @impl true
   def mount(%{"site_id" => site_id, "funnel_id" => funnel_id}, _session, socket) do
@@ -43,15 +42,8 @@ defmodule SpectabasWeb.Dashboard.FunnelDetailLive do
     funnel = socket.assigns.funnel
     range = socket.assigns.range
 
-    Logger.notice(
-      "[FunnelDetail] Loading funnel=#{funnel.id} name=#{funnel.name} steps=#{inspect(funnel.steps)} range=#{range}"
-    )
-
-    result = Analytics.funnel_stats(site, user, funnel, range)
-    Logger.notice("[FunnelDetail] Result: #{inspect(result)}")
-
     raw_data =
-      case result do
+      case Analytics.funnel_stats(site, user, funnel, range) do
         {:ok, data} -> data
         _ -> []
       end
@@ -63,12 +55,7 @@ defmodule SpectabasWeb.Dashboard.FunnelDetailLive do
      |> assign(:funnel_data, funnel_data)
      |> assign(:loading, false)}
   rescue
-    e ->
-      Logger.warning(
-        "[FunnelDetail] CRASHED: #{Exception.message(e)}\n#{Exception.format_stacktrace(__STACKTRACE__)}"
-      )
-
-      {:noreply, assign(socket, loading: false, funnel_data: [])}
+    _ -> {:noreply, assign(socket, loading: false, funnel_data: [])}
   end
 
   @impl true
