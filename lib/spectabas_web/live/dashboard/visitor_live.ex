@@ -4,7 +4,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers
 
-  alias Spectabas.{Accounts, Sites, Visitors, Analytics}
+  alias Spectabas.{Accounts, Sites, Visitors, Analytics, Goals}
   alias Spectabas.Webhooks.ScraperWebhook
 
   @impl true
@@ -50,6 +50,8 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
         |> assign(:scraper, nil)
         |> assign(:webhook_deliveries, nil)
         |> assign(:vpn_provider, nil)
+        |> assign(:completed_goals, nil)
+        |> assign(:editing_notes, false)
         |> assign(:deferred_loaded, false)
 
       if connected?(socket), do: send(self(), :load_deferred)
@@ -198,6 +200,52 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
       send(lv_pid, {:deferred_result, :webhook_deliveries, deliveries})
     end)
 
+    # Goal completions — single CH query, match in Elixir
+    Task.start(fn ->
+      goals = Goals.list_goals(site)
+
+      completed =
+        if goals == [] do
+          []
+        else
+          case Spectabas.ClickHouse.query("""
+               SELECT
+                 groupUniqArray(url_path) AS pages,
+                 groupUniqArray(event_name) AS events
+               FROM events
+               WHERE site_id = #{Spectabas.ClickHouse.param(site.id)}
+                 AND visitor_id = #{Spectabas.ClickHouse.param(visitor_id)}
+                 AND ip_is_bot = 0
+               """) do
+            {:ok, [row]} ->
+              pages = row["pages"] || []
+              events = row["events"] || []
+
+              Enum.filter(goals, fn goal ->
+                case goal.goal_type do
+                  "pageview" ->
+                    path = goal.page_path || ""
+                    Enum.any?(pages, fn p -> String.starts_with?(p, path) end)
+
+                  "custom_event" ->
+                    goal.event_name in events
+
+                  "click_element" ->
+                    "_click" in events
+
+                  _ ->
+                    false
+                end
+              end)
+
+            _ ->
+              []
+          end
+        end
+
+      send(lv_pid, {:deferred_result, :completed_goals, completed})
+    end)
+
     {:noreply, socket}
   end
 
@@ -241,6 +289,55 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
     end
   end
 
+  def handle_event("toggle_notes", _params, socket) do
+    {:noreply, assign(socket, :editing_notes, !socket.assigns.editing_notes)}
+  end
+
+  def handle_event("save_notes", %{"notes" => notes}, socket) do
+    changeset = Visitors.Visitor.changeset(socket.assigns.visitor, %{notes: notes})
+
+    case Spectabas.Repo.update(changeset) do
+      {:ok, visitor} ->
+        {:noreply, socket |> assign(visitor: visitor, editing_notes: false)}
+
+      _ ->
+        {:noreply, put_flash(socket, :error, "Failed to save notes.")}
+    end
+  end
+
+  def handle_event("export_profile", _params, socket) do
+    visitor = socket.assigns.visitor
+    profile = socket.assigns.profile
+
+    data = %{
+      visitor_id: visitor.id,
+      email: visitor.email,
+      user_id: visitor.user_id,
+      external_id: visitor.external_id,
+      notes: visitor.notes,
+      first_seen: profile["first_seen"],
+      last_seen: profile["last_seen"],
+      total_pageviews: profile["total_pageviews"],
+      total_sessions: profile["total_sessions"],
+      browser: profile["browser"],
+      os: profile["os"],
+      device_type: profile["device_type"],
+      country: profile["country"],
+      region: profile["region"],
+      city: profile["city"],
+      original_referrer: profile["original_referrer"],
+      utm_sources: profile["utm_sources"],
+      utm_campaigns: profile["utm_campaigns"]
+    }
+
+    json = Jason.encode!(data, pretty: true)
+    short_id = String.slice(to_string(visitor.id), 0, 8)
+    filename = "visitor_#{short_id}_#{Date.to_iso8601(Date.utc_today())}.json"
+
+    {:noreply,
+     push_event(socket, "download", %{filename: filename, content: json, mime: "application/json"})}
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -253,7 +350,15 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
           >
             &larr; Visitor Log
           </.link>
-          <h1 class="text-2xl font-bold text-gray-900 mt-2">Visitor Profile</h1>
+          <div class="flex items-center justify-between mt-2">
+            <h1 class="text-2xl font-bold text-gray-900">Visitor Profile</h1>
+            <button
+              phx-click="export_profile"
+              class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200"
+            >
+              <.icon name="hero-arrow-down-tray" class="w-3.5 h-3.5 mr-1.5" /> Export JSON
+            </button>
+          </div>
         </div>
 
         <%!-- Webhook Status Banner --%>
@@ -303,6 +408,77 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
           <% end %>
         </div>
 
+        <%!-- Goal Completion Badges --%>
+        <div
+          :if={@completed_goals != nil && @completed_goals != []}
+          class="mb-6 flex flex-wrap gap-2 items-center"
+        >
+          <span class="text-xs font-medium text-gray-500 uppercase">Goals completed:</span>
+          <span
+            :for={goal <- @completed_goals}
+            class={[
+              "inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-medium",
+              case goal.goal_type do
+                "pageview" -> "bg-blue-100 text-blue-800"
+                "custom_event" -> "bg-purple-100 text-purple-800"
+                "click_element" -> "bg-green-100 text-green-800"
+                _ -> "bg-gray-100 text-gray-800"
+              end
+            ]}
+          >
+            {goal.name}
+          </span>
+        </div>
+
+        <%!-- Notes --%>
+        <div class="bg-white rounded-lg shadow mb-6 px-5 py-4">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-xs font-semibold text-gray-500 uppercase">Notes</h3>
+            <button
+              :if={!@editing_notes}
+              phx-click="toggle_notes"
+              class="text-xs text-indigo-600 hover:text-indigo-800"
+            >
+              {if @visitor.notes && @visitor.notes != "", do: "Edit", else: "Add"}
+            </button>
+          </div>
+          <%= if @editing_notes do %>
+            <form phx-submit="save_notes" class="space-y-2">
+              <textarea
+                name="notes"
+                rows="3"
+                class="w-full text-sm rounded-lg border-gray-300 focus:border-indigo-500 focus:ring-indigo-500"
+                placeholder="Add a note about this visitor..."
+              >{@visitor.notes}</textarea>
+              <div class="flex items-center gap-2">
+                <button
+                  type="submit"
+                  class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  phx-click="toggle_notes"
+                  class="text-xs text-gray-500 hover:text-gray-700"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          <% else %>
+            <p class={[
+              "text-sm",
+              if(@visitor.notes && @visitor.notes != "",
+                do: "text-gray-700",
+                else: "text-gray-400 italic"
+              )
+            ]}>
+              {if @visitor.notes && @visitor.notes != "", do: @visitor.notes, else: "No notes yet."}
+            </p>
+          <% end %>
+        </div>
+
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
           <%!-- Identity & Device --%>
           <div class="bg-white rounded-lg shadow p-5">
@@ -310,16 +486,24 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
             <dl class="space-y-2 text-sm">
               <.field
                 label="Visitor ID"
-                value={String.slice(to_string(@visitor.id), 0, 12) <> "..."}
+                value={to_string(@visitor.id)}
                 mono={true}
+                copy={to_string(@visitor.id)}
               />
-              <.field :if={@visitor.email} label="Email" value={@visitor.email} />
-              <.field :if={@visitor.user_id} label="User ID" value={@visitor.user_id} mono={true} />
+              <.field :if={@visitor.email} label="Email" value={@visitor.email} copy={@visitor.email} />
+              <.field
+                :if={@visitor.user_id}
+                label="User ID"
+                value={@visitor.user_id}
+                mono={true}
+                copy={@visitor.user_id}
+              />
               <.field
                 :if={@visitor.external_id}
                 label="External ID"
                 value={@visitor.external_id}
                 mono={true}
+                copy={@visitor.external_id}
               />
               <.field
                 label="Browser"
@@ -450,6 +634,41 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
                 >
                   Bot
                 </span>
+              </div>
+              <div
+                :if={
+                  @ip_info && to_string(@ip_info["ip_lat"]) != "0" &&
+                    to_string(@ip_info["ip_lat"]) != "" && @ip_info["ip_lat"] != nil
+                }
+                class="pt-3 border-t border-gray-100"
+              >
+                <a
+                  href={"https://www.openstreetmap.org/?mlat=#{@ip_info["ip_lat"]}&mlon=#{@ip_info["ip_lon"]}&zoom=12"}
+                  target="_blank"
+                  rel="noopener"
+                  class="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="w-3.5 h-3.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+                    />
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 0 1 15 0Z"
+                    />
+                  </svg>
+                  View on map ({@ip_info["ip_lat"]}, {@ip_info["ip_lon"]})
+                </a>
               </div>
             </dl>
           </div>
@@ -631,12 +850,36 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
               <tbody class="divide-y divide-gray-100">
                 <tr :for={ip <- @visitor_ips} class="hover:bg-gray-50">
                   <td class="px-4 py-2">
-                    <.link
-                      navigate={~p"/dashboard/sites/#{@site.id}/ip/#{ip["ip_address"]}"}
-                      class="font-mono text-xs text-indigo-600 hover:text-indigo-800"
-                    >
-                      {ip["ip_address"]}
-                    </.link>
+                    <span class="flex items-center gap-1">
+                      <.link
+                        navigate={~p"/dashboard/sites/#{@site.id}/ip/#{ip["ip_address"]}"}
+                        class="font-mono text-xs text-indigo-600 hover:text-indigo-800"
+                      >
+                        {ip["ip_address"]}
+                      </.link>
+                      <button
+                        id={"copy-ip-#{ip["ip_address"] |> String.replace(~r/[^a-zA-Z0-9]/, "-")}"}
+                        phx-hook="CopyClipboard"
+                        data-copy={ip["ip_address"]}
+                        title="Copy to clipboard"
+                        class="text-gray-400 hover:text-indigo-600 cursor-pointer"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          class="w-3 h-3"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          stroke-width="2"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9.75a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184"
+                          />
+                        </svg>
+                      </button>
+                    </span>
                     <span
                       :if={ip["is_datacenter"] == "1" || ip["is_datacenter"] == 1}
                       class="ml-1 text-[10px] bg-orange-100 text-orange-700 px-1 rounded"
@@ -661,6 +904,28 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
                 </tr>
               </tbody>
             </table>
+          </div>
+        </.loading_section>
+
+        <%!-- Page Flow --%>
+        <.loading_section loaded={@timeline != nil}>
+          <div :if={@timeline != nil && @timeline != []} class="bg-white rounded-lg shadow mb-6">
+            <div class="px-5 py-4 border-b border-gray-100">
+              <h3 class="text-sm font-semibold text-gray-700">Page Flow</h3>
+            </div>
+            <div class="px-5 py-3">
+              <div class="flex flex-wrap items-center gap-1">
+                <%= for {event, idx} <- @timeline |> Enum.filter(& &1["event_type"] == "pageview") |> Enum.take(20) |> Enum.with_index() do %>
+                  <span :if={idx > 0} class="text-gray-300 text-xs">&rarr;</span>
+                  <span
+                    class="inline-flex px-2 py-0.5 rounded bg-blue-50 text-xs font-mono text-blue-700 truncate max-w-[160px]"
+                    title={event["url_path"]}
+                  >
+                    {event["url_path"]}
+                  </span>
+                <% end %>
+              </div>
+            </div>
           </div>
         </.loading_section>
 
@@ -1031,13 +1296,39 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
   end
 
   defp field(assigns) do
-    assigns = assigns |> Map.put_new(:mono, false)
+    assigns = assigns |> Map.put_new(:mono, false) |> Map.put_new(:copy, nil)
 
     ~H"""
     <div>
       <dt class="text-xs font-medium text-gray-500">{@label}</dt>
-      <dd class={["mt-0.5 text-gray-900", if(@mono, do: "font-mono text-xs", else: "")]}>
-        {@value}
+      <dd class={[
+        "mt-0.5 text-gray-900 flex items-center gap-1.5",
+        if(@mono, do: "font-mono text-xs", else: "")
+      ]}>
+        <span>{@value}</span>
+        <button
+          :if={@copy}
+          id={"copy-#{String.replace(@label, " ", "-") |> String.downcase()}"}
+          phx-hook="CopyClipboard"
+          data-copy={@copy}
+          title="Copy to clipboard"
+          class="text-gray-400 hover:text-indigo-600 cursor-pointer shrink-0"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="w-3.5 h-3.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9.75a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184"
+            />
+          </svg>
+        </button>
       </dd>
     </div>
     """

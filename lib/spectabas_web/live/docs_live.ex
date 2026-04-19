@@ -1610,6 +1610,24 @@ defmodule SpectabasWeb.DocsLive do
             ### Session History
             Table of all sessions with entry/exit pages, referrer, and duration.
 
+            ### Notes
+            Free-text notes per visitor — click to edit, stored in Postgres. Use for annotations like "VIP customer", "suspected fraud", "contacted support", etc.
+
+            ### Goal Completion Badges
+            Color-coded badges showing which goals this visitor completed, based on their pageview paths and custom events.
+
+            ### Page Flow
+            Visual representation of the visitor's page-to-page journey — shows the first 20 pageviews as a horizontal flow with arrows.
+
+            ### Export
+            Download the full visitor profile as JSON (identity, stats, notes).
+
+            ### Copy to Clipboard
+            All IDs (visitor, user, email, external) and IP addresses have a clipboard icon for one-click copying.
+
+            ### Location Map
+            "View on map" link opens the visitor's location on OpenStreetMap (when lat/lon is available).
+
             ### Event Timeline
             Chronological list of every event (pageviews, custom events, duration pings) with timestamps.
             """

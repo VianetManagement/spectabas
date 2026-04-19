@@ -339,6 +339,24 @@ const LocalTime = {
   }
 }
 
+const CopyClipboard = {
+  mounted() {
+    this.el.addEventListener("click", () => {
+      const text = this.el.dataset.copy
+      if (text) {
+        navigator.clipboard.writeText(text).then(() => {
+          this.el.classList.add("text-green-500")
+          this.el.title = "Copied!"
+          setTimeout(() => {
+            this.el.classList.remove("text-green-500")
+            this.el.title = "Copy to clipboard"
+          }, 1500)
+        })
+      }
+    })
+  }
+}
+
 const ChatScroll = {
   mounted() { this.el.scrollTop = this.el.scrollHeight },
   updated() { this.el.scrollTop = this.el.scrollHeight }
@@ -359,6 +377,7 @@ const Hooks = {
   IdleTimeout,
   LocalTime,
   ChatScroll,
+  CopyClipboard,
 }
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
@@ -388,6 +407,20 @@ window.addEventListener("spectabas:clipcopy", (e) => {
       setTimeout(() => { e.target.innerText = "Copy" }, 2000)
     })
   }
+})
+
+// File download via push_event("download", %{filename, content, mime})
+window.addEventListener("phx:download", (e) => {
+  const {filename, content, mime} = e.detail
+  const blob = new Blob([content], {type: mime || "application/octet-stream"})
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename || "download"
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 })
 
 // connect if there are any LiveViews on the page

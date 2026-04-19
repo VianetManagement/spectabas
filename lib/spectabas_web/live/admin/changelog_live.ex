@@ -53,6 +53,15 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.90.0", "2026-04-19T20:00:00Z",
+       [
+         %{
+           title:
+             "Feature: Visitor profile enhancements — clipboard, notes, export, page flow, goals",
+           description:
+             "Visitor profile page now shows full visitor ID with copy-to-clipboard buttons on all IDs (visitor, user, email, external, each IP address). New features: inline notes per visitor (editable text stored in Postgres), Export JSON button for full profile download, 'View on map' link in Location card (opens OpenStreetMap), Page Flow visualization showing the visitor's page-to-page journey as a horizontal flow, and goal completion badges showing which goals this visitor completed (deferred ClickHouse query)."
+         }
+       ]},
       {"v5.89.0", "2026-04-19T19:00:00Z",
        [
          %{
