@@ -24,7 +24,8 @@ defmodule Spectabas.Webhooks.ScraperWebhook do
         ip_addresses: ips,
         ip_ranges: ip_ranges,
         fingerprint: visitor.external_id || "",
-        user_id: parse_user_id(visitor.user_id)
+        user_id: parse_user_id(visitor.user_id),
+        sab_cookie: visitor.cookie_id || ""
       },
       score: score_result.score,
       activation_delay_hours: 0,
@@ -72,7 +73,8 @@ defmodule Spectabas.Webhooks.ScraperWebhook do
         ip_addresses: ips,
         ip_ranges: ip_ranges,
         fingerprint: visitor.external_id || "",
-        user_id: parse_user_id(visitor.user_id)
+        user_id: parse_user_id(visitor.user_id),
+        sab_cookie: visitor.cookie_id || ""
       }
     }
 

@@ -2190,7 +2190,7 @@ defmodule SpectabasWeb.DocsLive do
             ### Advanced
             - **Tracking Snippet** — copy your site's embed code
             - **IP Blocklist** — block specific IPs from being tracked
-            - **Scraper Webhooks** — configure a webhook URL and Bearer secret to receive POST notifications when scrapers are detected. Webhooks fire at score 40+ (watching tier) and re-fire when the score escalates to a higher tier (watching → suspicious → certain). Manual send/deactivate from the Scrapers page. Payload includes `ip_ranges` with /64 CIDR prefixes for IPv6 addresses when datacenter ASN signal fires. `activation_delay_hours` is always 0 — the recipient manages timing.
+            - **Scraper Webhooks** — configure a webhook URL and Bearer secret to receive POST notifications when scrapers are detected. Webhooks fire at score 40+ (watching tier) and re-fire when the score escalates to a higher tier (watching → suspicious → certain). Manual send/deactivate from the Scrapers page. Payload identifiers include: `ip_addresses`, `ip_ranges` (/64 CIDRs for IPv6), `fingerprint`, `user_id`, and `sab_cookie` (the visitor's `_sab` session cookie — most stable per-visitor identifier). `activation_delay_hours` is always 0 — the recipient manages timing.
             - **Ecommerce** — enable ecommerce tracking with currency setting
 
             ### User Timezone

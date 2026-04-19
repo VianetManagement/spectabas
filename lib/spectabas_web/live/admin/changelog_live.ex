@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.92.0", "2026-04-19T22:00:00Z",
+       [
+         %{
+           title: "Enhancement: sab_cookie in scraper webhook identifiers",
+           description:
+             "Scraper flag and deactivate webhook payloads now include sab_cookie (the visitor's _sab session cookie value) in the identifiers map alongside ip_addresses, ip_ranges, fingerprint, and user_id. This is the most stable per-visitor identifier and allows downstream consumers to match and block scrapers by cookie."
+         }
+       ]},
       {"v5.91.0", "2026-04-19T21:00:00Z",
        [
          %{
