@@ -6,7 +6,7 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
   alias Spectabas.Accounts
   import Spectabas.TypeHelpers
 
-  @refresh_ms 2_000
+  @refresh_ms 10_000
 
   @timezones [
     "America/New_York",
@@ -37,13 +37,14 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
      |> assign(:user, user)
      |> assign(:timezone, tz)
      |> assign(:timezones, @timezones)
-     |> load_metrics()}
+     |> load_slow_metrics()
+     |> load_live_metrics()}
   end
 
   @impl true
   def handle_info(:refresh, socket) do
     schedule_refresh()
-    {:noreply, load_metrics(socket)}
+    {:noreply, load_live_metrics(socket)}
   end
 
   @impl true
@@ -54,37 +55,10 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
 
   defp schedule_refresh, do: Process.send_after(self(), :refresh, @refresh_ms)
 
-  defp load_metrics(socket) do
-    # Buffer metrics
-    buffer_size = IngestBuffer.buffer_size()
-    buffer_full = IngestBuffer.full?()
+  # Heavy queries — run once on mount
+  defp load_slow_metrics(socket) do
+    ch_status = check_ch_status()
 
-    # Visitor cache metrics
-    cache_size = VisitorCache.size()
-
-    # BEAM metrics
-    memory = :erlang.memory()
-    process_count = :erlang.system_info(:process_count)
-    scheduler_count = :erlang.system_info(:schedulers_online)
-    {reductions, _} = :erlang.statistics(:reductions)
-    {{_, io_in}, {_, io_out}} = :erlang.statistics(:io)
-    uptime_ms = :erlang.statistics(:wall_clock) |> elem(0)
-
-    # Scheduler utilization (approximate)
-    run_queue = :erlang.statistics(:total_run_queue_lengths_all)
-
-    # ClickHouse connectivity
-    ch_status =
-      if Process.whereis(Spectabas.ClickHouse) do
-        case Spectabas.ClickHouse.query("SELECT 1 AS ok") do
-          {:ok, _} -> :ok
-          _ -> :error
-        end
-      else
-        :not_started
-      end
-
-    # ClickHouse events today
     events_today =
       if ch_status == :ok do
         case Spectabas.ClickHouse.query(
@@ -97,38 +71,13 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
         0
       end
 
-    # Events per minute (last 5 min)
-    events_per_min =
-      if ch_status == :ok do
-        case Spectabas.ClickHouse.query("""
-             SELECT
-               toStartOfMinute(timestamp) AS minute,
-               count() AS events
-             FROM events
-             WHERE timestamp >= now() - INTERVAL 5 MINUTE
-             GROUP BY minute
-             ORDER BY minute
-             """) do
-          {:ok, rows} -> rows
-          _ -> []
-        end
-      else
-        []
-      end
-
-    # Click ID stats (last 7 days)
     click_id_stats =
       if ch_status == :ok do
         case Spectabas.ClickHouse.query("""
-             SELECT
-               click_id_type,
-               count() AS events,
-               uniq(visitor_id) AS visitors
+             SELECT click_id_type, count() AS events, uniq(visitor_id) AS visitors
              FROM events
-             WHERE click_id != '' AND click_id_type != ''
-               AND timestamp >= now() - INTERVAL 7 DAY
-             GROUP BY click_id_type
-             ORDER BY events DESC
+             WHERE click_id != '' AND click_id_type != '' AND timestamp >= now() - INTERVAL 7 DAY
+             GROUP BY click_id_type ORDER BY events DESC
              """) do
           {:ok, rows} -> rows
           _ -> []
@@ -149,7 +98,42 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
         0
       end
 
-    # Failed events in Postgres
+    socket
+    |> assign(:events_today, events_today)
+    |> assign(:click_id_stats, click_id_stats)
+    |> assign(:click_id_today, click_id_today)
+  end
+
+  # Lightweight metrics — run every refresh tick
+  defp load_live_metrics(socket) do
+    buffer_size = IngestBuffer.buffer_size()
+    buffer_full = IngestBuffer.full?()
+    cache_size = VisitorCache.size()
+
+    memory = :erlang.memory()
+    process_count = :erlang.system_info(:process_count)
+    scheduler_count = :erlang.system_info(:schedulers_online)
+    {reductions, _} = :erlang.statistics(:reductions)
+    {{_, io_in}, {_, io_out}} = :erlang.statistics(:io)
+    uptime_ms = :erlang.statistics(:wall_clock) |> elem(0)
+    run_queue = :erlang.statistics(:total_run_queue_lengths_all)
+
+    ch_status = check_ch_status()
+
+    events_per_min =
+      if ch_status == :ok do
+        case Spectabas.ClickHouse.query("""
+             SELECT toStartOfMinute(timestamp) AS minute, count() AS events
+             FROM events WHERE timestamp >= now() - INTERVAL 5 MINUTE
+             GROUP BY minute ORDER BY minute
+             """) do
+          {:ok, rows} -> rows
+          _ -> []
+        end
+      else
+        []
+      end
+
     failed_count =
       try do
         Spectabas.Repo.aggregate(Spectabas.Events.FailedEvent, :count, :id)
@@ -157,18 +141,16 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
         _ -> 0
       end
 
-    # Flush supervisor active tasks
     flush_tasks =
       case Task.Supervisor.children(Spectabas.IngestFlushSupervisor) do
         pids when is_list(pids) -> length(pids)
         _ -> 0
       end
 
-    # Oban queue depth
+    import Ecto.Query
+
     oban_pending =
       try do
-        import Ecto.Query
-
         Spectabas.ObanRepo.aggregate(
           from(j in "oban_jobs", where: j.state in ["available", "scheduled", "retryable"]),
           :count
@@ -179,8 +161,6 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
 
     oban_executing =
       try do
-        import Ecto.Query
-
         Spectabas.ObanRepo.aggregate(
           from(j in "oban_jobs", where: j.state == "executing"),
           :count
@@ -191,8 +171,6 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
 
     oban_by_queue =
       try do
-        import Ecto.Query
-
         Spectabas.ObanRepo.all(
           from(j in "oban_jobs",
             where: j.state == "executing",
@@ -205,16 +183,8 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
         _ -> []
       end
 
-    # DB pool stats
     web_pool = db_pool_stats(Spectabas.Repo)
     oban_pool = db_pool_stats(Spectabas.ObanRepo)
-
-    # Crash recovery file
-    crash_file_size =
-      case File.stat("/tmp/spectabas_ingest_buffer.bin") do
-        {:ok, %{size: size}} -> size
-        _ -> 0
-      end
 
     tz = socket.assigns[:timezone] || "America/New_York"
 
@@ -238,7 +208,6 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
     |> assign(:uptime_hours, div(uptime_ms, 3_600_000))
     |> assign(:run_queue, run_queue)
     |> assign(:ch_status, ch_status)
-    |> assign(:events_today, events_today)
     |> assign(:events_per_min, events_per_min)
     |> assign(:failed_count, failed_count)
     |> assign(:flush_tasks, flush_tasks)
@@ -247,9 +216,17 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
     |> assign(:oban_by_queue, oban_by_queue)
     |> assign(:web_pool, web_pool)
     |> assign(:oban_pool, oban_pool)
-    |> assign(:crash_file_kb, div(crash_file_size, 1024))
-    |> assign(:click_id_stats, click_id_stats)
-    |> assign(:click_id_today, click_id_today)
+  end
+
+  defp check_ch_status do
+    if Process.whereis(Spectabas.ClickHouse) do
+      case Spectabas.ClickHouse.query("SELECT 1 AS ok") do
+        {:ok, _} -> :ok
+        _ -> :error
+      end
+    else
+      :not_started
+    end
   end
 
   @impl true
@@ -265,7 +242,7 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
       <div class="flex items-center justify-between mb-8">
         <div>
           <h1 class="text-2xl font-bold text-gray-900">Ingest Diagnostics</h1>
-          <p class="text-sm text-gray-500 mt-1">Live metrics — refreshes every 2 seconds</p>
+          <p class="text-sm text-gray-500 mt-1">Live metrics — refreshes every 10 seconds</p>
         </div>
         <div class="flex items-center gap-3">
           <form phx-change="change_timezone" class="flex items-center gap-2">
@@ -368,16 +345,6 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
             </tr>
           </tbody>
         </table>
-      </div>
-
-      <%!-- Crash Recovery --%>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <.metric_card
-          label="Crash Recovery File"
-          value={if @crash_file_kb > 0, do: "#{@crash_file_kb} KB", else: "None"}
-          color={if @crash_file_kb > 0, do: "yellow", else: "green"}
-          sublabel={if @crash_file_kb > 0, do: "buffered events on disk", else: "buffer clean"}
-        />
       </div>
 
       <%!-- ClickHouse --%>
