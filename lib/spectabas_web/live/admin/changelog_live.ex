@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.97.0", "2026-04-20T03:00:00Z",
+       [
+         %{
+           title: "Perf: Ingest diagnostics non-blocking + Slack only on new deploys",
+           description:
+             "Ingest diagnostics page no longer blocks on DB queries — BEAM metrics update instantly, ClickHouse/Oban/pool stats run async in background tasks. Refresh interval increased from 2s to 10s. Removed crash recovery file display. Slack deploy notifications now only fire on new version deploys, not autoscale boot (uses Postgres app_settings table to track last notified version)."
+         }
+       ]},
       {"v5.96.0", "2026-04-20T02:00:00Z",
        [
          %{
