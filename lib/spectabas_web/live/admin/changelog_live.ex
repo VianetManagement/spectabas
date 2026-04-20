@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.5.0", "2026-04-20T17:00:00Z",
+       [
+         %{
+           title: "Fix: Scraper detection broken by lightweight ingest — profile fields empty",
+           description:
+             "The lightweight ingest path (v5.94.0) sets empty strings for ip_org, browser, device_type, ip_is_datacenter etc. on custom/duration events. Scraper queries using argMax(field, timestamp) picked up these empty values from the latest _click event, corrupting the scraper profile. Fixed both scraper_candidates_system and scraper_score_for_visitor to use argMaxIf(field, timestamp, event_type='pageview') with nullIf fallback. Also fixed known_vpn_provider? treating whitespace-only strings as valid VPN names, and is_vpn comparison to handle integer/string values from ClickHouse."
+         }
+       ]},
       {"v6.4.0", "2026-04-20T16:00:00Z",
        [
          %{

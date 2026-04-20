@@ -4344,23 +4344,23 @@ defmodule Spectabas.Analytics do
     sql = """
     SELECT
       visitor_id,
-      argMax(ip_org, timestamp) AS asn,
-      argMax(user_agent, timestamp) AS user_agent,
+      ifNull(nullIf(argMaxIf(ip_org, timestamp, event_type = 'pageview'), ''), argMax(ip_org, timestamp)) AS asn,
+      ifNull(nullIf(argMaxIf(user_agent, timestamp, event_type = 'pageview'), ''), argMax(user_agent, timestamp)) AS user_agent,
       uniq(ip_address) AS visitor_ip_count,
       uniqIf(url_path, event_type = 'pageview') AS session_pageviews,
       arrayFilter(p -> p != '',
         groupArrayIf(50)(url_path, event_type = 'pageview')) AS page_paths,
-      argMax(referrer_domain, timestamp) AS referrer,
-      concat(toString(argMax(screen_width, timestamp)), 'x', toString(argMax(screen_height, timestamp))) AS screen_resolution,
+      ifNull(nullIf(argMaxIf(referrer_domain, timestamp, event_type = 'pageview'), ''), '') AS referrer,
+      concat(toString(argMaxIf(screen_width, timestamp, event_type = 'pageview')), 'x', toString(argMaxIf(screen_height, timestamp, event_type = 'pageview'))) AS screen_resolution,
       arraySlice(arrayDifference(arraySort(
         groupArrayIf(100)(toUnixTimestamp(timestamp) * 1000,
           event_type = 'pageview'))), 2) AS request_intervals_ms,
-      max(ip_is_datacenter) AS is_datacenter,
-      max(ip_is_vpn) AS is_vpn,
-      argMax(ip_vpn_provider, timestamp) AS vpn_provider,
-      argMax(browser, timestamp) AS browser,
-      argMax(browser_version, timestamp) AS browser_version,
-      argMax(device_type, timestamp) AS device_type
+      maxIf(ip_is_datacenter, event_type = 'pageview') AS is_datacenter,
+      maxIf(ip_is_vpn, event_type = 'pageview') AS is_vpn,
+      ifNull(nullIf(argMaxIf(ip_vpn_provider, timestamp, event_type = 'pageview'), ''), '') AS vpn_provider,
+      ifNull(nullIf(argMaxIf(browser, timestamp, event_type = 'pageview'), ''), argMax(browser, timestamp)) AS browser,
+      ifNull(nullIf(argMaxIf(browser_version, timestamp, event_type = 'pageview'), ''), '') AS browser_version,
+      ifNull(nullIf(argMaxIf(device_type, timestamp, event_type = 'pageview'), ''), '') AS device_type
     FROM events
     WHERE site_id = #{site_p}
       AND timestamp >= #{from_p}
@@ -4428,23 +4428,23 @@ defmodule Spectabas.Analytics do
     sql = """
     SELECT
       visitor_id,
-      argMax(ip_org, timestamp) AS asn,
-      argMax(user_agent, timestamp) AS user_agent,
+      ifNull(nullIf(argMaxIf(ip_org, timestamp, event_type = 'pageview'), ''), argMax(ip_org, timestamp)) AS asn,
+      ifNull(nullIf(argMaxIf(user_agent, timestamp, event_type = 'pageview'), ''), argMax(user_agent, timestamp)) AS user_agent,
       uniq(ip_address) AS visitor_ip_count,
       uniqIf(url_path, event_type = 'pageview') AS session_pageviews,
       arrayFilter(p -> p != '',
         groupArrayIf(50)(url_path, event_type = 'pageview')) AS page_paths,
-      argMax(referrer_domain, timestamp) AS referrer,
-      concat(toString(argMax(screen_width, timestamp)), 'x', toString(argMax(screen_height, timestamp))) AS screen_resolution,
+      ifNull(nullIf(argMaxIf(referrer_domain, timestamp, event_type = 'pageview'), ''), '') AS referrer,
+      concat(toString(argMaxIf(screen_width, timestamp, event_type = 'pageview')), 'x', toString(argMaxIf(screen_height, timestamp, event_type = 'pageview'))) AS screen_resolution,
       arraySlice(arrayDifference(arraySort(
         groupArrayIf(100)(toUnixTimestamp(timestamp) * 1000,
           event_type = 'pageview'))), 2) AS request_intervals_ms,
-      max(ip_is_datacenter) AS is_datacenter,
-      max(ip_is_vpn) AS is_vpn,
-      argMax(ip_vpn_provider, timestamp) AS vpn_provider,
-      argMax(browser, timestamp) AS browser,
-      argMax(browser_version, timestamp) AS browser_version,
-      argMax(device_type, timestamp) AS device_type
+      maxIf(ip_is_datacenter, event_type = 'pageview') AS is_datacenter,
+      maxIf(ip_is_vpn, event_type = 'pageview') AS is_vpn,
+      ifNull(nullIf(argMaxIf(ip_vpn_provider, timestamp, event_type = 'pageview'), ''), '') AS vpn_provider,
+      ifNull(nullIf(argMaxIf(browser, timestamp, event_type = 'pageview'), ''), argMax(browser, timestamp)) AS browser,
+      ifNull(nullIf(argMaxIf(browser_version, timestamp, event_type = 'pageview'), ''), '') AS browser_version,
+      ifNull(nullIf(argMaxIf(device_type, timestamp, event_type = 'pageview'), ''), '') AS device_type
     FROM events
     WHERE site_id = #{site_p}
       AND visitor_id = #{vid_p}

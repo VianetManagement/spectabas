@@ -140,7 +140,7 @@ defmodule Spectabas.Analytics.ScraperDetector do
   defp add_datacenter_signal(points, signals, profile, w) do
     is_dc_asn = datacenter_asn?(profile[:asn])
     is_dc = is_dc_asn or profile[:is_datacenter] == true
-    on_vpn = known_vpn_provider?(profile[:vpn_provider]) or profile[:is_vpn] == true
+    on_vpn = known_vpn_provider?(profile[:vpn_provider]) or profile[:is_vpn] in [true, 1, "1"]
     is_privacy_relay = privacy_relay_asn?(profile[:asn])
 
     # Suppress for VPN users unless they're on a datacenter ASN that is NOT
@@ -158,7 +158,7 @@ defmodule Spectabas.Analytics.ScraperDetector do
   defp add_spoofed_ua_signal(points, signals, profile, w) do
     is_dc_asn = datacenter_asn?(profile[:asn])
     is_dc = is_dc_asn or profile[:is_datacenter] == true
-    on_vpn = known_vpn_provider?(profile[:vpn_provider]) or profile[:is_vpn] == true
+    on_vpn = known_vpn_provider?(profile[:vpn_provider]) or profile[:is_vpn] in [true, 1, "1"]
     is_privacy_relay = privacy_relay_asn?(profile[:asn])
     suppressed = on_vpn and (not is_dc_asn or is_privacy_relay)
 
@@ -170,7 +170,7 @@ defmodule Spectabas.Analytics.ScraperDetector do
   end
 
   defp add_ip_rotation_signal(points, signals, profile, w) do
-    on_vpn = known_vpn_provider?(profile[:vpn_provider]) or profile[:is_vpn] == true
+    on_vpn = known_vpn_provider?(profile[:vpn_provider]) or profile[:is_vpn] in [true, 1, "1"]
 
     case profile[:visitor_ip_count] do
       n when is_integer(n) and n >= 3 ->
@@ -425,7 +425,11 @@ defmodule Spectabas.Analytics.ScraperDetector do
 
   defp known_vpn_provider?(nil), do: false
   defp known_vpn_provider?(""), do: false
-  defp known_vpn_provider?(name) when is_binary(name), do: true
+
+  defp known_vpn_provider?(name) when is_binary(name) do
+    String.trim(name) != ""
+  end
+
   defp known_vpn_provider?(_), do: false
 
   # Merge per-site overrides into default weights. Overrides is a map with
