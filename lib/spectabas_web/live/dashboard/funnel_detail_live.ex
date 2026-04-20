@@ -394,7 +394,10 @@ defmodule SpectabasWeb.Dashboard.FunnelDetailLive do
           </form>
         </div>
 
-        <div :if={@loading} class="text-center py-16 text-gray-400">Loading...</div>
+        <div :if={@loading} class="flex items-center justify-center py-16 gap-2 text-gray-400">
+          <.death_star_spinner class="w-6 h-6" />
+          <span class="text-sm">Loading...</span>
+        </div>
 
         <div :if={!@loading}>
           <%!-- Summary Cards --%>

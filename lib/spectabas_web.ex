@@ -86,6 +86,7 @@ defmodule SpectabasWeb do
       import Phoenix.HTML
       # Core UI components
       import SpectabasWeb.CoreComponents
+      import SpectabasWeb.Components.Spinner
 
       # Common modules used in templates
       alias Phoenix.LiveView.JS

@@ -232,13 +232,21 @@ defmodule SpectabasWeb.Admin.ApiLogsLive do
         <div class="bg-white rounded-lg shadow p-4">
           <dt class="text-xs font-medium text-gray-500 uppercase">Last Hour</dt>
           <dd class="mt-1 text-2xl font-bold text-indigo-600">
-            {if @calls_last_hour, do: format_number(@calls_last_hour), else: "..."}
+            <%= if @calls_last_hour do %>
+              {format_number(@calls_last_hour)}
+            <% else %>
+              <.death_star_spinner class="w-5 h-5 text-gray-300" />
+            <% end %>
           </dd>
         </div>
         <div class="bg-white rounded-lg shadow p-4">
           <dt class="text-xs font-medium text-gray-500 uppercase">Last 24h</dt>
           <dd class="mt-1 text-2xl font-bold text-indigo-600">
-            {if @calls_last_day, do: format_number(@calls_last_day), else: "..."}
+            <%= if @calls_last_day do %>
+              {format_number(@calls_last_day)}
+            <% else %>
+              <.death_star_spinner class="w-5 h-5 text-gray-300" />
+            <% end %>
           </dd>
         </div>
         <div class="bg-white rounded-lg shadow p-4">

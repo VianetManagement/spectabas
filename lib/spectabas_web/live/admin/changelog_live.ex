@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.3.0", "2026-04-20T15:00:00Z",
+       [
+         %{
+           title: "Feature: Death Star spinner + TrustAdmiral link on visitor profile",
+           description:
+             "Custom Death Star SVG spinner replaces generic spinners across all 14 admin/dashboard pages with deferred loading. Sites index shows site cards immediately with Death Star spinners where stats load. SAB Cookie field on visitor profile now has an external link icon that opens TrustAdmiral scraper defense filtered to that cookie."
+         }
+       ]},
       {"v6.2.0", "2026-04-20T14:00:00Z",
        [
          %{

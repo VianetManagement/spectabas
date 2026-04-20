@@ -69,7 +69,12 @@ defmodule SpectabasWeb.Admin.DashboardLive do
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <h1 class="text-2xl font-bold text-gray-900 mb-8">Admin Dashboard</h1>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div :if={@loading} class="flex items-center justify-center py-16 gap-2 text-gray-400">
+        <.death_star_spinner class="w-6 h-6" />
+        <span class="text-sm">Loading...</span>
+      </div>
+
+      <div :if={!@loading} class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div class="bg-white rounded-lg shadow p-6">
           <dt class="text-sm font-medium text-gray-500">Total Sites</dt>
           <dd class="mt-2 text-3xl font-bold text-gray-900">{@total_sites}</dd>
@@ -105,7 +110,7 @@ defmodule SpectabasWeb.Admin.DashboardLive do
         </div>
       </div>
 
-      <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div :if={!@loading} class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
         <.link
           navigate={~p"/admin/integrations"}
           class="block bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow"

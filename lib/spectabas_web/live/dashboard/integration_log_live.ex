@@ -96,8 +96,13 @@ defmodule SpectabasWeb.Dashboard.IntegrationLogLive do
           </.link>
         </div>
 
+        <div :if={@loading} class="flex items-center justify-center py-16 gap-2 text-gray-400">
+          <.death_star_spinner class="w-6 h-6" />
+          <span class="text-sm">Loading...</span>
+        </div>
+
         <%!-- Integration cards --%>
-        <%= if @integrations == [] do %>
+        <%= if !@loading && @integrations == [] do %>
           <div class="bg-white rounded-lg shadow p-8 text-center">
             <p class="text-gray-500">
               No integrations connected.
@@ -110,7 +115,7 @@ defmodule SpectabasWeb.Dashboard.IntegrationLogLive do
             </p>
           </div>
         <% else %>
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+          <div :if={!@loading} class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
             <%= for integration <- @integrations do %>
               <div class={"bg-white rounded-lg shadow p-5 border-l-4 " <> health_border(integration)}>
                 <div class="flex items-center justify-between mb-2">

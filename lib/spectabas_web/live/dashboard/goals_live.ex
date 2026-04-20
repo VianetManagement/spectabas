@@ -539,13 +539,25 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
                     conversion_rate: 0.0
                   }) %>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right font-semibold tabular-nums">
-                  {format_number(stats.completions)}
+                  <%= if @completions == %{} do %>
+                    <.death_star_spinner class="w-3 h-3 text-gray-300 inline-block" />
+                  <% else %>
+                    {format_number(stats.completions)}
+                  <% end %>
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
-                  {format_number(stats.unique_completers)}
+                  <%= if @completions == %{} do %>
+                    <.death_star_spinner class="w-3 h-3 text-gray-300 inline-block" />
+                  <% else %>
+                    {format_number(stats.unique_completers)}
+                  <% end %>
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
-                  {stats.conversion_rate}%
+                  <%= if @completions == %{} do %>
+                    <.death_star_spinner class="w-3 h-3 text-gray-300 inline-block" />
+                  <% else %>
+                    {stats.conversion_rate}%
+                  <% end %>
                 </td>
                 <td class="px-6 py-4 text-right">
                   <button

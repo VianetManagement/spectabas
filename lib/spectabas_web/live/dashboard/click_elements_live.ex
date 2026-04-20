@@ -286,7 +286,10 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
           </div>
         </div>
 
-        <div :if={@loading} class="text-center py-16 text-gray-400">Loading...</div>
+        <div :if={@loading} class="flex items-center justify-center py-16 gap-2 text-gray-400">
+          <.death_star_spinner class="w-6 h-6" />
+          <span class="text-sm">Loading...</span>
+        </div>
 
         <div :if={!@loading && @elements == []} class="bg-white rounded-lg shadow p-8 text-center">
           <p class="text-gray-500 mb-2 font-medium">No click elements detected yet</p>

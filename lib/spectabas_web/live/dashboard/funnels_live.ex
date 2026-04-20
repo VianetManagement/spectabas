@@ -488,7 +488,10 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
           </div>
         </div>
         <div :if={@suggestions_loading} class="bg-white rounded-lg shadow p-6 mb-8">
-          <p class="text-sm text-gray-400">Analyzing conversion paths...</p>
+          <div class="flex items-center gap-2 text-gray-400">
+            <.death_star_spinner class="w-5 h-5" />
+            <p class="text-sm">Analyzing conversion paths...</p>
+          </div>
         </div>
 
         <%!-- Funnel List --%>

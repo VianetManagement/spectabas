@@ -425,12 +425,7 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
         />
         <div class="bg-white rounded-lg shadow p-4">
           <dt class="text-xs font-medium text-gray-500 uppercase flex items-center gap-1.5">
-            Events/Minute (last 5 min)
-            <span
-              :if={!@db_loaded}
-              class="inline-block w-3 h-3 border-2 border-indigo-300 border-t-transparent rounded-full animate-spin"
-            >
-            </span>
+            Events/Minute (last 5 min) <.death_star_spinner :if={!@db_loaded} class="w-3 h-3" />
           </dt>
           <div class="mt-2 space-y-1">
             <div :for={row <- @events_per_min} class="flex justify-between text-sm">
@@ -567,11 +562,7 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
     <div class="bg-white rounded-lg shadow p-4">
       <dt class="text-xs font-medium text-gray-500 uppercase flex items-center gap-1.5">
         {@label}
-        <span
-          :if={@loading}
-          class="inline-block w-3 h-3 border-2 border-indigo-300 border-t-transparent rounded-full animate-spin"
-        >
-        </span>
+        <.death_star_spinner :if={@loading} class="w-3 h-3" />
       </dt>
       <dd :if={!@loading} class={"mt-1 text-2xl font-bold #{@color_class}"}>{@value}</dd>
       <dd :if={@loading} class="mt-1 text-2xl font-bold text-gray-300">...</dd>

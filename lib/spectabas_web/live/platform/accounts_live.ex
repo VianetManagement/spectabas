@@ -204,7 +204,12 @@ defmodule SpectabasWeb.Platform.AccountsLive do
         </div>
       <% end %>
 
-      <div class="bg-white border rounded-lg overflow-hidden">
+      <div :if={@loading} class="flex items-center justify-center py-16 gap-2 text-gray-400">
+        <.death_star_spinner class="w-6 h-6" />
+        <span class="text-sm">Loading...</span>
+      </div>
+
+      <div :if={!@loading} class="bg-white border rounded-lg overflow-hidden">
         <table class="w-full text-sm">
           <thead class="bg-gray-50 border-b">
             <tr>

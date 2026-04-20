@@ -72,12 +72,20 @@ defmodule SpectabasWeb.Dashboard.IndexLive do
         </.link>
       </div>
 
+      <div
+        :if={@loading && @sites == []}
+        class="flex items-center justify-center py-16 gap-2 text-gray-400"
+      >
+        <.death_star_spinner class="w-6 h-6" />
+        <span class="text-sm">Loading...</span>
+      </div>
+
       <div :if={@sites == []} class="text-center py-16 text-gray-500">
         <p class="text-lg">No sites yet.</p>
         <p class="mt-2">Ask an admin to grant you access to a site.</p>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div :if={@sites != []} class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <.link
           :for={site <- @sites}
           navigate={~p"/dashboard/sites/#{site.id}"}
@@ -95,13 +103,19 @@ defmodule SpectabasWeb.Dashboard.IndexLive do
           <p class="text-sm text-gray-500 truncate mb-4">{site.domain}</p>
           <div class="flex items-center gap-6">
             <div>
-              <span class="text-3xl font-bold text-indigo-600">
+              <span :if={@loading} class="text-gray-300">
+                <.death_star_spinner class="w-6 h-6 inline" />
+              </span>
+              <span :if={!@loading} class="text-3xl font-bold text-indigo-600">
                 {format_number(get_stat(@site_stats, site.id, :pageviews))}
               </span>
               <span class="text-sm text-gray-500 ml-1">pageviews</span>
             </div>
             <div>
-              <span class="text-3xl font-bold text-emerald-600">
+              <span :if={@loading} class="text-gray-300">
+                <.death_star_spinner class="w-6 h-6 inline" />
+              </span>
+              <span :if={!@loading} class="text-3xl font-bold text-emerald-600">
                 {format_number(get_stat(@site_stats, site.id, :visitors))}
               </span>
               <span class="text-sm text-gray-500 ml-1">visitors</span>

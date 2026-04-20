@@ -70,7 +70,12 @@ defmodule SpectabasWeb.Platform.DashboardLive do
     <div class="max-w-5xl mx-auto py-8 px-4">
       <h1 class="text-2xl font-bold text-gray-900 mb-6">Platform Administration</h1>
 
-      <div class="grid grid-cols-3 gap-4 mb-8">
+      <div :if={@loading} class="flex items-center justify-center py-16 gap-2 text-gray-400">
+        <.death_star_spinner class="w-6 h-6" />
+        <span class="text-sm">Loading...</span>
+      </div>
+
+      <div :if={!@loading} class="grid grid-cols-3 gap-4 mb-8">
         <div class="bg-white border rounded-lg p-4">
           <div class="text-sm text-gray-500">Total Accounts</div>
           <div class="text-3xl font-bold text-purple-600">{@total_accounts}</div>
@@ -85,14 +90,14 @@ defmodule SpectabasWeb.Platform.DashboardLive do
         </div>
       </div>
 
-      <div class="flex items-center justify-between mb-4">
+      <div :if={!@loading} class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-semibold text-gray-800">Accounts</h2>
         <a href="/platform/accounts" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium">
           Manage Accounts &rarr;
         </a>
       </div>
 
-      <div class="bg-white border rounded-lg overflow-hidden">
+      <div :if={!@loading} class="bg-white border rounded-lg overflow-hidden">
         <table class="w-full text-sm">
           <thead class="bg-gray-50 border-b">
             <tr>
@@ -136,7 +141,7 @@ defmodule SpectabasWeb.Platform.DashboardLive do
         </table>
       </div>
 
-      <div class="mt-8 grid grid-cols-2 gap-4">
+      <div :if={!@loading} class="mt-8 grid grid-cols-2 gap-4">
         <a
           href="/admin/ingest"
           class="block bg-white border rounded-lg p-4 hover:border-indigo-300"

@@ -88,8 +88,13 @@ defmodule SpectabasWeb.Dashboard.IpProfileLive do
 
         <h1 class="text-2xl font-bold text-gray-900 mb-6 font-mono">{@ip}</h1>
 
+        <div :if={@loading} class="flex items-center justify-center py-16 gap-2 text-gray-400">
+          <.death_star_spinner class="w-6 h-6" />
+          <span class="text-sm">Loading...</span>
+        </div>
+
         <%!-- IP Details — all available data --%>
-        <div :if={@ip_info} class="bg-white rounded-lg shadow p-6 mb-6">
+        <div :if={!@loading && @ip_info} class="bg-white rounded-lg shadow p-6 mb-6">
           <h2 class="text-lg font-semibold text-gray-900 mb-4">IP Enrichment Data</h2>
 
           <%!-- Badges --%>
@@ -157,11 +162,11 @@ defmodule SpectabasWeb.Dashboard.IpProfileLive do
           </div>
         </div>
 
-        <div :if={!@ip_info} class="bg-white rounded-lg shadow p-6 mb-6">
+        <div :if={!@loading && !@ip_info} class="bg-white rounded-lg shadow p-6 mb-6">
           <p class="text-sm text-gray-500">No enrichment data available for this IP address.</p>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div :if={!@loading} class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <%!-- Visitors --%>
           <div class="bg-white rounded-lg shadow overflow-x-auto">
             <div class="px-6 py-4 border-b border-gray-100">

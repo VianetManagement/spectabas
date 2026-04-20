@@ -167,8 +167,13 @@ defmodule SpectabasWeb.Platform.AccountDetailLive do
         <% end %>
       </div>
 
+      <div :if={@loading} class="flex items-center justify-center py-16 gap-2 text-gray-400">
+        <.death_star_spinner class="w-6 h-6" />
+        <span class="text-sm">Loading...</span>
+      </div>
+
       <%!-- Account settings --%>
-      <div class="bg-white border rounded-lg p-6 mb-6">
+      <div :if={!@loading} class="bg-white border rounded-lg p-6 mb-6">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-lg font-semibold">Account Settings</h2>
           <button phx-click="toggle_edit" class="text-sm text-indigo-600 hover:text-indigo-800">
@@ -249,7 +254,7 @@ defmodule SpectabasWeb.Platform.AccountDetailLive do
       </div>
 
       <%!-- Users --%>
-      <div class="bg-white border rounded-lg p-6 mb-6">
+      <div :if={!@loading} class="bg-white border rounded-lg p-6 mb-6">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-lg font-semibold">Users</h2>
           <button
@@ -327,7 +332,7 @@ defmodule SpectabasWeb.Platform.AccountDetailLive do
       </div>
 
       <%!-- Sites --%>
-      <div class="bg-white border rounded-lg p-6">
+      <div :if={!@loading} class="bg-white border rounded-lg p-6">
         <h2 class="text-lg font-semibold mb-4">Sites</h2>
         <table class="w-full text-sm">
           <thead class="border-b">
