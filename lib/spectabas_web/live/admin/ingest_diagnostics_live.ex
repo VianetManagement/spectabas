@@ -37,7 +37,9 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
      |> assign(:user, user)
      |> assign(:timezone, tz)
      |> assign(:timezones, @timezones)
-     |> load_slow_metrics()
+     |> assign(:events_today, 0)
+     |> assign(:click_id_stats, [])
+     |> assign(:click_id_today, 0)
      |> load_beam_metrics()
      |> assign(:ch_status, :ok)
      |> assign(:events_per_min, [])
@@ -47,10 +49,19 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
      |> assign(:oban_by_queue, [])
      |> assign(:web_pool, %{})
      |> assign(:oban_pool, %{})
+     |> assign(:flush_tasks, 0)
      |> then(fn s ->
+       send(self(), :load_slow)
        send(self(), :refresh)
        s
      end)}
+  end
+
+  @impl true
+  def handle_info(:load_slow, socket) do
+    {:noreply, load_slow_metrics(socket)}
+  rescue
+    _ -> {:noreply, socket}
   end
 
   @impl true

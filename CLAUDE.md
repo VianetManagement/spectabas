@@ -187,4 +187,4 @@ Weighted-signal scoring (15 signals, cap 100). Tiers: watching (40-69), suspicio
 - **Backpressure**: 503 at buffer 5,000. Health "overloaded" at buffer 8,000 or Oban queue 500k.
 - **AI**: Per-site config in `ai_config_encrypted`. `AI.Completion.generate/3` abstracts providers. `InsightsCache` (24h). Weekly email Monday 9am UTC. Platform-level help chatbot via `HELP_AI_API_KEY` (Anthropic Haiku) — `AI.HelpChat` module, `ChatComponent` LiveComponent in dashboard_layout.
 - **fix-ch-schema**: Uses `execute_admin` for DDL (writer may lack ALTER privileges).
-- **Changelog**: v5.97.0 at `/admin/changelog`. Updated every push.
+- **Changelog**: v5.98.0 at `/admin/changelog`. Updated every push.

@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.98.0", "2026-04-20T04:00:00Z",
+       [
+         %{
+           title: "Fix: Ingest diagnostics crash on mount",
+           description:
+             "Ingest diagnostics page crashed with internal server error because load_slow_metrics (3 ClickHouse queries) ran synchronously during mount. If ClickHouse was slow or unavailable, the mount failed. Moved all queries to deferred loading — mount sets safe defaults, then fires :load_slow and :refresh asynchronously."
+         }
+       ]},
       {"v5.97.0", "2026-04-20T03:00:00Z",
        [
          %{
