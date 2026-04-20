@@ -289,6 +289,79 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
     end
   end
 
+  def handle_event("send_webhook", _params, socket) do
+    site = socket.assigns.site
+    visitor = socket.assigns.visitor
+
+    # Use the current scraper score, or 0 if not yet computed
+    score = if socket.assigns.scraper, do: socket.assigns.scraper.score, else: 0
+    signals = if socket.assigns.scraper, do: socket.assigns.scraper.signals, else: []
+
+    score_result = %{score: score, signals: signals}
+
+    case Spectabas.Webhooks.ScraperWebhook.send_flag(site, visitor, score_result, 0) do
+      {:ok, _} ->
+        now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+        visitor
+        |> Spectabas.Visitors.Visitor.changeset(%{
+          scraper_webhook_sent_at: now,
+          scraper_webhook_score: score
+        })
+        |> Spectabas.Repo.update()
+
+        {:noreply,
+         socket
+         |> assign(:visitor, Spectabas.Repo.get!(Spectabas.Visitors.Visitor, visitor.id))
+         |> put_flash(:info, "Webhook sent with score #{score}.")}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to send webhook.")}
+    end
+  end
+
+  def handle_event("mark_scraper", _params, socket) do
+    site = socket.assigns.site
+    visitor = socket.assigns.visitor
+
+    score_result = %{score: 100, signals: [:manual_flag]}
+
+    # Send webhook with score 100
+    result =
+      if site.scraper_webhook_enabled && site.scraper_webhook_url do
+        Spectabas.Webhooks.ScraperWebhook.send_flag(site, visitor, score_result, 0)
+      else
+        {:ok, %{status: "no webhook configured"}}
+      end
+
+    case result do
+      {:ok, _} ->
+        now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+        visitor
+        |> Spectabas.Visitors.Visitor.changeset(%{
+          scraper_webhook_sent_at: now,
+          scraper_webhook_score: 100
+        })
+        |> Spectabas.Repo.update()
+
+        {:noreply,
+         socket
+         |> assign(:visitor, Spectabas.Repo.get!(Spectabas.Visitors.Visitor, visitor.id))
+         |> assign(:scraper, %{
+           score: 100,
+           signals: [:manual_flag],
+           verdict: :certain,
+           unique_pages: 0,
+           ip_count: 0
+         })
+         |> put_flash(:info, "Visitor marked as scraper (score 100) — webhook sent.")}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to send webhook.")}
+    end
+  end
+
   def handle_event("toggle_notes", _params, socket) do
     {:noreply, assign(socket, :editing_notes, !socket.assigns.editing_notes)}
   end
@@ -1153,6 +1226,13 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
           </div>
           <div class="flex items-center gap-2 shrink-0">
             <button
+              phx-click="send_webhook"
+              data-confirm="Re-send scraper webhook with current score?"
+              class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg text-amber-700 border border-amber-300 hover:bg-amber-50 shadow-sm"
+            >
+              Re-send
+            </button>
+            <button
               phx-click="unflag_scraper"
               data-confirm="This will send a deactivation webhook and clear the scraper flag. Continue?"
               class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg text-white bg-green-600 hover:bg-green-700 shadow-sm"
@@ -1181,11 +1261,27 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
         </div>
       <% :loading -> %>
         <div class="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-3 flex items-center gap-2">
-          <div class="animate-spin h-4 w-4 border-2 border-gray-300 border-t-gray-600 rounded-full">
-          </div>
+          <.death_star_spinner class="w-4 h-4 text-gray-400" />
           <span class="text-xs text-gray-500">Loading webhook status...</span>
         </div>
       <% _ -> %>
+        <%!-- Not flagged — show action buttons --%>
+        <div class="mb-6 flex items-center gap-2">
+          <button
+            phx-click="send_webhook"
+            data-confirm="Send scraper webhook with the current score?"
+            class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg text-white bg-amber-600 hover:bg-amber-700 shadow-sm"
+          >
+            Send Webhook
+          </button>
+          <button
+            phx-click="mark_scraper"
+            data-confirm="This will permanently mark this visitor as a scraper (score 100) and send the webhook. Continue?"
+            class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg text-white bg-red-600 hover:bg-red-700 shadow-sm"
+          >
+            Mark as Scraper
+          </button>
+        </div>
     <% end %>
     """
   end

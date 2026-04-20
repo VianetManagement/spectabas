@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.6.0", "2026-04-20T18:00:00Z",
+       [
+         %{
+           title: "Feature: Send Webhook + Mark as Scraper buttons on visitor profile",
+           description:
+             "Visitor profile now shows action buttons for scraper management. Unflagged visitors see 'Send Webhook' (sends at current score) and 'Mark as Scraper' (permanently sets score to 100 and sends webhook). Flagged visitors get a 'Re-send' button alongside the existing 'Unflag'. Both buttons have confirmation dialogs. Mark as Scraper updates both the Postgres visitor record and the LiveView scraper assign."
+         }
+       ]},
       {"v6.5.0", "2026-04-20T17:00:00Z",
        [
          %{
