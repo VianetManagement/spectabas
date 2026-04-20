@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.99.0", "2026-04-20T05:00:00Z",
+       [
+         %{
+           title: "Enhancement: Loading spinners on ingest diagnostics cards",
+           description:
+             "Metric cards on the ingest diagnostics page now show a spinning indicator and '...' while their data is loading. DB-dependent cards (ClickHouse, Oban, failed events) show the spinner until the async query completes. BEAM metrics (memory, buffer, processes) render instantly without spinners."
+         }
+       ]},
       {"v5.98.0", "2026-04-20T04:00:00Z",
        [
          %{

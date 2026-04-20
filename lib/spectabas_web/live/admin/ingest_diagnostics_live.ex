@@ -50,6 +50,8 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
      |> assign(:web_pool, %{})
      |> assign(:oban_pool, %{})
      |> assign(:flush_tasks, 0)
+     |> assign(:slow_loaded, false)
+     |> assign(:db_loaded, false)
      |> then(fn s ->
        send(self(), :load_slow)
        send(self(), :refresh)
@@ -59,9 +61,9 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
 
   @impl true
   def handle_info(:load_slow, socket) do
-    {:noreply, load_slow_metrics(socket)}
+    {:noreply, socket |> load_slow_metrics() |> assign(:slow_loaded, true)}
   rescue
-    _ -> {:noreply, socket}
+    _ -> {:noreply, assign(socket, :slow_loaded, true)}
   end
 
   @impl true
@@ -99,7 +101,8 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
      |> assign(:oban_executing, data.oban_executing)
      |> assign(:oban_by_queue, data.oban_by_queue)
      |> assign(:web_pool, data.web_pool)
-     |> assign(:oban_pool, data.oban_pool)}
+     |> assign(:oban_pool, data.oban_pool)
+     |> assign(:db_loaded, true)}
   end
 
   @impl true
@@ -321,6 +324,7 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
           value={format_number(@failed_count)}
           color={if @failed_count > 0, do: "red", else: "green"}
           sublabel="pending retry"
+          loading={!@db_loaded}
         />
       </div>
 
@@ -337,12 +341,14 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
             end
           }
           sublabel="queued jobs"
+          loading={!@db_loaded}
         />
         <.metric_card
           label="Oban Executing"
           value={@oban_executing}
           color="blue"
           sublabel="active workers"
+          loading={!@db_loaded}
         />
         <.metric_card
           label="Web DB Pool"
@@ -390,12 +396,14 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
           value={if @ch_status == :ok, do: "Connected", else: "Down"}
           color={if @ch_status == :ok, do: "green", else: "red"}
           sublabel=""
+          loading={!@db_loaded}
         />
         <.metric_card
           label="Events Today"
           value={format_number(@events_today)}
           color="blue"
           sublabel="all sites"
+          loading={!@slow_loaded}
         />
         <div class="bg-white rounded-lg shadow p-4">
           <dt class="text-xs font-medium text-gray-500 uppercase">Events/Minute (last 5 min)</dt>
@@ -421,6 +429,7 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
           value={format_number(@click_id_today)}
           color={if @click_id_today > 0, do: "green", else: "gray"}
           sublabel="events with gclid/msclkid/fbclid"
+          loading={!@slow_loaded}
         />
         <div class="bg-white rounded-lg shadow p-4 md:col-span-2">
           <dt class="text-xs font-medium text-gray-500 uppercase">By Platform (last 7 days)</dt>
@@ -547,12 +556,22 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
         _ -> "text-gray-900"
       end
 
-    assigns = assign(assigns, :color_class, color_class)
+    loading = Map.get(assigns, :loading, false)
+    assigns = assigns |> assign(:color_class, color_class) |> Map.put_new(:loading, false)
+    assigns = assign(assigns, :loading, loading)
 
     ~H"""
     <div class="bg-white rounded-lg shadow p-4">
-      <dt class="text-xs font-medium text-gray-500 uppercase">{@label}</dt>
-      <dd class={"mt-1 text-2xl font-bold #{@color_class}"}>{@value}</dd>
+      <dt class="text-xs font-medium text-gray-500 uppercase flex items-center gap-1.5">
+        {@label}
+        <span
+          :if={@loading}
+          class="inline-block w-3 h-3 border-2 border-indigo-300 border-t-transparent rounded-full animate-spin"
+        >
+        </span>
+      </dt>
+      <dd :if={!@loading} class={"mt-1 text-2xl font-bold #{@color_class}"}>{@value}</dd>
+      <dd :if={@loading} class="mt-1 text-2xl font-bold text-gray-300">...</dd>
       <p :if={@sublabel != ""} class="text-xs text-gray-400 mt-0.5">{@sublabel}</p>
     </div>
     """
