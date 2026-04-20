@@ -28,6 +28,90 @@ defmodule Spectabas.Events.Ingest do
   Process a validated payload and conn into an enriched event map.
   Returns `{:ok, event_map}` or `{:error, reason}`.
   """
+  # Fast path for non-pageview events (custom, duration).
+  # These events inherit session context from their preceding pageview.
+  # Skip: GeoIP lookup, session resolution, UTM/search extraction, intent classification.
+  # Keeps: IP extraction (for bot check), UA parsing, visitor resolution, URL/referrer parsing.
+  @lightweight_types ~w(custom duration)
+
+  def process(%CollectPayload{t: type} = payload, conn) when type in @lightweight_types do
+    site = conn.assigns[:site]
+    gdpr_mode = conn.assigns[:gdpr_mode] || :on
+
+    client_ip = extract_client_ip(conn)
+    ua_string = get_user_agent(conn)
+    {ua_data, is_bot} = parse_and_detect(ua_string, payload._bot == 1)
+
+    visitor_id = resolve_visitor(site, payload, gdpr_mode, client_ip, ua_string)
+
+    # Lightweight session lookup — reuse existing session from cache, don't create new
+    session_id = payload.sid || Sessions.current_session_id(site.id, visitor_id)
+
+    {_url_parsed, url_path, url_host, url_scheme} = normalize_url(payload.u, gdpr_mode)
+
+    now = resolve_timestamp(payload._oa)
+
+    event =
+      %{
+        event_id: Ecto.UUID.generate(),
+        site_id: site.id,
+        visitor_id: visitor_id,
+        session_id: session_id || "",
+        event_type: type,
+        event_name: payload.n,
+        timestamp: now,
+        url: payload.u,
+        url_path: normalize_path(url_path),
+        url_host: url_host,
+        url_scheme: url_scheme,
+        referrer: "",
+        referrer_domain: "",
+        utm_source: "",
+        utm_medium: "",
+        utm_campaign: "",
+        utm_term: "",
+        utm_content: "",
+        device_type: ua_data[:device_type],
+        browser: ua_data[:browser],
+        browser_version: ua_data[:browser_version],
+        os: ua_data[:os],
+        os_version: ua_data[:os_version],
+        screen_width: payload.sw,
+        screen_height: payload.sh,
+        duration: payload.d,
+        props: payload.p || %{},
+        user_agent: ua_string,
+        browser_fingerprint:
+          cond do
+            payload._fp && payload._fp != "" -> payload._fp
+            payload.vid && String.starts_with?(to_string(payload.vid), "fp_") -> payload.vid
+            true -> ""
+          end,
+        click_id: "",
+        click_id_type: "",
+        ip: client_ip,
+        ip_country: "",
+        ip_country_name: "",
+        ip_region_name: "",
+        ip_city: "",
+        ip_lat: 0.0,
+        ip_lon: 0.0,
+        ip_timezone: "",
+        ip_asn: 0,
+        ip_asn_org: "",
+        ip_is_datacenter: 0,
+        ip_is_vpn: 0,
+        ip_vpn_provider: "",
+        ip_is_tor: 0,
+        ip_is_bot: if(is_bot, do: 1, else: 0),
+        ip_is_eu: 0,
+        visitor_intent: ""
+      }
+
+    {:ok, event}
+  end
+
+  # Full path for pageviews and ecommerce events — complete enrichment.
   def process(%CollectPayload{} = payload, conn) do
     site = conn.assigns[:site]
     gdpr_mode = conn.assigns[:gdpr_mode] || :on

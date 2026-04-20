@@ -14,6 +14,14 @@ defmodule Spectabas.Sessions do
   @session_timeout_ms 30 * 60 * 1000
   @active_threshold_s 300
 
+  @doc "Look up the current session ID from cache without creating or extending. Returns session_id or nil."
+  def current_session_id(site_id, visitor_id) do
+    case SessionCache.get({site_id, visitor_id}) do
+      {:ok, session_id, _last_activity} -> session_id
+      :miss -> nil
+    end
+  end
+
   @doc """
   Resolve a session for the given site_id and visitor_id.
   Checks the ETS cache first; opens a new session or extends

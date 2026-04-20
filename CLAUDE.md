@@ -22,6 +22,8 @@ Spectabas is a multi-tenant, privacy-first web analytics SaaS built with Elixir/
 3. CollectController validates, resolves site by public key
 4. Ingest enriches (IP geo, UA, session, intent, visitor dedup)
 5. IngestBuffer batches (500), async flushes to ClickHouse (Finch pool, 10 connections)
+   - **Fast path**: custom/duration events skip GeoIP, session resolution, UTMs, intent classification (inherit from pageview)
+   - **Full path**: pageviews and ecommerce events get complete enrichment
 6. Dashboard LiveViews query ClickHouse directly
 
 ### IP Enrichment: DB-IP (geo/ASN) → MaxMind (timezone/EU) → ASN Blocklists (datacenter/VPN/TOR) → UAInspector (browser/OS/bot) → Intent Classifier
@@ -185,4 +187,4 @@ Weighted-signal scoring (15 signals, cap 100). Tiers: watching (40-69), suspicio
 - **Backpressure**: 503 at buffer 5,000. Health "overloaded" at buffer 8,000 or Oban queue 500k.
 - **AI**: Per-site config in `ai_config_encrypted`. `AI.Completion.generate/3` abstracts providers. `InsightsCache` (24h). Weekly email Monday 9am UTC. Platform-level help chatbot via `HELP_AI_API_KEY` (Anthropic Haiku) — `AI.HelpChat` module, `ChatComponent` LiveComponent in dashboard_layout.
 - **fix-ch-schema**: Uses `execute_admin` for DDL (writer may lack ALTER privileges).
-- **Changelog**: v5.93.0 at `/admin/changelog`. Updated every push.
+- **Changelog**: v5.94.0 at `/admin/changelog`. Updated every push.

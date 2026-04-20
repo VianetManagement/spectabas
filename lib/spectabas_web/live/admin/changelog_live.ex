@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.94.0", "2026-04-20T00:00:00Z",
+       [
+         %{
+           title: "Perf: Lightweight ingest path for custom/duration events — ~50% CPU reduction",
+           description:
+             "Custom events (_click, _rum, _cwv, _form_abuse, _outbound, _download) and duration pings now skip expensive enrichment steps: GeoIP lookup, session creation, UTM extraction, search query extraction, intent classification, and referrer parsing. These events inherit session context from their preceding pageview. Only pageviews and ecommerce events go through full enrichment. At 76% of ingest volume being custom/duration events (~138K/hr), this eliminates the majority of per-event CPU cost."
+         }
+       ]},
       {"v5.93.0", "2026-04-19T23:00:00Z",
        [
          %{
