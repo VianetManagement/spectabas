@@ -38,13 +38,57 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
      |> assign(:timezone, tz)
      |> assign(:timezones, @timezones)
      |> load_slow_metrics()
-     |> load_live_metrics()}
+     |> load_beam_metrics()
+     |> assign(:ch_status, :ok)
+     |> assign(:events_per_min, [])
+     |> assign(:failed_count, 0)
+     |> assign(:oban_pending, 0)
+     |> assign(:oban_executing, 0)
+     |> assign(:oban_by_queue, [])
+     |> assign(:web_pool, %{})
+     |> assign(:oban_pool, %{})
+     |> then(fn s ->
+       send(self(), :refresh)
+       s
+     end)}
   end
 
   @impl true
   def handle_info(:refresh, socket) do
     schedule_refresh()
-    {:noreply, load_live_metrics(socket)}
+
+    # BEAM metrics are instant — update immediately
+    socket = load_beam_metrics(socket)
+
+    # DB queries run async to avoid blocking the LiveView
+    pid = self()
+
+    Task.start(fn ->
+      data = fetch_db_metrics()
+      send(pid, {:db_metrics, data})
+    end)
+
+    {:noreply, socket}
+  end
+
+  def handle_info({:db_metrics, data}, socket) do
+    tz = socket.assigns[:timezone] || "America/New_York"
+
+    events_per_min =
+      Enum.map(data.events_per_min, fn row ->
+        Map.update(row, "minute", "", &convert_to_tz(&1, tz))
+      end)
+
+    {:noreply,
+     socket
+     |> assign(:ch_status, data.ch_status)
+     |> assign(:events_per_min, events_per_min)
+     |> assign(:failed_count, data.failed_count)
+     |> assign(:oban_pending, data.oban_pending)
+     |> assign(:oban_executing, data.oban_executing)
+     |> assign(:oban_by_queue, data.oban_by_queue)
+     |> assign(:web_pool, data.web_pool)
+     |> assign(:oban_pool, data.oban_pool)}
   end
 
   @impl true
@@ -104,19 +148,39 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
     |> assign(:click_id_today, click_id_today)
   end
 
-  # Lightweight metrics — run every refresh tick
-  defp load_live_metrics(socket) do
-    buffer_size = IngestBuffer.buffer_size()
-    buffer_full = IngestBuffer.full?()
-    cache_size = VisitorCache.size()
-
+  # Instant BEAM/buffer metrics — never blocks
+  defp load_beam_metrics(socket) do
     memory = :erlang.memory()
-    process_count = :erlang.system_info(:process_count)
-    scheduler_count = :erlang.system_info(:schedulers_online)
     {reductions, _} = :erlang.statistics(:reductions)
     {{_, io_in}, {_, io_out}} = :erlang.statistics(:io)
     uptime_ms = :erlang.statistics(:wall_clock) |> elem(0)
-    run_queue = :erlang.statistics(:total_run_queue_lengths_all)
+
+    flush_tasks =
+      case Task.Supervisor.children(Spectabas.IngestFlushSupervisor) do
+        pids when is_list(pids) -> length(pids)
+        _ -> 0
+      end
+
+    socket
+    |> assign(:buffer_size, IngestBuffer.buffer_size())
+    |> assign(:buffer_full, IngestBuffer.full?())
+    |> assign(:cache_size, VisitorCache.size())
+    |> assign(:memory_total, div(memory[:total], 1_048_576))
+    |> assign(:memory_processes, div(memory[:processes], 1_048_576))
+    |> assign(:memory_ets, div(memory[:ets], 1_048_576))
+    |> assign(:process_count, :erlang.system_info(:process_count))
+    |> assign(:scheduler_count, :erlang.system_info(:schedulers_online))
+    |> assign(:reductions, reductions)
+    |> assign(:io_in_mb, div(io_in, 1_048_576))
+    |> assign(:io_out_mb, div(io_out, 1_048_576))
+    |> assign(:uptime_hours, div(uptime_ms, 3_600_000))
+    |> assign(:run_queue, :erlang.statistics(:total_run_queue_lengths_all))
+    |> assign(:flush_tasks, flush_tasks)
+  end
+
+  # DB queries — runs in a separate task to avoid blocking LiveView
+  defp fetch_db_metrics do
+    import Ecto.Query
 
     ch_status = check_ch_status()
 
@@ -134,88 +198,49 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
         []
       end
 
-    failed_count =
-      try do
-        Spectabas.Repo.aggregate(Spectabas.Events.FailedEvent, :count, :id)
-      rescue
-        _ -> 0
-      end
-
-    flush_tasks =
-      case Task.Supervisor.children(Spectabas.IngestFlushSupervisor) do
-        pids when is_list(pids) -> length(pids)
-        _ -> 0
-      end
-
-    import Ecto.Query
-
-    oban_pending =
-      try do
-        Spectabas.ObanRepo.aggregate(
-          from(j in "oban_jobs", where: j.state in ["available", "scheduled", "retryable"]),
-          :count
-        )
-      rescue
-        _ -> 0
-      end
-
-    oban_executing =
-      try do
-        Spectabas.ObanRepo.aggregate(
-          from(j in "oban_jobs", where: j.state == "executing"),
-          :count
-        )
-      rescue
-        _ -> 0
-      end
-
-    oban_by_queue =
-      try do
-        Spectabas.ObanRepo.all(
-          from(j in "oban_jobs",
-            where: j.state == "executing",
-            group_by: [j.queue, j.worker],
-            select: %{queue: j.queue, worker: j.worker, count: count(j.id)},
-            order_by: [desc: count(j.id)]
+    %{
+      ch_status: ch_status,
+      events_per_min: events_per_min,
+      failed_count:
+        try do
+          Spectabas.Repo.aggregate(Spectabas.Events.FailedEvent, :count, :id)
+        rescue
+          _ -> 0
+        end,
+      oban_pending:
+        try do
+          Spectabas.ObanRepo.aggregate(
+            from(j in "oban_jobs", where: j.state in ["available", "scheduled", "retryable"]),
+            :count
           )
-        )
-      rescue
-        _ -> []
-      end
-
-    web_pool = db_pool_stats(Spectabas.Repo)
-    oban_pool = db_pool_stats(Spectabas.ObanRepo)
-
-    tz = socket.assigns[:timezone] || "America/New_York"
-
-    events_per_min =
-      Enum.map(events_per_min, fn row ->
-        Map.update(row, "minute", "", &convert_to_tz(&1, tz))
-      end)
-
-    socket
-    |> assign(:buffer_size, buffer_size)
-    |> assign(:buffer_full, buffer_full)
-    |> assign(:cache_size, cache_size)
-    |> assign(:memory_total, div(memory[:total], 1_048_576))
-    |> assign(:memory_processes, div(memory[:processes], 1_048_576))
-    |> assign(:memory_ets, div(memory[:ets], 1_048_576))
-    |> assign(:process_count, process_count)
-    |> assign(:scheduler_count, scheduler_count)
-    |> assign(:reductions, reductions)
-    |> assign(:io_in_mb, div(io_in, 1_048_576))
-    |> assign(:io_out_mb, div(io_out, 1_048_576))
-    |> assign(:uptime_hours, div(uptime_ms, 3_600_000))
-    |> assign(:run_queue, run_queue)
-    |> assign(:ch_status, ch_status)
-    |> assign(:events_per_min, events_per_min)
-    |> assign(:failed_count, failed_count)
-    |> assign(:flush_tasks, flush_tasks)
-    |> assign(:oban_pending, oban_pending)
-    |> assign(:oban_executing, oban_executing)
-    |> assign(:oban_by_queue, oban_by_queue)
-    |> assign(:web_pool, web_pool)
-    |> assign(:oban_pool, oban_pool)
+        rescue
+          _ -> 0
+        end,
+      oban_executing:
+        try do
+          Spectabas.ObanRepo.aggregate(
+            from(j in "oban_jobs", where: j.state == "executing"),
+            :count
+          )
+        rescue
+          _ -> 0
+        end,
+      oban_by_queue:
+        try do
+          Spectabas.ObanRepo.all(
+            from(j in "oban_jobs",
+              where: j.state == "executing",
+              group_by: [j.queue, j.worker],
+              select: %{queue: j.queue, worker: j.worker, count: count(j.id)},
+              order_by: [desc: count(j.id)]
+            )
+          )
+        rescue
+          _ -> []
+        end,
+      web_pool: db_pool_stats(Spectabas.Repo),
+      oban_pool: db_pool_stats(Spectabas.ObanRepo)
+    }
   end
 
   defp check_ch_status do
