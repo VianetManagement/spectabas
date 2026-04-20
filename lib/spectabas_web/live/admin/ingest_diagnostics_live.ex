@@ -61,7 +61,8 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
 
   @impl true
   def handle_info(:load_slow, socket) do
-    {:noreply, socket |> load_slow_metrics() |> assign(:slow_loaded, true)}
+    tz = socket.assigns[:timezone] || "America/New_York"
+    {:noreply, socket |> load_slow_metrics(tz) |> assign(:slow_loaded, true)}
   rescue
     _ -> {:noreply, assign(socket, :slow_loaded, true)}
   end
@@ -77,7 +78,23 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
     pid = self()
 
     Task.start(fn ->
-      data = fetch_db_metrics()
+      data =
+        try do
+          fetch_db_metrics()
+        rescue
+          _ ->
+            %{
+              ch_status: :error,
+              events_per_min: [],
+              failed_count: 0,
+              oban_pending: 0,
+              oban_executing: 0,
+              oban_by_queue: [],
+              web_pool: %{pool_size: 0, checked_out: 0},
+              oban_pool: %{pool_size: 0, checked_out: 0}
+            }
+        end
+
       send(pid, {:db_metrics, data})
     end)
 
@@ -114,13 +131,14 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
   defp schedule_refresh, do: Process.send_after(self(), :refresh, @refresh_ms)
 
   # Heavy queries — run once on mount
-  defp load_slow_metrics(socket) do
+  defp load_slow_metrics(socket, tz) do
     ch_status = check_ch_status()
+    tz_param = Spectabas.ClickHouse.param(tz)
 
     events_today =
       if ch_status == :ok do
         case Spectabas.ClickHouse.query(
-               "SELECT count() AS c FROM events WHERE toDate(timestamp) = today()"
+               "SELECT count() AS c FROM events WHERE toDate(timestamp, #{tz_param}) = toDate(now(), #{tz_param})"
              ) do
           {:ok, [%{"c" => c}]} -> to_num(c)
           _ -> 0
@@ -147,7 +165,7 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
     click_id_today =
       if ch_status == :ok do
         case Spectabas.ClickHouse.query(
-               "SELECT count() AS c FROM events WHERE click_id != '' AND toDate(timestamp) = today()"
+               "SELECT count() AS c FROM events WHERE click_id != '' AND toDate(timestamp, #{tz_param}) = toDate(now(), #{tz_param})"
              ) do
           {:ok, [%{"c" => c}]} -> to_num(c)
           _ -> 0
@@ -406,17 +424,25 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
           loading={!@slow_loaded}
         />
         <div class="bg-white rounded-lg shadow p-4">
-          <dt class="text-xs font-medium text-gray-500 uppercase">Events/Minute (last 5 min)</dt>
+          <dt class="text-xs font-medium text-gray-500 uppercase flex items-center gap-1.5">
+            Events/Minute (last 5 min)
+            <span
+              :if={!@db_loaded}
+              class="inline-block w-3 h-3 border-2 border-indigo-300 border-t-transparent rounded-full animate-spin"
+            >
+            </span>
+          </dt>
           <div class="mt-2 space-y-1">
             <div :for={row <- @events_per_min} class="flex justify-between text-sm">
               <span class="text-gray-500 font-mono text-xs">
-                {String.slice(row["minute"] || "", 11, 5)}
+                {String.slice(to_string(row["minute"]), 11, 5)}
               </span>
               <span class="font-bold text-gray-900 tabular-nums">
                 {format_number(to_num(row["events"]))}
               </span>
             </div>
-            <div :if={@events_per_min == []} class="text-sm text-gray-400">No data</div>
+            <div :if={!@db_loaded} class="text-sm text-gray-400">Loading...</div>
+            <div :if={@db_loaded && @events_per_min == []} class="text-sm text-gray-400">No data</div>
           </div>
         </div>
       </div>

@@ -53,6 +53,23 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.1.0", "2026-04-20T13:00:00Z",
+       [
+         %{
+           title:
+             "Fix: Ingest diagnostics 'Events Today' and 'Click IDs Today' use user timezone",
+           description:
+             "Both queries used ClickHouse today() which is UTC. At midnight Eastern (4am UTC), the count showed only UTC-day events. Now uses toDate(timestamp, 'America/New_York') to match the user's selected timezone. Also fixed async task crash recovery and added loading spinner to events/minute panel."
+         }
+       ]},
+      {"v6.0.0", "2026-04-20T12:00:00Z",
+       [
+         %{
+           title: "Fixes: SAB cookie display, pool defaults, ingest diag timezone + spinners",
+           description:
+             "Visitor profile shows SAB cookie value with clipboard button. Fixed ingest diagnostics crash from empty pool_size defaults. Added loading spinners to async metric cards. Simplified timezone conversion code. Fixed ingest diagnostics not showing time — events/minute display was missing data."
+         }
+       ]},
       {"v5.99.0", "2026-04-20T05:00:00Z",
        [
          %{
