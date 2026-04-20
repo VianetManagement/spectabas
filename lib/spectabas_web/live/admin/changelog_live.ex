@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.96.0", "2026-04-20T02:00:00Z",
+       [
+         %{
+           title: "Fix: Horizontal scaling — deterministic sessions + cross-instance sync locks",
+           description:
+             "Session IDs are now deterministic: derived from hash(site_id, visitor_id, 30-min-time-bucket) so multiple instances produce the same session ID without shared state. Uses Postgres upsert (ON CONFLICT) to handle concurrent inserts. Integration sync locks upgraded from per-node persistent_term to Postgres advisory locks — prevents duplicate syncs across instances. ETS cache retained as a fast performance layer but correctness no longer depends on it."
+         }
+       ]},
       {"v5.95.0", "2026-04-20T01:00:00Z",
        [
          %{

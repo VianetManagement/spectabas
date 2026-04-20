@@ -12,23 +12,23 @@ defmodule Spectabas.Sessions do
   alias Spectabas.Sessions.{Session, SessionCache}
 
   @session_timeout_ms 30 * 60 * 1000
+  @session_window_s 1800
   @active_threshold_s 300
 
-  @doc "Look up the current session ID from cache without creating or extending. Returns session_id or nil."
+  @doc "Look up the current session ID from cache, or derive deterministically. Returns session_id or nil."
   def current_session_id(site_id, visitor_id) do
     case SessionCache.get({site_id, visitor_id}) do
       {:ok, session_id, _last_activity} -> session_id
-      :miss -> nil
+      :miss -> deterministic_session_id(site_id, visitor_id, DateTime.utc_now())
     end
   end
 
   @doc """
   Resolve a session for the given site_id and visitor_id.
-  Checks the ETS cache first; opens a new session or extends
-  an existing one.
+  Uses deterministic session IDs based on a hash of (site_id, visitor_id, time_bucket)
+  so multiple instances produce the same session ID without shared state.
 
-  `event_data` should contain keys: entry_url, referrer, country, city,
-  device_type, browser, os.
+  Checks the ETS cache first for performance; falls back to Postgres upsert.
 
   Returns `{:ok, %Session{}}` or `{:error, reason}`.
   """
@@ -39,7 +39,7 @@ defmodule Spectabas.Sessions do
     case SessionCache.get(cache_key) do
       {:ok, session_id, last_activity} ->
         if expired?(last_activity, now) do
-          create_session(site_id, visitor_id, event_data, now)
+          upsert_session(site_id, visitor_id, event_data, now)
         else
           result = extend_session(session_id, event_data, now)
           if match?({:ok, _}, result), do: SessionCache.touch(cache_key, now)
@@ -47,8 +47,34 @@ defmodule Spectabas.Sessions do
         end
 
       :miss ->
-        create_session(site_id, visitor_id, event_data, now)
+        upsert_session(site_id, visitor_id, event_data, now)
     end
+  end
+
+  @doc "Generate a deterministic session ID from site_id + visitor_id + time window."
+  def deterministic_session_id(site_id, visitor_id, %DateTime{} = now) do
+    bucket = div(DateTime.to_unix(now), @session_window_s)
+    data = "#{site_id}:#{visitor_id}:#{bucket}"
+
+    # Generate a UUID-shaped deterministic ID via SHA-256 truncation
+    :crypto.hash(:sha256, data)
+    |> binary_part(0, 16)
+    |> encode_uuid()
+  end
+
+  defp encode_uuid(<<a::32, b::16, c::16, d::16, e::48>>) do
+    [
+      Base.encode16(<<a::32>>, case: :lower),
+      "-",
+      Base.encode16(<<b::16>>, case: :lower),
+      "-",
+      Base.encode16(<<c::16>>, case: :lower),
+      "-",
+      Base.encode16(<<d::16>>, case: :lower),
+      "-",
+      Base.encode16(<<e::48>>, case: :lower)
+    ]
+    |> IO.iodata_to_binary()
   end
 
   @doc """
@@ -92,8 +118,11 @@ defmodule Spectabas.Sessions do
 
   # --- Private ---
 
-  defp create_session(site_id, visitor_id, event_data, now) do
+  defp upsert_session(site_id, visitor_id, event_data, now) do
+    session_id = deterministic_session_id(site_id, visitor_id, now)
+
     attrs = %{
+      id: session_id,
       site_id: site_id,
       visitor_id: visitor_id,
       started_at: now,
@@ -109,7 +138,12 @@ defmodule Spectabas.Sessions do
       is_bounce: true
     }
 
-    case %Session{} |> Session.changeset(attrs) |> Repo.insert() do
+    case %Session{id: session_id}
+         |> Session.changeset(attrs)
+         |> Repo.insert(
+           on_conflict: {:replace, [:exit_url, :updated_at, :pageview_count]},
+           conflict_target: :id
+         ) do
       {:ok, session} ->
         SessionCache.put({site_id, visitor_id}, session.id, now)
         {:ok, session}
