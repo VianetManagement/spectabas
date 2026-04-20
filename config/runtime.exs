@@ -82,4 +82,12 @@ if config_env() == :prod do
   if help_ai_key = System.get_env("HELP_AI_API_KEY") do
     config :spectabas, help_ai_api_key: help_ai_key
   end
+
+  if r2_bucket = System.get_env("R2_BUCKET") do
+    config :spectabas,
+      r2_bucket: r2_bucket,
+      r2_access_key_id: System.get_env("R2_ACCESS_KEY_ID"),
+      r2_secret_access_key: System.get_env("R2_SECRET_ACCESS_KEY"),
+      r2_endpoint: System.get_env("R2_ENDPOINT")
+  end
 end

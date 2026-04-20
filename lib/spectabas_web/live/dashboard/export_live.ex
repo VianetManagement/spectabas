@@ -189,6 +189,18 @@ defmodule SpectabasWeb.Dashboard.ExportLive do
                 {Calendar.strftime(@export.completed_at, "%Y-%m-%d %H:%M")}
               </dd>
             </div>
+            <div :if={@export.status == "completed" && @export.file_path}>
+              <dt class="text-sm font-medium text-gray-500">Download</dt>
+              <dd class="mt-1">
+                <a
+                  href={export_download_url(@export)}
+                  target="_blank"
+                  class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700"
+                >
+                  Download CSV
+                </a>
+              </dd>
+            </div>
             <div :if={@export.error}>
               <dt class="text-sm font-medium text-gray-500">Error</dt>
               <dd class="mt-1 text-sm text-red-600">{@export.error}</dd>
@@ -199,6 +211,12 @@ defmodule SpectabasWeb.Dashboard.ExportLive do
     </.dashboard_layout>
     """
   end
+
+  defp export_download_url(%{file_path: "r2://" <> key}) do
+    Spectabas.R2.presigned_url(key)
+  end
+
+  defp export_download_url(%{file_path: path}) when is_binary(path), do: path
 
   defp export_status_class("pending"), do: "bg-yellow-100 text-yellow-800"
   defp export_status_class("completed"), do: "bg-green-100 text-green-800"

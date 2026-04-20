@@ -17,14 +17,8 @@ defmodule Spectabas.GeoIP do
   def databases, do: @databases
 
   def data_dir do
-    persistent_dir = System.get_env("PERSISTENT_DIR")
-    priv_dir = :code.priv_dir(:spectabas) |> to_string()
-
-    dir =
-      if persistent_dir,
-        do: Path.join(persistent_dir, "geoip"),
-        else: Path.join(priv_dir, "geoip")
-
+    # Use /tmp for stateless scaling — files are re-downloaded from R2 or upstream on boot
+    dir = System.get_env("GEOIP_DIR") || "/tmp/spectabas_geoip"
     File.mkdir_p!(dir)
     dir
   end
@@ -34,7 +28,10 @@ defmodule Spectabas.GeoIP do
     dir = data_dir()
     priv_dir = Path.join(:code.priv_dir(:spectabas) |> to_string(), "geoip")
 
-    # Try loading each database from persistent storage or priv (Docker fallback)
+    # Try R2 first for all missing databases (fast, same region)
+    pull_from_r2(dir)
+
+    # Try loading each database from dir, priv (Docker fallback), or mark as missing
     missing =
       Enum.filter(@databases, fn db ->
         path = Path.join(dir, db.filename)
@@ -69,6 +66,31 @@ defmodule Spectabas.GeoIP do
     end
 
     {:ok, %{}}
+  end
+
+  defp pull_from_r2(dir) do
+    if Spectabas.R2.configured?() do
+      Logger.notice("[GeoIP] Pulling MMDB files from R2...")
+
+      Enum.each(@databases, fn db ->
+        dest = Path.join(dir, db.filename)
+
+        unless File.exists?(dest) do
+          case Spectabas.R2.download_to_file("geoip/#{db.filename}", dest) do
+            {:ok, _} ->
+              Logger.notice("[GeoIP] Downloaded #{db.filename} from R2")
+
+            {:error, :not_found} ->
+              Logger.info("[GeoIP] #{db.filename} not in R2 yet")
+
+            {:error, reason} ->
+              Logger.warning("[GeoIP] R2 download failed #{db.filename}: #{inspect(reason)}")
+          end
+        end
+      end)
+    end
+  rescue
+    e -> Logger.warning("[GeoIP] R2 pull failed: #{Exception.message(e)}")
   end
 
   def load_db(path, id) do

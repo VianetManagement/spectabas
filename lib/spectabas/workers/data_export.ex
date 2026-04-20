@@ -66,19 +66,33 @@ defmodule Spectabas.Workers.DataExport do
   ]
 
   defp stream_csv(%Export{id: export_id, site: site, date_from: date_from, date_to: date_to}) do
-    file_path = Path.join(System.tmp_dir!(), "spectabas_export_#{export_id}.csv")
-
-    # Write header
+    # Build CSV in memory, then upload to R2 or write to /tmp
     header_csv = [@csv_headers] |> CSV.encode() |> Enum.join()
-    File.write!(file_path, header_csv)
 
-    # Fetch and write in chunks
-    fetch_and_write_chunks(file_path, site, date_from, date_to, 0, 0)
+    case fetch_all_chunks(site, date_from, date_to, 0, 0, [header_csv]) do
+      {:ok, parts} ->
+        csv_body = IO.iodata_to_binary(parts)
+        r2_key = "exports/#{export_id}.csv"
+
+        if Spectabas.R2.configured?() do
+          case Spectabas.R2.upload(r2_key, csv_body, "text/csv") do
+            :ok -> {:ok, "r2://#{r2_key}"}
+            {:error, reason} -> {:error, reason}
+          end
+        else
+          file_path = Path.join(System.tmp_dir!(), "spectabas_export_#{export_id}.csv")
+          File.write!(file_path, csv_body)
+          {:ok, file_path}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
-  defp fetch_and_write_chunks(file_path, site, date_from, date_to, offset, total_written) do
+  defp fetch_all_chunks(site, date_from, date_to, offset, total_written, acc) do
     if total_written >= @max_rows do
-      {:ok, file_path}
+      {:ok, Enum.reverse(acc)}
     else
       sql = """
       SELECT
@@ -107,7 +121,7 @@ defmodule Spectabas.Workers.DataExport do
 
       case ClickHouse.query(sql) do
         {:ok, []} ->
-          {:ok, file_path}
+          {:ok, Enum.reverse(acc)}
 
         {:ok, rows} ->
           chunk_csv =
@@ -116,18 +130,16 @@ defmodule Spectabas.Workers.DataExport do
             |> CSV.encode()
             |> Enum.join()
 
-          File.write!(file_path, chunk_csv, [:append])
-
           if length(rows) < @chunk_size do
-            {:ok, file_path}
+            {:ok, Enum.reverse([chunk_csv | acc])}
           else
-            fetch_and_write_chunks(
-              file_path,
+            fetch_all_chunks(
               site,
               date_from,
               date_to,
               offset + @chunk_size,
-              total_written + length(rows)
+              total_written + length(rows),
+              [chunk_csv | acc]
             )
           end
 

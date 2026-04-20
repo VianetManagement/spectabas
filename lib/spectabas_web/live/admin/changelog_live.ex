@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v5.95.0", "2026-04-20T01:00:00Z",
+       [
+         %{
+           title: "Feature: Stateless scaling — R2 for GeoIP + exports, no persistent disk",
+           description:
+             "The web service no longer requires persistent disk storage. GeoIP MMDB files (DB-IP, MaxMind, ipapi.is VPN) are synced to Cloudflare R2 by the GeoIPRefresh worker and pulled from R2 on boot to /tmp. Data exports write CSV to R2 with presigned download URLs. IngestBuffer disk persistence removed (buffer flushes every 500ms, max ~500ms data loss on crash). All runtime file writes now go to /tmp (ephemeral). Enables horizontal scaling on Railway/Render."
+         }
+       ]},
       {"v5.94.0", "2026-04-20T00:00:00Z",
        [
          %{
