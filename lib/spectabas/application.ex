@@ -35,9 +35,9 @@ defmodule Spectabas.Application do
     opts = [strategy: :one_for_one, name: Spectabas.Supervisor]
     result = Supervisor.start_link(children, opts)
 
-    # Notify Slack on deploy (async, non-blocking)
+    # Notify Slack only on new version deploys, not autoscale boot
     Task.start(fn ->
-      Spectabas.Notifications.Slack.notify(deploy_message())
+      notify_if_new_version()
     end)
 
     # One-time backfill checks — delayed so ClickHouse schema is ready.
@@ -107,6 +107,42 @@ defmodule Spectabas.Application do
   end
 
   @version "v5.96.0"
+
+  defp notify_if_new_version do
+    # Use a Postgres query to check if this version was already notified.
+    # Only one instance wins the advisory lock — others skip silently.
+    lock_id = :erlang.phash2({:deploy_notify, @version}, 2_147_483_647)
+
+    case Spectabas.Repo.query("SELECT pg_try_advisory_lock($1)", [lock_id]) do
+      {:ok, %{rows: [[true]]}} ->
+        # Check if this version was already notified by a previous boot of the same version
+        case Spectabas.Repo.query(
+               "SELECT value FROM app_settings WHERE key = 'last_deploy_version' LIMIT 1"
+             ) do
+          {:ok, %{rows: [[last]]}} when last == @version ->
+            # Same version — autoscale, not a new deploy. Release the lock.
+            Spectabas.Repo.query("SELECT pg_advisory_unlock($1)", [lock_id])
+
+          _ ->
+            # New version! Notify and record it.
+            Spectabas.Repo.query(
+              "INSERT INTO app_settings (key, value) VALUES ('last_deploy_version', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
+              [@version]
+            )
+
+            Spectabas.Repo.query("SELECT pg_advisory_unlock($1)", [lock_id])
+            Spectabas.Notifications.Slack.notify(deploy_message())
+        end
+
+      _ ->
+        # Another instance already has the lock — skip
+        :ok
+    end
+  rescue
+    _ ->
+      # If app_settings table doesn't exist yet, fall back to always notifying
+      Spectabas.Notifications.Slack.notify(deploy_message())
+  end
 
   defp deploy_message do
     # Pull the latest changelog entry to include in the Slack notification.
