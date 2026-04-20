@@ -500,37 +500,14 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
   end
 
   defp convert_to_tz(timestamp_str, tz) when is_binary(timestamp_str) do
-    case NaiveDateTime.from_iso8601(timestamp_str) do
-      {:ok, naive} ->
-        case DateTime.from_naive(naive, "Etc/UTC") do
-          {:ok, utc_dt} ->
-            case DateTime.shift_zone(utc_dt, tz) do
-              {:ok, local} -> Calendar.strftime(local, "%Y-%m-%d %H:%M:%S")
-              _ -> timestamp_str
-            end
+    normalized = String.replace(timestamp_str, " ", "T")
 
-          _ ->
-            timestamp_str
-        end
-
-      _ ->
-        # Try space-separated format "2026-03-31 21:44:00"
-        case NaiveDateTime.from_iso8601(String.replace(timestamp_str, " ", "T")) do
-          {:ok, naive} ->
-            case DateTime.from_naive(naive, "Etc/UTC") do
-              {:ok, utc_dt} ->
-                case DateTime.shift_zone(utc_dt, tz) do
-                  {:ok, local} -> Calendar.strftime(local, "%Y-%m-%d %H:%M:%S")
-                  _ -> timestamp_str
-                end
-
-              _ ->
-                timestamp_str
-            end
-
-          _ ->
-            timestamp_str
-        end
+    with {:ok, naive} <- NaiveDateTime.from_iso8601(normalized),
+         {:ok, utc_dt} <- DateTime.from_naive(naive, "Etc/UTC"),
+         {:ok, local} <- DateTime.shift_zone(utc_dt, tz) do
+      Calendar.strftime(local, "%Y-%m-%d %H:%M:%S")
+    else
+      _ -> timestamp_str
     end
   end
 
