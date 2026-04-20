@@ -467,7 +467,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
           <div
             :if={@flash["info"]}
             id="flash-info"
-            class="fixed top-4 right-4 z-50 max-w-sm w-full"
+            class="fixed top-3 right-3 z-50 w-[calc(100vw-24px)] max-w-sm"
             phx-hook="AutoDismiss"
           >
             <div class="bg-white rounded-lg shadow-lg border border-green-200 overflow-hidden">
@@ -507,7 +507,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
           <div
             :if={@flash["error"]}
             id="flash-error"
-            class="fixed top-4 right-4 z-50 max-w-sm w-full"
+            class="fixed top-3 right-3 z-50 w-[calc(100vw-24px)] max-w-sm"
           >
             <div class="bg-white rounded-lg shadow-lg border border-red-200 overflow-hidden">
               <div class="flex items-start gap-3 p-4">

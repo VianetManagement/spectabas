@@ -326,7 +326,7 @@ defmodule SpectabasWeb.Dashboard.FunnelDetailLive do
               <div class="space-y-3">
                 <div
                   :for={{step, idx} <- Enum.with_index(@edit_steps)}
-                  class="flex items-center gap-3"
+                  class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3"
                 >
                   <span class="text-sm font-medium text-gray-500 w-6">{idx + 1}.</span>
                   <% step_type = step["type"] || Map.get(step, :type, "pageview") %>
@@ -401,7 +401,10 @@ defmodule SpectabasWeb.Dashboard.FunnelDetailLive do
 
         <div :if={!@loading}>
           <%!-- Summary Cards --%>
-          <div :if={@funnel_data != []} class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div
+            :if={@funnel_data != []}
+            class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
+          >
             <% first_step = List.first(@funnel_data) || %{}
             last_step = List.last(@funnel_data) || %{}
             entered = first_step["visitors"] || 0

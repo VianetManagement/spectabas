@@ -369,7 +369,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
         />
 
         <%!-- Top stats row --%>
-        <div class={"grid grid-cols-2 gap-4 mb-6 " <> if(@ltv, do: "md:grid-cols-6", else: "md:grid-cols-5")}>
+        <div class={"grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 " <> if(@ltv, do: "md:grid-cols-6", else: "md:grid-cols-5")}>
           <div class="bg-white rounded-lg shadow p-4">
             <dt class="text-xs font-medium text-gray-500">Pageviews</dt>
             <dd class="mt-1 text-2xl font-bold text-gray-900">{@profile["total_pageviews"] || 0}</dd>
@@ -698,7 +698,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
                   ]}>
                     {click_platform_label(@profile["first_click_id_type"])}
                   </span>
-                  <span class="text-xs font-mono text-gray-500 truncate max-w-[200px]">
+                  <span class="text-xs font-mono text-gray-500 truncate max-w-[100px] sm:max-w-[200px]">
                     {@profile["first_click_id"]}
                   </span>
                 </dd>
@@ -770,7 +770,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
 
           <div :if={@show_ip_panel} class="border-t border-gray-100 px-5 py-4">
             <%!-- IP enrichment details --%>
-            <div :if={@ip_info} class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div :if={@ip_info} class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-4">
               <.field
                 label="Country"
                 value={"#{@ip_info["ip_country_name"]} (#{@ip_info["ip_country"]})"}
@@ -789,7 +789,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
               <h4 class="text-xs font-semibold text-gray-500 uppercase mb-2">
                 Other visitors from this IP
               </h4>
-              <table class="min-w-full divide-y divide-gray-200 text-sm">
+              <table class="min-w-full divide-y divide-gray-200 text-xs sm:text-sm">
                 <thead class="bg-gray-50">
                   <tr>
                     <th class="px-3 py-2 text-left text-xs text-gray-500">Visitor</th>
@@ -845,7 +845,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
                 IP Addresses Used ({length(@visitor_ips)})
               </h3>
             </div>
-            <table class="min-w-full divide-y divide-gray-200 text-sm">
+            <table class="min-w-full divide-y divide-gray-200 text-xs sm:text-sm">
               <thead class="bg-gray-50">
                 <tr>
                   <th class="px-4 py-2 text-left text-xs text-gray-500">IP Address</th>
@@ -926,7 +926,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
                 <%= for {event, idx} <- @timeline |> Enum.filter(& &1["event_type"] == "pageview") |> Enum.take(20) |> Enum.with_index() do %>
                   <span :if={idx > 0} class="text-gray-300 text-xs">&rarr;</span>
                   <span
-                    class="inline-flex px-2 py-0.5 rounded bg-blue-50 text-xs font-mono text-blue-700 truncate max-w-[160px]"
+                    class="inline-flex px-2 py-0.5 rounded bg-blue-50 text-xs font-mono text-blue-700 truncate max-w-[100px] sm:max-w-[160px]"
                     title={event["url_path"]}
                   >
                     {event["url_path"]}
@@ -943,7 +943,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
             <div class="px-5 py-4 border-b border-gray-100">
               <h3 class="text-sm font-semibold text-gray-700">Sessions ({length(@sessions)})</h3>
             </div>
-            <table class="min-w-full divide-y divide-gray-200 text-sm">
+            <table class="min-w-full divide-y divide-gray-200 text-xs sm:text-sm">
               <thead class="bg-gray-50">
                 <tr>
                   <th class="px-4 py-2 text-left text-xs text-gray-500">Started</th>
@@ -989,7 +989,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
               View all ecommerce &rarr;
             </.link>
           </div>
-          <table class="min-w-full divide-y divide-gray-200 text-sm">
+          <table class="min-w-full divide-y divide-gray-200 text-xs sm:text-sm">
             <thead class="bg-gray-50">
               <tr>
                 <th class="px-4 py-2 text-left text-xs text-gray-500">Order ID</th>
@@ -1034,7 +1034,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
               These visitors share the same browser fingerprint — possible alt accounts or shared device.
             </p>
           </div>
-          <table class="min-w-full divide-y divide-gray-200 text-sm">
+          <table class="min-w-full divide-y divide-gray-200 text-xs sm:text-sm">
             <thead class="bg-gray-50">
               <tr>
                 <th class="px-3 py-2 text-left text-xs text-gray-500">Visitor</th>
@@ -1208,7 +1208,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
               View all webhooks &rarr;
             </.link>
           </div>
-          <table class="min-w-full divide-y divide-gray-200 text-sm">
+          <table class="min-w-full divide-y divide-gray-200 text-xs sm:text-sm">
             <thead class="bg-gray-50">
               <tr>
                 <th class="px-4 py-2 text-left text-xs text-gray-500">Time</th>

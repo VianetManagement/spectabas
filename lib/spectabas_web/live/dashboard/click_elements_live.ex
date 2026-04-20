@@ -258,7 +258,7 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
                 value={@search}
                 placeholder="Search elements..."
                 phx-debounce="200"
-                class="rounded-lg border-gray-300 text-sm focus:border-indigo-500 focus:ring-indigo-500 w-56"
+                class="rounded-lg border-gray-300 text-sm focus:border-indigo-500 focus:ring-indigo-500 w-full sm:w-56"
               />
             </form>
             <select
@@ -465,7 +465,7 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
                       phx-click="create_goal"
                       phx-value-key={element_key(el)}
                       phx-value-name={el["element_text"] |> to_string() |> String.slice(0..39)}
-                      class="text-xs text-indigo-600 hover:text-indigo-800"
+                      class="text-xs text-indigo-600 hover:text-indigo-800 py-1"
                     >
                       Create Goal
                     </button>
@@ -473,7 +473,7 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
                       phx-click="toggle_ignore"
                       phx-value-key={element_key(el)}
                       class={[
-                        "text-xs",
+                        "text-xs py-1",
                         if(element_is_ignored?(el, @element_names),
                           do: "text-amber-600 hover:text-amber-800",
                           else: "text-gray-400 hover:text-gray-600"
@@ -497,7 +497,7 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
                 :if={@page > 1}
                 phx-click="page"
                 phx-value-page={@page - 1}
-                class="px-2.5 py-1 text-xs rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100"
+                class="px-3 py-2 sm:py-1 text-xs rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100"
               >
                 Prev
               </button>
@@ -506,7 +506,7 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
                 phx-click="page"
                 phx-value-page={p}
                 class={[
-                  "px-2.5 py-1 text-xs rounded-lg border",
+                  "px-3 py-2 sm:py-1 text-xs rounded-lg border",
                   if(p == @page,
                     do: "bg-indigo-600 text-white border-indigo-600",
                     else: "border-gray-300 text-gray-600 hover:bg-gray-100"
@@ -519,7 +519,7 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
                 :if={@page < pages}
                 phx-click="page"
                 phx-value-page={@page + 1}
-                class="px-2.5 py-1 text-xs rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100"
+                class="px-3 py-2 sm:py-1 text-xs rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100"
               >
                 Next
               </button>

@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.4.0", "2026-04-20T16:00:00Z",
+       [
+         %{
+           title: "Fix: Mobile responsiveness + scraper webhook candidate threshold",
+           description:
+             "Mobile responsiveness audit: fixed 13 issues across 8 files — chat widget responsive sizing, grids with mobile breakpoints, touch targets enlarged, search inputs full-width, flex wrapping on step forms, truncation widths responsive, flash messages safe on narrow screens. Scraper webhook scan HAVING threshold lowered from 20+ pages/3+ IPs to 3+ pages/2+ IPs/datacenter IP — catches low-volume scrapers from datacenter IPs that score high on signal-based detection."
+         }
+       ]},
       {"v6.3.0", "2026-04-20T15:00:00Z",
        [
          %{

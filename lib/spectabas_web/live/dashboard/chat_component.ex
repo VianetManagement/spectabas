@@ -90,7 +90,7 @@ defmodule SpectabasWeb.Dashboard.ChatComponent do
       <%!-- Chat panel --%>
       <div
         :if={@open}
-        class="fixed bottom-5 right-5 z-40 w-96 h-[32rem] bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden"
+        class="fixed bottom-3 right-3 sm:bottom-5 sm:right-5 z-40 w-[calc(100vw-24px)] max-w-sm h-[70vh] max-h-[32rem] sm:w-96 sm:h-[32rem] bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden"
       >
         <%!-- Header --%>
         <div class="flex items-center justify-between px-4 py-3 bg-indigo-600 text-white shrink-0">

@@ -221,7 +221,7 @@ defmodule SpectabasWeb.Dashboard.GoalDetailLive do
 
         <div :if={!@loading && @stats}>
           <%!-- Stat Cards --%>
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             <div class="bg-white rounded-lg shadow p-5">
               <p class="text-sm text-gray-500">Total Completions</p>
               <p class="text-2xl font-bold text-gray-900 mt-1">
@@ -261,7 +261,7 @@ defmodule SpectabasWeb.Dashboard.GoalDetailLive do
           <%!-- Click Element Info (if applicable) --%>
           <div :if={@click_element_info} class="bg-white rounded-lg shadow p-5 mb-8">
             <h2 class="text-sm font-semibold text-gray-700 mb-3">Element Details</h2>
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
               <div>
                 <p class="text-gray-500">Tag</p>
                 <p class="font-mono font-medium mt-1">{"<#{@click_element_info["element_tag"]}>"}</p>
@@ -309,21 +309,28 @@ defmodule SpectabasWeb.Dashboard.GoalDetailLive do
               <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
                   <tr>
-                    <th class="px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th class="px-3 sm:px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase">
                       Source
                     </th>
-                    <th class="px-5 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                    <th class="px-3 sm:px-5 py-2 text-right text-xs font-medium text-gray-500 uppercase">
                       Completers
                     </th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200">
                   <tr :if={@top_sources == []}>
-                    <td colspan="2" class="px-5 py-4 text-center text-sm text-gray-400">No data</td>
+                    <td
+                      colspan="2"
+                      class="px-3 sm:px-5 py-4 text-center text-xs sm:text-sm text-gray-400"
+                    >
+                      No data
+                    </td>
                   </tr>
                   <tr :for={src <- @top_sources} class="hover:bg-gray-50">
-                    <td class="px-5 py-2 text-sm text-gray-900">{src["source"]}</td>
-                    <td class="px-5 py-2 text-sm text-gray-600 text-right tabular-nums">
+                    <td class="px-3 sm:px-5 py-2 text-xs sm:text-sm text-gray-900">
+                      {src["source"]}
+                    </td>
+                    <td class="px-3 sm:px-5 py-2 text-xs sm:text-sm text-gray-600 text-right tabular-nums">
                       {format_number(to_num(src["completers"]))}
                     </td>
                   </tr>
@@ -338,29 +345,34 @@ defmodule SpectabasWeb.Dashboard.GoalDetailLive do
               <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
                   <tr>
-                    <th class="px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th class="px-3 sm:px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase">
                       Page
                     </th>
-                    <th class="px-5 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                    <th class="px-3 sm:px-5 py-2 text-right text-xs font-medium text-gray-500 uppercase">
                       Completions
                     </th>
-                    <th class="px-5 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                    <th class="px-3 sm:px-5 py-2 text-right text-xs font-medium text-gray-500 uppercase">
                       Visitors
                     </th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200">
                   <tr :if={@top_pages == []}>
-                    <td colspan="3" class="px-5 py-4 text-center text-sm text-gray-400">No data</td>
+                    <td
+                      colspan="3"
+                      class="px-3 sm:px-5 py-4 text-center text-xs sm:text-sm text-gray-400"
+                    >
+                      No data
+                    </td>
                   </tr>
                   <tr :for={page <- @top_pages} class="hover:bg-gray-50">
-                    <td class="px-5 py-2 text-sm text-gray-900 font-mono truncate max-w-[200px]">
+                    <td class="px-3 sm:px-5 py-2 text-xs sm:text-sm text-gray-900 font-mono truncate max-w-[120px] sm:max-w-[200px]">
                       {page["url_path"]}
                     </td>
-                    <td class="px-5 py-2 text-sm text-gray-600 text-right tabular-nums">
+                    <td class="px-3 sm:px-5 py-2 text-xs sm:text-sm text-gray-600 text-right tabular-nums">
                       {format_number(to_num(page["completions"]))}
                     </td>
-                    <td class="px-5 py-2 text-sm text-gray-600 text-right tabular-nums">
+                    <td class="px-3 sm:px-5 py-2 text-xs sm:text-sm text-gray-600 text-right tabular-nums">
                       {format_number(to_num(page["unique_completers"]))}
                     </td>
                   </tr>
@@ -378,24 +390,24 @@ defmodule SpectabasWeb.Dashboard.GoalDetailLive do
               <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
                   <tr>
-                    <th class="px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th class="px-3 sm:px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase">
                       Device
                     </th>
-                    <th class="px-5 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                    <th class="px-3 sm:px-5 py-2 text-right text-xs font-medium text-gray-500 uppercase">
                       Completions
                     </th>
-                    <th class="px-5 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                    <th class="px-3 sm:px-5 py-2 text-right text-xs font-medium text-gray-500 uppercase">
                       Visitors
                     </th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200">
                   <tr :for={d <- @devices} class="hover:bg-gray-50">
-                    <td class="px-5 py-2 text-sm text-gray-900">{d["device"]}</td>
-                    <td class="px-5 py-2 text-sm text-gray-600 text-right tabular-nums">
+                    <td class="px-3 sm:px-5 py-2 text-xs sm:text-sm text-gray-900">{d["device"]}</td>
+                    <td class="px-3 sm:px-5 py-2 text-xs sm:text-sm text-gray-600 text-right tabular-nums">
                       {format_number(to_num(d["completions"]))}
                     </td>
-                    <td class="px-5 py-2 text-sm text-gray-600 text-right tabular-nums">
+                    <td class="px-3 sm:px-5 py-2 text-xs sm:text-sm text-gray-600 text-right tabular-nums">
                       {format_number(to_num(d["unique_completers"]))}
                     </td>
                   </tr>
@@ -410,24 +422,24 @@ defmodule SpectabasWeb.Dashboard.GoalDetailLive do
               <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
                   <tr>
-                    <th class="px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th class="px-3 sm:px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase">
                       Country
                     </th>
-                    <th class="px-5 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                    <th class="px-3 sm:px-5 py-2 text-right text-xs font-medium text-gray-500 uppercase">
                       Completions
                     </th>
-                    <th class="px-5 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                    <th class="px-3 sm:px-5 py-2 text-right text-xs font-medium text-gray-500 uppercase">
                       Visitors
                     </th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200">
                   <tr :for={g <- @geo} class="hover:bg-gray-50">
-                    <td class="px-5 py-2 text-sm text-gray-900">{g["country"]}</td>
-                    <td class="px-5 py-2 text-sm text-gray-600 text-right tabular-nums">
+                    <td class="px-3 sm:px-5 py-2 text-xs sm:text-sm text-gray-900">{g["country"]}</td>
+                    <td class="px-3 sm:px-5 py-2 text-xs sm:text-sm text-gray-600 text-right tabular-nums">
                       {format_number(to_num(g["completions"]))}
                     </td>
-                    <td class="px-5 py-2 text-sm text-gray-600 text-right tabular-nums">
+                    <td class="px-3 sm:px-5 py-2 text-xs sm:text-sm text-gray-600 text-right tabular-nums">
                       {format_number(to_num(g["unique_completers"]))}
                     </td>
                   </tr>
@@ -445,34 +457,37 @@ defmodule SpectabasWeb.Dashboard.GoalDetailLive do
               <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
                   <tr>
-                    <th class="px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th class="px-3 sm:px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase">
                       Visitor
                     </th>
-                    <th class="px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th class="px-3 sm:px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase">
                       Email
                     </th>
-                    <th class="px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th class="px-3 sm:px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase">
                       Last Page
                     </th>
-                    <th class="px-5 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                    <th class="px-3 sm:px-5 py-2 text-right text-xs font-medium text-gray-500 uppercase">
                       Count
                     </th>
-                    <th class="px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th class="px-3 sm:px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase">
                       Device
                     </th>
-                    <th class="px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                    <th class="px-3 sm:px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase">
                       Country
                     </th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-200">
                   <tr :if={@recent_completers == []}>
-                    <td colspan="6" class="px-5 py-4 text-center text-sm text-gray-400">
+                    <td
+                      colspan="6"
+                      class="px-3 sm:px-5 py-4 text-center text-xs sm:text-sm text-gray-400"
+                    >
                       No completers found
                     </td>
                   </tr>
                   <tr :for={c <- @recent_completers} class="hover:bg-gray-50">
-                    <td class="px-5 py-2 text-sm">
+                    <td class="px-3 sm:px-5 py-2 text-xs sm:text-sm">
                       <.link
                         navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{c["visitor_id"]}"}
                         class="text-indigo-600 hover:text-indigo-800 font-mono text-xs"
@@ -480,17 +495,17 @@ defmodule SpectabasWeb.Dashboard.GoalDetailLive do
                         {String.slice(c["visitor_id"] || "", 0..11)}...
                       </.link>
                     </td>
-                    <td class="px-5 py-2 text-sm text-gray-600">
+                    <td class="px-3 sm:px-5 py-2 text-xs sm:text-sm text-gray-600">
                       {Map.get(@email_map, c["visitor_id"], %{}) |> Map.get(:email, "—")}
                     </td>
-                    <td class="px-5 py-2 text-sm text-gray-600 font-mono truncate max-w-[180px]">
+                    <td class="px-3 sm:px-5 py-2 text-xs sm:text-sm text-gray-600 font-mono truncate max-w-[180px]">
                       {c["last_url"]}
                     </td>
-                    <td class="px-5 py-2 text-sm text-gray-900 text-right tabular-nums font-semibold">
+                    <td class="px-3 sm:px-5 py-2 text-xs sm:text-sm text-gray-900 text-right tabular-nums font-semibold">
                       {format_number(to_num(c["completion_count"]))}
                     </td>
-                    <td class="px-5 py-2 text-sm text-gray-600">{c["device"]}</td>
-                    <td class="px-5 py-2 text-sm text-gray-600">{c["country"]}</td>
+                    <td class="px-3 sm:px-5 py-2 text-xs sm:text-sm text-gray-600">{c["device"]}</td>
+                    <td class="px-3 sm:px-5 py-2 text-xs sm:text-sm text-gray-600">{c["country"]}</td>
                   </tr>
                 </tbody>
               </table>

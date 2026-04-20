@@ -316,7 +316,7 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
       </div>
 
       <%!-- Pipeline Status --%>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <.metric_card
           label="Buffer Size"
           value={format_number(@buffer_size)}
@@ -347,7 +347,7 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
       </div>
 
       <%!-- Background Jobs & DB Pools --%>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <.metric_card
           label="Oban Pending"
           value={format_number(@oban_pending)}
@@ -408,7 +408,7 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
       </div>
 
       <%!-- ClickHouse --%>
-      <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-8">
         <.metric_card
           label="ClickHouse"
           value={if @ch_status == :ok, do: "Connected", else: "Down"}
@@ -444,7 +444,7 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
 
       <%!-- Click ID Attribution --%>
       <h2 class="text-lg font-semibold text-gray-900 mb-4">Click ID Attribution</h2>
-      <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-8">
         <.metric_card
           label="Click IDs Today"
           value={format_number(@click_id_today)}
@@ -476,7 +476,7 @@ defmodule SpectabasWeb.Admin.IngestDiagnosticsLive do
 
       <%!-- BEAM Runtime --%>
       <h2 class="text-lg font-semibold text-gray-900 mb-4">BEAM Runtime</h2>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <.metric_card label="Memory (total)" value={"#{@memory_total} MB"} color="gray" sublabel="" />
         <.metric_card
           label="Memory (processes)"

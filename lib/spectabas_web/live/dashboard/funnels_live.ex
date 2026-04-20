@@ -236,7 +236,7 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
       live_visitors={0}
     >
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div class="flex items-center justify-between mb-8">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
           <div>
             <h1 class="text-2xl font-bold text-gray-900">Funnels</h1>
           </div>
@@ -272,7 +272,7 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
               <div class="space-y-3">
                 <div
                   :for={{step, idx} <- Enum.with_index(@form_steps)}
-                  class="flex items-center gap-3"
+                  class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3"
                 >
                   <span class="text-sm font-medium text-gray-500 w-6">{idx + 1}.</span>
                   <% step_type = step["type"] || Map.get(step, :type, "pageview") %>
