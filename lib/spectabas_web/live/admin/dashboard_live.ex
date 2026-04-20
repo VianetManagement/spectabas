@@ -7,6 +7,22 @@ defmodule SpectabasWeb.Admin.DashboardLive do
 
   @impl true
   def mount(_params, _session, socket) do
+    socket =
+      socket
+      |> assign(:page_title, "Admin Dashboard")
+      |> assign(:total_sites, 0)
+      |> assign(:total_users, 0)
+      |> assign(:events_today, 0)
+      |> assign(:failed_events, 0)
+      |> assign(:loading, true)
+
+    if connected?(socket), do: send(self(), :load_data)
+
+    {:ok, socket}
+  end
+
+  @impl true
+  def handle_info(:load_data, socket) do
     user = socket.assigns.current_scope.user
 
     {total_sites, total_users} =
@@ -38,13 +54,13 @@ defmodule SpectabasWeb.Admin.DashboardLive do
         :id
       )
 
-    {:ok,
+    {:noreply,
      socket
-     |> assign(:page_title, "Admin Dashboard")
      |> assign(:total_sites, total_sites)
      |> assign(:total_users, total_users)
      |> assign(:events_today, events_today)
-     |> assign(:failed_events, failed_events)}
+     |> assign(:failed_events, failed_events)
+     |> assign(:loading, false)}
   end
 
   @impl true

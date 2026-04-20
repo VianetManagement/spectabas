@@ -10,6 +10,30 @@ defmodule SpectabasWeb.Platform.AccountDetailLive do
   def mount(%{"id" => id}, _session, socket) do
     account = Accounts.get_account!(id)
 
+    socket =
+      socket
+      |> assign(:page_title, "Account: #{account.name}")
+      |> assign(:account, account)
+      |> assign(:users, [])
+      |> assign(:sites, [])
+      |> assign(:pending_invitations, [])
+      |> assign(:editing, false)
+      |> assign(:form, to_form(Account.changeset(account, %{})))
+      |> assign(:invite_email, "")
+      |> assign(:invite_role, "superadmin")
+      |> assign(:invite_error, nil)
+      |> assign(:show_invite, false)
+      |> assign(:loading, true)
+
+    if connected?(socket), do: send(self(), :load_data)
+
+    {:ok, socket}
+  end
+
+  @impl true
+  def handle_info(:load_data, socket) do
+    account = socket.assigns.account
+
     users =
       Repo.all(
         from(u in Accounts.User, where: u.account_id == ^account.id, order_by: [asc: u.email])
@@ -25,19 +49,12 @@ defmodule SpectabasWeb.Platform.AccountDetailLive do
         )
       )
 
-    {:ok,
+    {:noreply,
      socket
-     |> assign(:page_title, "Account: #{account.name}")
-     |> assign(:account, account)
      |> assign(:users, users)
      |> assign(:sites, sites)
      |> assign(:pending_invitations, pending)
-     |> assign(:editing, false)
-     |> assign(:form, to_form(Account.changeset(account, %{})))
-     |> assign(:invite_email, "")
-     |> assign(:invite_role, "superadmin")
-     |> assign(:invite_error, nil)
-     |> assign(:show_invite, false)}
+     |> assign(:loading, false)}
   end
 
   @impl true

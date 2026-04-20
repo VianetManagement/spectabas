@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.2.0", "2026-04-20T14:00:00Z",
+       [
+         %{
+           title: "Perf: All admin/dashboard pages now load asynchronously",
+           description:
+             "Audited all LiveView pages for synchronous database queries in mount. Fixed 7 pages: Sites index (ClickHouse stats batch), IP profile (3 ClickHouse queries), Admin dashboard (Postgres aggregates + ClickHouse), Integration logs (Postgres), Account detail (3 Postgres queries), Platform dashboard (N+1 aggregates), Platform accounts (N+1 aggregates). All now use deferred loading with safe defaults. Fixed 2 N+1 patterns with GROUP BY batch queries. Every page renders instantly and fills in data asynchronously."
+         }
+       ]},
       {"v6.1.0", "2026-04-20T13:00:00Z",
        [
          %{

@@ -8,25 +8,56 @@ defmodule SpectabasWeb.Platform.AccountsLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok,
-     socket
-     |> assign(:page_title, "Manage Accounts")
-     |> assign(:show_form, false)
-     |> assign(:form, to_form(Account.changeset(%Account{}, %{})))
-     |> assign(:invite_account_id, nil)
-     |> assign(:invite_email, "")
-     |> assign(:invite_error, nil)
-     |> load_accounts()}
+    socket =
+      socket
+      |> assign(:page_title, "Manage Accounts")
+      |> assign(:show_form, false)
+      |> assign(:form, to_form(Account.changeset(%Account{}, %{})))
+      |> assign(:invite_account_id, nil)
+      |> assign(:invite_email, "")
+      |> assign(:invite_error, nil)
+      |> assign(:account_stats, [])
+      |> assign(:loading, true)
+
+    if connected?(socket), do: send(self(), :load_data)
+
+    {:ok, socket}
+  end
+
+  @impl true
+  def handle_info(:load_data, socket) do
+    {:noreply, load_accounts(socket) |> assign(:loading, false)}
   end
 
   defp load_accounts(socket) do
     accounts = Accounts.list_accounts()
 
+    # Single GROUP BY queries instead of N+1 per-account aggregates
+    site_counts =
+      Repo.all(
+        from(s in Site,
+          group_by: s.account_id,
+          select: {s.account_id, count(s.id)}
+        )
+      )
+      |> Map.new()
+
+    user_counts =
+      Repo.all(
+        from(u in Accounts.User,
+          group_by: u.account_id,
+          select: {u.account_id, count(u.id)}
+        )
+      )
+      |> Map.new()
+
     account_stats =
       Enum.map(accounts, fn acct ->
-        sites = Repo.aggregate(from(s in Site, where: s.account_id == ^acct.id), :count)
-        users = Repo.aggregate(from(u in Accounts.User, where: u.account_id == ^acct.id), :count)
-        %{account: acct, sites: sites, users: users}
+        %{
+          account: acct,
+          sites: Map.get(site_counts, acct.id, 0),
+          users: Map.get(user_counts, acct.id, 0)
+        }
       end)
 
     assign(socket, :account_stats, account_stats)

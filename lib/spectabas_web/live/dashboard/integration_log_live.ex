@@ -14,44 +14,61 @@ defmodule SpectabasWeb.Dashboard.IntegrationLogLive do
     if !Accounts.can_access_site?(user, site) do
       {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
     else
-      all_integrations = AdIntegrations.list_for_site(site.id)
-      integrations = Enum.filter(all_integrations, &(&1.status != "revoked"))
+      socket =
+        socket
+        |> assign(:page_title, "Integration Log - #{site.name}")
+        |> assign(:site, site)
+        |> assign(:user, user)
+        |> assign(:integrations, [])
+        |> assign(:sync_logs, [])
+        |> assign(:audit_logs, [])
+        |> assign(:user_tz, user.timezone || "America/New_York")
+        |> assign(:filter, "all")
+        |> assign(:loading, true)
 
-      sync_logs =
-        try do
-          SyncLog.recent_for_site(site.id, 200)
-        rescue
-          _ -> []
-        end
+      if connected?(socket), do: send(self(), :load_data)
 
-      # Also get audit log entries (connect/disconnect/credentials)
-      audit_logs =
-        Repo.all(
-          from(a in Spectabas.Accounts.AuditLog,
-            where:
-              fragment("?->>'site_id' = ?", a.metadata, ^to_string(site.id)) and
-                a.event in [
-                  "ad_integration.connected",
-                  "ad_integration.disconnected",
-                  "ad_credentials.saved",
-                  "payment_data.cleared"
-                ],
-            order_by: [desc: a.occurred_at],
-            limit: 50
-          )
-        )
-
-      {:ok,
-       socket
-       |> assign(:page_title, "Integration Log - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:user, user)
-       |> assign(:integrations, integrations)
-       |> assign(:sync_logs, sync_logs)
-       |> assign(:audit_logs, audit_logs)
-       |> assign(:user_tz, user.timezone || "America/New_York")
-       |> assign(:filter, "all")}
+      {:ok, socket}
     end
+  end
+
+  @impl true
+  def handle_info(:load_data, socket) do
+    site = socket.assigns.site
+
+    all_integrations = AdIntegrations.list_for_site(site.id)
+    integrations = Enum.filter(all_integrations, &(&1.status != "revoked"))
+
+    sync_logs =
+      try do
+        SyncLog.recent_for_site(site.id, 200)
+      rescue
+        _ -> []
+      end
+
+    # Also get audit log entries (connect/disconnect/credentials)
+    audit_logs =
+      Repo.all(
+        from(a in Spectabas.Accounts.AuditLog,
+          where:
+            fragment("?->>'site_id' = ?", a.metadata, ^to_string(site.id)) and
+              a.event in [
+                "ad_integration.connected",
+                "ad_integration.disconnected",
+                "ad_credentials.saved",
+                "payment_data.cleared"
+              ],
+          order_by: [desc: a.occurred_at],
+          limit: 50
+        )
+      )
+
+    {:noreply,
+     socket
+     |> assign(:integrations, integrations)
+     |> assign(:sync_logs, sync_logs)
+     |> assign(:audit_logs, audit_logs)
+     |> assign(:loading, false)}
   end
 
   @impl true

@@ -11,7 +11,23 @@ defmodule SpectabasWeb.Dashboard.IndexLive do
     user = socket.assigns.current_scope.user
     sites = Accounts.accessible_sites(user)
 
-    # Single batched ClickHouse query for all sites (was N+1 before)
+    socket =
+      socket
+      |> assign(:page_title, "Dashboard")
+      |> assign(:sites, sites)
+      |> assign(:site_stats, %{})
+      |> assign(:loading, true)
+
+    if connected?(socket), do: send(self(), :load_data)
+
+    {:ok, socket}
+  end
+
+  @impl true
+  def handle_info(:load_data, socket) do
+    sites = socket.assigns.sites
+
+    # Single batched ClickHouse query for all sites
     # Use a 24h rolling window to approximate "today" across all timezones
     site_stats =
       if sites != [] do
@@ -36,11 +52,9 @@ defmodule SpectabasWeb.Dashboard.IndexLive do
         %{}
       end
 
-    {:ok,
-     socket
-     |> assign(:page_title, "Dashboard")
-     |> assign(:sites, sites)
-     |> assign(:site_stats, site_stats)}
+    {:noreply, assign(socket, site_stats: site_stats, loading: false)}
+  rescue
+    _ -> {:noreply, assign(socket, loading: false)}
   end
 
   @impl true

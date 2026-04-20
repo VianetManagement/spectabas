@@ -6,25 +6,62 @@ defmodule SpectabasWeb.Platform.DashboardLive do
 
   @impl true
   def mount(_params, _session, socket) do
+    socket =
+      socket
+      |> assign(:page_title, "Platform Administration")
+      |> assign(:total_accounts, 0)
+      |> assign(:total_sites, 0)
+      |> assign(:total_users, 0)
+      |> assign(:account_stats, [])
+      |> assign(:loading, true)
+
+    if connected?(socket), do: send(self(), :load_data)
+
+    {:ok, socket}
+  end
+
+  @impl true
+  def handle_info(:load_data, socket) do
     total_accounts = Repo.aggregate(Accounts.Account, :count)
     total_sites = Repo.aggregate(Sites.Site, :count)
     total_users = Repo.aggregate(Accounts.User, :count)
     accounts = Accounts.list_accounts()
 
+    # Single GROUP BY query instead of N+1 per-account aggregates
+    site_counts =
+      Repo.all(
+        from(s in Sites.Site,
+          group_by: s.account_id,
+          select: {s.account_id, count(s.id)}
+        )
+      )
+      |> Map.new()
+
+    user_counts =
+      Repo.all(
+        from(u in Accounts.User,
+          group_by: u.account_id,
+          select: {u.account_id, count(u.id)}
+        )
+      )
+      |> Map.new()
+
     account_stats =
       Enum.map(accounts, fn acct ->
-        sites = Repo.aggregate(from(s in Sites.Site, where: s.account_id == ^acct.id), :count)
-        users = Repo.aggregate(from(u in Accounts.User, where: u.account_id == ^acct.id), :count)
-        %{account: acct, sites: sites, users: users}
+        %{
+          account: acct,
+          sites: Map.get(site_counts, acct.id, 0),
+          users: Map.get(user_counts, acct.id, 0)
+        }
       end)
 
-    {:ok,
+    {:noreply,
      socket
-     |> assign(:page_title, "Platform Administration")
      |> assign(:total_accounts, total_accounts)
      |> assign(:total_sites, total_sites)
      |> assign(:total_users, total_users)
-     |> assign(:account_stats, account_stats)}
+     |> assign(:account_stats, account_stats)
+     |> assign(:loading, false)}
   end
 
   @impl true

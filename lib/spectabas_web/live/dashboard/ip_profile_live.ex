@@ -15,34 +15,54 @@ defmodule SpectabasWeb.Dashboard.IpProfileLive do
     if !Accounts.can_access_site?(user, site) do
       {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
     else
-      ip_info =
-        case Analytics.ip_details(site, ip) do
-          {:ok, info} -> info
-          _ -> nil
-        end
+      socket =
+        socket
+        |> assign(:page_title, "IP #{ip} - #{site.name}")
+        |> assign(:site, site)
+        |> assign(:user, user)
+        |> assign(:ip, ip)
+        |> assign(:ip_info, nil)
+        |> assign(:visitors, [])
+        |> assign(:page_hits, [])
+        |> assign(:loading, true)
 
-      visitors =
-        case Analytics.visitors_by_ip(site, ip) do
-          {:ok, rows} -> rows
-          _ -> []
-        end
+      if connected?(socket), do: send(self(), :load_data)
 
-      page_hits =
-        case Analytics.ip_page_hits(site, ip) do
-          {:ok, rows} -> rows
-          _ -> []
-        end
-
-      {:ok,
-       socket
-       |> assign(:page_title, "IP #{ip} - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:user, user)
-       |> assign(:ip, ip)
-       |> assign(:ip_info, ip_info)
-       |> assign(:visitors, visitors)
-       |> assign(:page_hits, page_hits)}
+      {:ok, socket}
     end
+  end
+
+  @impl true
+  def handle_info(:load_data, socket) do
+    site = socket.assigns.site
+    ip = socket.assigns.ip
+
+    ip_info =
+      case Analytics.ip_details(site, ip) do
+        {:ok, info} -> info
+        _ -> nil
+      end
+
+    visitors =
+      case Analytics.visitors_by_ip(site, ip) do
+        {:ok, rows} -> rows
+        _ -> []
+      end
+
+    page_hits =
+      case Analytics.ip_page_hits(site, ip) do
+        {:ok, rows} -> rows
+        _ -> []
+      end
+
+    {:noreply,
+     socket
+     |> assign(:ip_info, ip_info)
+     |> assign(:visitors, visitors)
+     |> assign(:page_hits, page_hits)
+     |> assign(:loading, false)}
+  rescue
+    _ -> {:noreply, assign(socket, loading: false)}
   end
 
   @impl true
