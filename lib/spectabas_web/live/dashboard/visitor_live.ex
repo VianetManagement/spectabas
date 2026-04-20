@@ -1226,6 +1226,13 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
           </div>
           <div class="flex items-center gap-2 shrink-0">
             <button
+              phx-click="mark_scraper"
+              data-confirm="Mark as scraper (score 100) and send webhook?"
+              class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg text-white bg-red-600 hover:bg-red-700 shadow-sm"
+            >
+              Mark as Scraper
+            </button>
+            <button
               phx-click="send_webhook"
               data-confirm="Re-send scraper webhook with current score?"
               class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg text-amber-700 border border-amber-300 hover:bg-amber-50 shadow-sm"
