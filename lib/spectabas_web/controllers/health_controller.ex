@@ -1963,10 +1963,23 @@ defmodule SpectabasWeb.HealthController do
 
           json(conn, %{ok: true, cancelled: count})
 
+        "refresh_geoip" ->
+          %{}
+          |> Spectabas.Workers.GeoIPRefresh.new()
+          |> Oban.insert()
+
+          json(conn, %{
+            ok: true,
+            message: "GeoIP refresh job enqueued — will download + sync to R2"
+          })
+
         _ ->
           conn
           |> put_status(400)
-          |> json(%{error: "unknown action. use: status, cancel_worker, cancel_all_executing"})
+          |> json(%{
+            error:
+              "unknown action. use: status, cancel_worker, cancel_all_executing, refresh_geoip"
+          })
       end
     end
   end
