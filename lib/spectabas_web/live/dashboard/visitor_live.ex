@@ -519,6 +519,13 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
                 label="ID Type"
                 value={if @visitor.cookie_id, do: "Cookie", else: "Fingerprint"}
               />
+              <.field
+                :if={@visitor.cookie_id}
+                label="SAB Cookie"
+                value={@visitor.cookie_id}
+                mono={true}
+                copy={@visitor.cookie_id}
+              />
               <.field label="GDPR Mode" value={@site.gdpr_mode || "on"} />
               <%!-- Scraper score (deferred) --%>
               <%= if @scraper == nil do %>
