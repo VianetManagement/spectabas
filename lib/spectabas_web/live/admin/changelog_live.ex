@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.7.0", "2026-04-21T12:00:00Z",
+       [
+         %{
+           title: "Feature: Marked as Scraper badge on visitor profile",
+           description:
+             "Visitor profile header now shows a red 'Marked as Scraper' badge with shield icon when the visitor has been manually flagged (score 100). Provides immediate visual indication without needing to scroll to the webhook status banner."
+         }
+       ]},
       {"v6.6.0", "2026-04-20T18:00:00Z",
        [
          %{

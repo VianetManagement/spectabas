@@ -424,7 +424,15 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
             &larr; Visitor Log
           </.link>
           <div class="flex items-center justify-between mt-2">
-            <h1 class="text-2xl font-bold text-gray-900">Visitor Profile</h1>
+            <div class="flex items-center gap-3">
+              <h1 class="text-2xl font-bold text-gray-900">Visitor Profile</h1>
+              <span
+                :if={@visitor.scraper_webhook_score == 100}
+                class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-semibold bg-red-100 text-red-800 border border-red-200"
+              >
+                <.icon name="hero-shield-exclamation" class="w-4 h-4" /> Marked as Scraper
+              </span>
+            </div>
             <button
               phx-click="export_profile"
               class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200"
