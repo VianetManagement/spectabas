@@ -62,7 +62,7 @@ Push to `main` → auto-deploy on Render (~2-3 min Docker build).
 `/health`, `/health/diag`, `/health/dashboard-test`, `/health/audit-test`, `/health/backfill-geo`, `/health/ecom-diag` (supports `action=sync&start=YYYY-MM-DD&bg=1`), `/health/fix-ch-schema` (uses admin user for DDL), `/admin/ingest`, `/admin/api-logs`
 
 ### GeoIP Updates
-DB-IP + MaxMind refresh via Oban cron (1st/15th monthly, 06:00 UTC). DB-IP cached in Docker layer. MaxMind downloaded at build time or runtime fallback. VPN MMDB (ipapi.is) refreshed bi-monthly.
+DB-IP + MaxMind + ipapi.is VPN refresh via Oban cron (1st/15th monthly, 06:00 UTC). All MMDB files synced to R2 after download. On boot, pulled from R2 to `/tmp/spectabas_geoip/` (ephemeral). Falls back to Docker-baked priv/ files. Trigger manual refresh: `/oban-admin?token=...&action=refresh_geoip`.
 
 ## Dashboard (39 pages, 7 categories)
 
@@ -127,7 +127,7 @@ Routes: `/platform/*` (platform_admin), `/admin/*` (superadmin+), `/dashboard/*`
 - **Ad spend queries**: Always `FROM ad_spend FINAL` for dedup.
 
 ### Rollup Tables (AggregatingMergeTree)
-5 tables (`daily_rollup`, `daily_page_rollup`, `daily_source_rollup`, `daily_geo_rollup`, `daily_device_rollup`) populated by `DailyRollup` worker (01:30 UTC cron + one-shot backfill). Use `countIfMerge`/`uniqExactIfMerge` (keep `-If` in Merge name). Rollup query pattern: prior days from rollup, today+yesterday from raw events as states, UNION ALL into outer merge. Segmented queries fall back to raw events. Re-runs DELETE first (`mutations_sync=2`) because `countIfState` sums on merge. Never use old `daily_stats` SummingMergeTree — inflates uniqExact.
+6 tables (`daily_rollup`, `daily_page_rollup`, `daily_source_rollup`, `daily_geo_rollup`, `daily_device_rollup`, `daily_event_rollup`) populated by `DailyRollup` worker (01:30 UTC cron + one-shot backfill). Use `countIfMerge`/`uniqExactIfMerge` (keep `-If` in Merge name). Rollup query pattern: prior days from rollup, today+yesterday from raw events as states, UNION ALL into outer merge. Segmented queries fall back to raw events. Re-runs DELETE first (`mutations_sync=2`) because `countIfState` sums on merge. Never use old `daily_stats` SummingMergeTree — inflates uniqExact.
 
 ### Fast Paths
 - `timeseries_fast/4` for >= 30 days (rollup + raw today/yesterday). `timeseries/4` for < 30 days (hourly).
@@ -156,7 +156,7 @@ Routes: `/platform/*` (platform_admin), `/admin/*` (superadmin+), `/dashboard/*`
 ### Integrations
 - **Encrypted storage**: OAuth tokens via `Spectabas.AdIntegrations.Vault` (AES-256-GCM). Credentials in `sites.ad_credentials_encrypted`.
 - **HTTP retry**: All calls via `Spectabas.AdIntegrations.HTTP` (3 retries, exponential backoff).
-- **Sync lock**: `persistent_term` per integration ID prevents concurrent duplicate inserts.
+- **Sync lock**: Postgres advisory locks (`pg_try_advisory_lock`) prevent concurrent duplicate inserts across instances. Local `persistent_term` for fast check.
 - **Smart sync**: Payment providers fetch today; if last sync >6h ago, include yesterday. Backfill checks CH first.
 - **Configurable frequency**: `extra["sync_frequency_minutes"]`. Default 15min (payments), 6h (ads). Oban cron every 5min, `should_sync?/1` gates.
 - **mark_error**: Keeps `status: "active"` (cron retries). Only stores message + increments count.
@@ -170,7 +170,7 @@ Routes: `/platform/*` (platform_admin), `/admin/*` (superadmin+), `/dashboard/*`
 - **MRR**: `sum(unit_amount * quantity)`, apply discount, normalize interval (weekly*4.33, monthly*1, quarterly/3, annual/12).
 
 ### Scraper Detection
-Weighted-signal scoring (15 signals, cap 100). Tiers: watching (40-69), suspicious (70-84), certain (85+). Uses `uniqIf(url_path)` not `countIf`. VPN providers suppress `datacenter_asn` and `spoofed_mobile_ua` signals. `ScraperDetector` is pure/stateless. Webhooks fire at 40+ via `ScraperWebhookScan` (15min Oban). ASN management: `ASNDiscovery` weekly (Sunday 04:00 UTC), `ASNBlocklist` ETS (~900 ASNs).
+Weighted-signal scoring (15 signals, cap 100). Tiers: watching (40-69), suspicious (70-84), certain (85+). Uses `uniqIf(url_path)` not `countIf`. VPN providers suppress `datacenter_asn` and `spoofed_mobile_ua` signals — `known_vpn_provider?` trims whitespace, `is_vpn` checks `in [true, 1, "1"]`. `ScraperDetector` is pure/stateless. Webhooks fire at 40+ via `ScraperWebhookScan` (15min Oban), payload includes `sab_cookie`. ASN management: `ASNDiscovery` weekly (Sunday 04:00 UTC), `ASNBlocklist` ETS (~900 ASNs). **IMPORTANT**: Scraper queries MUST use `argMaxIf(field, timestamp, event_type='pageview')` not `argMax` — lightweight ingest path leaves enrichment fields empty on custom/duration events. Manual "Mark as Scraper" button on visitor profiles sets score 100 + sends webhook.
 
 ### UI Patterns
 - All pages use `<.dashboard_layout>` from SidebarComponent
@@ -187,4 +187,8 @@ Weighted-signal scoring (15 signals, cap 100). Tiers: watching (40-69), suspicio
 - **Backpressure**: 503 at buffer 5,000. Health "overloaded" at buffer 8,000 or Oban queue 500k.
 - **AI**: Per-site config in `ai_config_encrypted`. `AI.Completion.generate/3` abstracts providers. `InsightsCache` (24h). Weekly email Monday 9am UTC. Platform-level help chatbot via `HELP_AI_API_KEY` (Anthropic Haiku) — `AI.HelpChat` module, `ChatComponent` LiveComponent in dashboard_layout.
 - **fix-ch-schema**: Uses `execute_admin` for DDL (writer may lack ALTER privileges).
+- **R2 storage**: `Spectabas.R2` module — S3v4 signing, upload/download/presigned URLs. Used for GeoIP MMDB files and data exports. Env: `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ENDPOINT`.
+- **Deterministic sessions**: Session IDs derived from `hash(site_id, visitor_id, 30-min-bucket)` — no shared state needed across instances. Postgres upsert on conflict.
+- **Oban timeouts**: All 29 workers have `timeout/1` callbacks (60s emails, 120s exports, 300s API syncs, 600s ClickHouse maintenance).
+- **Death Star spinner**: `<.death_star_spinner class="w-4 h-4" />` — custom SVG component, globally available.
 - **Changelog**: v6.6.0 at `/admin/changelog`. Updated every push.
