@@ -430,7 +430,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
                 :if={@visitor.scraper_webhook_score == 100}
                 class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-semibold bg-red-100 text-red-800 border border-red-200"
               >
-                <.icon name="hero-shield-exclamation" class="w-4 h-4" /> Marked as Scraper
+                <.icon name="hero-shield-exclamation" class="w-5 h-5" /> Marked as Scraper
               </span>
             </div>
             <button
