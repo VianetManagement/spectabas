@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.8.0", "2026-04-21T13:00:00Z",
+       [
+         %{
+           title: "Improvement: Click elements — server-side search + dynamic ID normalization",
+           description:
+             "Search on Click Elements page now queries ClickHouse directly instead of filtering the top 500 client-side, so you can find any element regardless of click volume. Element IDs with trailing numeric suffixes (e.g., next-show-1144214) are now normalized to their base form (next-show) in both the tracker and queries, merging duplicates caused by dynamic DOM IDs."
+         }
+       ]},
       {"v6.7.0", "2026-04-21T12:00:00Z",
        [
          %{

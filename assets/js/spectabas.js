@@ -113,7 +113,11 @@
     lastClickTime = now;
 
     var props = { _tag: tag, _text: text };
-    if (el.id) props._id = el.id;
+    if (el.id) {
+      // Normalize dynamic IDs: strip trailing -<digits> (e.g., next-show-1144214 → next-show)
+      var nid = el.id.replace(/-\d+$/, "");
+      props._id = nid || el.id;
+    }
     if (el.className && typeof el.className === "string") {
       var classes = el.className.trim();
       if (classes) props._classes = classes.substring(0, 200);

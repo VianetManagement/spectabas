@@ -3646,10 +3646,34 @@ defmodule Spectabas.Analytics do
 
       dir = if sort_dir in ~w(ASC DESC), do: sort_dir, else: "DESC"
 
+      search_clause =
+        case Keyword.get(opts, :search) do
+          s when is_binary(s) and s != "" ->
+            escaped =
+              s
+              |> String.replace("\\", "\\\\")
+              |> String.replace("%", "\\%")
+              |> String.replace("_", "\\_")
+
+            pattern = "%#{escaped}%"
+
+            """
+            AND (
+              JSONExtractString(properties, '_text') ILIKE #{ClickHouse.param(pattern)}
+              OR replaceRegexpOne(JSONExtractString(properties, '_id'), '-\\\\d+$', '') ILIKE #{ClickHouse.param(pattern)}
+              OR JSONExtractString(properties, '_classes') ILIKE #{ClickHouse.param(pattern)}
+              OR JSONExtractString(properties, '_href') ILIKE #{ClickHouse.param(pattern)}
+            )
+            """
+
+          _ ->
+            ""
+        end
+
       sql = """
       SELECT
         JSONExtractString(properties, '_text') AS element_text,
-        JSONExtractString(properties, '_id') AS element_id,
+        replaceRegexpOne(JSONExtractString(properties, '_id'), '-\\d+$', '') AS element_id,
         JSONExtractString(properties, '_tag') AS element_tag,
         any(JSONExtractString(properties, '_href')) AS element_href,
         any(JSONExtractString(properties, '_classes')) AS element_classes,
@@ -3665,6 +3689,7 @@ defmodule Spectabas.Analytics do
         AND ip_is_bot = 0
         AND timestamp >= now() - INTERVAL 90 DAY
         #{tag_clause}
+        #{search_clause}
       GROUP BY element_text, element_id, element_tag
       HAVING clicks >= 2
       ORDER BY #{sort_col} #{dir}
@@ -4993,7 +5018,7 @@ defmodule Spectabas.Analytics do
       sql = """
       SELECT
         JSONExtractString(properties, '_text') AS element_text,
-        JSONExtractString(properties, '_id') AS element_id,
+        replaceRegexpOne(JSONExtractString(properties, '_id'), '-\\d+$', '') AS element_id,
         JSONExtractString(properties, '_tag') AS element_tag,
         any(JSONExtractString(properties, '_href')) AS element_href,
         count() AS clicks,

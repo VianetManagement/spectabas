@@ -51,7 +51,8 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
           Analytics.discovered_click_elements_full(site, user,
             tag_filter: socket.assigns.tag_filter,
             sort_by: socket.assigns.sort_by,
-            sort_dir: socket.assigns.sort_dir
+            sort_dir: socket.assigns.sort_dir,
+            search: socket.assigns.search
           )
         end)
       end)
@@ -111,7 +112,13 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
   end
 
   def handle_event("search", %{"search" => query}, socket) do
-    {:noreply, assign(socket, search: query, page: 1)}
+    {:noreply,
+     socket
+     |> assign(search: query, page: 1, loading: true)
+     |> then(fn s ->
+       send(self(), :load_data)
+       s
+     end)}
   end
 
   def handle_event("page", %{"page" => page}, socket) do
@@ -165,28 +172,6 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Failed to create goal.")}
-    end
-  end
-
-  defp filtered_elements(elements, search, names) do
-    if search == "" do
-      elements
-    else
-      q = String.downcase(search)
-
-      Enum.filter(elements, fn el ->
-        text = to_string(el["element_text"]) |> String.downcase()
-        id = to_string(el["element_id"]) |> String.downcase()
-        key = element_key(el)
-
-        name =
-          case Map.get(names, key) do
-            %{friendly_name: n} -> String.downcase(n)
-            _ -> ""
-          end
-
-        String.contains?(text, q) or String.contains?(id, q) or String.contains?(name, q)
-      end)
     end
   end
 
@@ -257,7 +242,7 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
                 name="search"
                 value={@search}
                 placeholder="Search elements..."
-                phx-debounce="200"
+                phx-debounce="500"
                 class="rounded-lg border-gray-300 text-sm focus:border-indigo-500 focus:ring-indigo-500 w-full sm:w-56"
               />
             </form>
@@ -299,7 +284,7 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
         </div>
 
         <% visible =
-          filtered_elements(@elements, @search, @element_names)
+          @elements
           |> then(fn els ->
             if @show_hidden, do: els, else: Enum.reject(els, &element_is_ignored?(&1, @element_names))
           end)
