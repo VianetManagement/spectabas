@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.1", "2026-04-27T10:40:00Z",
+       [
+         %{
+           title: "Performance: Page detail loads instantly on 30d / 90d",
+           description:
+             "All Page detail queries now run as parallel Tasks after the shell renders, instead of blocking on transitions + chart timeseries. The traffic chart also uses the daily_page_rollup table for ranges ≥ 7 days (raw events for today + yesterday only), matching the top_pages_fast pattern. 30d clicks now feel instant; sections fill in as data arrives."
+         }
+       ]},
       {"v6.9.0", "2026-04-27T10:20:00Z",
        [
          %{

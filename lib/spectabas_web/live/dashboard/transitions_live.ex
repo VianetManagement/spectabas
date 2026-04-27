@@ -57,33 +57,17 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
       socket.assigns
 
     period = range_to_period(range)
-
-    transitions =
-      safe_query(
-        fn -> Analytics.page_transitions(site, user, page, period) end,
-        %{previous: [], next: [], totals: %{}}
-      )
-
-    chart_data = build_chart_data(site, user, page, range)
-
-    socket =
-      socket
-      |> assign(:transitions, %{previous: transitions.previous, next: transitions.next})
-      |> assign(:totals, transitions.totals || %{})
-      |> assign(:chart_data, chart_data)
-      |> assign(:chart_json, encode_chart(chart_data, socket.assigns.chart_metric))
-      |> assign(:chart_key, socket.assigns.chart_key + 1)
-      |> assign(:loading, false)
-
-    if connected?(socket), do: send(self(), {:load_deferred, cache_key})
-    {:noreply, socket}
-  end
-
-  def handle_info({:load_deferred, cache_key}, socket) do
-    %{site: site, user: user, date_range: range, current_page: page} = socket.assigns
-    period = range_to_period(range)
     days = range_to_days(range)
     lv_pid = self()
+
+    # Render the shell immediately. All queries run in parallel as Tasks
+    # so 30d / 90d switches feel instant — sections fill in as they arrive.
+
+    spawn_deferred(lv_pid, :transitions, cache_key, %{previous: [], next: [], totals: %{}}, fn ->
+      Analytics.page_transitions(site, user, page, period)
+    end)
+
+    spawn_chart(lv_pid, site, user, page, range, cache_key)
 
     spawn_deferred(lv_pid, :page_perf, cache_key, %{}, fn ->
       Analytics.rum_vitals_by_page(site, user, period, page)
@@ -129,7 +113,32 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
       Analytics.page_visitor_split(site, user, page, period)
     end)
 
-    {:noreply, socket}
+    {:noreply, assign(socket, :loading, false)}
+  end
+
+  def handle_info({:deferred_result, :transitions, value, cache_key}, socket) do
+    if cache_key == socket.assigns.cache_key do
+      transitions = value || %{previous: [], next: [], totals: %{}}
+
+      {:noreply,
+       socket
+       |> assign(:transitions, %{previous: transitions.previous, next: transitions.next})
+       |> assign(:totals, transitions.totals || %{})}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_info({:deferred_result, :chart, chart_data, cache_key}, socket) do
+    if cache_key == socket.assigns.cache_key do
+      {:noreply,
+       socket
+       |> assign(:chart_data, chart_data)
+       |> assign(:chart_json, encode_chart(chart_data, socket.assigns.chart_metric))
+       |> assign(:chart_key, socket.assigns.chart_key + 1)}
+    else
+      {:noreply, socket}
+    end
   end
 
   def handle_info({:deferred_result, key, value, cache_key}, socket) do
@@ -144,6 +153,13 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
     Task.start(fn ->
       result = safe_query(fun, fallback)
       send(lv_pid, {:deferred_result, key, result, cache_key})
+    end)
+  end
+
+  defp spawn_chart(lv_pid, site, user, page, range, cache_key) do
+    Task.start(fn ->
+      chart_data = build_chart_data(site, user, page, range)
+      send(lv_pid, {:deferred_result, :chart, chart_data, cache_key})
     end)
   end
 
@@ -196,6 +212,10 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
 
   defp reset_deferred(socket) do
     socket
+    |> assign(:transitions, %{previous: [], next: []})
+    |> assign(:totals, %{})
+    |> assign(:chart_data, %{current: [], previous: [], range: socket.assigns.date_range})
+    |> assign(:chart_json, "{}")
     |> assign(:page_perf, %{})
     |> assign(:engagement, %{})
     |> assign(:referrers, [])
@@ -216,17 +236,17 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
     prev_to = DateTime.add(from, -1, :second)
     prev_from = DateTime.add(prev_to, -span_seconds, :second)
 
+    timeseries_fn =
+      if range == "24h",
+        do: &Analytics.page_timeseries/4,
+        else: &Analytics.page_timeseries_fast/4
+
     current_rows =
-      safe_query(
-        fn -> Analytics.page_timeseries(site, user, page, %{from: from, to: to}) end,
-        []
-      )
+      safe_query(fn -> timeseries_fn.(site, user, page, %{from: from, to: to}) end, [])
 
     previous_rows =
       safe_query(
-        fn ->
-          Analytics.page_timeseries(site, user, page, %{from: prev_from, to: prev_to})
-        end,
+        fn -> timeseries_fn.(site, user, page, %{from: prev_from, to: prev_to}) end,
         []
       )
 

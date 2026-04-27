@@ -4696,7 +4696,11 @@ defmodule Spectabas.Analytics do
 
   # ---- Page Detail (single url_path) ----
 
-  @doc "Daily/hourly traffic for one url_path. Returns rows with bucket, pageviews, visitors."
+  @doc """
+  Daily/hourly traffic for one url_path. Returns rows with bucket, pageviews, visitors.
+  Uses raw events for hourly granularity (≤1 day) or daily granularity on ranges that
+  span partial days. For full-day ranges, prefer page_timeseries_fast/4 (rollup-backed).
+  """
   def page_timeseries(%Site{} = site, %User{} = user, url_path, date_range) do
     date_range = ensure_date_range(date_range)
 
@@ -4719,6 +4723,55 @@ defmodule Spectabas.Analytics do
         AND ip_is_bot = 0
       GROUP BY bucket
       ORDER BY bucket ASC
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
+  Fast per-page timeseries for ranges ≥ 7 days. Uses daily_page_rollup for
+  full prior days and raw events for today + yesterday, matching the pattern
+  used by top_pages_fast/3. Returns daily buckets only.
+  """
+  def page_timeseries_fast(%Site{} = site, %User{} = user, url_path, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      {from_date, to_date, raw_cutoff} = rollup_date_bounds(date_range, site)
+      site_p = ClickHouse.param(site.id)
+      path_p = ClickHouse.param(url_path)
+
+      sql = """
+      SELECT
+        toString(date) AS bucket,
+        countIfMerge(pv_s) AS pageviews,
+        uniqExactIfMerge(vis_s) AS visitors
+      FROM (
+        SELECT date, pv_state AS pv_s, vis_state AS vis_s
+        FROM daily_page_rollup
+        WHERE site_id = #{site_p}
+          AND url_path = #{path_p}
+          AND date >= #{ClickHouse.param(from_date)}
+          AND date <= #{ClickHouse.param(to_date)}
+          AND date < #{ClickHouse.param(raw_cutoff)}
+
+        UNION ALL
+
+        SELECT
+          toDate(timestamp) AS date,
+          countIfState(event_type = 'pageview' AND ip_is_bot = 0) AS pv_s,
+          uniqExactIfState(visitor_id, event_type = 'pageview' AND ip_is_bot = 0) AS vis_s
+        FROM events
+        WHERE site_id = #{site_p}
+          AND url_path = #{path_p}
+          AND toDate(timestamp) >= #{ClickHouse.param(raw_cutoff)}
+          AND toDate(timestamp) >= #{ClickHouse.param(from_date)}
+          AND toDate(timestamp) <= #{ClickHouse.param(to_date)}
+        GROUP BY date
+      )
+      GROUP BY date
+      ORDER BY date ASC
       """
 
       ClickHouse.query(sql)
