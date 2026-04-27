@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.5", "2026-04-27T11:40:00Z",
+       [
+         %{
+           title: "Fix: Heroicons render correctly at any size (mask-size)",
+           description:
+             "The heroicons Tailwind plugin (assets/vendor/heroicons.js) sets a CSS mask but no mask-size, so any icon sized smaller than its natural SVG size (e.g. w-3 h-3 on a 24px outline icon) only showed a corner of the mask and appeared blank. Added a global CSS rule [class*='hero-'] { mask-size: contain } so icons scale correctly at any w-* h-* class. Fixes the MANUAL badge shield icon and unblocks future small icons."
+         }
+       ]},
       {"v6.9.4", "2026-04-27T11:30:00Z",
        [
          %{

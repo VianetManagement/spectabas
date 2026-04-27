@@ -11,3 +11,14 @@
 
 /* Make LiveView wrapper divs transparent for layout */
 [data-phx-session], [data-phx-teleported-src] { display: contents }
+
+/* Heroicons (assets/vendor/heroicons.js) set a mask but no mask-size, so when
+   an icon element is sized smaller than the mask SVG's natural size (e.g.
+   w-3 h-3 on a 24px outline icon) only a corner of the icon shows. Scale the
+   mask to the element so any size renders correctly. */
+[class*="hero-"] {
+  mask-size: contain;
+  -webkit-mask-size: contain;
+  mask-position: center;
+  -webkit-mask-position: center;
+}
