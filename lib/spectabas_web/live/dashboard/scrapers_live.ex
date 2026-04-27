@@ -236,7 +236,8 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
             visitor
             |> Spectabas.Visitors.Visitor.changeset(%{
               scraper_webhook_sent_at: nil,
-              scraper_webhook_score: nil
+              scraper_webhook_score: nil,
+              scraper_manual_flag: false
             })
             |> Spectabas.Repo.update()
 

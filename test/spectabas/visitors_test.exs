@@ -106,4 +106,51 @@ defmodule Spectabas.VisitorsTest do
       assert same_visitor.id == visitor.id
     end
   end
+
+  describe "scraper_manual_flag" do
+    test "defaults to false on a new visitor", %{site: site} do
+      {:ok, visitor} = Visitors.get_or_create(site.id, "cookie-mf-1", :off, "1.2.3.4")
+      assert visitor.scraper_manual_flag == false
+    end
+
+    test "changeset accepts scraper_manual_flag = true", %{site: site} do
+      {:ok, visitor} = Visitors.get_or_create(site.id, "cookie-mf-2", :off, "1.2.3.4")
+
+      {:ok, updated} =
+        visitor
+        |> Visitor.changeset(%{
+          scraper_manual_flag: true,
+          scraper_webhook_score: 100,
+          scraper_webhook_sent_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        })
+        |> Spectabas.Repo.update()
+
+      assert updated.scraper_manual_flag == true
+      assert updated.scraper_webhook_score == 100
+    end
+
+    test "changeset can clear scraper_manual_flag back to false", %{site: site} do
+      {:ok, visitor} = Visitors.get_or_create(site.id, "cookie-mf-3", :off, "1.2.3.4")
+
+      {:ok, flagged} =
+        visitor
+        |> Visitor.changeset(%{scraper_manual_flag: true})
+        |> Spectabas.Repo.update()
+
+      assert flagged.scraper_manual_flag == true
+
+      {:ok, cleared} =
+        flagged
+        |> Visitor.changeset(%{
+          scraper_manual_flag: false,
+          scraper_webhook_sent_at: nil,
+          scraper_webhook_score: nil
+        })
+        |> Spectabas.Repo.update()
+
+      assert cleared.scraper_manual_flag == false
+      assert is_nil(cleared.scraper_webhook_sent_at)
+      assert is_nil(cleared.scraper_webhook_score)
+    end
+  end
 end

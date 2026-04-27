@@ -274,7 +274,8 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
         visitor
         |> Spectabas.Visitors.Visitor.changeset(%{
           scraper_webhook_sent_at: nil,
-          scraper_webhook_score: nil
+          scraper_webhook_score: nil,
+          scraper_manual_flag: false
         })
         |> Spectabas.Repo.update()
 
@@ -341,7 +342,8 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
         visitor
         |> Spectabas.Visitors.Visitor.changeset(%{
           scraper_webhook_sent_at: now,
-          scraper_webhook_score: 100
+          scraper_webhook_score: 100,
+          scraper_manual_flag: true
         })
         |> Spectabas.Repo.update()
 
@@ -427,7 +429,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
             <div class="flex items-center gap-3">
               <h1 class="text-2xl font-bold text-gray-900">Visitor Profile</h1>
               <span
-                :if={@visitor.scraper_webhook_score == 100}
+                :if={@visitor.scraper_manual_flag or @visitor.scraper_webhook_score == 100}
                 class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-semibold bg-red-100 text-red-800 border border-red-200"
               >
                 <.icon name="hero-shield-exclamation" class="w-5 h-5" /> Marked as Scraper

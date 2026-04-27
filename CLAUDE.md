@@ -170,7 +170,7 @@ Routes: `/platform/*` (platform_admin), `/admin/*` (superadmin+), `/dashboard/*`
 - **MRR**: `sum(unit_amount * quantity)`, apply discount, normalize interval (weekly*4.33, monthly*1, quarterly/3, annual/12).
 
 ### Scraper Detection
-Weighted-signal scoring (15 signals, cap 100). Tiers: watching (40-69), suspicious (70-84), certain (85+). Uses `uniqIf(url_path)` not `countIf`. VPN providers suppress `datacenter_asn` and `spoofed_mobile_ua` signals — `known_vpn_provider?` trims whitespace, `is_vpn` checks `in [true, 1, "1"]`. `ScraperDetector` is pure/stateless. Webhooks fire at 40+ via `ScraperWebhookScan` (15min Oban), payload includes `sab_cookie`. ASN management: `ASNDiscovery` weekly (Sunday 04:00 UTC), `ASNBlocklist` ETS (~900 ASNs). **IMPORTANT**: Scraper queries MUST use `argMaxIf(field, timestamp, event_type='pageview')` not `argMax` — lightweight ingest path leaves enrichment fields empty on custom/duration events. Manual "Mark as Scraper" button on visitor profiles sets score 100 + sends webhook.
+Weighted-signal scoring (15 signals, cap 100). Tiers: watching (40-69), suspicious (70-84), certain (85+). Uses `uniqIf(url_path)` not `countIf`. VPN providers suppress `datacenter_asn` and `spoofed_mobile_ua` signals — `known_vpn_provider?` trims whitespace, `is_vpn` checks `in [true, 1, "1"]`. `ScraperDetector` is pure/stateless. Webhooks fire at 40+ via `ScraperWebhookScan` (15min Oban), payload includes `sab_cookie`. ASN management: `ASNDiscovery` weekly (Sunday 04:00 UTC), `ASNBlocklist` ETS (~900 ASNs). **IMPORTANT**: Scraper queries MUST use `argMaxIf(field, timestamp, event_type='pageview')` not `argMax` — lightweight ingest path leaves enrichment fields empty on custom/duration events. Manual "Mark as Scraper" button on visitor profiles sets score 100 + sends webhook + sets `scraper_manual_flag = true`. Manually-flagged visitors are excluded from the 15-min downgrade scan in `check_downgrades` so the sticky manual flag survives even when their automatic score drops below the watching threshold. The "Marked as Scraper" badge on the visitor profile checks `scraper_manual_flag OR scraper_webhook_score == 100`.
 
 ### UI Patterns
 - All pages use `<.dashboard_layout>` from SidebarComponent
@@ -191,4 +191,4 @@ Weighted-signal scoring (15 signals, cap 100). Tiers: watching (40-69), suspicio
 - **Deterministic sessions**: Session IDs derived from `hash(site_id, visitor_id, 30-min-bucket)` — no shared state needed across instances. Postgres upsert on conflict.
 - **Oban timeouts**: All 29 workers have `timeout/1` callbacks (60s emails, 120s exports, 300s API syncs, 600s ClickHouse maintenance).
 - **Death Star spinner**: `<.death_star_spinner class="w-4 h-4" />` — custom SVG component, globally available.
-- **Changelog**: v6.9.2 at `/admin/changelog`. Updated every push.
+- **Changelog**: v6.9.3 at `/admin/changelog`. Updated every push.

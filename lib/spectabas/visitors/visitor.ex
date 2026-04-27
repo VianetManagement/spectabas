@@ -25,6 +25,7 @@ defmodule Spectabas.Visitors.Visitor do
     field :external_id, :string
     field :scraper_webhook_sent_at, :utc_datetime
     field :scraper_webhook_score, :integer
+    field :scraper_manual_flag, :boolean, default: false
     field :notes, :string
 
     timestamps()
@@ -33,7 +34,7 @@ defmodule Spectabas.Visitors.Visitor do
   @required_fields ~w(site_id)a
   @optional_fields ~w(fingerprint_id cookie_id user_id email email_hash
                        first_seen_at last_seen_at last_ip known_ips gdpr_mode external_id
-                       scraper_webhook_sent_at scraper_webhook_score notes)a
+                       scraper_webhook_sent_at scraper_webhook_score scraper_manual_flag notes)a
 
   def changeset(visitor, attrs) do
     visitor

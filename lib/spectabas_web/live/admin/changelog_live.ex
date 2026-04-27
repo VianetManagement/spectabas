@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.3", "2026-04-27T11:15:00Z",
+       [
+         %{
+           title: "Fix: Manual scraper flag is now sticky",
+           description:
+             "Visitors manually marked as scrapers were getting their flag wiped 15 minutes later by the downgrade-detection worker, which re-runs the automatic scraper score and clears the flag if it drops below the watching threshold. Adds a scraper_manual_flag column on visitors. The Mark as Scraper button sets it to true; the downgrade scan now excludes manually-flagged visitors so their score stays at 100. The badge condition was made resilient to also check this flag."
+         }
+       ]},
       {"v6.9.2", "2026-04-27T10:55:00Z",
        [
          %{

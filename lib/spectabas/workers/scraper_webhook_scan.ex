@@ -97,11 +97,14 @@ defmodule Spectabas.Workers.ScraperWebhookScan do
   end
 
   defp check_downgrades(site) do
-    # Find all visitors with an active scraper webhook flag
+    # Find all visitors with an active scraper webhook flag, excluding any
+    # that were manually marked — manual flags are sticky and never auto-downgrade.
     flagged =
       Repo.all(
         from(v in Visitor,
-          where: v.site_id == ^site.id and not is_nil(v.scraper_webhook_sent_at),
+          where:
+            v.site_id == ^site.id and not is_nil(v.scraper_webhook_sent_at) and
+              v.scraper_manual_flag == false,
           select: v
         )
       )
