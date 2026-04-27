@@ -86,7 +86,7 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
     {provider, _key, model} = Config.credentials(site)
 
     result =
-      case Spectabas.AI.Completion.generate(site, system, prompt) do
+      case Spectabas.AI.Completion.generate(site, system, prompt, max_tokens: 8192) do
         {:ok, text} ->
           InsightsCache.put(site.id, text, provider, model)
           {:ok, text}

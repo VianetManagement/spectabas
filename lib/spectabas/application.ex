@@ -106,7 +106,7 @@ defmodule Spectabas.Application do
       :ok
   end
 
-  @version "v6.9.5"
+  @version "v6.9.6"
 
   defp notify_if_new_version do
     # Use a Postgres query to check if this version was already notified.

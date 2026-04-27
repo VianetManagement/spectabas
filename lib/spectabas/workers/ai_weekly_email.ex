@@ -18,14 +18,15 @@ defmodule Spectabas.Workers.AIWeeklyEmail do
 
   @impl Oban.Worker
   def perform(_job) do
-    # Find all sites with AI configured
+    # Sites with AI configured AND auto_generate enabled. The cron only
+    # touches sites that have explicitly opted in via Settings → Content.
     sites =
       Repo.all(from(s in Sites.Site, where: not is_nil(s.ai_config_encrypted)))
-      |> Enum.filter(&Config.configured?/1)
+      |> Enum.filter(&Config.auto_generate?/1)
 
     Enum.each(sites, fn site ->
       try do
-        send_for_site(site)
+        run_for_site(site)
       rescue
         e ->
           Logger.error("[AIWeeklyEmail] Failed for site #{site.id}: #{Exception.message(e)}")
@@ -35,57 +36,55 @@ defmodule Spectabas.Workers.AIWeeklyEmail do
     :ok
   end
 
-  defp send_for_site(site) do
-    # Find users subscribed to weekly email for this site
-    subscribers = Reports.weekly_subscribers(site.id)
-
-    if subscribers == [] do
-      Logger.info("[AIWeeklyEmail] No subscribers for site #{site.id}, skipping")
-      :ok
-    else
-      # Generate or use cached AI analysis
-      analysis = get_or_generate_analysis(site)
-
-      if analysis do
-        Enum.each(subscribers, fn user ->
-          send_email(user, site, analysis)
-        end)
-
-        Logger.info("[AIWeeklyEmail] Sent to #{length(subscribers)} users for site #{site.id}")
-      else
+  defp run_for_site(site) do
+    # Always regenerate on the schedule — the cache exists for ad-hoc views,
+    # but the weekly run is the user's signal that they want fresh analysis.
+    case generate_analysis(site) do
+      nil ->
         Logger.warning("[AIWeeklyEmail] No analysis generated for site #{site.id}")
-      end
+
+      analysis ->
+        if Config.email_enabled?(site) do
+          email_subscribers(site, analysis)
+        else
+          Logger.info(
+            "[AIWeeklyEmail] Generated for site #{site.id}, email disabled — cache only"
+          )
+        end
     end
   end
 
-  defp get_or_generate_analysis(site) do
-    # Check cache first
-    case InsightsCache.get(site.id) do
-      %{content: content} ->
-        content
+  defp email_subscribers(site, analysis) do
+    subscribers = Reports.weekly_subscribers(site.id)
 
-      nil ->
-        # Need a user for anomaly detection — use the site's first superadmin
-        user = find_site_admin(site)
+    if subscribers == [] do
+      Logger.info("[AIWeeklyEmail] No subscribers for site #{site.id}")
+    else
+      Enum.each(subscribers, fn user -> send_email(user, site, analysis) end)
+      Logger.info("[AIWeeklyEmail] Sent to #{length(subscribers)} users for site #{site.id}")
+    end
+  end
 
-        if user do
-          prompt = InsightsPrompt.build(site, user)
-          system = InsightsPrompt.system_prompt()
+  defp generate_analysis(site) do
+    user = find_site_admin(site)
 
-          case Completion.generate(site, system, prompt) do
-            {:ok, text} ->
-              {provider, _key, model} = Config.credentials(site)
-              InsightsCache.put(site.id, text, provider, model)
-              text
+    if user do
+      prompt = InsightsPrompt.build(site, user)
+      system = InsightsPrompt.system_prompt()
 
-            {:error, reason} ->
-              Logger.warning("[AIWeeklyEmail] AI generation failed: #{reason}")
-              nil
-          end
-        else
-          Logger.warning("[AIWeeklyEmail] No admin user found for site #{site.id}")
+      case Completion.generate(site, system, prompt, max_tokens: 8192) do
+        {:ok, text} ->
+          {provider, _key, model} = Config.credentials(site)
+          InsightsCache.put(site.id, text, provider, model)
+          text
+
+        {:error, reason} ->
+          Logger.warning("[AIWeeklyEmail] AI generation failed: #{reason}")
           nil
-        end
+      end
+    else
+      Logger.warning("[AIWeeklyEmail] No admin user found for site #{site.id}")
+      nil
     end
   end
 

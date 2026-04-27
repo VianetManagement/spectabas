@@ -185,11 +185,11 @@ Weighted-signal scoring (15 signals, cap 100). Tiers: watching (40-69), suspicio
 - **Geolix maps**: Use both atom and string keys — `Map.get(names, "en") || Map.get(names, :en)`
 - **ObanRepo**: Dedicated 25-conn pool (web pool = 10). Same DB, prevents sync starving web.
 - **Backpressure**: 503 at buffer 5,000. Health "overloaded" at buffer 8,000 or Oban queue 500k.
-- **AI**: Per-site config in `ai_config_encrypted`. `AI.Completion.generate/3` abstracts providers. `InsightsCache` (24h). Weekly email Monday 9am UTC. Platform-level help chatbot via `HELP_AI_API_KEY` (Anthropic Haiku) — `AI.HelpChat` module, `ChatComponent` LiveComponent in dashboard_layout.
+- **AI**: Per-site config in `ai_config_encrypted` (provider, api_key, model, `auto_generate`, `email_enabled`). `AI.Completion.generate/4` abstracts providers and accepts `max_tokens:` (default 2048; insights pass 8192). `InsightsCache` persists last analysis. Weekly cron `AIWeeklyEmail` runs Mondays 9am UTC and only touches sites where `auto_generate` is on; emails to email-report subscribers only when `email_enabled` is on. Toggles live at Settings → Content → AI Analysis. Platform-level help chatbot via `HELP_AI_API_KEY` (Anthropic Haiku) — `AI.HelpChat` module, `ChatComponent` LiveComponent in dashboard_layout.
 - **fix-ch-schema**: Uses `execute_admin` for DDL (writer may lack ALTER privileges).
 - **R2 storage**: `Spectabas.R2` module — S3v4 signing, upload/download/presigned URLs. Used for GeoIP MMDB files and data exports. Env: `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ENDPOINT`.
 - **Deterministic sessions**: Session IDs derived from `hash(site_id, visitor_id, 30-min-bucket)` — no shared state needed across instances. Postgres upsert on conflict.
 - **Oban timeouts**: All 29 workers have `timeout/1` callbacks (60s emails, 120s exports, 300s API syncs, 600s ClickHouse maintenance).
 - **Death Star spinner**: `<.death_star_spinner class="w-4 h-4" />` — custom SVG component, globally available.
 - **Heroicons mask-size fix**: `assets/css/app.css` adds `mask-size: contain` for any `[class*="hero-"]` element. Without this, the heroicons.js plugin sets a mask but no mask-size, so an element sized smaller than the SVG's natural size (e.g. `w-3 h-3` on a 24px outline icon) only shows a corner of the mask and looks blank. The CSS fix lets icons render at any `w-* h-*` size. Don't remove it.
-- **Changelog**: v6.9.5 at `/admin/changelog`. Updated every push.
+- **Changelog**: v6.9.6 at `/admin/changelog`. Updated every push.

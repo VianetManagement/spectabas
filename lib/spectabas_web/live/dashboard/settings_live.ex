@@ -108,7 +108,9 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
     config = %{
       "provider" => params["provider"] || "none",
       "api_key" => api_key,
-      "model" => params["model"]
+      "model" => params["model"],
+      "auto_generate" => params["auto_generate"] == "on",
+      "email_enabled" => params["email_enabled"] == "on"
     }
 
     if config["provider"] == "none" or config["api_key"] == "" do
@@ -1203,6 +1205,53 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                 </select>
               </div>
             </div>
+
+            <div class="border-t border-gray-100 pt-4 space-y-3">
+              <h3 class="text-sm font-semibold text-gray-900">Weekly schedule</h3>
+              <p class="text-xs text-gray-500">
+                Mondays at 9am UTC. Generation refreshes the cached analysis on the Insights page; emailing sends it to anyone with an Email Reports subscription for this site.
+              </p>
+              <label class="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="auto_generate"
+                  checked={ai_config["auto_generate"] == true}
+                  class="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span>
+                  <span class="text-sm font-medium text-gray-900">
+                    Auto-generate AI insights weekly
+                  </span>
+                  <span class="block text-xs text-gray-500">
+                    Refreshes the analysis on the Insights page every Monday so it's always current.
+                  </span>
+                </span>
+              </label>
+              <label class="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="email_enabled"
+                  checked={ai_config["email_enabled"] == true}
+                  class="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span>
+                  <span class="text-sm font-medium text-gray-900">
+                    Email weekly AI insights to subscribers
+                  </span>
+                  <span class="block text-xs text-gray-500">
+                    Sends the weekly insight to anyone with an
+                    <.link
+                      navigate={~p"/dashboard/sites/#{@site.id}/email-reports"}
+                      class="text-indigo-600 hover:underline"
+                    >
+                      Email Reports
+                    </.link>
+                    subscription for this site. Requires auto-generate to be on.
+                  </span>
+                </span>
+              </label>
+            </div>
+
             <button
               type="submit"
               class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm"

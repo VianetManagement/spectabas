@@ -6,7 +6,9 @@ defmodule Spectabas.AI.Config do
   %{
     "provider" => "anthropic" | "openai" | "google" | "none",
     "api_key" => "sk-...",
-    "model" => "claude-haiku-4-5-20251001" | "gpt-4o-mini" | "gemini-2.0-flash" | etc.
+    "model" => "claude-haiku-4-5-20251001" | "gpt-4o-mini" | "gemini-2.0-flash" | etc.,
+    "auto_generate" => true | false,
+    "email_enabled" => true | false
   }
   """
 
@@ -71,6 +73,16 @@ defmodule Spectabas.AI.Config do
   def configured?(site) do
     config = get(site)
     config["provider"] not in [nil, "", "none"] and config["api_key"] not in [nil, ""]
+  end
+
+  @doc "Whether the weekly cron should auto-regenerate the insight for this site."
+  def auto_generate?(site) do
+    configured?(site) and get(site)["auto_generate"] == true
+  end
+
+  @doc "Whether the weekly cron should email the insight to subscribers for this site."
+  def email_enabled?(site) do
+    configured?(site) and get(site)["email_enabled"] == true
   end
 
   @doc "Get the provider, api_key, and model for a site."

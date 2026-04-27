@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.6", "2026-04-27T12:00:00Z",
+       [
+         %{
+           title: "AI Insights: schedule + email toggles, full-length output",
+           description:
+             "Settings → Content → AI Analysis now has two checkboxes: 'Auto-generate AI insights weekly' (Monday 9am UTC) and 'Email weekly AI insights to subscribers'. The weekly cron only touches sites that opt in to auto-generate, and only emails when email is enabled — so previously every AI-configured site silently got the email piggybacking on the regular email reports subscription, which was confusing. Also bumped max_tokens for insight generation from 2048 to 8192, fixing the cut-off output you were seeing on busy sites."
+         }
+       ]},
       {"v6.9.5", "2026-04-27T11:40:00Z",
        [
          %{
