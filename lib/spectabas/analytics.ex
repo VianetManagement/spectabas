@@ -4443,6 +4443,82 @@ defmodule Spectabas.Analytics do
     }
   end
 
+  @doc """
+  Batched scraper-score lookup. Runs a single ClickHouse query with
+  visitor_id IN (...) for the given list and returns a map of
+  visitor_id → score result. Used by ScraperWebhookScan downgrade
+  detection so we don't fan out N round trips per site.
+
+  Options:
+    - :hours — restrict the scan to the last N hours of events (default 24)
+  """
+  def scraper_scores_for_visitors(site, visitor_ids, opts \\ [])
+
+  def scraper_scores_for_visitors(%Site{}, [], _opts), do: {:ok, %{}}
+
+  def scraper_scores_for_visitors(%Site{} = site, visitor_ids, opts)
+      when is_list(visitor_ids) do
+    hours = Keyword.get(opts, :hours, 24)
+    site_p = ClickHouse.param(site.id)
+    from_p = ClickHouse.param(format_datetime(DateTime.add(DateTime.utc_now(), -hours, :hour)))
+    to_p = ClickHouse.param(format_datetime(DateTime.utc_now()))
+    ids_p = Enum.map_join(visitor_ids, ", ", &ClickHouse.param/1)
+    prefixes = List.wrap(site.scraper_content_prefixes)
+
+    sql = """
+    SELECT
+      visitor_id,
+      ifNull(nullIf(argMaxIf(ip_org, timestamp, event_type = 'pageview'), ''), argMax(ip_org, timestamp)) AS asn,
+      ifNull(nullIf(argMaxIf(user_agent, timestamp, event_type = 'pageview'), ''), argMax(user_agent, timestamp)) AS user_agent,
+      uniq(ip_address) AS visitor_ip_count,
+      uniqIf(url_path, event_type = 'pageview') AS session_pageviews,
+      arrayFilter(p -> p != '',
+        groupArrayIf(50)(url_path, event_type = 'pageview')) AS page_paths,
+      ifNull(nullIf(argMaxIf(referrer_domain, timestamp, event_type = 'pageview'), ''), '') AS referrer,
+      concat(toString(argMaxIf(screen_width, timestamp, event_type = 'pageview')), 'x', toString(argMaxIf(screen_height, timestamp, event_type = 'pageview'))) AS screen_resolution,
+      arraySlice(arrayDifference(arraySort(
+        groupArrayIf(100)(toUnixTimestamp(timestamp) * 1000,
+          event_type = 'pageview'))), 2) AS request_intervals_ms,
+      maxIf(ip_is_datacenter, event_type = 'pageview') AS is_datacenter,
+      maxIf(ip_is_vpn, event_type = 'pageview') AS is_vpn,
+      ifNull(nullIf(argMaxIf(ip_vpn_provider, timestamp, event_type = 'pageview'), ''), '') AS vpn_provider,
+      ifNull(nullIf(argMaxIf(browser, timestamp, event_type = 'pageview'), ''), argMax(browser, timestamp)) AS browser,
+      ifNull(nullIf(argMaxIf(browser_version, timestamp, event_type = 'pageview'), ''), '') AS browser_version,
+      ifNull(nullIf(argMaxIf(device_type, timestamp, event_type = 'pageview'), ''), '') AS device_type
+    FROM events
+    WHERE site_id = #{site_p}
+      AND visitor_id IN (#{ids_p})
+      AND timestamp >= #{from_p}
+      AND timestamp <= #{to_p}
+    GROUP BY visitor_id
+    """
+
+    case ClickHouse.query(sql, receive_timeout: 60_000) do
+      {:ok, rows} ->
+        weight_overrides = site.scraper_weight_overrides
+
+        scores =
+          Map.new(rows, fn row ->
+            profile = row_to_profile(row, prefixes)
+            result = Spectabas.Analytics.ScraperDetector.score(profile, weight_overrides)
+
+            {row["visitor_id"],
+             %{
+               score: result.score,
+               signals: result.signals,
+               verdict: Spectabas.Analytics.ScraperDetector.verdict(result.score),
+               unique_pages: to_int(row["session_pageviews"]),
+               ip_count: to_int(row["visitor_ip_count"])
+             }}
+          end)
+
+        {:ok, scores}
+
+      error ->
+        error
+    end
+  end
+
   def scraper_score_for_visitor(%Site{} = site, visitor_id) do
     site_p = ClickHouse.param(site.id)
     vid_p = ClickHouse.param(visitor_id)

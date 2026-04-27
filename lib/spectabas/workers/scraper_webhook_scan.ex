@@ -11,7 +11,12 @@ defmodule Spectabas.Workers.ScraperWebhookScan do
   import Ecto.Query
 
   @impl Oban.Worker
-  def timeout(_job), do: :timer.seconds(60)
+  def timeout(_job), do: :timer.minutes(5)
+
+  # Cap how many flagged visitors we re-check per site per run. With a 15-min
+  # cron, even a 5,000-visitor backlog clears in well under a day. Prevents the
+  # job from blowing past its timeout on sites with massive flag tables.
+  @downgrade_batch_size 500
 
   @impl Oban.Worker
   def perform(_job) do
@@ -97,52 +102,63 @@ defmodule Spectabas.Workers.ScraperWebhookScan do
   end
 
   defp check_downgrades(site) do
-    # Find all visitors with an active scraper webhook flag, excluding any
-    # that were manually marked — manual flags are sticky and never auto-downgrade.
+    # Find visitors with an active scraper webhook flag, excluding any that
+    # were manually marked — manual flags are sticky and never auto-downgrade.
+    # Order by oldest webhook first so we eventually rotate through every
+    # flagged visitor across runs even if there are more than the batch size.
     flagged =
       Repo.all(
         from(v in Visitor,
           where:
             v.site_id == ^site.id and not is_nil(v.scraper_webhook_sent_at) and
               v.scraper_manual_flag == false,
+          order_by: [asc: v.scraper_webhook_sent_at],
+          limit: @downgrade_batch_size,
           select: v
         )
       )
 
-    if flagged != [] do
+    if flagged == [] do
+      :ok
+    else
       Logger.notice(
         "[ScraperWebhookScan] site=#{site.id} checking #{length(flagged)} flagged visitors for downgrades"
       )
-    end
 
-    Enum.each(flagged, fn visitor ->
-      check_visitor_downgrade(site, visitor)
-    end)
+      visitor_ids = Enum.map(flagged, & &1.id)
+
+      # ONE batched ClickHouse query covers all flagged visitors for this site,
+      # bounded to the last 24h of events so it doesn't full-scan history.
+      case Analytics.scraper_scores_for_visitors(site, visitor_ids, hours: 24) do
+        {:ok, scores} ->
+          Enum.each(flagged, fn visitor ->
+            curr = Map.get(scores, visitor.id, %{score: 0})
+            check_visitor_downgrade(site, visitor, curr.score)
+          end)
+
+        {:error, reason} ->
+          Logger.warning(
+            "[ScraperWebhookScan] Downgrade query failed site=#{site.id}: #{inspect(reason)}"
+          )
+      end
+    end
   end
 
-  defp check_visitor_downgrade(site, visitor) do
-    case Analytics.scraper_score_for_visitor(site, visitor.id) do
-      {:ok, %{score: curr_score}} ->
-        prev_score = visitor.scraper_webhook_score || 0
-        prev_tier = score_tier(prev_score)
-        curr_tier = score_tier(curr_score)
+  defp check_visitor_downgrade(site, visitor, curr_score) do
+    prev_score = visitor.scraper_webhook_score || 0
+    prev_tier = score_tier(prev_score)
+    curr_tier = score_tier(curr_score)
 
-        if curr_tier < prev_tier do
-          Logger.notice(
-            "[ScraperWebhookScan] Downgrade: visitor=#{visitor.id} score #{prev_score}→#{curr_score} (tier #{prev_tier}→#{curr_tier})"
-          )
+    if curr_tier < prev_tier do
+      Logger.notice(
+        "[ScraperWebhookScan] Downgrade: visitor=#{visitor.id} score #{prev_score}→#{curr_score} (tier #{prev_tier}→#{curr_tier})"
+      )
 
-          if curr_score < ScraperDetector.score_watching() do
-            # Dropped below watching threshold — send deactivation
-            send_deactivation(site, visitor)
-          else
-            # Dropped tier but still flagged — update score, re-send at new level
-            send_and_record(site, visitor, curr_score, [], %{"session_pageviews" => 0})
-          end
-        end
-
-      _ ->
-        :ok
+      if curr_score < ScraperDetector.score_watching() do
+        send_deactivation(site, visitor)
+      else
+        send_and_record(site, visitor, curr_score, [], %{"session_pageviews" => 0})
+      end
     end
   rescue
     e ->

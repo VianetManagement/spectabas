@@ -192,4 +192,4 @@ Weighted-signal scoring (15 signals, cap 100). Tiers: watching (40-69), suspicio
 - **Oban timeouts**: All 29 workers have `timeout/1` callbacks (60s emails, 120s exports, 300s API syncs, 600s ClickHouse maintenance).
 - **Death Star spinner**: `<.death_star_spinner class="w-4 h-4" />` — custom SVG component, globally available.
 - **Heroicons mask-size fix**: `assets/css/app.css` adds `mask-size: contain` for any `[class*="hero-"]` element. Without this, the heroicons.js plugin sets a mask but no mask-size, so an element sized smaller than the SVG's natural size (e.g. `w-3 h-3` on a 24px outline icon) only shows a corner of the mask and looks blank. The CSS fix lets icons render at any `w-* h-*` size. Don't remove it.
-- **Changelog**: v6.9.6 at `/admin/changelog`. Updated every push.
+- **Changelog**: v6.9.7 at `/admin/changelog`. Updated every push.

@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.7", "2026-04-27T12:30:00Z",
+       [
+         %{
+           title: "Fix: ScraperWebhookScan no longer times out at 60s",
+           description:
+             "The downgrade-detection step ran one ClickHouse query per flagged visitor and that query had no time bound (full-table scan per visitor). On sites with hundreds of flagged visitors the worker blew past the 60s Oban timeout and AppSignal flagged it. New Analytics.scraper_scores_for_visitors/3 batches all flagged visitors for a site into a single ClickHouse query bounded to the last 24h. Capped at 500 visitors per run (rotates oldest-first across runs). Worker timeout bumped to 5 min as headroom."
+         }
+       ]},
       {"v6.9.6", "2026-04-27T12:00:00Z",
        [
          %{
