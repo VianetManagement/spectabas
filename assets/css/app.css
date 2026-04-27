@@ -4,6 +4,12 @@
 @source "../../lib/spectabas_web";
 @source "../../lib/spectabas/analytics";
 
+/* Heroicons Tailwind plugin — generates a CSS class per icon (hero-x-mark,
+   hero-shield-exclamation, etc.) from deps/heroicons/optimized/. Without
+   this @plugin directive, Tailwind never emits any hero-* classes and every
+   <.icon name="hero-..." /> renders as a blank inline-block. */
+@plugin "../vendor/heroicons";
+
 /* Add variants based on LiveView classes */
 @custom-variant phx-click-loading (.phx-click-loading&, .phx-click-loading &);
 @custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);

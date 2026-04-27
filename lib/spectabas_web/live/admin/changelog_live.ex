@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.8", "2026-04-27T12:45:00Z",
+       [
+         %{
+           title: "Fix: All heroicons render now (plugin was never activated)",
+           description:
+             "The heroicons Tailwind plugin file at assets/vendor/heroicons.js was present but never loaded — there was no @plugin directive in app.css, so Tailwind never emitted any hero-* CSS classes. That meant every <.icon name='hero-...' /> across the entire app rendered as a blank inline-block. Added @plugin directive to app.css so the per-icon classes (with the SVG inlined as a base64 mask) are now generated. Combined with last release's mask-size: contain rule, icons render correctly at any size now."
+         }
+       ]},
       {"v6.9.7", "2026-04-27T12:30:00Z",
        [
          %{
