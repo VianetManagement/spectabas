@@ -1193,7 +1193,7 @@ defmodule SpectabasWeb.DocsLive do
             body: """
             Shows your top pages ranked by pageviews.
 
-            **Click any page URL** to see its **Page Transitions** — where visitors came from before viewing that page, and where they went afterward.
+            **Click any page URL** to open its **Page detail** view — traffic over time vs. prior period, top referrers, engagement, click elements, conversions, and more.
 
             ### Columns
 
@@ -1225,20 +1225,23 @@ defmodule SpectabasWeb.DocsLive do
           },
           %{
             id: "transitions",
-            title: "Page Transitions",
+            title: "Page detail",
             body: """
-            For any page on your site, see the navigation flow:
+            Drill into a single page on your site. Enter a path (e.g., `/pricing`) and click **Analyze**. Pick a date range — 24h / 7d / 30d / 90d — and the dashed line on the traffic chart shows the **prior period** for comparison.
 
-            - **Came from** — pages visitors viewed immediately before this page
-            - **Went to** — pages visitors viewed immediately after this page
+            ### What you get
 
-            Enter a page path (e.g., `/pricing`) and click **Analyze**. Click any page in the results to follow the flow and explore how visitors navigate your site.
+            - **Traffic over time** — pageviews or unique visitors for this page, with previous-period overlay
+            - **Engagement** — bounce rate, average time on page, entry rate (% of sessions starting here), exit rate (% ending here)
+            - **Came from / Went to** — internal navigation flow (click any row to drill into that page)
+            - **Top referrers** — external sources whose sessions started on this page
+            - **Top search keywords** — Search Console + Bing queries that landed here
+            - **Audience** — top countries, device split, new vs returning visitors
+            - **Conversions** — top auto-tracked clicked elements, outbound links, and goals completed by visitors who saw this page
+            - **When visitors view this page** — hour-of-day × day-of-week heatmap in the site timezone
+            - **Performance** — RUM stats (Load / LCP / FCP) when available
 
-            ### Performance Stats
-
-            When RUM data is available for the analyzed page, the current page card shows real load times: **Load** (full page load), **LCP** (Largest Contentful Paint), and **FCP** (First Contentful Paint), color-coded by speed. This lets you spot slow pages without leaving the transitions view.
-
-            > **Example:** Analyzing `/pricing` might show that 40% came from `/features` and 25% went to `/signup` — telling you your features page effectively drives pricing exploration, and pricing converts to signup.
+            > **Example:** Analyzing `/pricing` over 30 days might show traffic up 18% vs prior period, 60% of sessions land here from organic search, average time on page is 1m 12s, and 8% of visitors who saw the page completed a "Signup" goal.
             """
           },
           %{

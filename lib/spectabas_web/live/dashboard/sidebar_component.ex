@@ -139,7 +139,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
             />
             <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/transitions"}
-              label="Transitions"
+              label="Page detail"
               active={@active == "transitions"}
             />
             <.nav_item
@@ -563,7 +563,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
       {~p"/dashboard/sites/#{site_id}/realtime", "Realtime"},
       {~p"/dashboard/sites/#{site_id}/pages", "Pages"},
       {~p"/dashboard/sites/#{site_id}/entry-exit", "Entry/Exit"},
-      {~p"/dashboard/sites/#{site_id}/transitions", "Transitions"},
+      {~p"/dashboard/sites/#{site_id}/transitions", "Page detail"},
       {~p"/dashboard/sites/#{site_id}/search", "Search"},
       {~p"/dashboard/sites/#{site_id}/outbound-links", "Outbound Links"},
       {~p"/dashboard/sites/#{site_id}/downloads", "Downloads"},

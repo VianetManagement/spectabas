@@ -4694,6 +4694,430 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  # ---- Page Detail (single url_path) ----
+
+  @doc "Daily/hourly traffic for one url_path. Returns rows with bucket, pageviews, visitors."
+  def page_timeseries(%Site{} = site, %User{} = user, url_path, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      tz = tz_sql(site)
+
+      diff_days = Date.diff(DateTime.to_date(date_range.to), DateTime.to_date(date_range.from))
+      trunc_fn = if diff_days <= 1, do: "toStartOfHour", else: "toDate"
+
+      sql = """
+      SELECT
+        #{trunc_fn}(toTimezone(timestamp, #{tz})) AS bucket,
+        countIf(event_type = 'pageview') AS pageviews,
+        uniq(visitor_id) AS visitors
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND url_path = #{ClickHouse.param(url_path)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+      GROUP BY bucket
+      ORDER BY bucket ASC
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Engagement for one url_path: bounce rate, avg time on page, entry/exit rates."
+  def page_engagement(%Site{} = site, %User{} = user, url_path, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      from_p = ClickHouse.param(format_datetime(date_range.from))
+      to_p = ClickHouse.param(format_datetime(date_range.to))
+      site_p = ClickHouse.param(site.id)
+      path_p = ClickHouse.param(url_path)
+
+      sql = """
+      WITH session_summary AS (
+        SELECT
+          session_id,
+          argMin(url_path, timestamp) AS entry_page,
+          argMax(url_path, timestamp) AS exit_page,
+          countIf(event_type = 'pageview') AS pv,
+          maxIf(duration_s, event_type = 'duration' AND duration_s > 0) AS dur,
+          countIf(event_type = 'pageview' AND url_path = #{path_p}) AS pv_on_page
+        FROM events
+        WHERE site_id = #{site_p}
+          AND ip_is_bot = 0
+          AND timestamp >= #{from_p}
+          AND timestamp <= #{to_p}
+        GROUP BY session_id
+        HAVING pv > 0
+      )
+      SELECT
+        count() AS total_sessions,
+        countIf(pv_on_page > 0) AS sessions_on_page,
+        countIf(entry_page = #{path_p}) AS entries,
+        countIf(exit_page = #{path_p}) AS exits,
+        countIf(entry_page = #{path_p} AND pv = 1) AS bounces,
+        round(avgIf(dur, pv_on_page > 0 AND dur > 0), 0) AS avg_duration
+      FROM session_summary
+      """
+
+      case ClickHouse.query(sql) do
+        {:ok, [row]} -> {:ok, row}
+        {:ok, []} -> {:ok, %{}}
+        err -> err
+      end
+    end
+  end
+
+  @doc "Top external referrer domains for sessions that entered on this url_path."
+  def page_referrers(%Site{} = site, %User{} = user, url_path, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      excluded = self_referrer_domains(site)
+
+      exclude_clause =
+        if excluded == [],
+          do: "",
+          else:
+            "AND referrer_domain NOT IN (#{Enum.map_join(excluded, ", ", &ClickHouse.param/1)})"
+
+      from_p = ClickHouse.param(format_datetime(date_range.from))
+      to_p = ClickHouse.param(format_datetime(date_range.to))
+      site_p = ClickHouse.param(site.id)
+      path_p = ClickHouse.param(url_path)
+
+      entry_sessions = """
+      SELECT session_id
+      FROM (
+        SELECT
+          session_id,
+          argMin(url_path, timestamp) AS entry_page
+        FROM events
+        WHERE site_id = #{site_p}
+          AND ip_is_bot = 0
+          AND timestamp >= #{from_p}
+          AND timestamp <= #{to_p}
+        GROUP BY session_id
+        HAVING entry_page = #{path_p}
+      )
+      """
+
+      sql = """
+      SELECT
+        if(referrer_domain != '', referrer_domain, 'Direct') AS referrer_domain,
+        any(utm_source) AS utm_source,
+        any(utm_medium) AS utm_medium,
+        uniq(session_id) AS sessions,
+        uniq(visitor_id) AS visitors
+      FROM events
+      WHERE site_id = #{site_p}
+        AND ip_is_bot = 0
+        AND event_type = 'pageview'
+        AND timestamp >= #{from_p}
+        AND timestamp <= #{to_p}
+        AND session_id IN (#{entry_sessions})
+        #{exclude_clause}
+      GROUP BY referrer_domain
+      ORDER BY sessions DESC
+      LIMIT 25
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Top countries viewing one url_path."
+  def page_countries(%Site{} = site, %User{} = user, url_path, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        ip_country,
+        any(ip_country_name) AS ip_country_name,
+        countIf(event_type = 'pageview') AS pageviews,
+        uniq(visitor_id) AS unique_visitors
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND url_path = #{ClickHouse.param(url_path)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_country != ''
+        AND ip_is_bot = 0
+      GROUP BY ip_country
+      ORDER BY pageviews DESC
+      LIMIT 15
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Device-type breakdown for one url_path."
+  def page_devices(%Site{} = site, %User{} = user, url_path, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        if(device_type != '', device_type, 'Unknown') AS device_type,
+        countIf(event_type = 'pageview') AS pageviews,
+        uniq(visitor_id) AS unique_visitors
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND url_path = #{ClickHouse.param(url_path)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+      GROUP BY device_type
+      ORDER BY pageviews DESC
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Top auto-tracked click elements on one url_path."
+  def page_clicks(%Site{} = site, %User{} = user, url_path, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        JSONExtractString(properties, '_text') AS element_text,
+        replaceRegexpOne(JSONExtractString(properties, '_id'), '-\\d+$', '') AS element_id,
+        JSONExtractString(properties, '_tag') AS element_tag,
+        any(JSONExtractString(properties, '_href')) AS element_href,
+        count() AS clicks,
+        uniq(visitor_id) AS visitors
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND url_path = #{ClickHouse.param(url_path)}
+        AND event_type = 'custom'
+        AND event_name = '_click'
+        AND ip_is_bot = 0
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      GROUP BY element_text, element_id, element_tag
+      ORDER BY clicks DESC
+      LIMIT 25
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Top outbound links clicked from one url_path."
+  def page_outbound(%Site{} = site, %User{} = user, url_path, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        JSONExtractString(properties, 'domain') AS domain,
+        JSONExtractString(properties, 'url') AS url,
+        count() AS hits,
+        uniq(visitor_id) AS visitors
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND url_path = #{ClickHouse.param(url_path)}
+        AND event_type = 'custom'
+        AND event_name = '_outbound'
+        AND ip_is_bot = 0
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      GROUP BY domain, url
+      ORDER BY hits DESC
+      LIMIT 25
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
+  Goals completed by visitors who saw this url_path during the period.
+  Returns each goal with completions and unique converters who also viewed the page.
+  """
+  def page_goals(%Site{} = site, %User{} = user, url_path, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      goals = Spectabas.Goals.list_goals(site)
+
+      if goals == [] do
+        {:ok, []}
+      else
+        from_p = ClickHouse.param(format_datetime(date_range.from))
+        to_p = ClickHouse.param(format_datetime(date_range.to))
+        site_p = ClickHouse.param(site.id)
+        path_p = ClickHouse.param(url_path)
+
+        page_visitors_sub = """
+        SELECT DISTINCT visitor_id FROM events
+        WHERE site_id = #{site_p}
+          AND url_path = #{path_p}
+          AND event_type = 'pageview'
+          AND ip_is_bot = 0
+          AND timestamp >= #{from_p}
+          AND timestamp <= #{to_p}
+        """
+
+        unions =
+          goals
+          |> Enum.map(fn goal ->
+            condition = goal_condition(goal)
+
+            """
+            SELECT #{ClickHouse.param(to_string(goal.id))} AS goal_id,
+              count() AS completions,
+              uniq(visitor_id) AS unique_completers
+            FROM events
+            WHERE site_id = #{site_p}
+              AND timestamp >= #{from_p}
+              AND timestamp <= #{to_p}
+              AND ip_is_bot = 0
+              AND #{condition}
+              AND visitor_id IN (#{page_visitors_sub})
+            """
+          end)
+          |> Enum.join("\nUNION ALL\n")
+
+        case ClickHouse.query(unions) do
+          {:ok, rows} ->
+            counts =
+              Map.new(rows, fn r ->
+                {r["goal_id"],
+                 %{
+                   completions: to_int(r["completions"]),
+                   unique_completers: to_int(r["unique_completers"])
+                 }}
+              end)
+
+            results =
+              goals
+              |> Enum.map(fn goal ->
+                stats =
+                  Map.get(counts, to_string(goal.id), %{completions: 0, unique_completers: 0})
+
+                %{
+                  goal_id: goal.id,
+                  name: goal.name,
+                  goal_type: goal.goal_type,
+                  completions: stats.completions,
+                  unique_completers: stats.unique_completers
+                }
+              end)
+              |> Enum.filter(&(&1.completions > 0))
+              |> Enum.sort_by(&(-&1.completions))
+
+            {:ok, results}
+
+          err ->
+            err
+        end
+      end
+    end
+  end
+
+  @doc "Top GSC/Bing search keywords landing on this url_path (last 90 days)."
+  def page_search_keywords(%Site{} = site, %User{} = user, url_path, days) do
+    with :ok <- authorize(site, user) do
+      site_p = ClickHouse.param(site.id)
+      path_p = ClickHouse.param(url_path)
+      days = max(1, min(days, 90))
+
+      sql = """
+      SELECT
+        query,
+        source,
+        sum(clicks) AS total_clicks,
+        sum(impressions) AS total_impressions,
+        if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
+        round(avg(position), 1) AS avg_pos
+      FROM search_console FINAL
+      WHERE site_id = #{site_p}
+        AND date >= today() - #{days}
+        AND query != ''
+        AND path(page) = #{path_p}
+      GROUP BY query, source
+      ORDER BY total_clicks DESC, total_impressions DESC
+      LIMIT 25
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc "Hour-of-day x day-of-week heatmap for one url_path. Returns 7x24 grid of pageviews."
+  def page_hour_heatmap(%Site{} = site, %User{} = user, url_path, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      tz = tz_sql(site)
+
+      sql = """
+      SELECT
+        toHour(toTimezone(timestamp, #{tz})) AS hour_of_day,
+        toDayOfWeek(toTimezone(timestamp, #{tz})) AS day_of_week,
+        countIf(event_type = 'pageview') AS pageviews
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND url_path = #{ClickHouse.param(url_path)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+      GROUP BY hour_of_day, day_of_week
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
+  New vs returning split for visitors of one url_path.
+  "New" = the visitor's first ever pageview on the site is on this url_path.
+  """
+  def page_visitor_split(%Site{} = site, %User{} = user, url_path, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      from_p = ClickHouse.param(format_datetime(date_range.from))
+      to_p = ClickHouse.param(format_datetime(date_range.to))
+      site_p = ClickHouse.param(site.id)
+      path_p = ClickHouse.param(url_path)
+
+      sql = """
+      SELECT
+        if(first_page = #{path_p}, 'New', 'Returning') AS visitor_type,
+        count() AS visitors
+      FROM (
+        SELECT
+          visitor_id,
+          argMinIf(url_path, timestamp, event_type = 'pageview') AS first_page
+        FROM events
+        WHERE site_id = #{site_p}
+          AND ip_is_bot = 0
+          AND visitor_id IN (
+            SELECT DISTINCT visitor_id FROM events
+            WHERE site_id = #{site_p}
+              AND url_path = #{path_p}
+              AND event_type = 'pageview'
+              AND ip_is_bot = 0
+              AND timestamp >= #{from_p}
+              AND timestamp <= #{to_p}
+          )
+        GROUP BY visitor_id
+      )
+      GROUP BY visitor_type
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
   # ---- Multi-Channel Attribution ----
 
   @doc """

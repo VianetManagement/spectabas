@@ -82,13 +82,96 @@ defmodule SpectabasWeb.Dashboard.PerformanceLiveTest do
         live(conn, ~p"/dashboard/sites/#{site.id}/transitions?page=/pricing")
 
       assert html =~ "/pricing"
-      assert html =~ "Page Transitions"
+      assert html =~ "Page detail"
     end
 
     test "transitions page selector works with perf data", %{conn: conn, site: site} do
       {:ok, view, _html} = live(conn, ~p"/dashboard/sites/#{site.id}/transitions")
       html = render_submit(view, "change_page", %{"page" => "/about"})
       assert html =~ "/about"
+    end
+  end
+
+  describe "page detail view" do
+    test "renders all four range options including 90d", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/transitions")
+      assert html =~ "24h"
+      assert html =~ "7 days"
+      assert html =~ "30 days"
+      assert html =~ "90 days"
+    end
+
+    test "renders all section headings", %{conn: conn, site: site} do
+      {:ok, view, _html} = live(conn, ~p"/dashboard/sites/#{site.id}/transitions?page=/x")
+      html = render(view)
+      assert html =~ "Traffic over time"
+      assert html =~ "Came from"
+      assert html =~ "Went to"
+      assert html =~ "Top referrers landing here"
+      assert html =~ "Top search keywords"
+      assert html =~ "Top countries"
+      assert html =~ "Devices"
+      assert html =~ "New vs returning"
+      assert html =~ "Top clicked elements"
+      assert html =~ "Top outbound links"
+      assert html =~ "Goals from page viewers"
+      assert html =~ "When visitors view this page"
+    end
+
+    test "engagement metric cards render", %{conn: conn, site: site} do
+      {:ok, view, _html} = live(conn, ~p"/dashboard/sites/#{site.id}/transitions?page=/x")
+      html = render(view)
+      assert html =~ "Bounce rate"
+      assert html =~ "Avg time on page"
+      assert html =~ "Entry rate"
+      assert html =~ "Exit rate"
+    end
+
+    test "range change to 90d does not crash", %{conn: conn, site: site} do
+      {:ok, view, _html} = live(conn, ~p"/dashboard/sites/#{site.id}/transitions?page=/x")
+      html = render_click(view, "change_range", %{"range" => "90d"})
+      assert html =~ "Page detail"
+    end
+
+    test "all range options work without crashing", %{conn: conn, site: site} do
+      {:ok, view, _html} = live(conn, ~p"/dashboard/sites/#{site.id}/transitions?page=/x")
+
+      for range <- ["24h", "7d", "30d", "90d"] do
+        render_click(view, "change_range", %{"range" => range})
+      end
+    end
+
+    test "metric toggle does not crash", %{conn: conn, site: site} do
+      {:ok, view, _html} = live(conn, ~p"/dashboard/sites/#{site.id}/transitions?page=/x")
+      html = render_click(view, "toggle_metric", %{"metric" => "pageviews"})
+      assert html =~ "Page detail"
+      html = render_click(view, "toggle_metric", %{"metric" => "visitors"})
+      assert html =~ "Page detail"
+    end
+
+    test "navigate_page event updates current page", %{conn: conn, site: site} do
+      {:ok, view, _html} = live(conn, ~p"/dashboard/sites/#{site.id}/transitions?page=/x")
+      html = render_click(view, "navigate_page", %{"path" => "/checkout"})
+      assert html =~ "/checkout"
+    end
+
+    test "empty page submit defaults to /", %{conn: conn, site: site} do
+      {:ok, view, _html} = live(conn, ~p"/dashboard/sites/#{site.id}/transitions?page=/foo")
+      html = render_submit(view, "change_page", %{"page" => ""})
+      # Falls back to root path
+      refute html =~ ~s(value="/foo")
+    end
+
+    test "sidebar shows Page detail label", %{conn: conn, site: site} do
+      {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/transitions")
+      assert html =~ "Page detail"
+    end
+
+    test "chart container renders with TimeseriesChart hook", %{conn: conn, site: site} do
+      {:ok, view, _html} = live(conn, ~p"/dashboard/sites/#{site.id}/transitions?page=/x")
+      html = render(view)
+      assert html =~ ~s(phx-hook="TimeseriesChart")
+      assert html =~ ~s(id="traffic-chart-)
     end
   end
 end

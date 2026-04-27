@@ -67,9 +67,9 @@ defmodule SpectabasWeb.Dashboard.CategoryLive do
         %{
           key: "transitions",
           path: "transitions",
-          label: "Page Transitions",
+          label: "Page detail",
           desc:
-            "For any page, see where visitors came from and where they went next. Helps you understand navigation patterns and optimize internal linking."
+            "Drill into a single page: traffic over time vs prior period, top referrers landing here, engagement (bounce, time on page), top clicked elements, outbound links, goals from page viewers, hour-of-day heatmap, and new vs returning split."
         },
         %{
           key: "search",

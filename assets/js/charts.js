@@ -31,23 +31,41 @@ export const TimeseriesChart = {
     const metric = data.metric || "visitors"
     const isPageviews = metric === "pageviews"
     const values = isPageviews ? data.pageviews : data.visitors
+    const previous = isPageviews ? data.previous_pageviews : data.previous_visitors
     const label = isPageviews ? "Pageviews" : "Visitors"
     const borderColor = isPageviews ? "#6366f1" : "#10b981"
     const bgColor = isPageviews ? "rgba(99, 102, 241, 0.1)" : "rgba(16, 185, 129, 0.1)"
 
+    const datasets = [{
+      label: label,
+      data: values,
+      borderColor: borderColor,
+      backgroundColor: bgColor,
+      fill: true,
+      tension: 0.3,
+      pointRadius: values.length > 30 ? 0 : 3,
+      pointHoverRadius: 5,
+      borderWidth: 2,
+    }]
+
+    if (Array.isArray(previous) && previous.length > 0) {
+      datasets.push({
+        label: "Previous period",
+        data: previous,
+        borderColor: "#9ca3af",
+        backgroundColor: "transparent",
+        fill: false,
+        tension: 0.3,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        borderWidth: 1.5,
+        borderDash: [4, 4],
+      })
+    }
+
     if (this.chart) {
       this.chart.data.labels = data.labels
-      this.chart.data.datasets = [{
-        label: label,
-        data: values,
-        borderColor: borderColor,
-        backgroundColor: bgColor,
-        fill: true,
-        tension: 0.3,
-        pointRadius: values.length > 30 ? 0 : 3,
-        pointHoverRadius: 5,
-        borderWidth: 2,
-      }]
+      this.chart.data.datasets = datasets
       this.chart.resize()
       this.chart.update()
       return
@@ -57,19 +75,7 @@ export const TimeseriesChart = {
       type: "line",
       data: {
         labels: data.labels,
-        datasets: [
-          {
-            label: label,
-            data: values,
-            borderColor: borderColor,
-            backgroundColor: bgColor,
-            fill: true,
-            tension: 0.3,
-            pointRadius: values.length > 30 ? 0 : 3,
-            pointHoverRadius: 5,
-            borderWidth: 2,
-          },
-        ],
+        datasets: datasets,
       },
       options: {
         responsive: true,

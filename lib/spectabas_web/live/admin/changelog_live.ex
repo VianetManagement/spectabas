@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.0", "2026-04-27T10:20:00Z",
+       [
+         %{
+           title: "Feature: Page detail view (replaces Page Transitions)",
+           description:
+             "The per-page page now answers more than just 'where did they come from / go to'. Adds a traffic chart with previous-period overlay, engagement strip (bounce / avg time / entry / exit rate), top external referrers landing here, top GSC + Bing keywords, country and device breakdowns, new vs returning split, top auto-tracked clicked elements, top outbound links, goals completed by visitors who saw this page, and an hour-of-day × day-of-week heatmap. 90-day range added."
+         }
+       ]},
       {"v6.8.0", "2026-04-21T13:00:00Z",
        [
          %{

@@ -69,7 +69,7 @@ defmodule SpectabasWeb.DashboardPagesTest do
 
     test "transitions", %{conn: conn, site: site} do
       {:ok, _view, html} = live(conn, ~p"/dashboard/sites/#{site.id}/transitions")
-      assert html =~ "Page Transitions"
+      assert html =~ "Page detail"
     end
 
     test "attribution", %{conn: conn, site: site} do
