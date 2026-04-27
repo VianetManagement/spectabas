@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.2", "2026-04-27T10:55:00Z",
+       [
+         %{
+           title: "UI: Per-panel Death Star spinners on Page detail",
+           description:
+             "Each panel on the Page detail view now shows its own Death Star spinner while its query is running, instead of one big page-level spinner. Sections fill in independently as data arrives. Also swept the existing generic 'animate-spin' div spinners on Visitor Log, Revenue Attribution, Time to Convert, Revenue Cohorts, Visitor Quality, and Search Keywords pages, replacing them with the Death Star spinner for visual consistency."
+         }
+       ]},
       {"v6.9.1", "2026-04-27T10:40:00Z",
        [
          %{

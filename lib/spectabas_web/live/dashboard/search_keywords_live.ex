@@ -899,8 +899,8 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
         </div>
 
         <%= if @loading do %>
-          <div class="flex items-center justify-center py-12">
-            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+          <div class="flex items-center justify-center py-12 text-gray-400">
+            <.death_star_spinner class="w-8 h-8" />
           </div>
         <% else %>
           <%= if !@has_data do %>

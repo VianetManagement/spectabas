@@ -26,22 +26,7 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
         |> assign(:user, user)
         |> assign(:date_range, "7d")
         |> assign(:current_page, page)
-        |> assign(:loading, true)
-        |> assign(:totals, %{})
-        |> assign(:transitions, %{previous: [], next: []})
-        |> assign(:page_perf, %{})
-        |> assign(:engagement, %{})
-        |> assign(:referrers, [])
-        |> assign(:countries, [])
-        |> assign(:devices, [])
-        |> assign(:clicks, [])
-        |> assign(:outbound, [])
-        |> assign(:goals, [])
-        |> assign(:keywords, [])
-        |> assign(:heatmap, [])
-        |> assign(:visitor_split, [])
-        |> assign(:chart_json, "{}")
-        |> assign(:chart_data, %{current: [], previous: [], range: "7d"})
+        |> assign_loading_defaults()
         |> assign(:chart_metric, "visitors")
         |> assign(:chart_key, 0)
         |> assign(:cache_key, 0)
@@ -113,7 +98,7 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
       Analytics.page_visitor_split(site, user, page, period)
     end)
 
-    {:noreply, assign(socket, :loading, false)}
+    {:noreply, socket}
   end
 
   def handle_info({:deferred_result, :transitions, value, cache_key}, socket) do
@@ -168,7 +153,6 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
     socket =
       socket
       |> assign(:date_range, range)
-      |> assign(:loading, true)
       |> assign(:cache_key, socket.assigns.cache_key + 1)
       |> reset_deferred()
 
@@ -182,7 +166,6 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
     socket =
       socket
       |> assign(:current_page, page)
-      |> assign(:loading, true)
       |> assign(:cache_key, socket.assigns.cache_key + 1)
       |> reset_deferred()
 
@@ -194,7 +177,6 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
     socket =
       socket
       |> assign(:current_page, path)
-      |> assign(:loading, true)
       |> assign(:cache_key, socket.assigns.cache_key + 1)
       |> reset_deferred()
 
@@ -210,23 +192,25 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
      |> assign(:chart_key, socket.assigns.chart_key + 1)}
   end
 
-  defp reset_deferred(socket) do
+  defp reset_deferred(socket), do: assign_loading_defaults(socket)
+
+  defp assign_loading_defaults(socket) do
     socket
-    |> assign(:transitions, %{previous: [], next: []})
-    |> assign(:totals, %{})
-    |> assign(:chart_data, %{current: [], previous: [], range: socket.assigns.date_range})
+    |> assign(:transitions, nil)
+    |> assign(:totals, nil)
+    |> assign(:chart_data, nil)
     |> assign(:chart_json, "{}")
-    |> assign(:page_perf, %{})
-    |> assign(:engagement, %{})
-    |> assign(:referrers, [])
-    |> assign(:countries, [])
-    |> assign(:devices, [])
-    |> assign(:clicks, [])
-    |> assign(:outbound, [])
-    |> assign(:goals, [])
-    |> assign(:keywords, [])
-    |> assign(:heatmap, [])
-    |> assign(:visitor_split, [])
+    |> assign(:page_perf, nil)
+    |> assign(:engagement, nil)
+    |> assign(:referrers, nil)
+    |> assign(:countries, nil)
+    |> assign(:devices, nil)
+    |> assign(:clicks, nil)
+    |> assign(:outbound, nil)
+    |> assign(:goals, nil)
+    |> assign(:keywords, nil)
+    |> assign(:heatmap, nil)
+    |> assign(:visitor_split, nil)
   end
 
   defp build_chart_data(site, user, page, range) do
@@ -378,16 +362,21 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
           </form>
         </div>
 
-        <div :if={@loading} class="flex items-center justify-center py-12">
-          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-        </div>
-
-        <div :if={!@loading} class="space-y-6">
+        <div class="space-y-6">
           <%!-- Current page header strip --%>
           <div class="bg-indigo-50 rounded-lg p-5 text-center">
             <p class="text-xs text-indigo-600 font-medium uppercase tracking-wide">Page</p>
             <p class="text-2xl font-bold text-indigo-900 font-mono mt-1 break-all">{@current_page}</p>
-            <div class="flex flex-wrap justify-center gap-x-8 gap-y-2 mt-3 text-sm text-indigo-700">
+            <div
+              :if={is_nil(@totals)}
+              class="flex justify-center mt-3 text-indigo-500"
+            >
+              <.death_star_spinner class="w-5 h-5" />
+            </div>
+            <div
+              :if={!is_nil(@totals)}
+              class="flex flex-wrap justify-center gap-x-8 gap-y-2 mt-3 text-sm text-indigo-700"
+            >
               <span><strong>{format_number(to_num(@totals["total_views"]))}</strong> views</span>
               <span>
                 <strong>{format_number(to_num(@totals["unique_visitors"]))}</strong> visitors
@@ -395,7 +384,7 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
               <span><strong>{format_number(to_num(@totals["sessions"]))}</strong> sessions</span>
             </div>
             <div
-              :if={to_num(@page_perf["samples"]) > 0}
+              :if={!is_nil(@page_perf) and to_num(@page_perf["samples"]) > 0}
               class="flex justify-center gap-6 mt-3 pt-3 border-t border-indigo-200"
             >
               <.perf_stat label="Load" value={to_num(@page_perf["page_load"])} />
@@ -408,7 +397,13 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
           </div>
 
           <%!-- Engagement strip --%>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div :if={is_nil(@engagement)} class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <.metric_card_loading label="Bounce rate" />
+            <.metric_card_loading label="Avg time on page" />
+            <.metric_card_loading label="Entry rate" />
+            <.metric_card_loading label="Exit rate" />
+          </div>
+          <div :if={!is_nil(@engagement)} class="grid grid-cols-2 md:grid-cols-4 gap-3">
             <.metric_card
               label="Bounce rate"
               value={engagement_bounce_rate(@engagement)}
@@ -459,6 +454,13 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
               </div>
             </div>
             <div
+              :if={is_nil(@chart_data)}
+              class="h-64 flex items-center justify-center text-gray-400"
+            >
+              <.death_star_spinner class="w-8 h-8" />
+            </div>
+            <div
+              :if={!is_nil(@chart_data)}
               id={"traffic-chart-#{@chart_key}"}
               phx-hook="TimeseriesChart"
               phx-update="ignore"
@@ -476,7 +478,8 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
                 <h3 class="font-semibold text-gray-900">Came from</h3>
                 <p class="text-xs text-gray-500">Pages visitors viewed before this one</p>
               </div>
-              <div class="divide-y divide-gray-50">
+              <.panel_spinner :if={is_nil(@transitions)} />
+              <div :if={!is_nil(@transitions)} class="divide-y divide-gray-50">
                 <div
                   :if={@transitions.previous == []}
                   class="px-5 py-8 text-center text-sm text-gray-500"
@@ -505,7 +508,8 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
                 <h3 class="font-semibold text-gray-900">Went to</h3>
                 <p class="text-xs text-gray-500">Pages visitors viewed after this one</p>
               </div>
-              <div class="divide-y divide-gray-50">
+              <.panel_spinner :if={is_nil(@transitions)} />
+              <div :if={!is_nil(@transitions)} class="divide-y divide-gray-50">
                 <div :if={@transitions.next == []} class="px-5 py-8 text-center text-sm text-gray-500">
                   No next pages (exit point)
                 </div>
@@ -536,12 +540,13 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
                   External sources that started a session on this page
                 </p>
               </div>
-              <div class="divide-y divide-gray-50">
+              <.panel_spinner :if={is_nil(@referrers)} />
+              <div :if={!is_nil(@referrers)} class="divide-y divide-gray-50">
                 <div :if={@referrers == []} class="px-5 py-8 text-center text-sm text-gray-500">
                   No external referrers
                 </div>
                 <div
-                  :for={row <- @referrers}
+                  :for={row <- @referrers || []}
                   class="px-5 py-3 flex items-center justify-between"
                 >
                   <div class="min-w-0 mr-4">
@@ -568,12 +573,13 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
                   Search Console + Bing — last {range_to_days(@date_range)}d
                 </p>
               </div>
-              <div class="divide-y divide-gray-50">
+              <.panel_spinner :if={is_nil(@keywords)} />
+              <div :if={!is_nil(@keywords)} class="divide-y divide-gray-50">
                 <div :if={@keywords == []} class="px-5 py-8 text-center text-sm text-gray-500">
                   No search data for this page
                 </div>
                 <div
-                  :for={row <- @keywords}
+                  :for={row <- @keywords || []}
                   class="px-5 py-3 flex items-center justify-between"
                 >
                   <div class="min-w-0 mr-4">
@@ -601,12 +607,13 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
               <div class="px-5 py-4 border-b border-gray-100">
                 <h3 class="font-semibold text-gray-900">Top countries</h3>
               </div>
-              <div class="divide-y divide-gray-50">
+              <.panel_spinner :if={is_nil(@countries)} />
+              <div :if={!is_nil(@countries)} class="divide-y divide-gray-50">
                 <div :if={@countries == []} class="px-5 py-8 text-center text-sm text-gray-500">
                   No data
                 </div>
                 <div
-                  :for={row <- Enum.take(@countries, 10)}
+                  :for={row <- Enum.take(@countries || [], 10)}
                   class="px-5 py-2 flex items-center justify-between"
                 >
                   <span class="text-sm text-gray-900 truncate mr-4">
@@ -623,11 +630,16 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
               <div class="px-5 py-4 border-b border-gray-100">
                 <h3 class="font-semibold text-gray-900">Devices</h3>
               </div>
-              <div class="divide-y divide-gray-50">
+              <.panel_spinner :if={is_nil(@devices)} />
+              <div :if={!is_nil(@devices)} class="divide-y divide-gray-50">
                 <div :if={@devices == []} class="px-5 py-8 text-center text-sm text-gray-500">
                   No data
                 </div>
-                <.device_row :for={row <- @devices} row={row} total={device_total(@devices)} />
+                <.device_row
+                  :for={row <- @devices || []}
+                  row={row}
+                  total={device_total(@devices || [])}
+                />
               </div>
             </div>
 
@@ -636,14 +648,15 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
                 <h3 class="font-semibold text-gray-900">New vs returning</h3>
                 <p class="text-xs text-gray-500">First-touch on this page</p>
               </div>
-              <div class="divide-y divide-gray-50">
+              <.panel_spinner :if={is_nil(@visitor_split)} />
+              <div :if={!is_nil(@visitor_split)} class="divide-y divide-gray-50">
                 <div :if={@visitor_split == []} class="px-5 py-8 text-center text-sm text-gray-500">
                   No data
                 </div>
                 <.split_row
-                  :for={row <- @visitor_split}
+                  :for={row <- @visitor_split || []}
                   row={row}
-                  total={split_total(@visitor_split)}
+                  total={split_total(@visitor_split || [])}
                 />
               </div>
             </div>
@@ -656,12 +669,13 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
                 <h3 class="font-semibold text-gray-900">Top clicked elements</h3>
                 <p class="text-xs text-gray-500">Auto-tracked clicks on this page</p>
               </div>
-              <div class="divide-y divide-gray-50">
+              <.panel_spinner :if={is_nil(@clicks)} />
+              <div :if={!is_nil(@clicks)} class="divide-y divide-gray-50">
                 <div :if={@clicks == []} class="px-5 py-8 text-center text-sm text-gray-500">
                   No clicks tracked
                 </div>
                 <div
-                  :for={row <- Enum.take(@clicks, 10)}
+                  :for={row <- Enum.take(@clicks || [], 10)}
                   class="px-5 py-2 flex items-center justify-between"
                 >
                   <div class="min-w-0 mr-4">
@@ -683,12 +697,13 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
               <div class="px-5 py-4 border-b border-gray-100">
                 <h3 class="font-semibold text-gray-900">Top outbound links</h3>
               </div>
-              <div class="divide-y divide-gray-50">
+              <.panel_spinner :if={is_nil(@outbound)} />
+              <div :if={!is_nil(@outbound)} class="divide-y divide-gray-50">
                 <div :if={@outbound == []} class="px-5 py-8 text-center text-sm text-gray-500">
                   No outbound links
                 </div>
                 <div
-                  :for={row <- Enum.take(@outbound, 10)}
+                  :for={row <- Enum.take(@outbound || [], 10)}
                   class="px-5 py-2 flex items-center justify-between"
                 >
                   <div class="min-w-0 mr-4">
@@ -707,12 +722,13 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
                 <h3 class="font-semibold text-gray-900">Goals from page viewers</h3>
                 <p class="text-xs text-gray-500">Goal completions by visitors who saw this page</p>
               </div>
-              <div class="divide-y divide-gray-50">
+              <.panel_spinner :if={is_nil(@goals)} />
+              <div :if={!is_nil(@goals)} class="divide-y divide-gray-50">
                 <div :if={@goals == []} class="px-5 py-8 text-center text-sm text-gray-500">
                   No goals completed
                 </div>
                 <div
-                  :for={goal <- @goals}
+                  :for={goal <- @goals || []}
                   class="px-5 py-2 flex items-center justify-between"
                 >
                   <div class="min-w-0 mr-4">
@@ -742,10 +758,16 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
                 </p>
               </div>
             </div>
-            <div :if={@heatmap == []} class="text-center py-8 text-sm text-gray-500">
+            <div :if={is_nil(@heatmap)} class="flex items-center justify-center py-8 text-gray-400">
+              <.death_star_spinner class="w-6 h-6" />
+            </div>
+            <div
+              :if={!is_nil(@heatmap) and @heatmap == []}
+              class="text-center py-8 text-sm text-gray-500"
+            >
               No data
             </div>
-            <.heatmap_grid :if={@heatmap != []} cells={@heatmap} />
+            <.heatmap_grid :if={!is_nil(@heatmap) and @heatmap != []} cells={@heatmap} />
           </div>
         </div>
       </div>
@@ -754,6 +776,25 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
   end
 
   # ---- Components ----
+
+  defp panel_spinner(assigns) do
+    ~H"""
+    <div class="flex items-center justify-center py-12 text-gray-400">
+      <.death_star_spinner class="w-6 h-6" />
+    </div>
+    """
+  end
+
+  defp metric_card_loading(assigns) do
+    ~H"""
+    <div class="bg-white rounded-lg shadow p-4">
+      <div class="text-xs font-medium text-gray-500 uppercase tracking-wide">{@label}</div>
+      <div class="mt-2 text-gray-300">
+        <.death_star_spinner class="w-5 h-5" />
+      </div>
+    </div>
+    """
+  end
 
   defp metric_card(assigns) do
     assigns = assign_new(assigns, :suffix, fn -> "" end)
