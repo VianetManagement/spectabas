@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.4", "2026-04-27T11:30:00Z",
+       [
+         %{
+           title: "UI: Manually marked indicator on Scrapers page + detail modal",
+           description:
+             "The Scrapers page table row and the visitor detail modal now show a red MANUAL badge for any candidate that was manually marked as a scraper from their visitor profile. Implemented by enriching the ClickHouse candidate rows with a single bulk Postgres lookup of scraper_manual_flag for the visible visitor IDs."
+         }
+       ]},
       {"v6.9.3", "2026-04-27T11:15:00Z",
        [
          %{

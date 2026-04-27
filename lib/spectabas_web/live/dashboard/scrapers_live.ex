@@ -10,6 +10,7 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
 
   alias Spectabas.{Accounts, Sites, Analytics}
   alias Spectabas.Analytics.ScraperDetector
+  import Ecto.Query
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers
   import SpectabasWeb.Dashboard.DateHelpers
@@ -256,8 +257,6 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
   end
 
   defp calibration_job_running?(site_id) do
-    import Ecto.Query
-
     Oban.Job
     |> where([j], j.worker == "Spectabas.Workers.ScraperCalibrationWorker")
     |> where([j], j.state in ["available", "executing", "scheduled"])
@@ -277,12 +276,44 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
         _ -> []
       end
 
+    candidates = annotate_with_manual_flag(candidates, site)
     summary = summarize_candidates(candidates)
 
     socket
     |> assign(:summary, summary)
     |> assign(:candidates, candidates)
     |> assign(:loading, false)
+  end
+
+  # Look up which of these visitor_ids have been manually marked as scrapers
+  # in Postgres and stamp `_manual_flag` onto each row.
+  defp annotate_with_manual_flag([], _site), do: []
+
+  defp annotate_with_manual_flag(candidates, site) do
+    visitor_ids =
+      candidates
+      |> Enum.map(& &1["visitor_id"])
+      |> Enum.reject(&(is_nil(&1) or &1 == ""))
+
+    if visitor_ids == [] do
+      Enum.map(candidates, &Map.put(&1, "_manual_flag", false))
+    else
+      manual_ids =
+        Spectabas.Repo.all(
+          from(v in Spectabas.Visitors.Visitor,
+            where:
+              v.site_id == ^site.id and v.id in ^visitor_ids and
+                v.scraper_manual_flag == true,
+            select: v.id
+          )
+        )
+        |> Enum.map(&to_string/1)
+        |> MapSet.new()
+
+      Enum.map(candidates, fn c ->
+        Map.put(c, "_manual_flag", MapSet.member?(manual_ids, to_string(c["visitor_id"])))
+      end)
+    end
   end
 
   defp summarize_candidates(candidates) do
@@ -515,9 +546,18 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
                   phx-value-visitor_id={c["visitor_id"]}
                 >
                   <td class="px-4 py-3 text-sm">
-                    <span class="font-mono text-xs text-indigo-700">
-                      {String.slice(c["visitor_id"] || "", 0, 12)}...
-                    </span>
+                    <div class="flex items-center gap-2">
+                      <span class="font-mono text-xs text-indigo-700">
+                        {String.slice(c["visitor_id"] || "", 0, 12)}...
+                      </span>
+                      <span
+                        :if={c["_manual_flag"]}
+                        class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 border border-red-200"
+                        title="Manually marked as scraper"
+                      >
+                        <.icon name="hero-shield-exclamation" class="w-3 h-3" /> MANUAL
+                      </span>
+                    </div>
                   </td>
                   <td class="px-4 py-3">
                     <span class={[
@@ -583,7 +623,7 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
               </div>
 
               <div class="px-6 py-4 space-y-5">
-                <div class="flex items-center gap-3">
+                <div class="flex items-center flex-wrap gap-3">
                   <span class={[
                     "inline-flex items-center px-3 py-1 rounded-full text-sm font-bold",
                     score_color(to_num(v["score"]))
@@ -592,6 +632,13 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
                   </span>
                   <span class="text-sm font-medium text-gray-700">
                     Verdict: {verdict_label(v["verdict"])}
+                  </span>
+                  <span
+                    :if={v["_manual_flag"]}
+                    class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-semibold bg-red-100 text-red-800 border border-red-200"
+                    title="This visitor was manually marked as a scraper. Their flag is sticky and won't be auto-downgraded."
+                  >
+                    <.icon name="hero-shield-exclamation" class="w-4 h-4" /> Manually marked
                   </span>
                 </div>
 
