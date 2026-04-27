@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.9", "2026-04-27T12:55:00Z",
+       [
+         %{
+           title: "Fix: Heroicons production build (declare heroicons as a mix dep)",
+           description:
+             "v6.9.8 added the @plugin directive but the production build broke with ENOENT scandir on /app/deps/heroicons/optimized/24/outline. The heroicons SVG repo was in mix.lock from earlier but never declared in mix.exs deps, so mix deps.get during the Render Docker build skipped fetching it. Adds the {:heroicons, github: 'tailwindlabs/heroicons', tag: 'v2.2.0', sparse: 'optimized', app: false, compile: false} dep so deps/heroicons exists at build time and the Tailwind plugin can read the SVG files. Combined with v6.9.5 (mask-size: contain) and v6.9.8 (@plugin directive), all three pieces are now in place."
+         }
+       ]},
       {"v6.9.8", "2026-04-27T12:45:00Z",
        [
          %{
