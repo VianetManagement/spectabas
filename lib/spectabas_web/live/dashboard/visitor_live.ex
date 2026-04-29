@@ -343,7 +343,8 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
         |> Spectabas.Visitors.Visitor.changeset(%{
           scraper_webhook_sent_at: now,
           scraper_webhook_score: 100,
-          scraper_manual_flag: true
+          scraper_manual_flag: true,
+          scraper_whitelisted: false
         })
         |> Spectabas.Repo.update()
 
@@ -362,6 +363,49 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Failed to send webhook.")}
     end
+  end
+
+  # Whitelist this visitor: clear all scraper flags AND set scraper_whitelisted = true
+  # so the 15-min worker won't re-flag them no matter how high their auto score gets.
+  # Also sends a deactivation webhook if they're currently flagged so external systems
+  # learn they're not a scraper anymore.
+  def handle_event("whitelist_scraper", _params, socket) do
+    site = socket.assigns.site
+    visitor = socket.assigns.visitor
+
+    if site.scraper_webhook_enabled && site.scraper_webhook_url &&
+         visitor.scraper_webhook_sent_at do
+      _ = Spectabas.Webhooks.ScraperWebhook.send_deactivate(site, visitor)
+    end
+
+    visitor
+    |> Spectabas.Visitors.Visitor.changeset(%{
+      scraper_webhook_sent_at: nil,
+      scraper_webhook_score: nil,
+      scraper_manual_flag: false,
+      scraper_whitelisted: true
+    })
+    |> Spectabas.Repo.update()
+
+    {:noreply,
+     socket
+     |> assign(:visitor, Spectabas.Repo.get!(Spectabas.Visitors.Visitor, visitor.id))
+     |> assign(:status, :whitelisted)
+     |> put_flash(:info, "Visitor whitelisted — they will not be auto-flagged again.")}
+  end
+
+  # Reverse of whitelist — re-enable automatic scraper detection for this visitor.
+  def handle_event("unwhitelist_scraper", _params, socket) do
+    visitor = socket.assigns.visitor
+
+    visitor
+    |> Spectabas.Visitors.Visitor.changeset(%{scraper_whitelisted: false})
+    |> Spectabas.Repo.update()
+
+    {:noreply,
+     socket
+     |> assign(:visitor, Spectabas.Repo.get!(Spectabas.Visitors.Visitor, visitor.id))
+     |> put_flash(:info, "Whitelist removed. Automatic scraper detection re-enabled.")}
   end
 
   def handle_event("toggle_notes", _params, socket) do
@@ -426,13 +470,20 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
             &larr; Visitor Log
           </.link>
           <div class="flex items-center justify-between mt-2">
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-3 flex-wrap">
               <h1 class="text-2xl font-bold text-gray-900">Visitor Profile</h1>
               <span
                 :if={@visitor.scraper_manual_flag or @visitor.scraper_webhook_score == 100}
                 class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-semibold bg-red-100 text-red-800 border border-red-200"
               >
                 <.icon name="hero-shield-exclamation" class="w-5 h-5" /> Marked as Scraper
+              </span>
+              <span
+                :if={@visitor.scraper_whitelisted}
+                class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200"
+                title="This visitor is permanently whitelisted from scraper detection."
+              >
+                <.icon name="hero-shield-check" class="w-5 h-5" /> Whitelisted
               </span>
             </div>
             <button
@@ -1214,12 +1265,39 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
   # --- Component functions ---
 
   defp webhook_status_banner(assigns) do
-    # Determine current webhook state from visitor record + deliveries
-    status = webhook_status(assigns.visitor, assigns.webhook_deliveries)
+    # Determine current webhook state from visitor record + deliveries.
+    # Whitelisted always wins so the action buttons make sense.
+    status =
+      cond do
+        assigns.visitor.scraper_whitelisted -> :whitelisted
+        true -> webhook_status(assigns.visitor, assigns.webhook_deliveries)
+      end
+
     assigns = assign(assigns, :status, status)
 
     ~H"""
     <%= case @status do %>
+      <% :whitelisted -> %>
+        <div class="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 p-4 flex items-center gap-3">
+          <div class="flex-shrink-0">
+            <.icon name="hero-shield-check" class="w-6 h-6 text-emerald-600" />
+          </div>
+          <div class="flex-1">
+            <h3 class="text-sm font-semibold text-emerald-800">Whitelisted from scraper detection</h3>
+            <p class="text-xs text-emerald-700 mt-0.5">
+              This visitor will not be auto-flagged by the scraper webhook scan, regardless of their behavior. To re-enable detection for this visitor, click "Remove from whitelist".
+            </p>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <button
+              phx-click="unwhitelist_scraper"
+              data-confirm="Re-enable automatic scraper detection for this visitor?"
+              class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg text-emerald-700 border border-emerald-300 hover:bg-emerald-100 shadow-sm"
+            >
+              Remove from whitelist
+            </button>
+          </div>
+        </div>
       <% :flagged -> %>
         <div class="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 flex items-center gap-3">
           <div class="flex-shrink-0">
@@ -1251,10 +1329,17 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
             </button>
             <button
               phx-click="unflag_scraper"
-              data-confirm="This will send a deactivation webhook and clear the scraper flag. Continue?"
+              data-confirm="Clear the scraper flag and send a deactivation webhook. Note: this is NOT permanent — they may be re-flagged if their behavior crosses the watching threshold again. Continue?"
               class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg text-white bg-green-600 hover:bg-green-700 shadow-sm"
             >
               Unflag
+            </button>
+            <button
+              phx-click="whitelist_scraper"
+              data-confirm="Permanently whitelist this visitor. They will never be auto-flagged again, regardless of behavior. Continue?"
+              class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg text-emerald-700 border border-emerald-300 hover:bg-emerald-50 shadow-sm"
+            >
+              Whitelist
             </button>
             <.link
               navigate={~p"/dashboard/sites/#{@site.id}/scrapers"}
@@ -1297,6 +1382,13 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
             class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg text-white bg-red-600 hover:bg-red-700 shadow-sm"
           >
             Mark as Scraper
+          </button>
+          <button
+            phx-click="whitelist_scraper"
+            data-confirm="Permanently whitelist this visitor from scraper detection. Continue?"
+            class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-lg text-emerald-700 border border-emerald-300 hover:bg-emerald-50 shadow-sm"
+          >
+            Whitelist
           </button>
         </div>
     <% end %>

@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.11", "2026-04-29T10:30:00Z",
+       [
+         %{
+           title: "Permanent scraper whitelist + external_id search",
+           description:
+             "New scraper_whitelisted column on visitors. The Whitelist button on a visitor profile clears all flags AND sets the bit so the 15-min worker's process_candidate skips them entirely — never re-flagged regardless of score. (Plain Unflag only clears the current flag and is subject to re-flag if behavior crosses the watching threshold.) Mark as Scraper now also clears any existing whitelist. Visitor Log search now also matches external_id alongside email / user_id / cookie_id."
+         }
+       ]},
       {"v6.9.10", "2026-04-29T10:00:00Z",
        [
          %{

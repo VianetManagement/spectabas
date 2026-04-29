@@ -75,24 +75,32 @@ defmodule Spectabas.Workers.ScraperWebhookScan do
     # Look up the Postgres visitor record for known_ips, external_id, user_id
     visitor = Repo.one(from(v in Visitor, where: v.id == ^visitor_id, limit: 1))
 
-    if visitor do
-      prev = visitor.scraper_webhook_score || 0
-      prev_tier = score_tier(prev)
-      curr_tier = score_tier(score)
+    cond do
+      is_nil(visitor) ->
+        :ok
 
-      cond do
-        # Never sent — first flag
-        is_nil(visitor.scraper_webhook_sent_at) ->
-          send_and_record(site, visitor, score, signals, row)
+      # Whitelisted — never auto-flag, regardless of score.
+      visitor.scraper_whitelisted ->
+        :ok
 
-        # Score escalated to a higher tier (watching → suspicious → certain)
-        curr_tier > prev_tier ->
-          send_and_record(site, visitor, score, signals, row)
+      true ->
+        prev = visitor.scraper_webhook_score || 0
+        prev_tier = score_tier(prev)
+        curr_tier = score_tier(score)
 
-        # Same tier — skip
-        true ->
-          :ok
-      end
+        cond do
+          # Never sent — first flag
+          is_nil(visitor.scraper_webhook_sent_at) ->
+            send_and_record(site, visitor, score, signals, row)
+
+          # Score escalated to a higher tier (watching → suspicious → certain)
+          curr_tier > prev_tier ->
+            send_and_record(site, visitor, score, signals, row)
+
+          # Same tier — skip
+          true ->
+            :ok
+        end
     end
   rescue
     e ->

@@ -333,7 +333,8 @@ defmodule Spectabas.Visitors do
           from(v in Visitor,
             where:
               v.site_id == ^site_id and
-                (ilike(v.email, ^like) or ilike(v.user_id, ^like) or ilike(v.cookie_id, ^like)),
+                (ilike(v.email, ^like) or ilike(v.user_id, ^like) or
+                   ilike(v.cookie_id, ^like) or ilike(v.external_id, ^like)),
             order_by: [desc: v.last_seen_at],
             limit: ^limit
           )

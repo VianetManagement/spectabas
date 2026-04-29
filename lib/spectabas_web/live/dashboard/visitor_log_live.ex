@@ -375,13 +375,21 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
                 </td>
                 <td class="px-6 py-3 text-xs">
                   <span
-                    :if={v.scraper_manual_flag}
+                    :if={v.scraper_whitelisted}
+                    class="inline-flex items-center px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold"
+                  >
+                    Whitelisted
+                  </span>
+                  <span
+                    :if={!v.scraper_whitelisted && v.scraper_manual_flag}
                     class="inline-flex items-center px-2 py-0.5 rounded bg-red-100 text-red-800 font-semibold"
                   >
                     Manual scraper
                   </span>
                   <span
-                    :if={!v.scraper_manual_flag && v.scraper_webhook_sent_at}
+                    :if={
+                      !v.scraper_whitelisted && !v.scraper_manual_flag && v.scraper_webhook_sent_at
+                    }
                     class="inline-flex items-center px-2 py-0.5 rounded bg-amber-100 text-amber-800"
                   >
                     Flagged (auto)
