@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.10", "2026-04-29T10:00:00Z",
+       [
+         %{
+           title: "Visitor search by email + UUID on the Visitor Log",
+           description:
+             "The IP search box on /visitor-log now also accepts an email (full or partial) or a visitor UUID. Pasting a UUID jumps straight to that visitor's profile (handy for unflagging a manually-marked scraper). Email or partial match returns identified visitors with their flag status — Manual scraper or Auto-flagged badges shown so you can spot anyone who needs whitelisting. The orphaned /visitors page (no sidebar link) had this search behind the scenes; this surfaces it where users actually look. New Visitors.search/3 helper backs the lookup."
+         }
+       ]},
       {"v6.9.9", "2026-04-27T12:55:00Z",
        [
          %{

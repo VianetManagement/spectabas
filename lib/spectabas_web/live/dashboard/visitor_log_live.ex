@@ -43,9 +43,11 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
         |> assign(:sort_by, "last_seen")
         |> assign(:sort_dir, "desc")
         |> assign(:segment, segment)
+        |> assign(:search_query, ip_search)
         |> assign(:ip_search, ip_search)
         |> assign(:ip_results, nil)
         |> assign(:ip_info, nil)
+        |> assign(:visitor_results, nil)
         |> assign(:loading, true)
         |> assign(:visitors, [])
         |> assign(:next_cursor, nil)
@@ -126,35 +128,98 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
      |> assign(:loading, true)}
   end
 
-  def handle_event("search_ip", %{"ip" => ip}, socket) do
-    ip = String.trim(ip)
+  # Unified search: accepts IP, email, visitor UUID, or partial email/user_id/cookie_id.
+  # Auto-detects from the input shape.
+  def handle_event("search", %{"q" => q}, socket) do
+    q = String.trim(q)
 
-    if ip == "" do
-      {:noreply,
-       socket |> assign(:ip_search, "") |> assign(:ip_results, nil) |> assign(:ip_info, nil)}
-    else
-      results =
-        case Analytics.visitors_by_ip(socket.assigns.site, ip) do
-          {:ok, rows} -> rows
-          _ -> []
+    cond do
+      q == "" ->
+        {:noreply, clear_search(socket)}
+
+      uuid?(q) ->
+        # Direct hit on a visitor profile.
+        case Visitors.search(socket.assigns.site.id, q) do
+          [visitor | _] ->
+            {:noreply,
+             push_navigate(socket,
+               to: ~p"/dashboard/sites/#{socket.assigns.site.id}/visitors/#{visitor.id}"
+             )}
+
+          [] ->
+            {:noreply,
+             socket
+             |> assign(:search_query, q)
+             |> clear_search_results()
+             |> assign(:visitor_results, [])
+             |> put_flash(:error, "No visitor with that ID on this site.")}
         end
 
-      ip_info =
-        case Analytics.ip_details(socket.assigns.site, ip) do
-          {:ok, info} -> info
-          _ -> nil
-        end
+      ip?(q) ->
+        socket = handle_ip_search(socket, q)
+        {:noreply, assign(socket, :search_query, q)}
 
-      {:noreply,
-       socket
-       |> assign(:ip_search, ip)
-       |> assign(:ip_results, results)
-       |> assign(:ip_info, ip_info)}
+      true ->
+        results = Visitors.search(socket.assigns.site.id, q)
+
+        {:noreply,
+         socket
+         |> assign(:search_query, q)
+         |> clear_search_results()
+         |> assign(:visitor_results, results)}
     end
   end
 
-  def handle_event("clear_ip", _params, socket) do
-    {:noreply, socket |> assign(:ip_search, "") |> assign(:ip_results, nil)}
+  def handle_event("clear_search", _params, socket) do
+    {:noreply, clear_search(socket)}
+  end
+
+  defp clear_search(socket) do
+    socket
+    |> assign(:search_query, "")
+    |> clear_search_results()
+  end
+
+  defp clear_search_results(socket) do
+    socket
+    |> assign(:ip_search, "")
+    |> assign(:ip_results, nil)
+    |> assign(:ip_info, nil)
+    |> assign(:visitor_results, nil)
+  end
+
+  defp handle_ip_search(socket, ip) do
+    results =
+      case Analytics.visitors_by_ip(socket.assigns.site, ip) do
+        {:ok, rows} -> rows
+        _ -> []
+      end
+
+    ip_info =
+      case Analytics.ip_details(socket.assigns.site, ip) do
+        {:ok, info} -> info
+        _ -> nil
+      end
+
+    socket
+    |> assign(:ip_search, ip)
+    |> assign(:ip_results, results)
+    |> assign(:ip_info, ip_info)
+    |> assign(:visitor_results, nil)
+  end
+
+  defp uuid?(s),
+    do:
+      Regex.match?(
+        ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+        s
+      )
+
+  defp ip?(s) do
+    case :inet.parse_address(String.to_charlist(s)) do
+      {:ok, _} -> true
+      _ -> false
+    end
   end
 
   defp load_data(socket) do
@@ -230,17 +295,17 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
           </nav>
         </div>
 
-        <%!-- IP Search --%>
+        <%!-- Unified Visitor Search (IP, email, or UUID) --%>
         <div class="bg-white rounded-lg shadow p-4 mb-6">
-          <form phx-submit="search_ip" class="flex flex-wrap items-center gap-3">
-            <label class="text-sm font-medium text-gray-700">Search by IP</label>
+          <form phx-submit="search" class="flex flex-wrap items-center gap-3">
+            <label class="text-sm font-medium text-gray-700">Find visitor</label>
             <input
               type="text"
-              name="ip"
-              value={@ip_search}
-              placeholder="e.g., 192.168.1.1"
-              class="rounded-lg border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 py-2 px-3 w-full sm:w-48"
-              inputmode="decimal"
+              name="q"
+              value={@search_query}
+              placeholder="IP, email, or visitor UUID"
+              class="rounded-lg border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500 py-2 px-3 w-full sm:w-80"
+              autocomplete="off"
             />
             <button
               type="submit"
@@ -249,14 +314,82 @@ defmodule SpectabasWeb.Dashboard.VisitorLogLive do
               Search
             </button>
             <button
-              :if={@ip_search != ""}
+              :if={@search_query != ""}
               type="button"
-              phx-click="clear_ip"
+              phx-click="clear_search"
               class="text-sm text-gray-500 hover:text-gray-700"
             >
               Clear
             </button>
+            <p class="basis-full text-xs text-gray-500 mt-1">
+              Pasting a UUID jumps straight to that visitor's profile. Email or partial match returns identified visitors. IP shows everyone who used that address.
+            </p>
           </form>
+        </div>
+
+        <%!-- Email / UUID search results --%>
+        <div :if={@visitor_results != nil} class="bg-white rounded-lg shadow overflow-x-auto mb-6">
+          <div class="px-6 py-4 border-b border-gray-100">
+            <h3 class="font-semibold text-gray-900">
+              {length(@visitor_results)} visitor{if length(@visitor_results) == 1, do: "", else: "s"} matching
+              <span class="font-mono text-indigo-600">{@search_query}</span>
+            </h3>
+          </div>
+          <div :if={@visitor_results == []} class="px-6 py-8 text-center text-sm text-gray-500">
+            No visitors matching that email or ID on this site.
+          </div>
+          <table :if={@visitor_results != []} class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Visitor
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Email
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Last Seen
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Status
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr :for={v <- @visitor_results} class="hover:bg-gray-50">
+                <td class="px-6 py-3 text-sm">
+                  <.link
+                    navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{v.id}"}
+                    class="font-mono text-indigo-600 hover:text-indigo-800 hover:underline"
+                  >
+                    {String.slice(v.id, 0, 12)}...
+                  </.link>
+                </td>
+                <td class="px-6 py-3 text-sm text-gray-700">
+                  <span :if={v.email}>{v.email}</span>
+                  <span :if={!v.email && v.user_id} class="text-gray-500">{v.user_id}</span>
+                  <span :if={!v.email && !v.user_id} class="text-gray-400">—</span>
+                </td>
+                <td class="px-6 py-3 text-xs text-gray-500 whitespace-nowrap">
+                  {v.last_seen_at && Calendar.strftime(v.last_seen_at, "%Y-%m-%d %H:%M")}
+                </td>
+                <td class="px-6 py-3 text-xs">
+                  <span
+                    :if={v.scraper_manual_flag}
+                    class="inline-flex items-center px-2 py-0.5 rounded bg-red-100 text-red-800 font-semibold"
+                  >
+                    Manual scraper
+                  </span>
+                  <span
+                    :if={!v.scraper_manual_flag && v.scraper_webhook_sent_at}
+                    class="inline-flex items-center px-2 py-0.5 rounded bg-amber-100 text-amber-800"
+                  >
+                    Flagged (auto)
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
         <%!-- IP Search Results --%>

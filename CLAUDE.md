@@ -192,4 +192,4 @@ Weighted-signal scoring (15 signals, cap 100). Tiers: watching (40-69), suspicio
 - **Oban timeouts**: All 29 workers have `timeout/1` callbacks (60s emails, 120s exports, 300s API syncs, 600s ClickHouse maintenance).
 - **Death Star spinner**: `<.death_star_spinner class="w-4 h-4" />` — custom SVG component, globally available.
 - **Heroicons setup**: three pieces have to be in place. (1) `mix.exs` declares `:heroicons` as a sparse git dep so `deps/heroicons/optimized/24/outline/*.svg` exists during the production build (without it, `mix tailwind ... --minify` crashes with ENOENT scandir). (2) `assets/css/app.css` activates the plugin via `@plugin "../vendor/heroicons"` so the per-icon classes get generated. (3) Same file adds `mask-size: contain` for `[class*="hero-"]` so icons sized smaller than the SVG's natural size (e.g. `w-3 h-3` on a 24px outline) don't only show a corner of the mask. Don't remove any of the three.
-- **Changelog**: v6.9.9 at `/admin/changelog`. Updated every push.
+- **Changelog**: v6.9.10 at `/admin/changelog`. Updated every push.

@@ -304,6 +304,53 @@ defmodule Spectabas.Visitors do
   end
 
   @doc """
+  Search visitors for a site by email, user_id, cookie_id, or visitor UUID.
+  Returns a list of up to `limit` matches (default 25) ordered by last seen.
+
+  - If `query` looks like a UUID, only that visitor (if any) is returned —
+    same shape as a list so callers don't branch.
+  - Otherwise an ILIKE %query% match across email / user_id / cookie_id.
+  - Empty query returns an empty list rather than the whole table.
+  """
+  def search(site_id, query, opts \\ []) do
+    query = String.trim(query || "")
+    limit = Keyword.get(opts, :limit, 25)
+
+    cond do
+      query == "" ->
+        []
+
+      uuid?(query) ->
+        case Repo.get_by(Visitor, id: query, site_id: site_id) do
+          nil -> []
+          v -> [v]
+        end
+
+      true ->
+        like = "%#{query}%"
+
+        Repo.all(
+          from(v in Visitor,
+            where:
+              v.site_id == ^site_id and
+                (ilike(v.email, ^like) or ilike(v.user_id, ^like) or ilike(v.cookie_id, ^like)),
+            order_by: [desc: v.last_seen_at],
+            limit: ^limit
+          )
+        )
+    end
+  end
+
+  defp uuid?(s) when is_binary(s) do
+    Regex.match?(
+      ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      s
+    )
+  end
+
+  defp uuid?(_), do: false
+
+  @doc """
   List visitors for a site with optional search and pagination.
   Returns `{visitors, total_count}`.
   """
