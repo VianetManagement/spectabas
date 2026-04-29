@@ -246,12 +246,62 @@ defmodule Spectabas.Visitors do
           |> maybe_put(:user_id, user_id)
           |> maybe_put(:last_ip, client_ip)
           |> maybe_put(:known_ips, known_ips)
+          |> maybe_inherit_whitelist(site_id, email, visitor)
 
         visitor
         |> Visitor.changeset(attrs)
         |> Repo.update()
     end
   end
+
+  # If another visitor on this site with the same email is whitelisted from
+  # scraper detection, inherit the flag onto this visitor at identify time.
+  # Lets a customer's whitelist follow them across new devices / cookie clears
+  # the moment they sign in. No-op if no email or already whitelisted.
+  defp maybe_inherit_whitelist(attrs, _site_id, nil, _visitor), do: attrs
+
+  defp maybe_inherit_whitelist(attrs, _site_id, _email, %Visitor{scraper_whitelisted: true}),
+    do: attrs
+
+  defp maybe_inherit_whitelist(attrs, site_id, email, visitor) do
+    exists =
+      Repo.exists?(
+        from(v in Visitor,
+          where:
+            v.site_id == ^site_id and v.id != ^visitor.id and v.email == ^email and
+              v.scraper_whitelisted == true
+        )
+      )
+
+    if exists, do: Map.put(attrs, :scraper_whitelisted, true), else: attrs
+  end
+
+  @doc """
+  Whitelist (or unwhitelist) every visitor on a site that shares an email
+  with the given visitor. Used by the visitor profile Whitelist button so
+  the same human is exempted across all of their existing visitor records
+  on this site, not just the one currently open.
+
+  Returns the count of additional visitor records updated (the originating
+  visitor is updated separately by the caller).
+  """
+  def propagate_whitelist_by_email(site_id, %Visitor{email: email, id: id}, value)
+      when is_binary(email) and email != "" do
+    {count, _} =
+      Repo.update_all(
+        from(v in Visitor,
+          where: v.site_id == ^site_id and v.email == ^email and v.id != ^id
+        ),
+        set: [
+          scraper_whitelisted: value,
+          updated_at: DateTime.utc_now() |> DateTime.truncate(:second)
+        ]
+      )
+
+    count
+  end
+
+  def propagate_whitelist_by_email(_site_id, _visitor, _value), do: 0
 
   @doc """
   Generate a single-use cross-domain token that maps to a visitor_id.

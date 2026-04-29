@@ -153,4 +153,76 @@ defmodule Spectabas.VisitorsTest do
       assert is_nil(cleared.scraper_webhook_score)
     end
   end
+
+  describe "scraper whitelist propagation by email" do
+    test "identify inherits whitelist from another visitor with the same email", %{site: site} do
+      # Original whitelisted visitor
+      {:ok, v1} = Visitors.get_or_create(site.id, "cookie-wl-1", :off, "1.2.3.4")
+
+      {:ok, _} =
+        Visitors.identify(site.id, v1.cookie_id, %{"email" => "Jeff@Example.com"}, "1.2.3.4")
+
+      v1 = Spectabas.Repo.get!(Visitor, v1.id)
+
+      {:ok, _} =
+        v1
+        |> Visitor.changeset(%{scraper_whitelisted: true})
+        |> Spectabas.Repo.update()
+
+      # New visitor (different cookie / "device") identifies with the same email
+      {:ok, v2} = Visitors.get_or_create(site.id, "cookie-wl-2", :off, "5.6.7.8")
+      assert v2.scraper_whitelisted == false
+
+      {:ok, v2_updated} =
+        Visitors.identify(site.id, v2.cookie_id, %{"email" => "jeff@example.com"}, "5.6.7.8")
+
+      assert v2_updated.scraper_whitelisted == true
+    end
+
+    test "identify does not inherit when no matching whitelisted email exists", %{site: site} do
+      {:ok, v1} = Visitors.get_or_create(site.id, "cookie-wl-3", :off, "1.2.3.4")
+
+      {:ok, _} =
+        v1
+        |> Visitor.changeset(%{
+          email: "alice@example.com",
+          scraper_whitelisted: true
+        })
+        |> Spectabas.Repo.update()
+
+      {:ok, v2} = Visitors.get_or_create(site.id, "cookie-wl-4", :off, "5.6.7.8")
+
+      {:ok, v2_updated} =
+        Visitors.identify(site.id, v2.cookie_id, %{"email" => "bob@example.com"}, "5.6.7.8")
+
+      assert v2_updated.scraper_whitelisted == false
+    end
+
+    test "propagate_whitelist_by_email/3 updates sibling records and skips self", %{site: site} do
+      {:ok, v1} = Visitors.get_or_create(site.id, "cookie-wl-5", :off, "1.2.3.4")
+      {:ok, v2} = Visitors.get_or_create(site.id, "cookie-wl-6", :off, "1.2.3.4")
+      {:ok, v3} = Visitors.get_or_create(site.id, "cookie-wl-7", :off, "1.2.3.4")
+
+      {:ok, v1} =
+        v1 |> Visitor.changeset(%{email: "carol@example.com"}) |> Spectabas.Repo.update()
+
+      {:ok, _} =
+        v2 |> Visitor.changeset(%{email: "carol@example.com"}) |> Spectabas.Repo.update()
+
+      {:ok, _} =
+        v3 |> Visitor.changeset(%{email: "dan@example.com"}) |> Spectabas.Repo.update()
+
+      assert Visitors.propagate_whitelist_by_email(site.id, v1, true) == 1
+
+      v2_after = Spectabas.Repo.get!(Visitor, v2.id)
+      v3_after = Spectabas.Repo.get!(Visitor, v3.id)
+      assert v2_after.scraper_whitelisted == true
+      assert v3_after.scraper_whitelisted == false
+    end
+
+    test "propagate_whitelist_by_email/3 is a no-op for visitors without an email", %{site: site} do
+      {:ok, v1} = Visitors.get_or_create(site.id, "cookie-wl-8", :off, "1.2.3.4")
+      assert Visitors.propagate_whitelist_by_email(site.id, v1, true) == 0
+    end
+  end
 end

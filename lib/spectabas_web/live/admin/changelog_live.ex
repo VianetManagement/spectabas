@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.12", "2026-04-29T11:00:00Z",
+       [
+         %{
+           title: "Whitelist follows users across devices via email",
+           description:
+             "The scraper whitelist is now email-aware. Two changes: (1) Visitors.identify/4 inherits scraper_whitelisted = true when an existing visitor on the same site already has that email whitelisted — so a returning customer signing in from a new device is exempted automatically; (2) the Whitelist button on a visitor profile fans out to every sibling visitor record on the site that shares the email, so existing duplicate records get exempted in one click. Toggle is symmetric — Remove from whitelist also un-whitelists siblings."
+         }
+       ]},
       {"v6.9.11", "2026-04-29T10:30:00Z",
        [
          %{

@@ -368,7 +368,9 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
   # Whitelist this visitor: clear all scraper flags AND set scraper_whitelisted = true
   # so the 15-min worker won't re-flag them no matter how high their auto score gets.
   # Also sends a deactivation webhook if they're currently flagged so external systems
-  # learn they're not a scraper anymore.
+  # learn they're not a scraper anymore. If the visitor has an email, propagate the
+  # whitelist to every other visitor record on this site with the same email — so
+  # the same human stays exempt across cookie clears / new devices.
   def handle_event("whitelist_scraper", _params, socket) do
     site = socket.assigns.site
     visitor = socket.assigns.visitor
@@ -387,20 +389,39 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
     })
     |> Spectabas.Repo.update()
 
+    propagated = Spectabas.Visitors.propagate_whitelist_by_email(site.id, visitor, true)
+
+    flash =
+      cond do
+        propagated == 0 ->
+          "Visitor whitelisted — they will not be auto-flagged again."
+
+        propagated == 1 ->
+          "Visitor whitelisted (also applied to 1 other record with the same email)."
+
+        true ->
+          "Visitor whitelisted (also applied to #{propagated} other records with the same email)."
+      end
+
     {:noreply,
      socket
      |> assign(:visitor, Spectabas.Repo.get!(Spectabas.Visitors.Visitor, visitor.id))
      |> assign(:status, :whitelisted)
-     |> put_flash(:info, "Visitor whitelisted — they will not be auto-flagged again.")}
+     |> put_flash(:info, flash)}
   end
 
-  # Reverse of whitelist — re-enable automatic scraper detection for this visitor.
+  # Reverse of whitelist — re-enable automatic scraper detection for this visitor
+  # and any sibling records that share the same email (kept consistent with the
+  # forward action so toggles are reversible).
   def handle_event("unwhitelist_scraper", _params, socket) do
+    site = socket.assigns.site
     visitor = socket.assigns.visitor
 
     visitor
     |> Spectabas.Visitors.Visitor.changeset(%{scraper_whitelisted: false})
     |> Spectabas.Repo.update()
+
+    _ = Spectabas.Visitors.propagate_whitelist_by_email(site.id, visitor, false)
 
     {:noreply,
      socket
