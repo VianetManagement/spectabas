@@ -182,6 +182,15 @@ defmodule Spectabas.Workers.ScraperWebhookScan do
         |> Visitor.changeset(%{scraper_webhook_sent_at: nil, scraper_webhook_score: nil})
         |> Repo.update()
 
+        Spectabas.ScraperLabels.record(%{
+          site_id: site.id,
+          visitor_id: visitor.id,
+          label: "not_scraper",
+          source: "webhook_downgrade",
+          score: visitor.scraper_webhook_score,
+          email: visitor.email
+        })
+
         Logger.notice("[ScraperWebhookScan] Deactivated visitor=#{visitor.id}")
 
       {:error, reason} ->
@@ -202,6 +211,16 @@ defmodule Spectabas.Workers.ScraperWebhookScan do
         visitor
         |> Visitor.changeset(%{scraper_webhook_sent_at: now, scraper_webhook_score: score})
         |> Repo.update()
+
+        Spectabas.ScraperLabels.record(%{
+          site_id: site.id,
+          visitor_id: visitor.id,
+          label: "scraper",
+          source: "webhook_auto_flag",
+          score: score,
+          signals: signals,
+          email: visitor.email
+        })
 
       {:error, _reason} ->
         :ok

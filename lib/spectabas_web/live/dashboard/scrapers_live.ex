@@ -210,6 +210,19 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
             })
             |> Spectabas.Repo.update()
 
+            user = socket.assigns[:current_scope] && socket.assigns.current_scope.user
+
+            Spectabas.ScraperLabels.record(%{
+              site_id: site.id,
+              visitor_id: visitor.id,
+              label: "scraper",
+              source: "manual_flag",
+              score: v["score"],
+              signals: v["signals"] || [],
+              email: visitor.email,
+              user_id: user && user.id
+            })
+
             log = Spectabas.Webhooks.ScraperWebhook.list_deliveries(site.id)
 
             {:noreply,
@@ -241,6 +254,18 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
               scraper_manual_flag: false
             })
             |> Spectabas.Repo.update()
+
+            user = socket.assigns[:current_scope] && socket.assigns.current_scope.user
+
+            Spectabas.ScraperLabels.record(%{
+              site_id: site.id,
+              visitor_id: visitor.id,
+              label: "not_scraper",
+              source: "manual_unflag",
+              score: visitor.scraper_webhook_score,
+              email: visitor.email,
+              user_id: user && user.id
+            })
 
             log = Spectabas.Webhooks.ScraperWebhook.list_deliveries(site.id)
 

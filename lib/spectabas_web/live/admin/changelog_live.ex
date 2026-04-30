@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.18", "2026-04-30T19:30:00Z",
+       [
+         %{
+           title: "Scraper labels logging table (foundation for future ML)",
+           description:
+             "New scraper_labels table that captures every Mark as Scraper / Whitelist / Unflag / auto-flag / auto-downgrade event with the visitor's signal vector at the moment of the click. Logging only — does NOT change current detection. Sources have confidence weights for future training (human 1.0, auto-fired 0.3 — circular). Wired into VisitorLive (mark / whitelist / unflag), ScrapersLive (manual send_webhook / deactivate), and ScraperWebhookScan worker (auto-flag / auto-downgrade). Spectabas.ScraperLabels.record/1 is best-effort — failures are logged and swallowed so the user-facing action never fails because of label logging. Full design and training plan in docs/scraper-labels.md. Minimum 4–8 weeks of accumulation needed before any model training is honest."
+         }
+       ]},
       {"v6.9.17", "2026-04-30T18:00:00Z",
        [
          %{

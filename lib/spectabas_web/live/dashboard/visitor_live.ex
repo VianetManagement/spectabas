@@ -279,6 +279,8 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
         })
         |> Spectabas.Repo.update()
 
+        record_label(socket, "not_scraper", "manual_unflag")
+
         {:noreply,
          socket
          |> assign(:visitor, Spectabas.Repo.get!(Spectabas.Visitors.Visitor, visitor.id))
@@ -348,6 +350,8 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
         })
         |> Spectabas.Repo.update()
 
+        record_label(socket, "scraper", "manual_flag")
+
         {:noreply,
          socket
          |> assign(:visitor, Spectabas.Repo.get!(Spectabas.Visitors.Visitor, visitor.id))
@@ -388,6 +392,8 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
       scraper_whitelisted: true
     })
     |> Spectabas.Repo.update()
+
+    record_label(socket, "not_scraper", "manual_whitelist")
 
     propagated = Spectabas.Visitors.propagate_whitelist_by_email(site.id, visitor, true)
 
@@ -1676,4 +1682,25 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
   defp click_platform_class("linkedin_ads"), do: "bg-blue-100 text-blue-900"
   defp click_platform_class("snapchat_ads"), do: "bg-yellow-100 text-yellow-800"
   defp click_platform_class(_), do: "bg-gray-100 text-gray-800"
+
+  # Append a row to scraper_labels capturing the visitor's signal vector at
+  # the moment of the click. See dev/scraper_labels.md.
+  defp record_label(socket, label, source) do
+    visitor = socket.assigns.visitor
+    site = socket.assigns.site
+    user = socket.assigns[:current_scope] && socket.assigns.current_scope.user
+    scraper = socket.assigns[:scraper]
+
+    Spectabas.ScraperLabels.record(%{
+      site_id: site.id,
+      visitor_id: visitor.id,
+      label: label,
+      source: source,
+      score: scraper && scraper.score,
+      tier: scraper && to_string(scraper.verdict || ""),
+      signals: (scraper && scraper.signals) || [],
+      email: visitor.email,
+      user_id: user && user.id
+    })
+  end
 end
