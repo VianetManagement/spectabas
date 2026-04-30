@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.13", "2026-04-30T10:00:00Z",
+       [
+         %{
+           title: "Funnels page: faster suggestions + per-funnel summary",
+           description:
+             "Two changes. (1) The Funnels list now shows Entered / Completed / Conversion Rate (with a small bar) for each funnel over the last 30 days. Loaded async after mount and re-loaded after creating a funnel. New Analytics.funnel_summaries/4 runs the windowFunnel queries for all funnels in parallel via Task.async_stream (max 4 concurrent). (2) Fixed slow queries on the page. suggested_funnels was doing a global ORDER BY visitor_id, timestamp on the full 30-day events partition (the table is sorted by timestamp, not visitor) AND a separate scan via visitor_id IN (SELECT … FROM events …) for the goal filter. Rewrote it as a single scan: per-visitor sort via arraySort inside groupArrayIf, converter flag computed inline as maxIf. Added event_type IN ('pageview','custom') pre-filter to skip RUM/CWV rows. funnel_stats and funnel_abandoned_at_step got the same event_type pre-filter; abandoned was also missing ip_is_bot = 0 (CLAUDE.md query rule). Every funnel query is now bounded by SETTINGS max_execution_time so a slow site fails fast instead of hanging the LiveView."
+         }
+       ]},
       {"v6.9.12", "2026-04-29T11:00:00Z",
        [
          %{

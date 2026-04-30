@@ -3087,10 +3087,13 @@ defmodule Spectabas.Analytics do
         WHERE site_id = #{ClickHouse.param(site.id)}
           AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
           AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+          AND ip_is_bot = 0
+          AND event_type IN ('pageview', 'custom')
         GROUP BY visitor_id
       )
       WHERE level = #{ClickHouse.param(target_step)}
       LIMIT 1000
+      SETTINGS max_execution_time = 30
       """
 
       case ClickHouse.query(sql) do
@@ -3160,11 +3163,60 @@ defmodule Spectabas.Analytics do
           AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
           AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
           AND ip_is_bot = 0
+          AND event_type IN ('pageview', 'custom')
         GROUP BY visitor_id
       )
+      SETTINGS max_execution_time = 30
       """
 
       ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
+  Compact funnel summary (entered / completed / conversion rate) for a list of
+  funnels. Runs the windowFunnel queries in parallel and returns
+  `{:ok, %{funnel_id => %{entered, completed, conversion_rate}}}`.
+  """
+  def funnel_summaries(%Site{} = site, %User{} = user, funnels, date_range \\ "30d")
+      when is_list(funnels) do
+    with :ok <- authorize(site, user) do
+      results =
+        funnels
+        |> Task.async_stream(
+          fn funnel -> {funnel.id, funnel_summary_for(site, user, funnel, date_range)} end,
+          max_concurrency: 4,
+          timeout: 35_000,
+          on_timeout: :kill_task
+        )
+        |> Enum.reduce(%{}, fn
+          {:ok, {id, stats}}, acc -> Map.put(acc, id, stats)
+          _, acc -> acc
+        end)
+
+      {:ok, results}
+    end
+  end
+
+  defp funnel_summary_for(site, user, funnel, date_range) do
+    num_steps = length(funnel.steps || [])
+
+    if num_steps == 0 do
+      %{entered: 0, completed: 0, conversion_rate: 0.0}
+    else
+      case funnel_stats(site, user, funnel, date_range) do
+        {:ok, [row | _]} ->
+          entered = Spectabas.TypeHelpers.to_int(row["step_1"] || 0)
+          completed = Spectabas.TypeHelpers.to_int(row["step_#{num_steps}"] || 0)
+
+          rate =
+            if entered > 0, do: Float.round(completed / entered * 100, 1), else: 0.0
+
+          %{entered: entered, completed: completed, conversion_rate: rate}
+
+        _ ->
+          %{entered: 0, completed: 0, conversion_rate: 0.0}
+      end
     end
   end
 
@@ -3337,70 +3389,98 @@ defmodule Spectabas.Analytics do
     with :ok <- authorize(site, user) do
       goals = Spectabas.Goals.list_goals(site)
 
-      # Build a UNION of all goal conditions to find converting visitors
-      goal_filter =
-        if goals == [] do
-          # No goals — use ecommerce orders as conversion signal
-          if site.ecommerce_enabled do
-            "visitor_id IN (SELECT DISTINCT visitor_id FROM ecommerce_events WHERE site_id = #{ClickHouse.param(site.id)} AND timestamp >= now() - INTERVAL 30 DAY)"
-          else
-            nil
-          end
-        else
-          conditions =
-            goals
-            |> Enum.map(&goal_condition/1)
-            |> Enum.reject(&(&1 == "1 = 0"))
-            |> Enum.map(fn c -> "(#{c})" end)
-            |> Enum.join(" OR ")
+      goal_conditions =
+        goals
+        |> Enum.map(&goal_condition/1)
+        |> Enum.reject(&(&1 == "1 = 0"))
 
-          if conditions == "" do
-            nil
-          else
-            "visitor_id IN (SELECT DISTINCT visitor_id FROM events WHERE site_id = #{ClickHouse.param(site.id)} AND (#{conditions}) AND ip_is_bot = 0 AND timestamp >= now() - INTERVAL 30 DAY)"
-          end
-        end
+      cond do
+        goal_conditions != [] ->
+          suggested_funnels_from_goals(site, goal_conditions)
 
-      if is_nil(goal_filter) do
-        {:ok, []}
-      else
-        sql = """
-        SELECT
-          path_sequence,
-          count() AS converters,
-          length(path_sequence) AS steps
-        FROM (
-          SELECT
-            visitor_id,
-            arrayDistinct(
-              arraySlice(
-                groupArray(url_path),
-                greatest(1, length(groupArray(url_path)) - 4)
-              )
-            ) AS path_sequence
-          FROM (
-            SELECT visitor_id, url_path, timestamp
-            FROM events
-            WHERE site_id = #{ClickHouse.param(site.id)}
-              AND event_type = 'pageview'
-              AND ip_is_bot = 0
-              AND url_path != ''
-              AND timestamp >= now() - INTERVAL 30 DAY
-              AND #{goal_filter}
-            ORDER BY visitor_id, timestamp
-          )
-          GROUP BY visitor_id
-          HAVING length(path_sequence) >= 2
-        )
-        GROUP BY path_sequence
-        HAVING converters >= 3
-        ORDER BY converters DESC
-        LIMIT 10
-        """
+        site.ecommerce_enabled ->
+          suggested_funnels_from_ecommerce(site)
 
-        ClickHouse.query(sql)
+        true ->
+          {:ok, []}
       end
     end
+  end
+
+  # Single-pass scan: per-visitor sort via arraySort (no global ORDER BY),
+  # converter flag computed inline as maxIf so we don't double-scan events.
+  defp suggested_funnels_from_goals(site, goal_conditions) do
+    converter_expr = goal_conditions |> Enum.map(&"(#{&1})") |> Enum.join(" OR ")
+
+    sql = """
+    SELECT
+      path_sequence,
+      count() AS converters,
+      length(path_sequence) AS steps
+    FROM (
+      SELECT
+        visitor_id,
+        arrayDistinct(arraySlice(
+          arrayMap(t -> t.2,
+            arraySort(t -> t.1,
+              groupArrayIf((timestamp, url_path),
+                event_type = 'pageview' AND url_path != ''))),
+          -5
+        )) AS path_sequence,
+        maxIf(1, #{converter_expr}) AS is_converter
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND ip_is_bot = 0
+        AND event_type IN ('pageview', 'custom')
+        AND timestamp >= now() - INTERVAL 30 DAY
+      GROUP BY visitor_id
+      HAVING is_converter = 1 AND length(path_sequence) >= 2
+    )
+    GROUP BY path_sequence
+    HAVING converters >= 3
+    ORDER BY converters DESC
+    LIMIT 10
+    SETTINGS max_execution_time = 20
+    """
+
+    ClickHouse.query(sql)
+  end
+
+  defp suggested_funnels_from_ecommerce(site) do
+    sql = """
+    SELECT
+      path_sequence,
+      count() AS converters,
+      length(path_sequence) AS steps
+    FROM (
+      SELECT
+        visitor_id,
+        arrayDistinct(arraySlice(
+          arrayMap(t -> t.2, arraySort(t -> t.1, groupArray((timestamp, url_path)))),
+          -5
+        )) AS path_sequence
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND ip_is_bot = 0
+        AND event_type = 'pageview'
+        AND url_path != ''
+        AND timestamp >= now() - INTERVAL 30 DAY
+        AND visitor_id IN (
+          SELECT DISTINCT visitor_id FROM ecommerce_events
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND timestamp >= now() - INTERVAL 30 DAY
+        )
+      GROUP BY visitor_id
+      HAVING length(path_sequence) >= 2
+    )
+    GROUP BY path_sequence
+    HAVING converters >= 3
+    ORDER BY converters DESC
+    LIMIT 10
+    SETTINGS max_execution_time = 20
+    """
+
+    ClickHouse.query(sql)
   end
 
   # ---- Goal Detail Queries ----
@@ -5586,6 +5666,7 @@ defmodule Spectabas.Analytics do
       HAVING clicks >= 2
       ORDER BY clicks DESC
       LIMIT 50
+      SETTINGS max_execution_time = 15
       """
 
       ClickHouse.query(sql)

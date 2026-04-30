@@ -35,8 +35,11 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
        |> assign(:goals, Goals.list_goals(site))
        |> assign(:suggestions, nil)
        |> assign(:suggestions_loading, true)
+       |> assign(:funnel_summaries, %{})
+       |> assign(:summaries_loading, funnels != [])
        |> then(fn s ->
          send(self(), :load_suggestions)
+         if funnels != [], do: send(self(), :load_summaries)
          s
        end)}
     end
@@ -50,6 +53,24 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
     {:noreply, assign(socket, suggestions: suggestions, suggestions_loading: false)}
   rescue
     _ -> {:noreply, assign(socket, suggestions: [], suggestions_loading: false)}
+  end
+
+  def handle_info(:load_summaries, socket) do
+    summaries =
+      safe_query(
+        fn ->
+          Analytics.funnel_summaries(
+            socket.assigns.site,
+            socket.assigns.user,
+            socket.assigns.funnels
+          )
+        end,
+        %{}
+      )
+
+    {:noreply, assign(socket, funnel_summaries: summaries, summaries_loading: false)}
+  rescue
+    _ -> {:noreply, assign(socket, funnel_summaries: %{}, summaries_loading: false)}
   end
 
   @impl true
@@ -68,11 +89,13 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
       case Goals.create_funnel(socket.assigns.site, %{"name" => name, "steps" => steps}) do
         {:ok, _funnel} ->
           funnels = Goals.list_funnels(socket.assigns.site)
+          send(self(), :load_summaries)
 
           {:noreply,
            socket
            |> put_flash(:info, "Funnel created from suggestion.")
-           |> assign(:funnels, funnels)}
+           |> assign(:funnels, funnels)
+           |> assign(:summaries_loading, true)}
 
         {:error, _} ->
           {:noreply, put_flash(socket, :error, "Failed to create funnel.")}
@@ -151,11 +174,13 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
       case Goals.create_funnel(socket.assigns.site, funnel_params) do
         {:ok, _funnel} ->
           funnels = Goals.list_funnels(socket.assigns.site)
+          send(self(), :load_summaries)
 
           {:noreply,
            socket
            |> put_flash(:info, "Funnel created.")
            |> assign(:funnels, funnels)
+           |> assign(:summaries_loading, true)
            |> assign(:show_form, false)
            |> assign(:form_name, "")
            |> assign(:form_steps, [%{name: "", type: "pageview", value: ""}])}
@@ -496,6 +521,10 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
 
         <%!-- Funnel List --%>
         <div class="bg-white rounded-lg shadow overflow-x-auto">
+          <div class="px-6 py-3 border-b border-gray-200 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-700">Your Funnels</h2>
+            <span class="text-xs text-gray-400">Last 30 days</span>
+          </div>
           <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
               <tr>
@@ -505,6 +534,15 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Steps
                 </th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Entered
+                </th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Completed
+                </th>
+                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Conv. Rate
+                </th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
                 </th>
@@ -512,7 +550,7 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr :if={@funnels == []}>
-                <td colspan="3" class="px-6 py-8 text-center text-gray-500">
+                <td colspan="6" class="px-6 py-8 text-center text-gray-500">
                   No funnels configured.
                 </td>
               </tr>
@@ -526,6 +564,38 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
                   </.link>
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-500">{length(funnel.steps || [])} steps</td>
+                <% summary = Map.get(@funnel_summaries || %{}, funnel.id) %>
+                <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                  <span :if={summary}>{format_number(summary.entered)}</span>
+                  <span :if={!summary && @summaries_loading} class="text-gray-300">…</span>
+                  <span :if={!summary && !@summaries_loading} class="text-gray-300">—</span>
+                </td>
+                <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
+                  <span :if={summary}>{format_number(summary.completed)}</span>
+                  <span :if={!summary && @summaries_loading} class="text-gray-300">…</span>
+                  <span :if={!summary && !@summaries_loading} class="text-gray-300">—</span>
+                </td>
+                <td class="px-6 py-4 text-right">
+                  <div :if={summary} class="flex items-center justify-end gap-2">
+                    <div class="w-16 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        class={[
+                          "h-1.5 rounded-full",
+                          conv_rate_color(summary.conversion_rate)
+                        ]}
+                        style={"width: #{min(summary.conversion_rate, 100)}%"}
+                      >
+                      </div>
+                    </div>
+                    <span class="text-sm text-gray-900 tabular-nums w-12 text-right">
+                      {summary.conversion_rate}%
+                    </span>
+                  </div>
+                  <span :if={!summary && @summaries_loading} class="text-sm text-gray-300">…</span>
+                  <span :if={!summary && !@summaries_loading} class="text-sm text-gray-300">
+                    —
+                  </span>
+                </td>
                 <td class="px-6 py-4">
                   <span class={[
                     "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium",
@@ -628,4 +698,15 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
 
   defp parse_revenue(n) when is_number(n), do: n / 1
   defp parse_revenue(_), do: 0.0
+
+  defp conv_rate_color(rate) when is_number(rate) do
+    cond do
+      rate >= 25 -> "bg-emerald-500"
+      rate >= 10 -> "bg-indigo-500"
+      rate >= 3 -> "bg-amber-500"
+      true -> "bg-gray-400"
+    end
+  end
+
+  defp conv_rate_color(_), do: "bg-gray-400"
 end
