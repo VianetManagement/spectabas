@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.17", "2026-04-30T18:00:00Z",
+       [
+         %{
+           title: "Fix: Visitor Quality avg duration was always 0",
+           description:
+             "visitor_quality_by_source filtered events by `click_id != ''`, but duration events go through the ingest fast path and have empty click_id (and empty utm_campaign). So `avgIf(duration_s, event_type = 'duration')` always evaluated over an empty rowset and the column was 0 for every platform / campaign. Restructured the query: the cohort is still gated by `click_id != ''` (via an IN subquery — these are still ad-click visitors), but the per-session metrics now read each visitor's full event stream so duration events are included. Attribution (platform / campaign) is picked up via anyIf since duration events carry no attribution columns. Switched the avg from `avg(coalesce(per_session_avg, 0))` to `sum(dur_sum)/sum(dur_count)` — a true global mean instead of an average of per-session averages."
+         }
+       ]},
       {"v6.9.16", "2026-04-30T17:15:00Z",
        [
          %{

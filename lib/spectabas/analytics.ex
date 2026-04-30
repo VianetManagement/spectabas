@@ -2796,27 +2796,44 @@ defmodule Spectabas.Analytics do
     date_range = ensure_date_range(date_range)
 
     with :ok <- authorize(site, user) do
-      {group_col, result_col} =
+      # Raw column for per-event attribution. Duration events go through the
+      # fast path in ingest and have no click_id / utm_campaign, so we look up
+      # the attribution from any non-empty event for the visitor (typically the
+      # entry pageview) rather than filtering events by click_id != ''.
+      {raw_col, result_col} =
         if opts[:group_by] == "campaign",
-          do: {"if(utm_campaign != '', utm_campaign, '(none)')", "campaign"},
+          do: {"utm_campaign", "campaign"},
           else: {"click_id_type", "platform"}
 
-      # Three-level: session → visitor → group
-      # Inner: per-session metrics (needed for accurate bounce = 1 pageview)
-      # Middle: per-visitor aggregates (needed for return rate = sessions > 1)
-      # Outer: per-group aggregates
+      final_expr =
+        if opts[:group_by] == "campaign",
+          do: "if(attribution = '', '(none)', attribution)",
+          else: "attribution"
+
+      site_p = ClickHouse.param(site.id)
+      from_p = ClickHouse.param(format_datetime(date_range.from))
+      to_p = ClickHouse.param(format_datetime(date_range.to))
+
+      # Three-level: session → visitor → group.
+      # Inner: per-session metrics over the visitor's full event stream (so
+      # duration events are included).
+      # Middle: visitor's attribution comes from anyIf over their events
+      # (because duration events carry no click_id_type / utm_campaign).
+      # Outer: per-group aggregates.
+      # Visitor set is gated by a subquery on click_id != '' so the cohort
+      # is still "ad-click visitors", not all visitors.
       sql = """
       SELECT
-        #{result_col},
+        #{final_expr} AS #{result_col},
         count() AS visitors,
         round(sum(pageviews) / greatest(sum(sessions), 1), 1) AS avg_pages,
-        round(avg(coalesce(avg_dur, 0)), 0) AS avg_duration_s,
+        round(sum(dur_sum) / greatest(sum(dur_count), 1), 0) AS avg_duration_s,
         round(sum(bounced) / greatest(sum(sessions), 1) * 100, 1) AS bounce_rate,
         round(countIf(sessions > 1) / greatest(count(), 1) * 100, 1) AS return_rate,
         round(sum(high_intent_pvs) / greatest(sum(pageviews), 1) * 100, 1) AS high_intent_pct,
         round(
           least(sum(pageviews) / greatest(sum(sessions), 1) / 5, 1) * 25
-          + least(avg(coalesce(avg_dur, 0)) / 300, 1) * 25
+          + least(sum(dur_sum) / greatest(sum(dur_count), 1) / 300, 1) * 25
           + (1 - sum(bounced) / greatest(sum(sessions), 1)) * 20
           + countIf(sessions > 1) / greatest(count(), 1) * 15
           + sum(high_intent_pvs) / greatest(sum(pageviews), 1) * 15
@@ -2824,32 +2841,40 @@ defmodule Spectabas.Analytics do
       FROM (
         SELECT
           visitor_id,
-          #{result_col},
+          anyIf(attribution_raw, attribution_raw != '') AS attribution,
           count() AS sessions,
           sum(pv) AS pageviews,
-          avg(dur) AS avg_dur,
+          sum(dur_sum) AS dur_sum,
+          sum(dur_count) AS dur_count,
           sumIf(1, pv = 1) AS bounced,
           sum(hi) AS high_intent_pvs
         FROM (
           SELECT
             visitor_id,
             session_id,
-            #{group_col} AS #{result_col},
+            anyIf(#{raw_col}, #{raw_col} != '') AS attribution_raw,
             countIf(event_type = 'pageview') AS pv,
-            avgIf(duration_s, event_type = 'duration' AND duration_s > 0) AS dur,
+            sumIf(duration_s, event_type = 'duration' AND duration_s > 0) AS dur_sum,
+            countIf(event_type = 'duration' AND duration_s > 0) AS dur_count,
             countIf(visitor_intent NOT IN ('', 'browsing', 'bot') AND event_type = 'pageview') AS hi
           FROM events
-          WHERE site_id = #{ClickHouse.param(site.id)}
+          WHERE site_id = #{site_p}
             AND ip_is_bot = 0
-            AND click_id != ''
-            AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-            AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-          GROUP BY visitor_id, session_id, #{group_col}
+            AND timestamp >= #{from_p}
+            AND timestamp <= #{to_p}
+            AND visitor_id IN (
+              SELECT DISTINCT visitor_id FROM events
+              WHERE site_id = #{site_p}
+                AND click_id != ''
+                AND timestamp >= #{from_p}
+                AND timestamp <= #{to_p}
+            )
+          GROUP BY visitor_id, session_id
         )
-        GROUP BY visitor_id, #{result_col}
+        GROUP BY visitor_id
       )
       GROUP BY #{result_col}
-      HAVING count() > 0
+      HAVING #{result_col} != '' AND count() > 0
       ORDER BY visitors DESC
       LIMIT 50
       """
