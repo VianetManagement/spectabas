@@ -2243,6 +2243,52 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  @doc """
+  Resolved ad campaign names keyed by the utm_campaign value as it
+  appears in tracking. Looks up matches in `ad_spend` against both
+  `campaign_id` and `campaign_name` (per CLAUDE.md), so utm_campaign
+  values that are numeric IDs (Google Ads default) and human names
+  (Meta default) both resolve. Returns
+  `{:ok, %{utm_value => %{name, platform}}}`.
+  """
+  def campaign_names(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        campaign_id,
+        any(campaign_name) AS campaign_name,
+        any(platform) AS platform
+      FROM ad_spend FINAL
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND date >= #{ClickHouse.param(Date.to_iso8601(DateTime.to_date(date_range.from)))}
+        AND date <= #{ClickHouse.param(Date.to_iso8601(DateTime.to_date(date_range.to)))}
+        AND (campaign_id != '' OR campaign_name != '')
+      GROUP BY campaign_id
+      """
+
+      case ClickHouse.query(sql) do
+        {:ok, rows} ->
+          map =
+            Enum.reduce(rows, %{}, fn r, acc ->
+              id = r["campaign_id"] || ""
+              name = r["campaign_name"] || ""
+              platform = r["platform"] || ""
+              entry = %{name: name, platform: platform}
+
+              acc = if id != "", do: Map.put(acc, id, entry), else: acc
+              if name != "", do: Map.put(acc, name, entry), else: acc
+            end)
+
+          {:ok, map}
+
+        error ->
+          error
+      end
+    end
+  end
+
   @doc "Ad spend totals across all platforms for a site."
   def ad_spend_totals(%Site{} = site, %User{} = user, date_range) do
     date_range = ensure_date_range(date_range)

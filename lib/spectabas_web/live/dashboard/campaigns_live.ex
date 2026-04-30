@@ -160,6 +160,12 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
         _ -> %{}
       end
 
+    ad_names =
+      case Analytics.campaign_names(site, user, period) do
+        {:ok, map} -> map
+        _ -> %{}
+      end
+
     # Map (campaign, source, medium) → saved record when present.
     saved_by_triple =
       Map.new(saved, fn c ->
@@ -178,6 +184,8 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
             {r["campaign"] || "", r["source"] || "", r["medium"] || ""}
           )
 
+        ad = Map.get(ad_names, r["campaign"] || "")
+
         %{
           source: :detected,
           campaign: r["campaign"],
@@ -188,6 +196,8 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
           bounce_rate: eng && eng.bounce_rate,
           avg_duration: eng && eng.avg_duration,
           pageviews: to_num(r["pageviews"]),
+          ad_name: ad && ad.name,
+          ad_platform: ad && ad.platform,
           saved: Map.get(saved_by_triple, triple)
         }
       end)
@@ -215,7 +225,10 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
           visitors: 0,
           sessions: 0,
           bounce_rate: nil,
+          avg_duration: nil,
           pageviews: 0,
+          ad_name: nil,
+          ad_platform: nil,
           saved: c
         }
       end)
@@ -241,6 +254,17 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
   defp range_to_period("30d"), do: :"30d"
   defp range_to_period("90d"), do: :"90d"
   defp range_to_period(_), do: :"30d"
+
+  defp ad_platform_label("google_ads"), do: "Google Ads"
+  defp ad_platform_label("bing_ads"), do: "Microsoft Ads"
+  defp ad_platform_label("meta_ads"), do: "Meta Ads"
+  defp ad_platform_label(p) when is_binary(p) and p != "", do: p
+  defp ad_platform_label(_), do: "Ads"
+
+  defp ad_platform_classes("google_ads"), do: "bg-blue-100 text-blue-700"
+  defp ad_platform_classes("bing_ads"), do: "bg-cyan-100 text-cyan-700"
+  defp ad_platform_classes("meta_ads"), do: "bg-indigo-100 text-indigo-700"
+  defp ad_platform_classes(_), do: "bg-gray-100 text-gray-700"
 
   # ---------------- Render ----------------
 
@@ -448,12 +472,29 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
                 >
                   <td class="px-6 py-3 text-sm">
                     <div class="font-medium text-gray-900 truncate max-w-xs">
-                      <%= if row.saved do %>
-                        {row.saved.name}
-                        <span class="text-xs text-gray-500 font-normal">({row.campaign})</span>
-                      <% else %>
-                        {row.campaign}
+                      <%= cond do %>
+                        <% row.saved -> %>
+                          {row.saved.name}
+                          <span class="text-xs text-gray-500 font-normal">({row.campaign})</span>
+                        <% row.ad_name && row.ad_name != "" && row.ad_name != row.campaign -> %>
+                          {row.ad_name}
+                        <% true -> %>
+                          {row.campaign}
                       <% end %>
+                    </div>
+                    <div
+                      :if={
+                        row.ad_name && row.ad_name != "" && row.ad_name != row.campaign && !row.saved
+                      }
+                      class="flex items-center gap-1.5 mt-0.5"
+                    >
+                      <span class={[
+                        "inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium",
+                        ad_platform_classes(row.ad_platform)
+                      ]}>
+                        {ad_platform_label(row.ad_platform)}
+                      </span>
+                      <span class="text-xs text-gray-400 font-mono truncate">{row.campaign}</span>
                     </div>
                   </td>
                   <td class="px-6 py-3 text-sm text-gray-600">

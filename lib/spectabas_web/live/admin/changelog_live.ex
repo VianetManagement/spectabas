@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.16", "2026-04-30T17:15:00Z",
+       [
+         %{
+           title: "Campaigns: resolve ad campaign names from connected platforms",
+           description:
+             "When utm_campaign is a numeric ID (Google Ads default) or a raw slug, the row now shows the human-readable campaign name pulled from the connected ad platform alongside a platform badge (Google Ads / Microsoft Ads / Meta Ads). New Analytics.campaign_names/3 looks up matches in ad_spend by both campaign_id AND campaign_name (per the CLAUDE.md rule), so utm values that are IDs and ones that are names both resolve. Saved campaigns still take priority — the resolved name only shows when the row isn't already linked to a saved Campaigns.Campaign record."
+         }
+       ]},
       {"v6.9.15", "2026-04-30T16:30:00Z",
        [
          %{
