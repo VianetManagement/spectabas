@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.14", "2026-04-30T15:15:00Z",
+       [
+         %{
+           title: "Fix: flaky Vault decrypt test (CI)",
+           description:
+             "test 'decrypt of corrupted data returns :error' replaced the last byte of the AES-GCM ciphertext with <<0>>. AES-GCM ciphertext is essentially random, so ~1/256 of the time the original last byte was already 0 — making the 'corruption' a no-op and decryption succeed. v6.9.13's CI run hit it. Now flips the byte deterministically (XOR with 0xFF) so it's always different from the original."
+         }
+       ]},
       {"v6.9.13", "2026-04-30T10:00:00Z",
        [
          %{

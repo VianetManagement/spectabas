@@ -61,7 +61,9 @@ defmodule Spectabas.AdIntegrationsTest do
 
     test "decrypt of corrupted data returns :error" do
       encrypted = Vault.encrypt("valid_token")
-      corrupted = :binary.part(encrypted, 0, byte_size(encrypted) - 1) <> <<0>>
+      last_byte = :binary.at(encrypted, byte_size(encrypted) - 1)
+      flipped = Bitwise.bxor(last_byte, 0xFF)
+      corrupted = :binary.part(encrypted, 0, byte_size(encrypted) - 1) <> <<flipped>>
       assert Vault.decrypt(corrupted) == :error
     end
 
