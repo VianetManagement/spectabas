@@ -146,10 +146,18 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
     user = socket.assigns.user
     saved = Campaigns.list_campaigns(site)
 
+    period = range_to_period(socket.assigns.range)
+
     detected =
-      case Analytics.campaign_performance_fast(site, user, range_to_period(socket.assigns.range)) do
+      case Analytics.campaign_performance_fast(site, user, period) do
         {:ok, rows} -> rows
         _ -> []
+      end
+
+    engagement =
+      case Analytics.campaign_engagement(site, user, period) do
+        {:ok, map} -> map
+        _ -> %{}
       end
 
     # Map (campaign, source, medium) → saved record when present.
@@ -164,6 +172,12 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
         triple =
           {norm(r["campaign"]), norm(r["source"]), norm(r["medium"])}
 
+        eng =
+          Map.get(
+            engagement,
+            {r["campaign"] || "", r["source"] || "", r["medium"] || ""}
+          )
+
         %{
           source: :detected,
           campaign: r["campaign"],
@@ -171,7 +185,8 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
           utm_medium: r["medium"],
           visitors: to_num(r["visitors"]),
           sessions: to_num(r["sessions"]),
-          bounce_rate: r["bounce_rate"],
+          bounce_rate: eng && eng.bounce_rate,
+          avg_duration: eng && eng.avg_duration,
           pageviews: to_num(r["pageviews"]),
           saved: Map.get(saved_by_triple, triple)
         }

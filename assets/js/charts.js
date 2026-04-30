@@ -32,9 +32,10 @@ export const TimeseriesChart = {
     const isPageviews = metric === "pageviews"
     const values = isPageviews ? data.pageviews : data.visitors
     const previous = isPageviews ? data.previous_pageviews : data.previous_visitors
-    const label = isPageviews ? "Pageviews" : "Visitors"
-    const borderColor = isPageviews ? "#6366f1" : "#10b981"
-    const bgColor = isPageviews ? "rgba(99, 102, 241, 0.1)" : "rgba(16, 185, 129, 0.1)"
+    const label = data.label || (isPageviews ? "Pageviews" : "Visitors")
+    const borderColor = data.color || (isPageviews ? "#6366f1" : "#10b981")
+    const bgColor = data.bg_color || (isPageviews ? "rgba(99, 102, 241, 0.1)" : "rgba(16, 185, 129, 0.1)")
+    const valueSuffix = data.value_suffix || ""
 
     const datasets = [{
       label: label,
@@ -100,6 +101,9 @@ export const TimeseriesChart = {
             bodyColor: "#d1d5db",
             padding: 10,
             cornerRadius: 8,
+            callbacks: valueSuffix ? {
+              label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y}${valueSuffix}`,
+            } : {},
           },
           legend: { display: false },
         },

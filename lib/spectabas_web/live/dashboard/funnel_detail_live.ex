@@ -23,6 +23,7 @@ defmodule SpectabasWeb.Dashboard.FunnelDetailLive do
        |> assign(:funnel, funnel)
        |> assign(:range, "30d")
        |> assign(:funnel_data, nil)
+       |> assign(:timeseries_json, "{}")
        |> assign(:loading, true)
        |> assign(:editing, false)
        |> assign(:edit_name, funnel.name)
@@ -50,12 +51,22 @@ defmodule SpectabasWeb.Dashboard.FunnelDetailLive do
 
     funnel_data = process_funnel_data(funnel, raw_data, site)
 
+    timeseries =
+      case Analytics.funnel_completion_timeseries(site, user, funnel, range) do
+        {:ok, rows} -> rows
+        _ -> []
+      end
+
+    timeseries_json = build_timeseries_json(timeseries)
+
     {:noreply,
      socket
      |> assign(:funnel_data, funnel_data)
+     |> assign(:timeseries_json, timeseries_json)
      |> assign(:loading, false)}
   rescue
-    _ -> {:noreply, assign(socket, loading: false, funnel_data: [])}
+    _ ->
+      {:noreply, assign(socket, loading: false, funnel_data: [], timeseries_json: "{}")}
   end
 
   @impl true
@@ -243,6 +254,20 @@ defmodule SpectabasWeb.Dashboard.FunnelDetailLive do
   defp step_type_badge("goal"), do: {"Goal", "bg-green-100 text-green-700"}
   defp step_type_badge(_), do: {"Step", "bg-gray-100 text-gray-700"}
 
+  defp build_timeseries_json(rows) do
+    Jason.encode!(%{
+      labels: Enum.map(rows, & &1["day"]),
+      visitors: Enum.map(rows, &Spectabas.TypeHelpers.to_float(&1["completion_rate"])),
+      label: "Completion rate",
+      color: "#6366f1",
+      bg_color: "rgba(99, 102, 241, 0.1)",
+      value_suffix: "%",
+      metric: "visitors"
+    })
+  rescue
+    _ -> "{}"
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -426,6 +451,25 @@ defmodule SpectabasWeb.Dashboard.FunnelDetailLive do
             <div class="bg-white rounded-lg shadow p-5">
               <p class="text-sm text-gray-500">Total Drop-off</p>
               <p class="text-2xl font-bold text-gray-900 mt-1">{format_number(total_drop)}</p>
+            </div>
+          </div>
+
+          <%!-- Completion Rate Trend --%>
+          <div :if={@funnel_data != []} class="bg-white rounded-lg shadow p-5 mb-8">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-sm font-semibold text-gray-700">Completion Rate Over Time</h2>
+              <span class="text-xs text-gray-400">
+                % of entrants who completed all steps, by entry day
+              </span>
+            </div>
+            <div
+              id={"funnel-rate-chart-#{@funnel.id}-#{@range}"}
+              phx-hook="TimeseriesChart"
+              phx-update="ignore"
+              data-chart={@timeseries_json}
+              class="h-48 sm:h-[240px] relative"
+            >
+              <canvas></canvas>
             </div>
           </div>
 

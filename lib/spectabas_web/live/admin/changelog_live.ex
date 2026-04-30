@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.15", "2026-04-30T16:30:00Z",
+       [
+         %{
+           title: "Funnels: gated suggestions, completion-rate trend, campaigns bounce rate fix",
+           description:
+             "Three things. (1) Suggested Funnels no longer auto-runs on page load — it's now behind a 'Generate suggestions' button (and 'Regenerate' once you have results). The underlying ClickHouse query is heavy and the suggestions weren't always useful, so it was a real blocker on every visit. (2) Funnel detail pages (/dashboard/sites/:id/funnels/:funnel_id) now show a Completion Rate Over Time line chart above the conversion viz. New Analytics.funnel_completion_timeseries/4 buckets each visitor by the day they entered step 1 (via minIf on the first step's condition) and computes daily entered / completed / completion_rate from windowFunnel. Same 30s execution cap as the other funnel queries. The TimeseriesChart hook gained optional label / color / value_suffix so the same hook can render '%' tooltips. (3) Campaigns page bounce rate column was always 0% — campaign_performance_fast hard-coded `0 AS bounce_rate, 0 AS avg_duration` because the rollup table doesn't track them. New Analytics.campaign_engagement/3 pulls real bounce rate and avg duration from daily_session_facts keyed by the (campaign, source, medium) triple, and campaigns_live merges them into each detected row."
+         }
+       ]},
       {"v6.9.14", "2026-04-30T15:15:00Z",
        [
          %{

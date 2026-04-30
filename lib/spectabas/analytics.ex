@@ -1353,6 +1353,55 @@ defmodule Spectabas.Analytics do
   end
 
   @doc """
+  Engagement (bounce rate / avg duration) keyed by the
+  (utm_campaign, utm_source, utm_medium) triple. Used by the Campaigns
+  page to merge real engagement metrics into the rollup-based traffic
+  counts. Returns
+  `{:ok, %{{campaign, source, medium} => %{bounce_rate, avg_duration}}}`.
+  """
+  def campaign_engagement(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      from_date = date_range.from |> DateTime.to_date() |> Date.to_iso8601()
+      to_date = date_range.to |> DateTime.to_date() |> Date.to_iso8601()
+
+      sql = """
+      SELECT
+        utm_campaign AS campaign,
+        utm_source AS source,
+        utm_medium AS medium,
+        count() AS sessions,
+        round(countIf(is_bounce = 1) / greatest(count(), 1) * 100, 1) AS bounce_rate,
+        round(avgIf(duration_s, duration_s > 0), 0) AS avg_duration
+      FROM daily_session_facts
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND date >= #{ClickHouse.param(from_date)}
+        AND date <= #{ClickHouse.param(to_date)}
+        AND utm_campaign != ''
+      GROUP BY campaign, source, medium
+      """
+
+      case ClickHouse.query(sql) do
+        {:ok, rows} ->
+          map =
+            Map.new(rows, fn r ->
+              {{r["campaign"] || "", r["source"] || "", r["medium"] || ""},
+               %{
+                 bounce_rate: to_float(r["bounce_rate"]),
+                 avg_duration: to_int(r["avg_duration"])
+               }}
+            end)
+
+          {:ok, map}
+
+        error ->
+          error
+      end
+    end
+  end
+
+  @doc """
   Drill down into a specific channel — shows individual sources within that channel.
   """
   def channel_detail(%Site{} = site, %User{} = user, date_range, channel_name) do
@@ -3104,35 +3153,35 @@ defmodule Spectabas.Analytics do
   end
 
   defp build_funnel_conditions(steps) do
-    steps
-    |> Enum.map(fn step ->
-      type = step["type"] || Map.get(step, :type, "pageview")
-      # Support both "value" key (new form) and "path"/"name" keys (legacy)
-      value = step["value"] || step["path"] || step["name"] || Map.get(step, :value, "")
+    steps |> Enum.map(&build_funnel_step_condition/1) |> Enum.join(", ")
+  end
 
-      case type do
-        "pageview" ->
-          "event_type = 'pageview' AND url_path = #{ClickHouse.param(value)}"
+  defp build_funnel_step_condition(step) do
+    type = step["type"] || Map.get(step, :type, "pageview")
+    # Support both "value" key (new form) and "path"/"name" keys (legacy)
+    value = step["value"] || step["path"] || step["name"] || Map.get(step, :value, "")
 
-        "custom_event" ->
-          "event_type = 'custom' AND event_name = #{ClickHouse.param(value)}"
+    case type do
+      "pageview" ->
+        "event_type = 'pageview' AND url_path = #{ClickHouse.param(value)}"
 
-        "click_element" ->
-          click_element_condition(value)
+      "custom_event" ->
+        "event_type = 'custom' AND event_name = #{ClickHouse.param(value)}"
 
-        "goal" ->
-          try do
-            goal = Spectabas.Goals.get_goal!(String.to_integer(to_string(value)))
-            goal_condition(goal)
-          rescue
-            _ -> "1=0"
-          end
+      "click_element" ->
+        click_element_condition(value)
 
-        _ ->
-          "1=0"
-      end
-    end)
-    |> Enum.join(", ")
+      "goal" ->
+        try do
+          goal = Spectabas.Goals.get_goal!(String.to_integer(to_string(value)))
+          goal_condition(goal)
+        rescue
+          _ -> "1=0"
+        end
+
+      _ ->
+        "1=0"
+    end
   end
 
   @doc """
@@ -3195,6 +3244,60 @@ defmodule Spectabas.Analytics do
         end)
 
       {:ok, results}
+    end
+  end
+
+  @doc """
+  Daily completion-rate timeseries for a funnel. Buckets by the day each
+  visitor entered (started step 1). Returns
+  `{:ok, [%{"day" => ..., "entered" => n, "completed" => n, "completion_rate" => f}]}`.
+  """
+  def funnel_completion_timeseries(
+        %Site{} = site,
+        %User{} = user,
+        %{steps: steps} = _funnel,
+        date_range \\ "30d"
+      )
+      when is_list(steps) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      num_steps = length(steps)
+      first_step = List.first(steps)
+
+      if num_steps == 0 or is_nil(first_step) do
+        {:ok, []}
+      else
+        step_conditions = build_funnel_conditions(steps)
+        first_step_cond = build_funnel_step_condition(first_step)
+
+        sql = """
+        SELECT
+          toString(toDate(first_step_time)) AS day,
+          count() AS entered,
+          countIf(level >= #{num_steps}) AS completed,
+          if(count() > 0, round(countIf(level >= #{num_steps}) / count() * 100, 2), 0) AS completion_rate
+        FROM (
+          SELECT
+            visitor_id,
+            windowFunnel(86400)(timestamp, #{step_conditions}) AS level,
+            minIf(timestamp, #{first_step_cond}) AS first_step_time
+          FROM events
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+            AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+            AND ip_is_bot = 0
+            AND event_type IN ('pageview', 'custom')
+          GROUP BY visitor_id
+          HAVING level >= 1 AND first_step_time > toDateTime('1970-01-02')
+        )
+        GROUP BY day
+        ORDER BY day ASC
+        SETTINGS max_execution_time = 30
+        """
+
+        ClickHouse.query(sql)
+      end
     end
   end
 

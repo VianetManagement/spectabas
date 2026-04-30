@@ -34,11 +34,10 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
        |> assign(:discovered_elements, [])
        |> assign(:goals, Goals.list_goals(site))
        |> assign(:suggestions, nil)
-       |> assign(:suggestions_loading, true)
+       |> assign(:suggestions_loading, false)
        |> assign(:funnel_summaries, %{})
        |> assign(:summaries_loading, funnels != [])
        |> then(fn s ->
-         send(self(), :load_suggestions)
          if funnels != [], do: send(self(), :load_summaries)
          s
        end)}
@@ -74,6 +73,11 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
   end
 
   @impl true
+  def handle_event("generate_suggestions", _params, socket) do
+    send(self(), :load_suggestions)
+    {:noreply, assign(socket, suggestions_loading: true, suggestions: nil)}
+  end
+
   def handle_event("create_suggested", %{"index" => index}, socket) do
     idx = String.to_integer(index)
     suggestion = Enum.at(socket.assigns.suggestions || [], idx)
@@ -473,13 +477,42 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
           </p>
         </div>
 
-        <%!-- Suggested Funnels --%>
-        <div :if={@suggestions && @suggestions != []} class="bg-white rounded-lg shadow p-6 mb-8">
-          <h2 class="text-sm font-semibold text-gray-700 mb-3">Suggested Funnels</h2>
-          <p class="text-xs text-gray-400 mb-4">
-            Common page paths taken by converting visitors in the last 30 days.
+        <%!-- Suggested Funnels (button-gated; the underlying CH query is heavy) --%>
+        <div class="bg-white rounded-lg shadow p-6 mb-8">
+          <div class="flex items-start justify-between gap-3 mb-3">
+            <div>
+              <h2 class="text-sm font-semibold text-gray-700">Suggested Funnels</h2>
+              <p class="text-xs text-gray-400 mt-1">
+                Common page paths taken by converting visitors in the last 30 days.
+              </p>
+            </div>
+            <button
+              :if={!@suggestions_loading}
+              phx-click="generate_suggestions"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-indigo-300 text-indigo-600 hover:bg-indigo-50 transition-colors whitespace-nowrap"
+            >
+              {if is_nil(@suggestions), do: "Generate suggestions", else: "Regenerate"}
+            </button>
+            <span
+              :if={@suggestions_loading}
+              class="inline-flex items-center gap-2 text-xs text-gray-400"
+            >
+              <.death_star_spinner class="w-4 h-4" /> Analyzing…
+            </span>
+          </div>
+
+          <p :if={is_nil(@suggestions) && !@suggestions_loading} class="text-xs text-gray-400">
+            Click "Generate suggestions" to scan converting visitors for common paths.
           </p>
-          <div class="space-y-2">
+
+          <p
+            :if={@suggestions == [] && !@suggestions_loading}
+            class="text-xs text-gray-400"
+          >
+            No common paths found — set up a goal or get more conversion volume, then try again.
+          </p>
+
+          <div :if={is_list(@suggestions) && @suggestions != []} class="space-y-2 mt-2">
             <div
               :for={{suggestion, idx} <- Enum.with_index(@suggestions)}
               class="flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:border-indigo-200 hover:bg-indigo-50/50 transition-colors"
@@ -510,12 +543,6 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-        <div :if={@suggestions_loading} class="bg-white rounded-lg shadow p-6 mb-8">
-          <div class="flex items-center gap-2 text-gray-400">
-            <.death_star_spinner class="w-5 h-5" />
-            <p class="text-sm">Analyzing conversion paths...</p>
           </div>
         </div>
 
