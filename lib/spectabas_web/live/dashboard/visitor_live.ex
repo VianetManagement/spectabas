@@ -395,6 +395,19 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
 
     record_label(socket, "not_scraper", "manual_whitelist")
 
+    # Persist the email in the site allowlist so future never-before-seen
+    # visitors with this email also auto-inherit the whitelist (matches the
+    # /api/v1/sites/:id/whitelist behavior).
+    if is_binary(visitor.email) and visitor.email != "" do
+      user = socket.assigns[:current_scope] && socket.assigns.current_scope.user
+
+      _ =
+        Spectabas.Visitors.EmailWhitelist.add(site.id, visitor.email,
+          source: "dashboard",
+          added_by_user_id: user && user.id
+        )
+    end
+
     propagated = Spectabas.Visitors.propagate_whitelist_by_email(site.id, visitor, true)
 
     flash =
@@ -426,6 +439,11 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
     visitor
     |> Spectabas.Visitors.Visitor.changeset(%{scraper_whitelisted: false})
     |> Spectabas.Repo.update()
+
+    # Remove from the email allowlist too (mirrors API DELETE behavior).
+    if is_binary(visitor.email) and visitor.email != "" do
+      _ = Spectabas.Visitors.EmailWhitelist.remove(site.id, visitor.email)
+    end
 
     _ = Spectabas.Visitors.propagate_whitelist_by_email(site.id, visitor, false)
 

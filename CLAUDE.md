@@ -94,7 +94,7 @@ Routes: `/platform/*` (platform_admin), `/admin/*` (superadmin+), `/dashboard/*`
 - **MFA**: TOTP + WebAuthn/Passkeys. Account-level `require_mfa` toggle. `Require2FA` plug checks `totp_verified_at` (12h validity).
 - **SOC2**: 12-char passwords (letter+number), 5-attempt lockout (15min, Hammer ETS), 30-min idle timeout (JS tracking, 28-min warning), session management (IP/UA/last_active on `users_tokens`), audit logging.
 - **wax_ config**: Requires `origin` in `config.exs` and `test.exs` — tests fail without it.
-- **API keys**: Scopes (`read:stats`, `read:visitors`, `write:events`, `write:identify`, `admin:sites`), site restrictions, optional expiry. All calls logged (30-day retention, `/admin/api-logs`).
+- **API keys**: Scopes (`read:stats`, `read:visitors`, `write:events`, `write:identify`, `write:whitelist`, `admin:sites`), site restrictions, optional expiry. All calls logged (30-day retention, `/admin/api-logs`).
 
 ## Security (4 audits completed: v0.8.0, v1.6.0, v2.6.0, v4.8.0)
 
@@ -195,4 +195,4 @@ Weighted-signal scoring (15 signals, cap 100). Tiers: watching (40-69), suspicio
 - **Oban timeouts**: All 29 workers have `timeout/1` callbacks (60s emails, 120s exports, 300s API syncs, 600s ClickHouse maintenance).
 - **Death Star spinner**: `<.death_star_spinner class="w-4 h-4" />` — custom SVG component, globally available.
 - **Heroicons setup**: three pieces have to be in place. (1) `mix.exs` declares `:heroicons` as a sparse git dep so `deps/heroicons/optimized/24/outline/*.svg` exists during the production build (without it, `mix tailwind ... --minify` crashes with ENOENT scandir). (2) `assets/css/app.css` activates the plugin via `@plugin "../vendor/heroicons"` so the per-icon classes get generated. (3) Same file adds `mask-size: contain` for `[class*="hero-"]` so icons sized smaller than the SVG's natural size (e.g. `w-3 h-3` on a 24px outline) don't only show a corner of the mask. Don't remove any of the three.
-- **Changelog**: v6.9.18 at `/admin/changelog`. Updated every push.
+- **Changelog**: v6.9.19 at `/admin/changelog`. Updated every push.

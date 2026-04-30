@@ -41,6 +41,7 @@ defmodule Spectabas.ScraperLabels do
 
   @valid_sources ~w(
     manual_flag manual_whitelist manual_unflag manual_unwhitelist
+    api_whitelist api_unwhitelist
     webhook_auto_flag webhook_downgrade
     goal_conversion ecommerce_purchase
   )
@@ -54,6 +55,8 @@ defmodule Spectabas.ScraperLabels do
     "manual_whitelist" => 1.0,
     "manual_unflag" => 0.5,
     "manual_unwhitelist" => 0.4,
+    "api_whitelist" => 1.0,
+    "api_unwhitelist" => 0.4,
     "webhook_auto_flag" => 0.3,
     "webhook_downgrade" => 0.3,
     "goal_conversion" => 0.7,

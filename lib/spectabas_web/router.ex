@@ -280,6 +280,8 @@ defmodule SpectabasWeb.Router do
     get "/sites/:site_id/ecommerce/products", StatsController, :ecommerce_products
     get "/sites/:site_id/ecommerce/orders", StatsController, :ecommerce_orders
     post "/sites/:site_id/ecommerce/transactions", StatsController, :record_transaction
+    post "/sites/:site_id/whitelist", WhitelistController, :create
+    delete "/sites/:site_id/whitelist", WhitelistController, :delete
   end
 
   # Dev routes

@@ -2,7 +2,7 @@ defmodule Spectabas.Accounts.APIKey do
   use Ecto.Schema
   import Ecto.Changeset
 
-  @valid_scopes ~w(read:stats read:visitors write:events write:identify admin:sites)
+  @valid_scopes ~w(read:stats read:visitors write:events write:identify write:whitelist admin:sites)
 
   schema "api_keys" do
     belongs_to :user, Spectabas.Accounts.User

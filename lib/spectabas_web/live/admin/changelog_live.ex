@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.19", "2026-04-30T20:30:00Z",
+       [
+         %{
+           title: "API: scraper-whitelist email endpoint (POST/DELETE)",
+           description:
+             "POST /api/v1/sites/:id/whitelist and DELETE /api/v1/sites/:id/whitelist (body: {email}) let an external service whitelist or un-whitelist a customer email in the scraper detector — equivalent to the dashboard Whitelist button but keyed by email so customers can be whitelisted before they've ever visited. New write:whitelist scope. New site_email_whitelist Postgres table holds the persistent allowlist; Visitors.identify/4 checks it on every identify so brand-new visitors with a whitelisted email auto-inherit scraper_whitelisted. The dashboard Whitelist / Remove from whitelist buttons now also write to the allowlist so dashboard ↔ API stay symmetric. Each call is logged in scraper_labels (sources api_whitelist / api_unwhitelist) for future model training. Full curl + Elixir + Node samples in /docs."
+         }
+       ]},
       {"v6.9.18", "2026-04-30T19:30:00Z",
        [
          %{

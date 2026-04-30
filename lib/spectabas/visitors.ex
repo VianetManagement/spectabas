@@ -271,9 +271,83 @@ defmodule Spectabas.Visitors do
             v.site_id == ^site_id and v.id != ^visitor.id and v.email == ^email and
               v.scraper_whitelisted == true
         )
-      )
+      ) ||
+        Spectabas.Visitors.EmailWhitelist.whitelisted?(site_id, email)
 
     if exists, do: Map.put(attrs, :scraper_whitelisted, true), else: attrs
+  end
+
+  @doc """
+  Whitelist an email on a site. Used by the API endpoint and (for symmetry)
+  by the dashboard Whitelist button. Two effects:
+
+    1. Persists the email in `site_email_whitelist` so future visitors that
+       identify with this email auto-inherit `scraper_whitelisted = true`,
+       even if no visitor row exists for them yet.
+    2. Flips every existing visitor row on this site that already has the
+       email — clearing `scraper_manual_flag`, `scraper_webhook_score` and
+       `scraper_webhook_sent_at` so they're not still showing as flagged.
+
+  Returns `{:ok, %{visitors_updated: n}}` or `{:error, reason}`.
+
+  Note: this does NOT send deactivation webhooks for currently-flagged
+  visitors. The next `ScraperWebhookScan` run will pick up the whitelist
+  flag and short-circuit. Sites that need an immediate deactivation should
+  call the API after the visitor is identified.
+  """
+  def whitelist_email(site_id, email, opts \\ []) when is_binary(email) do
+    case Spectabas.Visitors.EmailWhitelist.add(site_id, email, opts) do
+      {:ok, _record} ->
+        n_email = email |> String.trim() |> String.downcase()
+        now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+        {count, _} =
+          Repo.update_all(
+            from(v in Visitor,
+              where: v.site_id == ^site_id and v.email == ^n_email
+            ),
+            set: [
+              scraper_whitelisted: true,
+              scraper_manual_flag: false,
+              scraper_webhook_sent_at: nil,
+              scraper_webhook_score: nil,
+              updated_at: now
+            ]
+          )
+
+        {:ok, %{visitors_updated: count}}
+
+      error ->
+        error
+    end
+  end
+
+  @doc """
+  Remove an email from the whitelist. Reverse of `whitelist_email/3`.
+  Returns `{:ok, %{visitors_updated: n}}` or `{:error, reason}`.
+  """
+  def unwhitelist_email(site_id, email) when is_binary(email) do
+    case Spectabas.Visitors.EmailWhitelist.remove(site_id, email) do
+      {:ok, _n} ->
+        n_email = email |> String.trim() |> String.downcase()
+        now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+        {count, _} =
+          Repo.update_all(
+            from(v in Visitor,
+              where: v.site_id == ^site_id and v.email == ^n_email
+            ),
+            set: [
+              scraper_whitelisted: false,
+              updated_at: now
+            ]
+          )
+
+        {:ok, %{visitors_updated: count}}
+
+      error ->
+        error
+    end
   end
 
   @doc """

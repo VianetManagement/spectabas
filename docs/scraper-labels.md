@@ -55,6 +55,8 @@ GROUP BY label;
 | `manual_whitelist`    | `not_scraper`  | 1.0    | "Whitelist" click — strongest negative                              |
 | `manual_unflag`       | `not_scraper`  | 0.5    | "Unflag" click; weaker because user may unflag without conviction   |
 | `manual_unwhitelist`  | (reserved)     | 0.4    | reserved — currently not written                                    |
+| `api_whitelist`       | `not_scraper`  | 1.0    | `POST /api/v1/sites/:id/whitelist` — external service trusts this email |
+| `api_unwhitelist`     | `scraper`      | 0.4    | `DELETE /api/v1/sites/:id/whitelist` — weak; just removes exemption |
 | `webhook_auto_flag`   | `scraper`      | 0.3    | auto-fired by `ScraperWebhookScan` worker — circular signal         |
 | `webhook_downgrade`   | `not_scraper`  | 0.3    | auto-deactivated by the worker when score dropped                   |
 | `goal_conversion`     | `not_scraper`  | 0.7    | reserved — write when a flagged visitor completes a goal            |
@@ -87,6 +89,8 @@ never fails because of label logging.
 | `ScrapersLive.handle_event("deactivate_webhook", ...)`                    | `manual_unflag`       |
 | `Workers.ScraperWebhookScan.send_and_record/5`                            | `webhook_auto_flag`   |
 | `Workers.ScraperWebhookScan.send_deactivation/2`                          | `webhook_downgrade`   |
+| `API.WhitelistController.create/2`                                        | `api_whitelist`       |
+| `API.WhitelistController.delete/2`                                        | `api_unwhitelist`     |
 
 ## Training plan (future, not yet implemented)
 

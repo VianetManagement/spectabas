@@ -1707,6 +1707,7 @@ defmodule SpectabasWeb.DocsLive do
             | `read:visitors` | GET visitor log, visitor details |
             | `write:events` | POST events, ecommerce transactions |
             | `write:identify` | POST server-side visitor identification |
+            | `write:whitelist` | POST/DELETE scraper-detector email whitelist |
             | `admin:sites` | Site management endpoints |
 
             Tokens can also be **restricted to specific sites** and given an **expiry date**.
@@ -1969,6 +1970,137 @@ defmodule SpectabasWeb.DocsLive do
             - **Fire and forget** — wrap the API call in an async task (Task.start, Thread.new, etc.) so it doesn't block your login flow.
             - **Call on every login** — the `_sab` cookie may change (new browser, cleared cookies), so always identify on login to keep the association current.
             - **IP is optional** — if provided, it updates the visitor's geo data and known IPs list.
+            """
+          },
+          %{
+            id: "api-whitelist",
+            title: "Scraper Whitelist (Email)",
+            body: """
+            Add or remove an email address from the scraper-detector whitelist for a site.
+            Equivalent to clicking **Whitelist** / **Remove from whitelist** on a visitor profile,
+            but keyed by email so you can pre-whitelist customers **before they've ever visited**.
+
+            Required scope: `write:whitelist`.
+
+            ### How It Works
+
+            - **POST** persists the email in the site's email allowlist (idempotent — re-posting
+              the same email is a no-op) AND flips every existing visitor on the site that already
+              has that email to `scraper_whitelisted = true`, clearing any active scraper flags.
+            - When a brand-new visitor later identifies with the email (via the tracker
+              `data-xid-cookie`, server-side `/identify`, or matching email at first sight),
+              `Visitors.identify/4` checks the allowlist and inherits the whitelist automatically.
+            - **DELETE** removes the email from the allowlist and flips matching visitors back
+              to `scraper_whitelisted = false`.
+            - This endpoint does **not** send a deactivation webhook for currently-flagged
+              visitors. The next `ScraperWebhookScan` run picks up the whitelist flag and
+              short-circuits — usually within 15 minutes.
+            - Every call is logged in `scraper_labels` (sources `api_whitelist` / `api_unwhitelist`)
+              so future model training can use these decisions.
+
+            ### POST — Add to whitelist
+
+            `POST /api/v1/sites/:site_id/whitelist`
+
+            **Request body:**
+
+            | Field | Type | Required | Description |
+            |-------|------|----------|-------------|
+            | `email` | string | yes | The customer's email address |
+
+            **Response (200):**
+
+            ```json
+            {"ok": true, "email": "user@example.com", "visitors_updated": 3}
+            ```
+
+            `visitors_updated` is the count of existing visitor rows on the site that already
+            had this email and were flipped to whitelisted. `0` means no existing visitors —
+            the email is now in the allowlist and the next visit by this user will inherit it.
+
+            **Errors:**
+
+            - `400` — `email` missing, malformed, or longer than 320 chars
+            - `403` — token lacks `write:whitelist` scope, or token is restricted to other sites
+            - `404` — site not found
+
+            ### DELETE — Remove from whitelist
+
+            `DELETE /api/v1/sites/:site_id/whitelist`
+
+            Same request body and response shape as POST.
+
+            ### Example (curl)
+
+            ```bash
+            # Add to whitelist
+            curl -X POST https://www.spectabas.com/api/v1/sites/4/whitelist \\
+              -H "Authorization: Bearer YOUR_API_KEY" \\
+              -H "Content-Type: application/json" \\
+              -d '{"email": "user@example.com"}'
+
+            # Remove from whitelist
+            curl -X DELETE https://www.spectabas.com/api/v1/sites/4/whitelist \\
+              -H "Authorization: Bearer YOUR_API_KEY" \\
+              -H "Content-Type: application/json" \\
+              -d '{"email": "user@example.com"}'
+            ```
+
+            ### Example (Elixir/Phoenix)
+
+            ```elixir
+            # When a customer is verified or flagged as legit in your system:
+            def whitelist_in_spectabas(email) do
+              Req.post!("https://www.spectabas.com/api/v1/sites/4/whitelist",
+                headers: [{"authorization", "Bearer YOUR_API_KEY"}],
+                json: %{email: email}
+              )
+            end
+
+            # When a customer is removed/suspended:
+            def remove_from_spectabas_whitelist(email) do
+              Req.delete!("https://www.spectabas.com/api/v1/sites/4/whitelist",
+                headers: [{"authorization", "Bearer YOUR_API_KEY"}],
+                json: %{email: email}
+              )
+            end
+            ```
+
+            ### Example (Node.js)
+
+            ```javascript
+            // Add to whitelist
+            await fetch("https://www.spectabas.com/api/v1/sites/4/whitelist", {
+              method: "POST",
+              headers: {
+                "Authorization": "Bearer YOUR_API_KEY",
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({ email: "user@example.com" })
+            });
+
+            // Remove from whitelist
+            await fetch("https://www.spectabas.com/api/v1/sites/4/whitelist", {
+              method: "DELETE",
+              headers: {
+                "Authorization": "Bearer YOUR_API_KEY",
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({ email: "user@example.com" })
+            });
+            ```
+
+            ### Notes
+
+            - **Email is normalized** to lowercase and trimmed before lookup, so
+              `User@Example.com` and `user@example.com ` are treated identically.
+            - **Email is hashed** at rest (SHA-256). The plaintext is also stored for the
+              dashboard's display in the visitor profile, but lookups use the hash.
+            - **Idempotent** — calling POST repeatedly with the same email is safe; calling
+              DELETE on an email that isn't whitelisted returns `visitors_updated: 0`.
+            - **The dashboard Whitelist button writes to the same table.** If a support agent
+              clicks Whitelist on a visitor profile, that email is also added to the allowlist
+              so future devices/cookies for the same customer inherit it.
             """
           },
           %{
