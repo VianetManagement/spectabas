@@ -351,11 +351,15 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
         end)
       end
 
-    # Email-allowlist fallback: if the candidate's visitor row has an email
-    # that's in `site_email_whitelist`, surface the green shield even when
-    # `scraper_whitelisted` on the specific row is false. Catches the case
-    # where the user whitelisted via the API and propagation didn't reach
-    # this particular sibling row. Batched into a single Postgres query.
+    # Two fallbacks for visitors whose own row isn't whitelisted:
+    #
+    # 1. Sibling whitelist — ANY visitor on this site with the same email
+    #    is whitelisted. Catches multi-cookie / multi-device cases where
+    #    the dashboard whitelist click only propagated to existing
+    #    siblings and missed later cookies.
+    # 2. Email allowlist (`site_email_whitelist`) — populated by the API
+    #    + the dashboard click since v6.9.19. Doesn't include pre-v6.9.19
+    #    whitelist clicks.
     candidate_emails =
       status_map
       |> Map.values()
@@ -363,7 +367,10 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
       |> Enum.map(fn {_m, _w, e} -> e end)
       |> Enum.uniq()
 
-    whitelisted_emails = lookup_whitelisted_emails(site.id, candidate_emails)
+    sibling_whitelisted_emails = lookup_sibling_whitelisted_emails(site.id, candidate_emails)
+    allowlist_emails = lookup_whitelisted_emails(site.id, candidate_emails)
+
+    fallback_emails = MapSet.union(sibling_whitelisted_emails, allowlist_emails)
 
     annotated =
       Enum.map(candidates, fn c ->
@@ -372,7 +379,7 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
 
         whitelisted =
           whitelisted ||
-            (is_binary(email) and email != "" and MapSet.member?(whitelisted_emails, email))
+            (is_binary(email) and email != "" and MapSet.member?(fallback_emails, email))
 
         c
         |> Map.put("_manual_flag", manual)
@@ -384,6 +391,32 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
     log_missing_match_smell(candidates, status_map, site)
 
     annotated
+  end
+
+  # Returns a MapSet of emails for which AT LEAST ONE visitor on the site
+  # is `scraper_whitelisted = true`. Catches the case where the dashboard
+  # Whitelist click flipped one cookie's row but didn't propagate to a
+  # later cookie (or the propagation predates that visitor record). Single
+  # batched Postgres query.
+  defp lookup_sibling_whitelisted_emails(_site_id, []), do: MapSet.new()
+
+  defp lookup_sibling_whitelisted_emails(site_id, emails) do
+    normalized =
+      emails
+      |> Enum.map(&(&1 |> to_string() |> String.trim() |> String.downcase()))
+      |> Enum.uniq()
+
+    Spectabas.Repo.all(
+      from(v in Spectabas.Visitors.Visitor,
+        where:
+          v.site_id == ^site_id and v.scraper_whitelisted == true and
+            v.email in ^normalized,
+        select: v.email,
+        distinct: true
+      )
+    )
+    |> Enum.map(&(&1 |> to_string() |> String.downcase()))
+    |> MapSet.new()
   end
 
   # Batch lookup — one Postgres query against site_email_whitelist instead

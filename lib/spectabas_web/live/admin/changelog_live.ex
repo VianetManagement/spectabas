@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.2", "2026-05-01T18:30:00Z",
+       [
+         %{
+           title: "Fix: green shield missing for sibling-whitelisted visitors",
+           description:
+             "v6.9.25's email-allowlist fallback only checked site_email_whitelist, which is populated by the API + dashboard whitelist clicks since v6.9.19. Older whitelist clicks never wrote to that table, AND the user could have multiple visitor records per email (one per cookie). If the click only flipped one cookie's row and a later cookie generated a new visitor record, the candidate row showed no shield even though a sibling visitor with the same email was whitelisted. Added a second batched lookup: any visitor on the site with `scraper_whitelisted = true` whose email matches a candidate's email surfaces the green shield. Combined with the existing email-allowlist fallback into a single fallback set."
+         }
+       ]},
       {"v6.10.1", "2026-05-01T17:30:00Z",
        [
          %{
