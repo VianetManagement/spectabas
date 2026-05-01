@@ -351,11 +351,20 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
         end)
       end
 
-    # Email-allowlist fallback: if a candidate's visitor row exists and has
-    # an email that's in `site_email_whitelist` (or another visitor on this
-    # site with the same email is whitelisted), surface the green shield too.
-    # Catches the case where the user whitelisted a sibling visitor via the
-    # API or dashboard and propagation didn't reach this row.
+    # Email-allowlist fallback: if the candidate's visitor row has an email
+    # that's in `site_email_whitelist`, surface the green shield even when
+    # `scraper_whitelisted` on the specific row is false. Catches the case
+    # where the user whitelisted via the API and propagation didn't reach
+    # this particular sibling row. Batched into a single Postgres query.
+    candidate_emails =
+      status_map
+      |> Map.values()
+      |> Enum.filter(fn {_m, w, e} -> not w and is_binary(e) and e != "" end)
+      |> Enum.map(fn {_m, _w, e} -> e end)
+      |> Enum.uniq()
+
+    whitelisted_emails = lookup_whitelisted_emails(site.id, candidate_emails)
+
     annotated =
       Enum.map(candidates, fn c ->
         key = c["visitor_id"] |> to_string() |> String.downcase()
@@ -363,8 +372,7 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
 
         whitelisted =
           whitelisted ||
-            (is_binary(email) and email != "" and
-               Spectabas.Visitors.EmailWhitelist.whitelisted?(site.id, email))
+            (is_binary(email) and email != "" and MapSet.member?(whitelisted_emails, email))
 
         c
         |> Map.put("_manual_flag", manual)
@@ -376,6 +384,35 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
     log_missing_match_smell(candidates, status_map, site)
 
     annotated
+  end
+
+  # Batch lookup — one Postgres query against site_email_whitelist instead
+  # of N. Returns a MapSet of normalized (lowercased + trimmed) emails that
+  # are in the allowlist for this site.
+  defp lookup_whitelisted_emails(_site_id, []), do: MapSet.new()
+
+  defp lookup_whitelisted_emails(site_id, emails) do
+    normalized = Enum.map(emails, fn e -> e |> String.trim() |> String.downcase() end)
+
+    hashes =
+      Enum.map(normalized, fn e ->
+        :crypto.hash(:sha256, e) |> Base.hex_encode32(case: :lower, padding: false)
+      end)
+
+    found_hashes =
+      Spectabas.Repo.all(
+        from(w in Spectabas.Visitors.EmailWhitelist,
+          where: w.site_id == ^site_id and w.email_hash in ^hashes,
+          select: w.email_hash
+        )
+      )
+      |> MapSet.new()
+
+    normalized
+    |> Enum.zip(hashes)
+    |> Enum.filter(fn {_e, h} -> MapSet.member?(found_hashes, h) end)
+    |> Enum.map(fn {e, _h} -> e end)
+    |> MapSet.new()
   end
 
   defp log_missing_match_smell(candidates, status_map, site) do

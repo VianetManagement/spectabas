@@ -4572,10 +4572,12 @@ defmodule Spectabas.Analytics do
       WHERE site_id = #{site_p}
         AND timestamp >= #{from_p}
         AND timestamp <= #{to_p}
+        AND event_type IN ('pageview', 'custom')
       GROUP BY visitor_id
       HAVING uniqIf(url_path, event_type = 'pageview') >= 20 OR uniq(ip_address) >= 3
       ORDER BY uniqIf(url_path, event_type = 'pageview') DESC
       LIMIT #{limit * 2}
+      SETTINGS max_execution_time = 45
       """
 
       case ClickHouse.query(sql, receive_timeout: 60_000) do
@@ -4644,10 +4646,12 @@ defmodule Spectabas.Analytics do
     WHERE site_id = #{site_p}
       AND timestamp >= #{from_p}
       AND timestamp <= #{to_p}
+      AND event_type IN ('pageview', 'custom')
     GROUP BY visitor_id
     HAVING uniqIf(url_path, event_type = 'pageview') >= 3 OR uniq(ip_address) >= 2 OR max(ip_is_datacenter) = 1
     ORDER BY uniqIf(url_path, event_type = 'pageview') DESC
     LIMIT #{limit}
+    SETTINGS max_execution_time = 45
     """
 
     case ClickHouse.query(sql, receive_timeout: 60_000) do

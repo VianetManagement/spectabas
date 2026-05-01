@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.26", "2026-05-01T13:30:00Z",
+       [
+         %{
+           title: "Fix: Scrapers page pinning ClickHouse CPU",
+           description:
+             "scraper_candidates and scraper_candidates_system both ran 7-day events scans with no SETTINGS max_execution_time. When the page was reloaded faster than ~60s, Req gave up but ClickHouse kept executing the orphan query — multiple stacked orphans pinned CPU at 100%. Both queries are now bounded by SETTINGS max_execution_time = 45 (under Req's 60s receive_timeout) and pre-filter to event_type IN ('pageview', 'custom') so RUM/CWV rows are skipped at scan time, not just inside aggregates. Also batched the new email-allowlist fallback into a single hash-keyed Postgres query against site_email_whitelist instead of one query per candidate."
+         }
+       ]},
       {"v6.9.25", "2026-05-01T12:30:00Z",
        [
          %{
