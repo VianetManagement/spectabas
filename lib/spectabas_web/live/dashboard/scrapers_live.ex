@@ -602,10 +602,10 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
                       </span>
                       <span
                         :if={c["_manual_flag"]}
-                        class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 border border-red-200"
+                        class="inline-flex items-center justify-center w-5 h-5 rounded bg-red-100 text-red-700 border border-red-200"
                         title="Manually marked as scraper"
                       >
-                        <.icon name="hero-shield-exclamation" class="w-3 h-3" /> MANUAL
+                        <.icon name="hero-shield-exclamation" class="w-3.5 h-3.5" />
                       </span>
                       <span
                         :if={c["_whitelisted"]}

@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.24", "2026-05-01T11:30:00Z",
+       [
+         %{
+           title: "Scrapers page: MANUAL badge now icon-only too",
+           description:
+             "Mirrors the v6.9.23 whitelist-badge change. The MANUAL text pill in the candidates list is now just a small red shield icon (hero-shield-exclamation), matching the green shield used for whitelisted visitors. Hover tooltip still says 'Manually marked as scraper'. The visitor-detail modal continues to show the full red + green pills with their labels."
+         }
+       ]},
       {"v6.9.23", "2026-05-01T11:00:00Z",
        [
          %{
