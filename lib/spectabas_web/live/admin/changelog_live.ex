@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.22", "2026-05-01T09:00:00Z",
+       [
+         %{
+           title: "Scrapers page: WHITELISTED badge alongside MANUAL",
+           description:
+             "Whitelisted visitors can still appear in the Scrapers list because the candidate query scans ClickHouse signals independently of the Postgres exemption — the worker won't auto-flag them, but a human looking at the page should still see at a glance that this person is exempt. Added a green WHITELISTED badge in the table row (next to the red MANUAL badge) and a matching pill in the visitor detail modal. Single Postgres lookup now fetches both flags at once instead of two."
+         }
+       ]},
       {"v6.9.21", "2026-05-01T08:30:00Z",
        [
          %{

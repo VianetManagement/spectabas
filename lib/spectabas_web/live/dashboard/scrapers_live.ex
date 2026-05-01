@@ -301,7 +301,7 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
         _ -> []
       end
 
-    candidates = annotate_with_manual_flag(candidates, site)
+    candidates = annotate_visitor_status(candidates, site)
     summary = summarize_candidates(candidates)
 
     socket
@@ -310,33 +310,43 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
     |> assign(:loading, false)
   end
 
-  # Look up which of these visitor_ids have been manually marked as scrapers
-  # in Postgres and stamp `_manual_flag` onto each row.
-  defp annotate_with_manual_flag([], _site), do: []
+  # Single Postgres lookup that stamps both `_manual_flag` and `_whitelisted`
+  # onto each candidate. Whitelisted visitors can still appear here because
+  # the candidate query scans ClickHouse signals independently of the
+  # Postgres exemption — ScraperWebhookScan won't auto-flag them, but a
+  # human looking at this page should still see the badge.
+  defp annotate_visitor_status([], _site), do: []
 
-  defp annotate_with_manual_flag(candidates, site) do
+  defp annotate_visitor_status(candidates, site) do
     visitor_ids =
       candidates
       |> Enum.map(& &1["visitor_id"])
       |> Enum.reject(&(is_nil(&1) or &1 == ""))
 
     if visitor_ids == [] do
-      Enum.map(candidates, &Map.put(&1, "_manual_flag", false))
+      Enum.map(
+        candidates,
+        &(&1 |> Map.put("_manual_flag", false) |> Map.put("_whitelisted", false))
+      )
     else
-      manual_ids =
+      status_map =
         Spectabas.Repo.all(
           from(v in Spectabas.Visitors.Visitor,
-            where:
-              v.site_id == ^site.id and v.id in ^visitor_ids and
-                v.scraper_manual_flag == true,
-            select: v.id
+            where: v.site_id == ^site.id and v.id in ^visitor_ids,
+            select: {v.id, v.scraper_manual_flag, v.scraper_whitelisted}
           )
         )
-        |> Enum.map(&to_string/1)
-        |> MapSet.new()
+        |> Map.new(fn {id, manual, whitelisted} ->
+          {to_string(id), {manual == true, whitelisted == true}}
+        end)
 
       Enum.map(candidates, fn c ->
-        Map.put(c, "_manual_flag", MapSet.member?(manual_ids, to_string(c["visitor_id"])))
+        {manual, whitelisted} =
+          Map.get(status_map, to_string(c["visitor_id"]), {false, false})
+
+        c
+        |> Map.put("_manual_flag", manual)
+        |> Map.put("_whitelisted", whitelisted)
       end)
     end
   end
@@ -582,6 +592,13 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
                       >
                         <.icon name="hero-shield-exclamation" class="w-3 h-3" /> MANUAL
                       </span>
+                      <span
+                        :if={c["_whitelisted"]}
+                        class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200"
+                        title="Whitelisted — exempt from auto-flagging despite signals"
+                      >
+                        <.icon name="hero-shield-check" class="w-3 h-3" /> WHITELISTED
+                      </span>
                     </div>
                   </td>
                   <td class="px-4 py-3">
@@ -664,6 +681,13 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
                     title="This visitor was manually marked as a scraper. Their flag is sticky and won't be auto-downgraded."
                   >
                     <.icon name="hero-shield-exclamation" class="w-4 h-4" /> Manually marked
+                  </span>
+                  <span
+                    :if={v["_whitelisted"]}
+                    class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-sm font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200"
+                    title="This visitor is whitelisted from scraper detection. ScraperWebhookScan skips them no matter the score."
+                  >
+                    <.icon name="hero-shield-check" class="w-4 h-4" /> Whitelisted
                   </span>
                 </div>
 
