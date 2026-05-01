@@ -6,7 +6,11 @@ defmodule Spectabas.AdIntegrations.Platforms.GoogleAds do
   @authorize_url "https://accounts.google.com/o/oauth2/v2/auth"
   @token_url "https://oauth2.googleapis.com/token"
   @api_base "https://googleads.googleapis.com/v23"
-  @scope "https://www.googleapis.com/auth/adwords"
+  # `adwords` for spend reads + ConversionUploadService legacy fallback.
+  # `datamanager` for the Data Manager API used by Conversions.GoogleDataManager
+  # (offline conversion uploads). Existing connections will need to be
+  # disconnected + reconnected to pick up the new scope.
+  @scope "https://www.googleapis.com/auth/adwords https://www.googleapis.com/auth/datamanager"
 
   alias Spectabas.AdIntegrations.{Credentials, HTTP}
 

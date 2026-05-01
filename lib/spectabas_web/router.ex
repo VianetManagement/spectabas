@@ -221,6 +221,9 @@ defmodule SpectabasWeb.Router do
       live "/sites/:site_id/exports", Dashboard.ExportLive, :index
       live "/sites/:site_id/find", Dashboard.FindLive, :index
       live "/sites/:site_id/settings", Dashboard.SettingsLive, :edit
+      live "/sites/:site_id/conversions", Dashboard.ConversionsLive, :index
+      live "/sites/:site_id/conversions/new", Dashboard.ConversionsLive, :new
+      live "/sites/:site_id/conversions/:id/edit", Dashboard.ConversionsLive, :edit
       live "/sites/:site_id/integration-log", Dashboard.IntegrationLogLive, :index
     end
   end

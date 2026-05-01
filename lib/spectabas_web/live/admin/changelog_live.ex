@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.0", "2026-05-01T16:30:00Z",
+       [
+         %{
+           title: "Server-side ad conversion tracking (Google Data Manager + Microsoft Ads)",
+           description:
+             "Full server-side conversion pipeline. New conversion_actions + conversions Postgres tables; three detectors (Stripe payment, URL pattern, click element) run every 15 min and resolve the visitor's first click within a 90-day attribution window from CH events. Hourly uploader pushes pending rows to Google's Data Manager API (the GA-Oct-2025 replacement for direct Google Ads API ConversionUploadService) and Microsoft Ads Bulk API. Tracker now captures wbraid + gbraid (Google's iOS replacements for gclid post-ATT) so iOS paid traffic doesn't fall off the OCI uploads. Settings UI at /dashboard/sites/:id/conversions for CRUD on conversion actions; per-site summary cards show pending / uploaded / failed counts. Quality gate via max_scraper_score (default 40) keeps bot-flagged visitors out of Smart Bidding's learning signal. Idempotent end-to-end via dedup_key unique index. Full design + setup guide in docs/conversions.md. Existing Google Ads OAuth connections need to disconnect+reconnect to pick up the new datamanager scope."
+         }
+       ]},
       {"v6.9.26", "2026-05-01T13:30:00Z",
        [
          %{

@@ -684,9 +684,15 @@ defmodule Spectabas.Events.Ingest do
     Ecto.ConstraintError -> :ok
   end
 
-  # Extract ad platform click IDs (gclid, msclkid, fbclid) from payload or URL
+  # Extract ad platform click IDs (gclid, wbraid, gbraid, msclkid, fbclid…)
+  # from payload or URL. wbraid/gbraid are Google's iOS replacements for
+  # gclid when ATT blocks the gclid; needed for OCI uploads to recover iOS
+  # paid traffic. Each carries a distinct click_id_type so the downstream
+  # uploader can route to the correct Google Ads field.
   @click_id_params [
     {"gclid", "google_ads"},
+    {"wbraid", "google_ads_wbraid"},
+    {"gbraid", "google_ads_gbraid"},
     {"msclkid", "bing_ads"},
     {"fbclid", "meta_ads"},
     {"epik", "pinterest_ads"},

@@ -49,6 +49,27 @@
         } catch (e) {}
       }
     });
+
+    // Capture ad-platform click identifiers from URL → sessionStorage so
+    // they ride along on every subsequent event for attribution. wbraid /
+    // gbraid are the iOS replacements Google introduced when ATT broke
+    // gclid; without these we miss iOS paid traffic on OCI uploads.
+    var clickIds = [
+      ["gclid", "google_ads"],
+      ["wbraid", "google_ads_wbraid"],
+      ["gbraid", "google_ads_gbraid"],
+      ["msclkid", "bing_ads"],
+      ["fbclid", "meta_ads"],
+    ];
+    clickIds.forEach(function (pair) {
+      var v = url.searchParams.get(pair[0]);
+      if (v) {
+        try {
+          sessionStorage.setItem("_sab_click_id", v);
+          sessionStorage.setItem("_sab_click_id_type", pair[1]);
+        } catch (e) {}
+      }
+    });
   }
 
   // Decorate cross-domain links

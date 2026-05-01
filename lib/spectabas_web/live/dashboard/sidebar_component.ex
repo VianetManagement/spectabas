@@ -267,6 +267,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
               active={@active == "funnels"}
             />
             <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/conversions"}
+              label="Ad Conversions"
+              active={@active == "conversions"}
+            />
+            <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/ecommerce"}
               label="Ecommerce"
               active={@active == "ecommerce"}
