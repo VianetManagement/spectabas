@@ -315,6 +315,12 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
   # the candidate query scans ClickHouse signals independently of the
   # Postgres exemption — ScraperWebhookScan won't auto-flag them, but a
   # human looking at this page should still see the badge.
+  #
+  # IDs are normalized to lowercase on both sides because visitor.id round-
+  # trips from Postgres as a lowercase UUID string while ClickHouse stores
+  # whatever the tracker / ingest path sent. Without the normalization the
+  # join silently misses whitelisted visitors. Non-UUID ids (legacy `fp_…`)
+  # are filtered out so they don't crash the Ecto cast.
   defp annotate_visitor_status([], _site), do: []
 
   defp annotate_visitor_status(candidates, site) do
@@ -322,14 +328,14 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
       candidates
       |> Enum.map(& &1["visitor_id"])
       |> Enum.reject(&(is_nil(&1) or &1 == ""))
+      |> Enum.filter(&uuid?/1)
+      |> Enum.map(&String.downcase/1)
+      |> Enum.uniq()
 
-    if visitor_ids == [] do
-      Enum.map(
-        candidates,
-        &(&1 |> Map.put("_manual_flag", false) |> Map.put("_whitelisted", false))
-      )
-    else
-      status_map =
+    status_map =
+      if visitor_ids == [] do
+        %{}
+      else
         Spectabas.Repo.all(
           from(v in Spectabas.Visitors.Visitor,
             where: v.site_id == ^site.id and v.id in ^visitor_ids,
@@ -337,19 +343,28 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
           )
         )
         |> Map.new(fn {id, manual, whitelisted} ->
-          {to_string(id), {manual == true, whitelisted == true}}
+          {id |> to_string() |> String.downcase(), {manual == true, whitelisted == true}}
         end)
+      end
 
-      Enum.map(candidates, fn c ->
-        {manual, whitelisted} =
-          Map.get(status_map, to_string(c["visitor_id"]), {false, false})
+    Enum.map(candidates, fn c ->
+      key = c["visitor_id"] |> to_string() |> String.downcase()
+      {manual, whitelisted} = Map.get(status_map, key, {false, false})
 
-        c
-        |> Map.put("_manual_flag", manual)
-        |> Map.put("_whitelisted", whitelisted)
-      end)
+      c
+      |> Map.put("_manual_flag", manual)
+      |> Map.put("_whitelisted", whitelisted)
+    end)
+  end
+
+  defp uuid?(s) when is_binary(s) do
+    case Ecto.UUID.cast(s) do
+      {:ok, _} -> true
+      _ -> false
     end
   end
+
+  defp uuid?(_), do: false
 
   defp summarize_candidates(candidates) do
     %{
@@ -594,10 +609,10 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
                       </span>
                       <span
                         :if={c["_whitelisted"]}
-                        class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200"
+                        class="inline-flex items-center justify-center w-5 h-5 rounded bg-emerald-100 text-emerald-700 border border-emerald-200"
                         title="Whitelisted — exempt from auto-flagging despite signals"
                       >
-                        <.icon name="hero-shield-check" class="w-3 h-3" /> WHITELISTED
+                        <.icon name="hero-shield-check" class="w-3.5 h-3.5" />
                       </span>
                     </div>
                   </td>

@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.23", "2026-05-01T11:00:00Z",
+       [
+         %{
+           title: "Scrapers page: case-insensitive whitelist match + icon-only badge",
+           description:
+             "Two fixes. (1) Whitelisted visitors weren't showing the green badge on the candidates list. The cause was case-sensitive UUID matching: visitor.id round-trips from Postgres as a lowercase UUID string while the ClickHouse events column has historically held mixed case from the tracker. annotate_visitor_status now downcases on both sides and also filters out non-UUID legacy IDs (`fp_…`) so they don't blow up the Ecto cast. (2) The WHITELISTED text badge in the table is now just a green shield icon — keeps the row compact when several visitors are whitelisted. The MANUAL pill stays red+text as before. Visitor detail modal continues to show both shields with their full label."
+         }
+       ]},
       {"v6.9.22", "2026-05-01T09:00:00Z",
        [
          %{
