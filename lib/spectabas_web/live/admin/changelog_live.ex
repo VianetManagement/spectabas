@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.21", "2026-05-01T08:30:00Z",
+       [
+         %{
+           title: "Fix: Insights goal-conversion check spiked ClickHouse CPU",
+           description:
+             "v6.9.20's per-goal conversion check ran a separate 14-day events scan for each goal on each site (Enum.reduce over goals, one ClickHouse query per goal). For sites with several goals × many sites in the daily worker, ClickHouse stayed pinned around 80% CPU. Collapsed all goals for a site into a SINGLE scan with one uniqIf-per-goal in the SELECT list — N queries → 1 query per site. Added event_type IN ('pageview','custom') to skip RUM/CWV rows entirely. Capped at 20 goals per site to keep SQL bounded. Every new SEO/engagement query now also has SETTINGS max_execution_time so a runaway can't dominate. DailyAnomalyDetection worker is now Oban-unique (one in-flight at a time) with max_attempts: 1 so a long-running pass won't pile up retries."
+         }
+       ]},
       {"v6.9.20", "2026-04-30T22:00:00Z",
        [
          %{

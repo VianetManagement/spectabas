@@ -9,7 +9,10 @@ defmodule Spectabas.Workers.DailyAnomalyDetection do
   `AnomalyDetector.detect/2` + `AnomalyCache.put/2` directly).
   """
 
-  use Oban.Worker, queue: :maintenance, max_attempts: 3
+  use Oban.Worker,
+    queue: :maintenance,
+    max_attempts: 1,
+    unique: [period: :infinity, states: [:available, :scheduled, :executing]]
 
   require Logger
   import Ecto.Query

@@ -859,6 +859,7 @@ defmodule Spectabas.Analytics.AnomalyDetector do
          WHERE prev.pos <= 10 AND cur.pos > 10
          ORDER BY prev.clicks DESC
          LIMIT 5
+         SETTINGS max_execution_time = 15
          """) do
       {:ok, rows} when rows != [] ->
         Enum.reduce(rows, anomalies, fn row, acc ->
@@ -899,6 +900,7 @@ defmodule Spectabas.Analytics.AnomalyDetector do
          HAVING impr >= 100 AND pos > 10 AND pos <= 20
          ORDER BY impr DESC
          LIMIT 5
+         SETTINGS max_execution_time = 15
          """) do
       {:ok, rows} when rows != [] ->
         Enum.reduce(rows, anomalies, fn row, acc ->
@@ -947,6 +949,7 @@ defmodule Spectabas.Analytics.AnomalyDetector do
          WHERE prev.clicks >= 20 AND cur.clicks <= prev.clicks * 0.7
          ORDER BY (prev.clicks - cur.clicks) DESC
          LIMIT 5
+         SETTINGS max_execution_time = 15
          """) do
       {:ok, rows} when rows != [] ->
         Enum.reduce(rows, anomalies, fn row, acc ->
@@ -998,6 +1001,7 @@ defmodule Spectabas.Analytics.AnomalyDetector do
          WHERE prev.query = ''
          ORDER BY cur.impr DESC
          LIMIT 5
+         SETTINGS max_execution_time = 15
          """) do
       {:ok, rows} when rows != [] ->
         Enum.reduce(rows, anomalies, fn row, acc ->
@@ -1054,6 +1058,7 @@ defmodule Spectabas.Analytics.AnomalyDetector do
     WHERE cur.bounce_rate - prev.bounce_rate >= 20
     ORDER BY cur.sessions DESC
     LIMIT 3
+    SETTINGS max_execution_time = 15
     """
 
     case ClickHouse.query(sql) do
@@ -1086,85 +1091,110 @@ defmodule Spectabas.Analytics.AnomalyDetector do
   end
 
   # --- Goal conversion-rate drop (uses Postgres goals + ClickHouse events) ---
-
+  #
+  # Single scan of the 14-day events window with one uniqIf-per-goal in the
+  # SELECT list. Replaces the original "one scan per goal" approach which was
+  # the dominant cost of the daily anomaly worker (per CLAUDE.md feedback,
+  # rolled out in v6.9.21 after spiking ClickHouse CPU on v6.9.20).
   defp check_goal_conversion_drop(anomalies, site, cf, ct, pf, pt) do
-    goals = Spectabas.Goals.list_goals(site)
+    goals =
+      site
+      |> Spectabas.Goals.list_goals()
+      # Cap to keep the SQL bounded — 20 goals already gives 42 uniqIf
+      # aggregates in one SELECT, plenty without making CH parse a megabyte.
+      |> Enum.take(20)
+      |> Enum.map(fn g -> {g, goal_condition_for_anomaly(g)} end)
+      |> Enum.reject(fn {_g, cond_sql} -> is_nil(cond_sql) end)
 
     if goals == [] do
       anomalies
     else
-      Enum.reduce(goals, anomalies, fn goal, acc ->
-        check_single_goal_conversion(acc, site, goal, cf, ct, pf, pt)
-      end)
+      site_p = ClickHouse.param(site.id)
+      cf_p = ClickHouse.param(fmt(cf))
+      ct_p = ClickHouse.param(fmt(ct))
+      pf_p = ClickHouse.param(fmt(pf))
+      pt_p = ClickHouse.param(fmt(pt))
+
+      goal_selects =
+        goals
+        |> Enum.with_index()
+        |> Enum.flat_map(fn {{_g, cond_sql}, idx} ->
+          [
+            "uniqIf(visitor_id, #{cond_sql} AND timestamp >= #{cf_p} AND timestamp <= #{ct_p}) AS g#{idx}_cur",
+            "uniqIf(visitor_id, #{cond_sql} AND timestamp >= #{pf_p} AND timestamp <= #{pt_p}) AS g#{idx}_prev"
+          ]
+        end)
+        |> Enum.join(",\n  ")
+
+      sql = """
+      SELECT
+        #{goal_selects},
+        uniqIf(visitor_id, event_type = 'pageview' AND timestamp >= #{cf_p} AND timestamp <= #{ct_p}) AS cur_total,
+        uniqIf(visitor_id, event_type = 'pageview' AND timestamp >= #{pf_p} AND timestamp <= #{pt_p}) AS prev_total
+      FROM events
+      WHERE site_id = #{site_p}
+        AND ip_is_bot = 0
+        AND event_type IN ('pageview', 'custom')
+        AND timestamp >= #{pf_p}
+        AND timestamp <= #{ct_p}
+      SETTINGS max_execution_time = 30
+      """
+
+      case ClickHouse.query(sql) do
+        {:ok, [row]} ->
+          cur_t = to_int(row["cur_total"])
+          prev_t = to_int(row["prev_total"])
+
+          # Baseline activity check applies once for the whole site, not per goal.
+          if prev_t >= 50 and cur_t >= 50 do
+            goals
+            |> Enum.with_index()
+            |> Enum.reduce(anomalies, fn {{goal, _cond}, idx}, acc ->
+              evaluate_goal_drop(acc, goal, idx, row, cur_t, prev_t)
+            end)
+          else
+            anomalies
+          end
+
+        _ ->
+          anomalies
+      end
     end
   rescue
     _ -> anomalies
   end
 
-  defp check_single_goal_conversion(anomalies, site, goal, cf, ct, pf, pt) do
-    site_p = ClickHouse.param(site.id)
-    cond_sql = goal_condition_for_anomaly(goal)
+  defp evaluate_goal_drop(anomalies, goal, idx, row, cur_t, prev_t) do
+    cur_c = to_int(row["g#{idx}_cur"])
+    prev_c = to_int(row["g#{idx}_prev"])
 
-    if cond_sql == nil do
-      anomalies
+    cur_rate = if cur_t > 0, do: cur_c / cur_t * 100, else: 0.0
+    prev_rate = if prev_t > 0, do: prev_c / prev_t * 100, else: 0.0
+
+    if prev_rate >= 0.5 and prev_rate - cur_rate >= 1.0 do
+      drop_pct =
+        if prev_rate > 0,
+          do: Float.round((cur_rate - prev_rate) / prev_rate * 100, 1),
+          else: 0.0
+
+      [
+        %{
+          severity: :medium,
+          severity_rank: 2,
+          category: "revenue",
+          metric: "goal_conversion",
+          current: Float.round(cur_rate, 2),
+          previous: Float.round(prev_rate, 2),
+          change_pct: drop_pct,
+          message:
+            "\"#{goal.name}\" conversion rate dropped #{Float.round(prev_rate, 2)}% → #{Float.round(cur_rate, 2)}%",
+          action:
+            "Audit the conversion path for this goal — entry pages, form behavior, CTAs, and any recent UI/copy changes."
+        }
+        | anomalies
+      ]
     else
-      sql = """
-      SELECT
-        uniqIf(visitor_id, #{cond_sql} AND timestamp >= #{ClickHouse.param(fmt(cf))} AND timestamp <= #{ClickHouse.param(fmt(ct))}) AS cur_completers,
-        uniqIf(visitor_id, #{cond_sql} AND timestamp >= #{ClickHouse.param(fmt(pf))} AND timestamp <= #{ClickHouse.param(fmt(pt))}) AS prev_completers,
-        uniqIf(visitor_id, event_type = 'pageview' AND timestamp >= #{ClickHouse.param(fmt(cf))} AND timestamp <= #{ClickHouse.param(fmt(ct))}) AS cur_total,
-        uniqIf(visitor_id, event_type = 'pageview' AND timestamp >= #{ClickHouse.param(fmt(pf))} AND timestamp <= #{ClickHouse.param(fmt(pt))}) AS prev_total
-      FROM events
-      WHERE site_id = #{site_p}
-        AND ip_is_bot = 0
-        AND timestamp >= #{ClickHouse.param(fmt(pf))}
-        AND timestamp <= #{ClickHouse.param(fmt(ct))}
-      """
-
-      run_goal_query(sql, anomalies, goal)
-    end
-  end
-
-  defp run_goal_query(sql, anomalies, goal) do
-    case ClickHouse.query(sql) do
-      {:ok, [row]} ->
-        cur_c = to_int(row["cur_completers"])
-        prev_c = to_int(row["prev_completers"])
-        cur_t = to_int(row["cur_total"])
-        prev_t = to_int(row["prev_total"])
-
-        cur_rate = if cur_t > 0, do: cur_c / cur_t * 100, else: 0.0
-        prev_rate = if prev_t > 0, do: prev_c / prev_t * 100, else: 0.0
-
-        # Need a baseline of activity to be meaningful
-        if prev_t >= 50 and cur_t >= 50 and prev_rate >= 0.5 and prev_rate - cur_rate >= 1.0 do
-          drop_pct =
-            if prev_rate > 0,
-              do: Float.round((cur_rate - prev_rate) / prev_rate * 100, 1),
-              else: 0.0
-
-          [
-            %{
-              severity: :medium,
-              severity_rank: 2,
-              category: "revenue",
-              metric: "goal_conversion",
-              current: Float.round(cur_rate, 2),
-              previous: Float.round(prev_rate, 2),
-              change_pct: drop_pct,
-              message:
-                "\"#{goal.name}\" conversion rate dropped #{Float.round(prev_rate, 2)}% → #{Float.round(cur_rate, 2)}%",
-              action:
-                "Audit the conversion path for this goal — entry pages, form behavior, CTAs, and any recent UI/copy changes."
-            }
-            | anomalies
-          ]
-        else
-          anomalies
-        end
-
-      _ ->
-        anomalies
+      anomalies
     end
   end
 
