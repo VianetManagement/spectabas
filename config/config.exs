@@ -78,6 +78,8 @@ config :spectabas, Oban,
        {"0 8 * * *", Spectabas.Workers.SearchConsoleSync},
        # Monday at 9am UTC — send weekly AI insights email
        {"0 9 * * 1", Spectabas.Workers.AIWeeklyEmail},
+       # Daily at 06:30 UTC — refresh the per-site Insights anomaly cache
+       {"30 6 * * *", Spectabas.Workers.DailyAnomalyDetection},
        # Daily at 01:30 UTC — roll up yesterday's stats into daily_rollup
        {"30 1 * * *", Spectabas.Workers.DailyRollup},
        # Daily at 02:00 UTC — materialize per-session facts for entry/exit queries

@@ -4,7 +4,7 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
   @moduledoc "Weekly actionable insights — automated analysis across all data sources."
 
   alias Spectabas.{Accounts, Sites}
-  alias Spectabas.Analytics.AnomalyDetector
+  alias Spectabas.Analytics.{AnomalyCache, AnomalyDetector}
   alias Spectabas.AI.{Config, InsightsCache}
   import SpectabasWeb.Dashboard.SidebarComponent
 
@@ -24,29 +24,42 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
     if !Accounts.can_access_site?(user, site) do
       {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
     else
-      # AI cache is a cheap Postgres lookup — do it in mount.
+      # Both caches are cheap Postgres lookups — do them in mount so the page
+      # paints with real data immediately. AnomalyCache is refreshed nightly
+      # by Workers.DailyAnomalyDetection (06:30 UTC) and on demand via the
+      # Refresh button.
       ai_configured = Config.configured?(site)
       cached_ai = InsightsCache.get(site.id)
+      cached_anomalies = AnomalyCache.get(site.id)
+      anomalies = AnomalyCache.items(cached_anomalies)
 
       socket =
         socket
         |> assign(:page_title, "Weekly Insights - #{site.name}")
         |> assign(:site, site)
         |> assign(:user, user)
-        |> assign(:loading, true)
-        |> assign(:anomalies, [])
-        |> assign(:grouped, [])
-        |> assign(:summary, %{alerts: 0, warnings: 0, seo_items: 0, opportunities: 0})
+        |> assign(:anomalies, anomalies)
+        |> assign(:grouped, group_anomalies(anomalies))
+        |> assign(:summary, build_summary(anomalies))
+        |> assign(:anomalies_generated_at, cached_anomalies && cached_anomalies.generated_at)
+        |> assign(:anomalies_refreshing, false)
+        |> assign(:loading, false)
         |> assign(:ai_configured, ai_configured)
         |> assign(:ai_analysis, if(cached_ai, do: cached_ai.content, else: nil))
         |> assign(:ai_generated_at, if(cached_ai, do: cached_ai.generated_at, else: nil))
         |> assign(:ai_loading, false)
         |> assign(:ai_error, nil)
 
-      # AnomalyDetector.detect runs multiple ClickHouse comparison queries —
-      # load it async so the page renders immediately with the cached AI
-      # analysis visible while anomalies load in the background.
-      if connected?(socket), do: send(self(), :load_anomalies)
+      # If the cache is empty (first deploy / new site), run a one-shot
+      # detection so the user sees something on first visit. Subsequent
+      # visits just read the cache and the daily worker keeps it fresh.
+      socket =
+        if connected?(socket) and is_nil(cached_anomalies) do
+          send(self(), :load_anomalies)
+          assign(socket, :anomalies_refreshing, true)
+        else
+          socket
+        end
 
       {:ok, socket}
     end
@@ -63,12 +76,21 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
     {:noreply, socket}
   end
 
+  def handle_event("refresh_anomalies", _params, socket) do
+    send(self(), :load_anomalies)
+    {:noreply, assign(socket, :anomalies_refreshing, true)}
+  end
+
   @impl true
   def handle_info(:load_anomalies, socket) do
     anomalies =
       case AnomalyDetector.detect(socket.assigns.site, socket.assigns.user) do
-        {:ok, results} -> results
-        _ -> []
+        {:ok, results} ->
+          AnomalyCache.put(socket.assigns.site.id, results)
+          results
+
+        _ ->
+          []
       end
 
     {:noreply,
@@ -76,6 +98,8 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
      |> assign(:anomalies, anomalies)
      |> assign(:grouped, group_anomalies(anomalies))
      |> assign(:summary, build_summary(anomalies))
+     |> assign(:anomalies_generated_at, DateTime.utc_now() |> DateTime.truncate(:second))
+     |> assign(:anomalies_refreshing, false)
      |> assign(:loading, false)}
   end
 
@@ -209,7 +233,37 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
           </div>
         </div>
 
-        <%= if @loading do %>
+        <%!-- Anomaly section header w/ generated_at + Refresh --%>
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-base font-semibold text-gray-900">Anomalies & Opportunities</h2>
+            <p :if={@anomalies_generated_at} class="text-xs text-gray-400">
+              Updated {relative_time(@anomalies_generated_at)} — refreshes nightly at 06:30 UTC
+            </p>
+            <p :if={!@anomalies_generated_at && !@anomalies_refreshing} class="text-xs text-gray-400">
+              Not yet generated for this site
+            </p>
+          </div>
+          <button
+            phx-click="refresh_anomalies"
+            disabled={@anomalies_refreshing}
+            class={[
+              "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition",
+              if(@anomalies_refreshing,
+                do: "border-gray-200 text-gray-400 cursor-wait",
+                else: "border-gray-300 text-gray-700 hover:bg-gray-50"
+              )
+            ]}
+          >
+            <%= if @anomalies_refreshing do %>
+              Refreshing&hellip;
+            <% else %>
+              Refresh
+            <% end %>
+          </button>
+        </div>
+
+        <%= if @anomalies_refreshing && @anomalies == [] do %>
           <div class="bg-white rounded-lg shadow p-12 text-center">
             <div class="inline-flex items-center gap-3 text-gray-600">
               <svg class="animate-spin h-5 w-5 text-indigo-600" viewBox="0 0 24 24" fill="none">
@@ -486,4 +540,17 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
     |> String.replace("<", "&lt;")
     |> String.replace(">", "&gt;")
   end
+
+  defp relative_time(%DateTime{} = dt) do
+    diff = DateTime.diff(DateTime.utc_now(), dt, :second)
+
+    cond do
+      diff < 60 -> "just now"
+      diff < 3600 -> "#{div(diff, 60)} min ago"
+      diff < 86_400 -> "#{div(diff, 3600)}h ago"
+      true -> "#{div(diff, 86_400)}d ago"
+    end
+  end
+
+  defp relative_time(_), do: ""
 end

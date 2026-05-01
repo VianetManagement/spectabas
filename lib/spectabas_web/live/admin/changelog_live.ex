@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.20", "2026-04-30T22:00:00Z",
+       [
+         %{
+           title: "Insights: cached daily, six new SEO + Action checks",
+           description:
+             "Two changes. (1) The Insights page no longer runs ~15 ClickHouse comparison queries on every mount. New anomaly_cache Postgres table holds the per-site result, refreshed nightly by Workers.DailyAnomalyDetection (06:30 UTC, after the rollups). The page reads from the cache so it paints instantly; a new Refresh button bypasses the cache for on-demand recompute. Empty cache (new site / first deploy) auto-runs once. (2) Six new anomaly checks: keywords falling out of top 10 (medium SEO), page-2 keyword opportunities at positions 11-20 with 100+ impressions (low SEO), top organic landing pages losing GSC clicks WoW (medium SEO), brand-new keywords with first impressions in 60+ days (info SEO), top entry pages with bounce-rate spikes via daily_session_facts (medium engagement), and per-goal conversion-rate drops (medium revenue, only when the site has goals configured). Each new check returns gracefully when the underlying table has no data — sites without GSC connected or without goals just don't see those rows."
+         }
+       ]},
       {"v6.9.19", "2026-04-30T20:30:00Z",
        [
          %{

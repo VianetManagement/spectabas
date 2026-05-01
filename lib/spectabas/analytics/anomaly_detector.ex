@@ -38,12 +38,18 @@ defmodule Spectabas.Analytics.AnomalyDetector do
         |> check_sources(site, current_from, now, prev_from, prev_to)
         |> check_top_pages(site, current_from, now, prev_from, prev_to)
         |> check_exit_pages(site, current_from, now)
+        |> check_entry_page_bounce(site, current_from, now, prev_from, prev_to)
         |> check_revenue(site, current_from, now, prev_from, prev_to)
         |> check_ad_traffic(site, current_from, now, prev_from, prev_to)
+        |> check_ad_spend_roas(site)
         |> check_churn_risk(site)
+        |> check_goal_conversion_drop(site, current_from, now, prev_from, prev_to)
         |> check_seo_rankings(site)
         |> check_seo_ctr_opportunities(site)
-        |> check_ad_spend_roas(site)
+        |> check_seo_dropouts(site)
+        |> check_seo_page_two(site)
+        |> check_seo_landing_page_decline(site)
+        |> check_seo_new_keywords(site)
         |> Enum.sort_by(& &1.severity_rank)
 
       {:ok, anomalies}
@@ -829,4 +835,365 @@ defmodule Spectabas.Analytics.AnomalyDetector do
   end
 
   defp format_num(n), do: to_string(n)
+
+  # --- SEO: keywords falling out of top 10 ---
+
+  defp check_seo_dropouts(anomalies, site) do
+    site_p = ClickHouse.param(site.id)
+
+    case ClickHouse.query("""
+         SELECT cur.query AS query, cur.pos AS current_pos, prev.pos AS previous_pos,
+           prev.clicks AS lost_clicks
+         FROM (
+           SELECT query, round(avg(position), 1) AS pos, sum(clicks) AS clicks
+           FROM search_console FINAL
+           WHERE site_id = #{site_p} AND date >= today() - 7
+           GROUP BY query HAVING sum(impressions) >= 5
+         ) cur
+         JOIN (
+           SELECT query, round(avg(position), 1) AS pos, sum(clicks) AS clicks
+           FROM search_console FINAL
+           WHERE site_id = #{site_p} AND date >= today() - 14 AND date < today() - 7
+           GROUP BY query HAVING sum(impressions) >= 5
+         ) prev ON cur.query = prev.query
+         WHERE prev.pos <= 10 AND cur.pos > 10
+         ORDER BY prev.clicks DESC
+         LIMIT 5
+         """) do
+      {:ok, rows} when rows != [] ->
+        Enum.reduce(rows, anomalies, fn row, acc ->
+          [
+            %{
+              severity: :medium,
+              severity_rank: 2,
+              category: "seo",
+              metric: "ranking_dropout",
+              current: to_float(row["current_pos"]),
+              previous: to_float(row["previous_pos"]),
+              change_pct: nil,
+              message:
+                "\"#{row["query"]}\" dropped out of the top 10 (#{row["previous_pos"]} → #{row["current_pos"]})",
+              action:
+                "Review the landing page — content freshness, internal links, or competitor changes are likely causes. You may have lost ~#{row["lost_clicks"]} weekly clicks."
+            }
+            | acc
+          ]
+        end)
+
+      _ ->
+        anomalies
+    end
+  end
+
+  # --- SEO: page-2 keywords (positions 11-20) with decent impression volume ---
+
+  defp check_seo_page_two(anomalies, site) do
+    site_p = ClickHouse.param(site.id)
+
+    case ClickHouse.query("""
+         SELECT query, sum(impressions) AS impr, sum(clicks) AS clicks,
+           round(avg(position), 1) AS pos
+         FROM search_console FINAL
+         WHERE site_id = #{site_p} AND date >= today() - 7
+         GROUP BY query
+         HAVING impr >= 100 AND pos > 10 AND pos <= 20
+         ORDER BY impr DESC
+         LIMIT 5
+         """) do
+      {:ok, rows} when rows != [] ->
+        Enum.reduce(rows, anomalies, fn row, acc ->
+          [
+            %{
+              severity: :low,
+              severity_rank: 4,
+              category: "seo",
+              metric: "page_two_opportunity",
+              current: to_float(row["pos"]),
+              previous: nil,
+              change_pct: nil,
+              message:
+                "\"#{row["query"]}\" is on page 2 (position #{row["pos"]}) with #{format_num(to_int(row["impr"]))} impressions",
+              action:
+                "Build internal links and refresh content for this keyword — moving from page 2 to page 1 typically 5x's clicks."
+            }
+            | acc
+          ]
+        end)
+
+      _ ->
+        anomalies
+    end
+  end
+
+  # --- SEO: top organic landing pages losing GSC clicks WoW ---
+
+  defp check_seo_landing_page_decline(anomalies, site) do
+    site_p = ClickHouse.param(site.id)
+
+    case ClickHouse.query("""
+         SELECT cur.page AS page, cur.clicks AS current_clicks, prev.clicks AS previous_clicks
+         FROM (
+           SELECT page, sum(clicks) AS clicks
+           FROM search_console FINAL
+           WHERE site_id = #{site_p} AND date >= today() - 7
+           GROUP BY page
+         ) cur
+         JOIN (
+           SELECT page, sum(clicks) AS clicks
+           FROM search_console FINAL
+           WHERE site_id = #{site_p} AND date >= today() - 14 AND date < today() - 7
+           GROUP BY page
+         ) prev ON cur.page = prev.page
+         WHERE prev.clicks >= 20 AND cur.clicks <= prev.clicks * 0.7
+         ORDER BY (prev.clicks - cur.clicks) DESC
+         LIMIT 5
+         """) do
+      {:ok, rows} when rows != [] ->
+        Enum.reduce(rows, anomalies, fn row, acc ->
+          curr = to_int(row["current_clicks"])
+          prev = to_int(row["previous_clicks"])
+          pct = if prev > 0, do: Float.round((curr - prev) / prev * 100, 1), else: 0.0
+
+          [
+            %{
+              severity: :medium,
+              severity_rank: 2,
+              category: "seo",
+              metric: "landing_page_clicks",
+              current: curr,
+              previous: prev,
+              change_pct: pct,
+              message:
+                "Organic clicks to #{row["page"]} dropped #{abs(pct)}% (#{curr} vs #{prev})",
+              action:
+                "Check the page in Search Console — likely ranking loss for its top keywords. Refresh content or audit recent changes."
+            }
+            | acc
+          ]
+        end)
+
+      _ ->
+        anomalies
+    end
+  end
+
+  # --- SEO: keywords with first impressions this week ---
+
+  defp check_seo_new_keywords(anomalies, site) do
+    site_p = ClickHouse.param(site.id)
+
+    case ClickHouse.query("""
+         SELECT cur.query AS query, cur.impr AS impressions, cur.pos AS position
+         FROM (
+           SELECT query, sum(impressions) AS impr, round(avg(position), 1) AS pos
+           FROM search_console FINAL
+           WHERE site_id = #{site_p} AND date >= today() - 7
+           GROUP BY query HAVING impr >= 20
+         ) cur
+         LEFT JOIN (
+           SELECT DISTINCT query
+           FROM search_console FINAL
+           WHERE site_id = #{site_p} AND date >= today() - 60 AND date < today() - 7
+         ) prev ON cur.query = prev.query
+         WHERE prev.query = ''
+         ORDER BY cur.impr DESC
+         LIMIT 5
+         """) do
+      {:ok, rows} when rows != [] ->
+        Enum.reduce(rows, anomalies, fn row, acc ->
+          [
+            %{
+              severity: :info,
+              severity_rank: 3,
+              category: "seo",
+              metric: "new_keyword",
+              current: to_float(row["position"]),
+              previous: nil,
+              change_pct: nil,
+              message:
+                "New ranking: \"#{row["query"]}\" (position #{row["position"]}, #{format_num(to_int(row["impressions"]))} impressions)",
+              action:
+                "A keyword you haven't ranked for in 60 days now appears. Decide whether to optimize the page further to push for top results."
+            }
+            | acc
+          ]
+        end)
+
+      _ ->
+        anomalies
+    end
+  end
+
+  # --- Top entry page with bounce rate spike ---
+
+  defp check_entry_page_bounce(anomalies, site, cf, ct, pf, pt) do
+    site_p = ClickHouse.param(site.id)
+
+    sql = """
+    SELECT cur.entry_page AS page, cur.sessions AS sessions,
+           cur.bounce_rate AS current_br, prev.bounce_rate AS previous_br
+    FROM (
+      SELECT entry_page,
+             count() AS sessions,
+             round(countIf(is_bounce = 1) / greatest(count(), 1) * 100, 1) AS bounce_rate
+      FROM daily_session_facts
+      WHERE site_id = #{site_p}
+        AND date >= toDate(#{ClickHouse.param(fmt(cf))})
+        AND date <= toDate(#{ClickHouse.param(fmt(ct))})
+      GROUP BY entry_page HAVING sessions >= 30
+    ) cur
+    JOIN (
+      SELECT entry_page,
+             round(countIf(is_bounce = 1) / greatest(count(), 1) * 100, 1) AS bounce_rate
+      FROM daily_session_facts
+      WHERE site_id = #{site_p}
+        AND date >= toDate(#{ClickHouse.param(fmt(pf))})
+        AND date <= toDate(#{ClickHouse.param(fmt(pt))})
+      GROUP BY entry_page HAVING count() >= 30
+    ) prev ON cur.entry_page = prev.entry_page
+    WHERE cur.bounce_rate - prev.bounce_rate >= 20
+    ORDER BY cur.sessions DESC
+    LIMIT 3
+    """
+
+    case ClickHouse.query(sql) do
+      {:ok, rows} when rows != [] ->
+        Enum.reduce(rows, anomalies, fn row, acc ->
+          curr = to_float(row["current_br"])
+          prev = to_float(row["previous_br"])
+
+          [
+            %{
+              severity: :medium,
+              severity_rank: 2,
+              category: "engagement",
+              metric: "entry_page_bounce",
+              current: curr,
+              previous: prev,
+              change_pct: Float.round(curr - prev, 1),
+              message:
+                "#{row["page"]} bounce rate jumped #{prev}% → #{curr}% (#{row["sessions"]} sessions)",
+              action:
+                "This is a high-volume entry page that's losing visitors fast. Check for recent layout changes, broken hero/CTA, slow load, or paid traffic mismatch."
+            }
+            | acc
+          ]
+        end)
+
+      _ ->
+        anomalies
+    end
+  end
+
+  # --- Goal conversion-rate drop (uses Postgres goals + ClickHouse events) ---
+
+  defp check_goal_conversion_drop(anomalies, site, cf, ct, pf, pt) do
+    goals = Spectabas.Goals.list_goals(site)
+
+    if goals == [] do
+      anomalies
+    else
+      Enum.reduce(goals, anomalies, fn goal, acc ->
+        check_single_goal_conversion(acc, site, goal, cf, ct, pf, pt)
+      end)
+    end
+  rescue
+    _ -> anomalies
+  end
+
+  defp check_single_goal_conversion(anomalies, site, goal, cf, ct, pf, pt) do
+    site_p = ClickHouse.param(site.id)
+    cond_sql = goal_condition_for_anomaly(goal)
+
+    if cond_sql == nil do
+      anomalies
+    else
+      sql = """
+      SELECT
+        uniqIf(visitor_id, #{cond_sql} AND timestamp >= #{ClickHouse.param(fmt(cf))} AND timestamp <= #{ClickHouse.param(fmt(ct))}) AS cur_completers,
+        uniqIf(visitor_id, #{cond_sql} AND timestamp >= #{ClickHouse.param(fmt(pf))} AND timestamp <= #{ClickHouse.param(fmt(pt))}) AS prev_completers,
+        uniqIf(visitor_id, event_type = 'pageview' AND timestamp >= #{ClickHouse.param(fmt(cf))} AND timestamp <= #{ClickHouse.param(fmt(ct))}) AS cur_total,
+        uniqIf(visitor_id, event_type = 'pageview' AND timestamp >= #{ClickHouse.param(fmt(pf))} AND timestamp <= #{ClickHouse.param(fmt(pt))}) AS prev_total
+      FROM events
+      WHERE site_id = #{site_p}
+        AND ip_is_bot = 0
+        AND timestamp >= #{ClickHouse.param(fmt(pf))}
+        AND timestamp <= #{ClickHouse.param(fmt(ct))}
+      """
+
+      run_goal_query(sql, anomalies, goal)
+    end
+  end
+
+  defp run_goal_query(sql, anomalies, goal) do
+    case ClickHouse.query(sql) do
+      {:ok, [row]} ->
+        cur_c = to_int(row["cur_completers"])
+        prev_c = to_int(row["prev_completers"])
+        cur_t = to_int(row["cur_total"])
+        prev_t = to_int(row["prev_total"])
+
+        cur_rate = if cur_t > 0, do: cur_c / cur_t * 100, else: 0.0
+        prev_rate = if prev_t > 0, do: prev_c / prev_t * 100, else: 0.0
+
+        # Need a baseline of activity to be meaningful
+        if prev_t >= 50 and cur_t >= 50 and prev_rate >= 0.5 and prev_rate - cur_rate >= 1.0 do
+          drop_pct =
+            if prev_rate > 0,
+              do: Float.round((cur_rate - prev_rate) / prev_rate * 100, 1),
+              else: 0.0
+
+          [
+            %{
+              severity: :medium,
+              severity_rank: 2,
+              category: "revenue",
+              metric: "goal_conversion",
+              current: Float.round(cur_rate, 2),
+              previous: Float.round(prev_rate, 2),
+              change_pct: drop_pct,
+              message:
+                "\"#{goal.name}\" conversion rate dropped #{Float.round(prev_rate, 2)}% → #{Float.round(cur_rate, 2)}%",
+              action:
+                "Audit the conversion path for this goal — entry pages, form behavior, CTAs, and any recent UI/copy changes."
+            }
+            | anomalies
+          ]
+        else
+          anomalies
+        end
+
+      _ ->
+        anomalies
+    end
+  end
+
+  # Goal-condition SQL — mirrors Spectabas.Analytics.goal_condition/1 (which is
+  # private). Kept here to avoid widening the API surface of Analytics. Returns
+  # nil for unknown / invalid goals so the caller can skip them.
+  defp goal_condition_for_anomaly(goal) do
+    case goal.goal_type do
+      "pageview" ->
+        path = goal.page_path |> to_string() |> String.replace("*", "%")
+        "(event_type = 'pageview' AND url_path LIKE #{ClickHouse.param(path)})"
+
+      "custom_event" ->
+        "(event_type = 'custom' AND event_name = #{ClickHouse.param(to_string(goal.event_name))})"
+
+      "click_element" ->
+        case to_string(goal.element_selector || "") do
+          "#" <> id ->
+            "(event_type = 'custom' AND event_name = '_click' AND JSONExtractString(properties, '_id') = #{ClickHouse.param(id)})"
+
+          "text:" <> text ->
+            "(event_type = 'custom' AND event_name = '_click' AND JSONExtractString(properties, '_text') = #{ClickHouse.param(text)})"
+
+          _ ->
+            nil
+        end
+
+      _ ->
+        nil
+    end
+  end
 end
