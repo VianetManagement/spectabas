@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.9.25", "2026-05-01T12:30:00Z",
+       [
+         %{
+           title: "Scrapers page: bulletproof whitelist match + email-allowlist fallback",
+           description:
+             "v6.9.23's case-insensitive fix didn't fully resolve the missing green shield for some whitelisted visitors. Two changes here: (1) The visitor.id <-> ClickHouse visitor_id join now uses fragment(\"lower(?::text) = ANY(?::text[])\") instead of the Ecto `in ^uuids` form, which has been silently dropping matches when ids weren't in the canonical hyphenated UUID shape. (2) Added an email-allowlist fallback — if the candidate's visitor row has an email that's in site_email_whitelist (or any sibling visitor with the same email is whitelisted), the green shield shows even if scraper_whitelisted on the specific row is false. Catches the case where the user whitelisted via the API or the propagation didn't reach this particular row. Plus a Logger.warning when zero candidates match Postgres so we can spot ingest/lookup mismatches in production logs."
+         }
+       ]},
       {"v6.9.24", "2026-05-01T11:30:00Z",
        [
          %{

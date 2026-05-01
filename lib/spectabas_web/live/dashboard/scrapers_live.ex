@@ -316,55 +316,83 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
   # Postgres exemption — ScraperWebhookScan won't auto-flag them, but a
   # human looking at this page should still see the badge.
   #
-  # IDs are normalized to lowercase on both sides because visitor.id round-
-  # trips from Postgres as a lowercase UUID string while ClickHouse stores
-  # whatever the tracker / ingest path sent. Without the normalization the
-  # join silently misses whitelisted visitors. Non-UUID ids (legacy `fp_…`)
-  # are filtered out so they don't crash the Ecto cast.
+  # We compare visitor.id ::text against the raw string list. That bypasses
+  # any silent UUID-cast surprises in `v.id in ^uuids` (which has been
+  # reported to drop matches when the tracker / ingest path stored ids
+  # without canonical hyphens, etc.). Both sides are then lowercased into
+  # the lookup map for a final string-equality match.
   defp annotate_visitor_status([], _site), do: []
 
   defp annotate_visitor_status(candidates, site) do
-    visitor_ids =
+    raw_ids =
       candidates
       |> Enum.map(& &1["visitor_id"])
       |> Enum.reject(&(is_nil(&1) or &1 == ""))
-      |> Enum.filter(&uuid?/1)
-      |> Enum.map(&String.downcase/1)
       |> Enum.uniq()
 
     status_map =
-      if visitor_ids == [] do
+      if raw_ids == [] do
         %{}
       else
         Spectabas.Repo.all(
           from(v in Spectabas.Visitors.Visitor,
-            where: v.site_id == ^site.id and v.id in ^visitor_ids,
-            select: {v.id, v.scraper_manual_flag, v.scraper_whitelisted}
+            where:
+              v.site_id == ^site.id and
+                fragment(
+                  "lower(?::text) = ANY(?::text[])",
+                  v.id,
+                  ^Enum.map(raw_ids, &String.downcase/1)
+                ),
+            select: {v.id, v.email, v.scraper_manual_flag, v.scraper_whitelisted}
           )
         )
-        |> Map.new(fn {id, manual, whitelisted} ->
-          {id |> to_string() |> String.downcase(), {manual == true, whitelisted == true}}
+        |> Map.new(fn {id, email, manual, whitelisted} ->
+          {id |> to_string() |> String.downcase(), {manual == true, whitelisted == true, email}}
         end)
       end
 
-    Enum.map(candidates, fn c ->
-      key = c["visitor_id"] |> to_string() |> String.downcase()
-      {manual, whitelisted} = Map.get(status_map, key, {false, false})
+    # Email-allowlist fallback: if a candidate's visitor row exists and has
+    # an email that's in `site_email_whitelist` (or another visitor on this
+    # site with the same email is whitelisted), surface the green shield too.
+    # Catches the case where the user whitelisted a sibling visitor via the
+    # API or dashboard and propagation didn't reach this row.
+    annotated =
+      Enum.map(candidates, fn c ->
+        key = c["visitor_id"] |> to_string() |> String.downcase()
+        {manual, whitelisted, email} = Map.get(status_map, key, {false, false, nil})
 
-      c
-      |> Map.put("_manual_flag", manual)
-      |> Map.put("_whitelisted", whitelisted)
-    end)
+        whitelisted =
+          whitelisted ||
+            (is_binary(email) and email != "" and
+               Spectabas.Visitors.EmailWhitelist.whitelisted?(site.id, email))
+
+        c
+        |> Map.put("_manual_flag", manual)
+        |> Map.put("_whitelisted", whitelisted)
+      end)
+
+    # Smell test: if every candidate has a visitor_id but none matched a
+    # Postgres row, log a warning so we notice the ingest/lookup mismatch.
+    log_missing_match_smell(candidates, status_map, site)
+
+    annotated
   end
 
-  defp uuid?(s) when is_binary(s) do
-    case Ecto.UUID.cast(s) do
-      {:ok, _} -> true
-      _ -> false
+  defp log_missing_match_smell(candidates, status_map, site) do
+    populated_count =
+      Enum.count(candidates, &(is_binary(&1["visitor_id"]) and &1["visitor_id"] != ""))
+
+    if populated_count > 0 and map_size(status_map) == 0 do
+      require Logger
+
+      sample = candidates |> Enum.take(3) |> Enum.map(& &1["visitor_id"])
+
+      Logger.warning(
+        "[ScrapersLive] no Postgres visitor matches for site=#{site.id} " <>
+          "(#{populated_count} candidates with visitor_id, 0 matched). Sample ids=#{inspect(sample)}"
+      )
     end
   end
-
-  defp uuid?(_), do: false
 
   defp summarize_candidates(candidates) do
     %{
