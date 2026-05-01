@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.1", "2026-05-01T17:30:00Z",
+       [
+         %{
+           title: "Documentation: server-side conversion tracking setup guide",
+           description:
+             "New `docs/server-side-conversions-setup.md` is the stakeholder/operator-facing guide covering what was shipped in v6.10.0, what each party needs to do (Spectabas team / ad agency / customer dev team), recommended improvements, and operations / troubleshooting. New 'Server-Side Ad Conversions' section in /docs (Conversions category) covers the customer-facing version: how it works, click IDs captured, setup checklist, match-rate troubleshooting, Smart Bidding cutover guidance. Companion to the existing technical design doc at `docs/conversions.md`."
+         }
+       ]},
       {"v6.10.0", "2026-05-01T16:30:00Z",
        [
          %{

@@ -2483,6 +2483,133 @@ defmodule SpectabasWeb.DocsLive do
             """
           },
           %{
+            id: "server-side-conversions",
+            title: "Server-Side Ad Conversions",
+            body: """
+            Spectabas can upload conversion events directly to **Google Ads** and **Microsoft Ads** without depending on browser-side tag tracking, ad blockers, consent banners, or browser privacy software.
+
+            This is the durable, browser-independent path: the ad-platform click identifier (gclid, wbraid, gbraid, msclkid) is captured server-side when a visitor lands on your site, tied to their account or purchase, and uploaded directly to the platform's official conversion-import API on a regular schedule.
+
+            Configure conversion actions at **Conversions > Ad Conversions** in your site dashboard.
+
+            ### Why server-side?
+
+            Browser-based conversion tracking (the standard Google Ads tag, Microsoft UET, etc.) is increasingly blocked by:
+
+            - Ad blockers (~30% of users)
+            - Browser privacy features (Safari ITP, Firefox ETP)
+            - Consent management software that blocks tags by default
+            - Strict privacy laws / consent regimes
+
+            Industry data shows browser-based tracking captures only **60–85% of true conversions** under normal conditions. Server-side conversion tracking is independent of all of these — the only browser requirement is that the ad-click URL lands on your server, which always happens.
+
+            ### What gets uploaded
+
+            For each conversion action you configure:
+
+            - The **click identifier** (gclid / wbraid / gbraid / msclkid)
+            - The **conversion type** (mapped to your Google Ads / Microsoft Ads conversion action)
+            - The **conversion timestamp**
+            - The **conversion value** + currency (for purchase-type actions)
+
+            **No personal data leaves Spectabas.** No emails, names, IP addresses, or user identifiers are sent to the ad platforms — only the opaque click identifier the platform itself created when their ad was clicked, plus the value.
+
+            ### How conversions are detected
+
+            Each conversion action specifies how Spectabas detects the event:
+
+            | Detection type | Triggers when… | Best for |
+            |----------------|------------|----------|
+            | **Stripe payment** | A new charge appears in your Stripe integration | Membership / subscription / product purchases |
+            | **URL pattern** | A visitor views a page matching a glob pattern (`/welcome*`) | Signup completion, listing creation, thank-you pages |
+            | **Click element** | A visitor clicks a button or link matching `#id` or `text:Label` | Submit-form buttons, "Publish" buttons, etc. |
+            | **Custom event** | Your tracker calls `Spectabas.track('event_name', …)` | Most precise — your code controls timing |
+
+            All detectors are **idempotent** — re-running cannot double-count. The detector resolves the visitor's first click within the attribution window (default 90 days) and stamps it on the conversion record.
+
+            ### Setup checklist
+
+            #### In Google Ads (or via your agency)
+
+            1. Create a conversion action in Google Ads for each event (Sign-up, Lead, Purchase, etc.). Note the numeric **Conversion Action ID**.
+            2. Set the conversion action's **Count** to `Every` if you want iOS / wbraid / gbraid uploads to work (otherwise they error out).
+            3. Set the attribution model on the conversion action — Spectabas can resolve clicks first or last; Google Ads honors whatever the conversion action's model says.
+            4. Note the **Google Ads account timezone** (e.g. `America/Chicago`). Wrong timezone here is the most common cause of low match rate.
+
+            #### In Microsoft Ads
+
+            1. Verify **MSCLKID auto-tagging is enabled** at the account level. Without this, no msclkid lands in URLs and Microsoft conversions cannot be tracked.
+            2. Create offline conversion goals matching each event. Note each goal's name.
+
+            #### In Spectabas
+
+            1. **Connect Google Ads** in `Settings > Ad Integrations`. Existing connections must disconnect and reconnect to grant the new `datamanager` scope.
+            2. **Connect Microsoft Ads** in `Settings > Ad Integrations`.
+            3. **Create conversion actions** at `Conversions > Ad Conversions > New Conversion Action`. Map each to its Google + Microsoft IDs.
+
+            ### Match rates
+
+            Realistic match rate: **80–95%** for gclid uploads, lower for wbraid/gbraid.
+
+            Common reasons for low match rate:
+
+            - Wrong **Google Ads account timezone** on the conversion action
+            - Click expired (over 90 days from the original click)
+            - **MSCLKID auto-tagging off** at the Microsoft Ads account level
+            - **wbraid/gbraid conversion action not set to `Count: Every`** in Google Ads
+            - Conversions uploaded too soon after the click (rare; Google needs ~30 minutes to process new clicks)
+
+            ### Quality gate
+
+            Each conversion action has a `max_scraper_score` setting. Spectabas's scraper detector scores every visitor 0–100 based on bot signals; conversions from visitors at or above the configured score are recorded but **not uploaded**. This keeps Smart Bidding from learning bot patterns on sites without strong email verification on signup.
+
+            Default is `40` (the "watching" tier). Lower it if you're seeing legitimate conversions skipped; raise it if Smart Bidding seems to chase bot signals.
+
+            ### Backfill
+
+            When you first connect an ad platform, the detector automatically scans back **90 days** for matching events. Smart Bidding sees a populated history immediately, compressing the typical 2–4 week re-learning period.
+
+            ### Click IDs Spectabas captures
+
+            The tracker automatically captures these from the URL into sessionStorage and stamps them on every event:
+
+            | URL parameter | Click ID type | Used by |
+            |---------------|---------------|---------|
+            | `gclid` | google_ads | Google Ads (web) |
+            | `wbraid` | google_ads_wbraid | Google Ads (iOS in-app → web) |
+            | `gbraid` | google_ads_gbraid | Google Ads (web → iOS app) |
+            | `msclkid` | bing_ads | Microsoft Ads |
+            | `fbclid` | meta_ads | Meta (captured for future Conversions API support) |
+
+            iOS-specific identifiers (`wbraid`/`gbraid`) are essential for matching iOS paid traffic where Apple's App Tracking Transparency framework prevents traditional gclid linkage.
+
+            ### What this does *not* do
+
+            - **It does not provide on-site analytics.** GA4 and similar tools still require browser-based tracking.
+            - **It does not reach users from non-paid channels.** Organic, direct, referral, and email traffic don't carry click identifiers and aren't part of this system.
+            - **It does not eliminate consent requirements.** The system uses minimal click-identifier-only data sharing, but compliance posture should be confirmed with your legal counsel.
+            - **It does not eliminate all measurement loss.** Click expiry (90 days), conversions outside the attribution window, and other natural limits cap match rates around 95%.
+
+            ### Smart Bidding cutover
+
+            When switching from browser-side to server-side tracking, Google's Smart Bidding will need 2–4 weeks of re-learning. During cutover:
+
+            1. Drop to **Maximize Clicks** or **Manual CPC** temporarily.
+            2. Confirm conversions are flowing for at least a week.
+            3. Progressively migrate back to **Maximize Conversion Value** or **Target CPA**.
+
+            ### Operations
+
+            The Conversions page shows summary cards for the last 7 days:
+
+            - **Pending** — conversions detected but not yet uploaded. Healthy: low and steady. Sustained growth means uploads are failing.
+            - **Uploaded (Google)** + **Uploaded (Microsoft)** — successfully uploaded conversions.
+            - **Failed** — combines failed uploads, conversions with no resolvable click, and quality-gate skips.
+
+            Conversions upload **hourly**. Detection runs **every 15 minutes**. Worst-case latency from a Stripe payment to the ad platform is roughly 1h20m.
+            """
+          },
+          %{
             id: "ecommerce-overview",
             title: "Ecommerce Tracking",
             body: """
