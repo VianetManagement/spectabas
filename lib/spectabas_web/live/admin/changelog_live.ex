@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.5", "2026-05-06T15:00:00Z",
+       [
+         %{
+           title: "Fix: cross-account site permission assignment + cleanup on move",
+           description:
+             "Two issues. (1) /admin/users edit form listed sites from `Accounts.accessible_sites(admin)` which for a platform admin returns every site across every account — so a vianet admin could assign a vianet user to a moved michlp site. The site list is now scoped to the edited user's account; the runtime access check (`can_access_site?`) already rejected cross-account access so this was a UI/clutter bug rather than a true security hole, but it was confusing. Server-side guard added in sync_site_permissions so a forged grant request is rejected too. (2) Sites.move_to_account/3 now strips any UserSitePermission rows pointing at users in the OLD account when a site is moved. Those permissions become dead the moment the move happens (access check requires user.account_id == site.account_id) but the rows would otherwise linger and clutter the UI."
+         }
+       ]},
       {"v6.10.4", "2026-05-06T14:30:00Z",
        [
          %{

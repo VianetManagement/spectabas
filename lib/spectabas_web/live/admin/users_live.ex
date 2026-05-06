@@ -38,6 +38,11 @@ defmodule SpectabasWeb.Admin.UsersLive do
      |> assign(:roles, @all_roles)
      |> assign(:timezones, @timezones)
      |> assign(:all_sites, all_sites)
+     # Sites that can be assigned to the user currently being edited.
+     # Scoped to the edited user's account at edit_user time so a platform
+     # admin can't accidentally grant a vianet user access to a michlp
+     # site (or vice versa).
+     |> assign(:assignable_sites, [])
      |> assign(:show_invite, false)
      |> assign(:invite_email, "")
      |> assign(:invite_role, "analyst")
@@ -151,6 +156,11 @@ defmodule SpectabasWeb.Admin.UsersLive do
       perms = Accounts.list_user_permissions(user)
       site_ids = Enum.map(perms, & &1.site_id) |> MapSet.new()
 
+      # Site permissions must respect the edited user's account boundary.
+      # `Accounts.accessible_sites(admin)` would return cross-account sites
+      # when admin is a platform_admin — wrong audience here.
+      assignable_sites = sites_for_account(user.account_id)
+
       {:noreply,
        socket
        |> assign(:editing_user, user)
@@ -160,7 +170,8 @@ defmodule SpectabasWeb.Admin.UsersLive do
          "timezone" => user.timezone || "America/New_York",
          "force_2fa" => user.force_2fa
        })
-       |> assign(:edit_site_ids, site_ids)}
+       |> assign(:edit_site_ids, site_ids)
+       |> assign(:assignable_sites, assignable_sites)}
     end
   end
 
@@ -413,12 +424,15 @@ defmodule SpectabasWeb.Admin.UsersLive do
             </div>
           </div>
 
-          <%!-- Site Access (only for analyst/viewer) --%>
+          <%!-- Site Access (only for analyst/viewer) — scoped to the edited user's account --%>
           <div :if={@edit_form["role"] in ["analyst", "viewer"]}>
             <label class="block text-sm font-medium text-gray-700 mb-2">Site Access</label>
-            <div class="flex flex-wrap gap-2">
+            <div :if={@assignable_sites == []} class="text-xs text-gray-500 italic">
+              No sites in this user's account yet.
+            </div>
+            <div :if={@assignable_sites != []} class="flex flex-wrap gap-2">
               <button
-                :for={site <- @all_sites}
+                :for={site <- @assignable_sites}
                 type="button"
                 phx-click="toggle_site_access"
                 phx-value-site-id={site.id}
@@ -434,7 +448,7 @@ defmodule SpectabasWeb.Admin.UsersLive do
               </button>
             </div>
             <p class="text-xs text-gray-500 mt-1">
-              Select which sites this user can access. No sites selected = no access.
+              Select which sites this user can access. Only sites in the user's account are listed.
             </p>
           </div>
 
@@ -654,17 +668,33 @@ defmodule SpectabasWeb.Admin.UsersLive do
 
   # -- Private --
 
+  defp sites_for_account(nil), do: []
+
+  defp sites_for_account(account_id) do
+    import Ecto.Query
+
+    Spectabas.Repo.all(
+      from(s in Spectabas.Sites.Site,
+        where: s.account_id == ^account_id,
+        order_by: [asc: s.name]
+      )
+    )
+  end
+
   defp sync_site_permissions(admin, user, desired_site_ids) do
     current_perms = Accounts.list_user_permissions(user)
     current_ids = Enum.map(current_perms, & &1.site_id) |> MapSet.new()
 
-    # Grant new — only for sites the admin can access
+    # Grant new — site must be in the admin's reach AND in the user's
+    # own account. Without the second check a platform admin could grant
+    # cross-account permissions (which the runtime access check rejects
+    # anyway, but the row would be misleading and confusing).
     to_grant = MapSet.difference(desired_site_ids, current_ids)
 
     Enum.each(to_grant, fn site_id ->
       site = Sites.get_site!(site_id)
 
-      if Accounts.can_access_site?(admin, site) do
+      if Accounts.can_access_site?(admin, site) and site.account_id == user.account_id do
         Accounts.grant_permission(admin, user, site, user.role)
       end
     end)

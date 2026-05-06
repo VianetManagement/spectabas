@@ -68,12 +68,19 @@ defmodule Spectabas.Sites do
       |> Repo.update()
       |> case do
         {:ok, moved} ->
+          # Strip stale per-user permissions held by users in the old
+          # account — they can't access the site after the move (the
+          # access check requires user.account_id == site.account_id),
+          # so the rows are dead and confusing if left behind.
+          revoked = revoke_permissions_outside_account(moved.id, target_account_id)
+
           Audit.log("site.moved", %{
             site_id: moved.id,
             domain: moved.domain,
             from_account_id: old_account_id,
             to_account_id: target_account_id,
-            moved_by_user_id: admin.id
+            moved_by_user_id: admin.id,
+            stale_permissions_revoked: revoked
           })
 
           {:ok, moved}
@@ -85,6 +92,21 @@ defmodule Spectabas.Sites do
   end
 
   def move_to_account(_, _, _), do: {:error, :unauthorized}
+
+  # Remove any UserSitePermission rows for this site that point at users
+  # whose account_id != the site's new account. Returns the count.
+  defp revoke_permissions_outside_account(site_id, target_account_id) do
+    {count, _} =
+      Repo.delete_all(
+        from(p in Spectabas.Accounts.UserSitePermission,
+          join: u in Spectabas.Accounts.User,
+          on: u.id == p.user_id,
+          where: p.site_id == ^site_id and u.account_id != ^target_account_id
+        )
+      )
+
+    count
+  end
 
   @doc """
   Create a new site. Generates a public key and warms the domain cache.
