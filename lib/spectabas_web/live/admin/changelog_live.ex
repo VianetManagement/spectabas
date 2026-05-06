@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.4", "2026-05-06T14:30:00Z",
+       [
+         %{
+           title: "Move sites between accounts in the UI (no SQL)",
+           description:
+             "Sites table at /admin/sites now shows the current account per site (platform admins only). A 'Move' link expands an inline account selector; submit to move the site to another account. New Sites.move_to_account/3 helper does the update with audit logging ('site.moved' event) and a confirm dialog. ClickHouse data is keyed by site_id and is not touched — visitors, goals, conversions, integrations, and all analytics history follow the site. Useful for fixing the v6.10.3-and-earlier misassignments without psql."
+         }
+       ]},
       {"v6.10.3", "2026-05-06T14:00:00Z",
        [
          %{

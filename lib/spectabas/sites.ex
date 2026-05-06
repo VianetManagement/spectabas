@@ -42,6 +42,51 @@ defmodule Spectabas.Sites do
   end
 
   @doc """
+  Move a site to a different account. Platform-admin-only — used to fix
+  cross-account misassignment (see CLAUDE.md notes on the v6.10.3 fix).
+
+  ClickHouse data is keyed by `site_id` and is not touched. The site's
+  Postgres row gets the new `account_id`; everything else (visitors,
+  goals, conversions, integrations) follows the site automatically since
+  they're already keyed by `site_id`.
+
+  Returns `{:ok, site}` or `{:error, reason}`. Audit-logs the move.
+  """
+  def move_to_account(
+        %Site{} = site,
+        %Spectabas.Accounts.User{role: :platform_admin} = admin,
+        target_account_id
+      )
+      when is_integer(target_account_id) do
+    if site.account_id == target_account_id do
+      {:ok, site}
+    else
+      old_account_id = site.account_id
+
+      site
+      |> Ecto.Changeset.change(account_id: target_account_id)
+      |> Repo.update()
+      |> case do
+        {:ok, moved} ->
+          Audit.log("site.moved", %{
+            site_id: moved.id,
+            domain: moved.domain,
+            from_account_id: old_account_id,
+            to_account_id: target_account_id,
+            moved_by_user_id: admin.id
+          })
+
+          {:ok, moved}
+
+        error ->
+          error
+      end
+    end
+  end
+
+  def move_to_account(_, _, _), do: {:error, :unauthorized}
+
+  @doc """
   Create a new site. Generates a public key and warms the domain cache.
   Accepts attrs map which must include account_id.
   """

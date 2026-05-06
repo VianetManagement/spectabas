@@ -29,6 +29,7 @@ defmodule SpectabasWeb.Admin.SitesLive do
      |> assign(:account, account)
      |> assign(:accounts, accounts)
      |> assign(:show_form, false)
+     |> assign(:moving_site_id, nil)
      |> assign(:form, to_form(site_changeset()))}
   end
 
@@ -121,6 +122,57 @@ defmodule SpectabasWeb.Admin.SitesLive do
 
       {:error, reason} ->
         {:noreply, put_flash(socket, :error, "Failed to register #{domain}: #{reason}")}
+    end
+  end
+
+  def handle_event("open_move", %{"id" => site_id}, socket) do
+    user = socket.assigns.current_scope.user
+
+    if user.role != :platform_admin do
+      {:noreply,
+       put_flash(socket, :error, "Only platform admins can move sites between accounts.")}
+    else
+      {:noreply, assign(socket, :moving_site_id, site_id)}
+    end
+  end
+
+  def handle_event("cancel_move", _params, socket) do
+    {:noreply, assign(socket, :moving_site_id, nil)}
+  end
+
+  def handle_event("move_site", %{"site_id" => site_id, "account_id" => target_id}, socket) do
+    user = socket.assigns.current_scope.user
+    site = Sites.get_site!(site_id)
+
+    target_account_id =
+      case target_id do
+        id when is_binary(id) and id != "" -> String.to_integer(id)
+        _ -> nil
+      end
+
+    cond do
+      user.role != :platform_admin ->
+        {:noreply,
+         put_flash(socket, :error, "Only platform admins can move sites between accounts.")}
+
+      is_nil(target_account_id) ->
+        {:noreply, put_flash(socket, :error, "Pick a target account.")}
+
+      true ->
+        case Sites.move_to_account(site, user, target_account_id) do
+          {:ok, _moved} ->
+            target = Spectabas.Accounts.get_account!(target_account_id)
+            sites = Spectabas.Accounts.accessible_sites(user)
+
+            {:noreply,
+             socket
+             |> put_flash(:info, "Moved \"#{site.name}\" to account \"#{target.name}\".")
+             |> assign(:sites, sites)
+             |> assign(:moving_site_id, nil)}
+
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, "Move failed: #{inspect(reason)}")}
+        end
     end
   end
 
@@ -277,6 +329,12 @@ defmodule SpectabasWeb.Admin.SitesLive do
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Domain
               </th>
+              <th
+                :if={@accounts != []}
+                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+              >
+                Account
+              </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 DNS
               </th>
@@ -293,7 +351,7 @@ defmodule SpectabasWeb.Admin.SitesLive do
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
             <tr :if={@sites == []}>
-              <td colspan="6" class="px-6 py-8 text-center text-gray-500">No sites yet.</td>
+              <td colspan="7" class="px-6 py-8 text-center text-gray-500">No sites yet.</td>
             </tr>
             <tr :for={site <- @sites} class="hover:bg-gray-50">
               <td class="px-6 py-4 text-sm font-medium text-gray-900">
@@ -305,6 +363,60 @@ defmodule SpectabasWeb.Admin.SitesLive do
                 </.link>
               </td>
               <td class="px-6 py-4 text-sm text-gray-500 font-mono">{site.domain}</td>
+              <td :if={@accounts != []} class="px-6 py-4 text-sm text-gray-700">
+                <%!-- Inline move form when this row is being moved --%>
+                <%= if to_string(@moving_site_id) == to_string(site.id) do %>
+                  <form phx-submit="move_site" class="flex items-center gap-2">
+                    <input type="hidden" name="site_id" value={site.id} />
+                    <select
+                      name="account_id"
+                      class="rounded border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs px-2 py-1"
+                    >
+                      <option value="">Pick account…</option>
+                      <option
+                        :for={a <- @accounts}
+                        value={a.id}
+                        selected={a.id == site.account_id}
+                      >
+                        {a.name} ({a.slug}, id={a.id})
+                      </option>
+                    </select>
+                    <button
+                      type="submit"
+                      data-confirm={"Move #{site.name} to a different account? Visitors, goals, conversions, and integrations all follow the site. ClickHouse data is unchanged."}
+                      class="inline-flex items-center px-2 py-1 text-xs font-medium rounded text-white bg-amber-600 hover:bg-amber-700"
+                    >
+                      Move
+                    </button>
+                    <button
+                      type="button"
+                      phx-click="cancel_move"
+                      class="text-xs text-gray-500 hover:text-gray-700"
+                    >
+                      Cancel
+                    </button>
+                  </form>
+                <% else %>
+                  <% acct = Enum.find(@accounts, &(&1.id == site.account_id)) %>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs">
+                      <%= if acct do %>
+                        {acct.name}
+                        <span class="text-gray-400 font-mono">({acct.slug})</span>
+                      <% else %>
+                        <span class="text-red-600">unknown (id={site.account_id})</span>
+                      <% end %>
+                    </span>
+                    <button
+                      phx-click="open_move"
+                      phx-value-id={site.id}
+                      class="text-xs text-amber-700 hover:text-amber-900 underline"
+                    >
+                      Move
+                    </button>
+                  </div>
+                <% end %>
+              </td>
               <td class="px-6 py-4">
                 <span
                   :if={site.dns_verified}
