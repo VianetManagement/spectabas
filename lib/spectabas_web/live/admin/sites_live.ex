@@ -13,11 +13,21 @@ defmodule SpectabasWeb.Admin.SitesLive do
         do: Spectabas.Accounts.get_account!(user.account_id),
         else: nil
 
+    # Platform admins create sites on behalf of any account, so they need an
+    # account selector in the form. Other roles are scoped to their own.
+    accounts =
+      if user.role == :platform_admin do
+        Spectabas.Accounts.list_accounts()
+      else
+        []
+      end
+
     {:ok,
      socket
      |> assign(:page_title, "Manage Sites")
      |> assign(:sites, sites)
      |> assign(:account, account)
+     |> assign(:accounts, accounts)
      |> assign(:show_form, false)
      |> assign(:form, to_form(site_changeset()))}
   end
@@ -39,24 +49,34 @@ defmodule SpectabasWeb.Admin.SitesLive do
   def handle_event("create_site", %{"site" => params}, socket) do
     user = socket.assigns.current_scope.user
 
-    # For platform_admin, use the first account (or let them specify)
+    # Lock non-platform-admins to their own account; platform admins must
+    # choose explicitly via the form. Previously we silently defaulted a
+    # platform admin's site creation to the first account in the table —
+    # which produced cross-account misassignment when an admin in account
+    # A created sites intended for account B (v6.10.3 fix).
     account_id =
-      if user.account_id do
-        user.account_id
-      else
-        # Platform admin — use the first account
-        case Spectabas.Repo.one(
-               Spectabas.Accounts.Account
-               |> Ecto.Query.first(:id)
-             ) do
-          %{id: id} -> id
-          nil -> nil
-        end
+      cond do
+        user.account_id ->
+          user.account_id
+
+        user.role == :platform_admin ->
+          case params["account_id"] do
+            id when is_binary(id) and id != "" -> String.to_integer(id)
+            _ -> nil
+          end
+
+        true ->
+          nil
       end
 
     cond do
       is_nil(account_id) ->
-        {:noreply, put_flash(socket, :error, "No account found. Create an account first.")}
+        msg =
+          if user.role == :platform_admin,
+            do: "Pick an account for the new site.",
+            else: "No account found. Create an account first."
+
+        {:noreply, put_flash(socket, :error, msg)}
 
       not Spectabas.Accounts.can_create_site?(user) ->
         {:noreply, put_flash(socket, :error, "Site limit reached for this account.")}
@@ -161,6 +181,24 @@ defmodule SpectabasWeb.Admin.SitesLive do
       <div :if={@show_form} class="bg-white rounded-lg shadow p-6 mb-8">
         <h2 class="text-lg font-semibold text-gray-900 mb-4">Create Site</h2>
         <.form for={@form} phx-submit="create_site" phx-change="validate_site" class="space-y-4">
+          <div :if={@accounts != []} class="rounded-lg bg-amber-50 border border-amber-200 p-3">
+            <label class="block text-sm font-medium text-amber-900 mb-1">
+              Account <span class="text-amber-700">(platform admin)</span>
+            </label>
+            <select
+              name="site[account_id]"
+              required
+              class="mt-1 block w-full rounded-lg border-amber-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 sm:text-sm px-3 py-2.5 bg-white"
+            >
+              <option value="">— Pick an account —</option>
+              <option :for={a <- @accounts} value={a.id}>
+                {a.name} ({a.slug}, id={a.id})
+              </option>
+            </select>
+            <p class="mt-1 text-xs text-amber-800">
+              The site will be assigned to this account and only its users will see it. Verify before submitting.
+            </p>
+          </div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium text-gray-700">Site Name</label>

@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.3", "2026-05-06T14:00:00Z",
+       [
+         %{
+           title: "Fix: site creation by platform admin silently used wrong account",
+           description:
+             "When a platform admin (a user with no account_id) created a site at /admin/sites, the form silently used `Repo.one(Account |> first(:id))` — always the FIRST account in the table — regardless of which account the admin actually intended. Sites created while logged in as a platform admin from one account but intending to set up another ended up account-misassigned. The original account's superadmins/admins then saw the misassigned sites because accessible_sites correctly filters by user.account_id == site.account_id. Fixed: platform admins now see an explicit account selector in the create-site form (with name, slug, and id displayed) and must choose. Non-platform-admins are still locked to their own account as before."
+         }
+       ]},
       {"v6.10.2", "2026-05-01T18:30:00Z",
        [
          %{
