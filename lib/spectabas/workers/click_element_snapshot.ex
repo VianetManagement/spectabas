@@ -66,7 +66,9 @@ defmodule Spectabas.Workers.ClickElementSnapshot do
     SETTINGS max_execution_time = 240
     """
 
-    case ClickHouse.query(sql) do
+    # CH module default receive_timeout is 30s — way too short for puppies.com
+    # volume. Match the SQL max_execution_time above.
+    case ClickHouse.query(sql, receive_timeout: 260_000) do
       {:ok, rows} ->
         # CH groups by (text, id, tag) but `element_key` is derived only from
         # id-or-text — two rows with the same id but different tags (e.g.

@@ -3293,7 +3293,10 @@ defmodule Spectabas.Analytics do
     SETTINGS max_execution_time = 180
     """
 
-    ClickHouse.query(sql)
+    # The CH module's default HTTP receive_timeout is 30s — far too short for
+    # windowFunnel on high-volume sites. Override per-query to match the SQL
+    # max_execution_time above.
+    ClickHouse.query(sql, receive_timeout: 200_000)
   end
 
   @doc """
