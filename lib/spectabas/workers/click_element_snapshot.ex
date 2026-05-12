@@ -68,7 +68,15 @@ defmodule Spectabas.Workers.ClickElementSnapshot do
 
     case ClickHouse.query(sql) do
       {:ok, rows} ->
-        normalized = Enum.map(rows, &normalize_row/1)
+        # CH groups by (text, id, tag) but `element_key` is derived only from
+        # id-or-text — two rows with the same id but different tags (e.g.
+        # `#submit` clicked as both <button> and <a>) collide on the unique
+        # index. Dedupe by key, keeping the first occurrence; rows are sorted
+        # by clicks DESC so we keep the most-clicked variant.
+        normalized =
+          rows
+          |> Enum.map(&normalize_row/1)
+          |> Enum.uniq_by(& &1["element_key"])
 
         case Goals.replace_click_element_stats(site, normalized) do
           {:ok, _} ->
