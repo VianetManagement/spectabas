@@ -2056,6 +2056,54 @@ defmodule SpectabasWeb.HealthController do
 
           json(conn, %{enqueued: jobs, site_id: site_id})
 
+        "funnel_worker_dryrun" ->
+          # Exact reproduction of FunnelStatsSnapshot.snapshot_site/1 but
+          # returns each step's result instead of writing. Lets us see whether
+          # the worker is getting different data than funnel_summaries_probe.
+          case Integer.parse(params["site_id"] || "") do
+            {site_id, _} ->
+              site = Spectabas.Sites.get_site(site_id)
+              funnels = Spectabas.Goals.list_funnels(site)
+
+              {ok, summaries, error} =
+                case Spectabas.Analytics.funnel_summaries_system(site, funnels, "30d") do
+                  {:ok, s} -> {true, s, nil}
+                  {:error, r} -> {false, %{}, inspect(r) |> String.slice(0, 300)}
+                end
+
+              rows =
+                Enum.map(funnels, fn funnel ->
+                  stats =
+                    Map.get(summaries, funnel.id, %{
+                      entered: 0,
+                      completed: 0,
+                      conversion_rate: 0.0
+                    })
+
+                  %{
+                    funnel_id: funnel.id,
+                    funnel_steps: length(funnel.steps || []),
+                    lookup_used_default:
+                      Map.get(summaries, funnel.id) == nil,
+                    entered: stats.entered,
+                    completed: stats.completed,
+                    conversion_rate: stats.conversion_rate
+                  }
+                end)
+
+              json(conn, %{
+                site_id: site_id,
+                summaries_ok: ok,
+                summaries_error: error,
+                summaries_keys: Map.keys(summaries),
+                funnel_ids: Enum.map(funnels, & &1.id),
+                rows: rows
+              })
+
+            _ ->
+              conn |> put_status(400) |> json(%{error: "site_id param required"})
+          end
+
         "funnel_summaries_probe" ->
           case Integer.parse(params["site_id"] || "") do
             {site_id, _} ->
