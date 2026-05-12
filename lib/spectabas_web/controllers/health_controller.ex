@@ -2056,6 +2056,48 @@ defmodule SpectabasWeb.HealthController do
 
           json(conn, %{enqueued: jobs, site_id: site_id})
 
+        "funnel_summaries_probe" ->
+          case Integer.parse(params["site_id"] || "") do
+            {site_id, _} ->
+              site = Spectabas.Sites.get_site(site_id)
+              funnels = Spectabas.Goals.list_funnels(site)
+              t0 = System.monotonic_time(:millisecond)
+              result = Spectabas.Analytics.funnel_summaries_system(site, funnels, "30d")
+              elapsed = System.monotonic_time(:millisecond) - t0
+
+              shaped =
+                case result do
+                  {:ok, map} ->
+                    %{
+                      ok: true,
+                      summaries:
+                        Map.new(map, fn {k, v} ->
+                          {k,
+                           %{
+                             entered: v.entered,
+                             completed: v.completed,
+                             conversion_rate: v.conversion_rate
+                           }}
+                        end)
+                    }
+
+                  other ->
+                    %{ok: false, raw: inspect(other) |> String.slice(0, 500)}
+                end
+
+              json(
+                conn,
+                Map.merge(shaped, %{
+                  site_id: site_id,
+                  funnel_count: length(funnels),
+                  elapsed_ms: elapsed
+                })
+              )
+
+            _ ->
+              conn |> put_status(400) |> json(%{error: "site_id param required"})
+          end
+
         "funnel_stats_dump" ->
           case Integer.parse(params["site_id"] || "") do
             {site_id, _} ->

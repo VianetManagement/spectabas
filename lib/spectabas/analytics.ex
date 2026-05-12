@@ -3290,7 +3290,7 @@ defmodule Spectabas.Analytics do
         AND event_type IN ('pageview', 'custom')
       GROUP BY visitor_id
     )
-    SETTINGS max_execution_time = 30
+    SETTINGS max_execution_time = 180
     """
 
     ClickHouse.query(sql)
@@ -3322,7 +3322,7 @@ defmodule Spectabas.Analytics do
       |> Task.async_stream(
         fn funnel -> {funnel.id, funnel_summary_for_system(site, funnel, date_range)} end,
         max_concurrency: 4,
-        timeout: 35_000,
+        timeout: 200_000,
         on_timeout: :kill_task
       )
       |> Enum.reduce(%{}, fn
