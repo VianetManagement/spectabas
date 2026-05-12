@@ -21,16 +21,31 @@ RUN mix esbuild.install --if-missing && \
     mix ua_inspector.download --force
 
 # --- Layer 2: GeoIP databases ---
-# DB-IP downloaded at build time (free, no key needed)
-# MaxMind downloaded at build time if MAXMIND_LICENSE_KEY is set as build arg
-# Cache key: 2026-03
+# DB-IP rotates files monthly; try current month, fall back to previous month,
+# then previous-previous. Build does not fail if all fall through — the runtime
+# GeoIPRefresh worker pulls fresh MMDB files from R2 on boot anyway. These are
+# only a seed for the first boot before R2 sync runs.
+# Cache key: 2026-05
 ARG MAXMIND_LICENSE_KEY=""
 RUN mkdir -p priv/geoip && \
-    curl -fsSL -o /tmp/city.mmdb.gz "https://download.db-ip.com/free/dbip-city-lite-2026-03.mmdb.gz" && \
-    curl -fsSL -o /tmp/asn.mmdb.gz "https://download.db-ip.com/free/dbip-asn-lite-2026-03.mmdb.gz" && \
-    gunzip -c /tmp/city.mmdb.gz > priv/geoip/dbip-city-lite.mmdb && \
-    gunzip -c /tmp/asn.mmdb.gz > priv/geoip/dbip-asn-lite.mmdb && \
+    NOW=$(date -u +%Y-%m) && \
+    PREV=$(date -u -d "1 month ago" +%Y-%m 2>/dev/null || date -u +%Y-%m) && \
+    PREV2=$(date -u -d "2 months ago" +%Y-%m 2>/dev/null || date -u +%Y-%m) && \
+    DBIP_OK=0 && \
+    for V in "$NOW" "$PREV" "$PREV2"; do \
+      if curl -fsSL -o /tmp/city.mmdb.gz "https://download.db-ip.com/free/dbip-city-lite-${V}.mmdb.gz" \
+         && curl -fsSL -o /tmp/asn.mmdb.gz "https://download.db-ip.com/free/dbip-asn-lite-${V}.mmdb.gz"; then \
+        gunzip -c /tmp/city.mmdb.gz > priv/geoip/dbip-city-lite.mmdb && \
+        gunzip -c /tmp/asn.mmdb.gz > priv/geoip/dbip-asn-lite.mmdb && \
+        echo "Bundled DB-IP ${V}" && \
+        DBIP_OK=1 && \
+        break; \
+      else \
+        echo "DB-IP ${V} not available, trying older"; \
+      fi; \
+    done && \
     rm -f /tmp/*.gz && \
+    if [ "$DBIP_OK" = "0" ]; then echo "WARN: no DB-IP build seed; runtime R2 pull will populate"; fi && \
     if [ -n "$MAXMIND_LICENSE_KEY" ]; then \
       curl -fsSL -o /tmp/maxmind.tar.gz "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=${MAXMIND_LICENSE_KEY}&suffix=tar.gz" && \
       tar -xzf /tmp/maxmind.tar.gz -C /tmp && \
