@@ -2127,6 +2127,25 @@ defmodule SpectabasWeb.HealthController do
             {:error, reason} -> json(conn, %{ok: false, error: inspect(reason)})
           end
 
+        "dashboard_snapshot_dump" ->
+          case Integer.parse(params["site_id"] || "") do
+            {site_id, _} ->
+              kind = params["kind"] || ""
+
+              row =
+                Spectabas.Repo.one(
+                  from(s in "dashboard_snapshots",
+                    where: s.site_id == ^site_id and s.kind == ^kind,
+                    select: %{data: s.data, refreshed_at: s.refreshed_at}
+                  )
+                )
+
+              json(conn, %{site_id: site_id, kind: kind, row: row})
+
+            _ ->
+              conn |> put_status(400) |> json(%{error: "site_id param required"})
+          end
+
         "funnel_worker_run" ->
           # Bypass Oban entirely — invoke the worker module's perform/1 inline
           # so we can see what it returns and check funnel_stats immediately
