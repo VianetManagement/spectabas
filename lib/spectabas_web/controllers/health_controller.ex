@@ -2090,6 +2090,7 @@ defmodule SpectabasWeb.HealthController do
                 limit: 10,
                 select: %{
                   id: j.id,
+                  args: j.args,
                   state: j.state,
                   attempt: j.attempt,
                   max_attempts: j.max_attempts,
