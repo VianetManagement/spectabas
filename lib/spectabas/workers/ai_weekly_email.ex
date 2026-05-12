@@ -134,34 +134,7 @@ defmodule Spectabas.Workers.AIWeeklyEmail do
   end
 
   defp render_html(site, analysis) do
-    # Convert markdown to simple HTML
-    body_html =
-      analysis
-      |> String.split("\n")
-      |> Enum.map(fn line ->
-        line = String.trim_trailing(line)
-
-        cond do
-          String.starts_with?(line, "## ") ->
-            "<h2 style=\"color:#1f2937;font-size:18px;margin:20px 0 8px;border-bottom:1px solid #e5e7eb;padding-bottom:6px;\">#{esc(String.trim_leading(line, "## "))}</h2>"
-
-          String.starts_with?(line, "# ") ->
-            "<h1 style=\"color:#1f2937;font-size:22px;margin:16px 0 8px;\">#{esc(String.trim_leading(line, "# "))}</h1>"
-
-          String.match?(line, ~r/^\d+\.\s/) ->
-            "<p style=\"color:#374151;font-size:14px;margin:4px 0 4px 16px;\">#{bold(esc(line))}</p>"
-
-          String.starts_with?(line, "- ") ->
-            "<p style=\"color:#374151;font-size:14px;margin:4px 0 4px 16px;\">&bull; #{bold(esc(String.trim_leading(line, "- ")))}</p>"
-
-          line == "" ->
-            ""
-
-          true ->
-            "<p style=\"color:#374151;font-size:14px;margin:6px 0;\">#{bold(esc(line))}</p>"
-        end
-      end)
-      |> Enum.join("\n")
+    body_html = Spectabas.AI.MarkdownEmail.render(analysis)
 
     """
     <div style="max-width:600px;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:20px;">
@@ -194,9 +167,5 @@ defmodule Spectabas.Workers.AIWeeklyEmail do
     |> String.replace("&", "&amp;")
     |> String.replace("<", "&lt;")
     |> String.replace(">", "&gt;")
-  end
-
-  defp bold(text) do
-    String.replace(text, ~r/\*\*(.+?)\*\*/, "<strong>\\1</strong>")
   end
 end
