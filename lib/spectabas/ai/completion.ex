@@ -6,7 +6,10 @@ defmodule Spectabas.AI.Completion do
 
   require Logger
 
-  @timeout 60_000
+  # AI completions with high max_tokens (e.g. 8192 for weekly insights) can
+  # take 1-2 minutes against Anthropic + thinking models. Match the worker
+  # timeout so the HTTP client doesn't cut off mid-stream.
+  @timeout 300_000
 
   @doc """
   Generate a completion from the configured AI provider.

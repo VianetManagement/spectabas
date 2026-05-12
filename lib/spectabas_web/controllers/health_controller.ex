@@ -2109,10 +2109,17 @@ defmodule SpectabasWeb.HealthController do
           })
 
         "trigger_ai_weekly" ->
-          # Fire AIWeeklyEmail immediately (no args = full run across all
-          # auto_generate sites; or site_id=N to dry-run-then-write for one).
-          case Spectabas.Workers.AIWeeklyEmail.new(%{}) |> Oban.insert() do
-            {:ok, job} -> json(conn, %{ok: true, job_id: job.id})
+          # Fire AIWeeklyEmail immediately. With no args: meta-job fans out
+          # per-site jobs across all auto_generate sites. With ?site_id=N:
+          # run a single site directly, skipping the fan-out.
+          args =
+            case Integer.parse(params["site_id"] || "") do
+              {n, _} -> %{"site_id" => n}
+              _ -> %{}
+            end
+
+          case Spectabas.Workers.AIWeeklyEmail.new(args) |> Oban.insert() do
+            {:ok, job} -> json(conn, %{ok: true, job_id: job.id, args: args})
             {:error, reason} -> json(conn, %{ok: false, error: inspect(reason)})
           end
 

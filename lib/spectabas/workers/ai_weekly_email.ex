@@ -1,7 +1,16 @@
 defmodule Spectabas.Workers.AIWeeklyEmail do
   @moduledoc """
-  Sends weekly AI-generated insight emails for sites with AI configured.
+  Generates and emails the weekly AI insights for sites that have opted in.
   Runs Monday at 9am UTC via Oban cron.
+
+  Modes:
+  - no args → meta-job: enqueue a per-site job for every site with
+    auto_generate enabled
+  - `%{"site_id" => N}` → per-site job: generate the analysis, cache it,
+    and (if email_enabled) send to every weekly subscriber
+
+  Per-site jobs let one slow site (AI generation can take 60-120s) not
+  block the others.
   """
 
   use Oban.Worker, queue: :mailer, max_attempts: 2
@@ -13,44 +22,57 @@ defmodule Spectabas.Workers.AIWeeklyEmail do
   alias Spectabas.Reports
   import Ecto.Query
 
+  # AI generation alone can take 60-120s; add prompt-building (CH queries) on
+  # top, plus email sending. 10 minutes is a generous safety margin.
   @impl Oban.Worker
-  def timeout(_job), do: :timer.seconds(60)
+  def timeout(_job), do: :timer.seconds(600)
 
   @impl Oban.Worker
-  def perform(_job) do
-    # Sites with AI configured AND auto_generate enabled. The cron only
-    # touches sites that have explicitly opted in via Settings → Content.
-    sites =
-      Repo.all(from(s in Sites.Site, where: not is_nil(s.ai_config_encrypted)))
-      |> Enum.filter(&Config.auto_generate?/1)
+  def perform(%Oban.Job{args: %{"site_id" => site_id}}) do
+    case Sites.get_site(site_id) do
+      nil ->
+        :ok
 
-    Enum.each(sites, fn site ->
-      try do
-        run_for_site(site)
-      rescue
-        e ->
-          Logger.error("[AIWeeklyEmail] Failed for site #{site.id}: #{Exception.message(e)}")
-      end
+      site ->
+        if Config.auto_generate?(site) do
+          run_for_site(site)
+        else
+          # auto_generate was toggled off between meta-job and per-site job
+          :ok
+        end
+    end
+  end
+
+  def perform(%Oban.Job{args: args}) when args == %{} do
+    sites_with_auto_generate()
+    |> Enum.each(fn site ->
+      __MODULE__.new(%{"site_id" => site.id}) |> Oban.insert()
     end)
 
     :ok
   end
 
+  defp sites_with_auto_generate do
+    Repo.all(from(s in Sites.Site, where: not is_nil(s.ai_config_encrypted)))
+    |> Enum.filter(&Config.auto_generate?/1)
+  end
+
   defp run_for_site(site) do
-    # Always regenerate on the schedule — the cache exists for ad-hoc views,
-    # but the weekly run is the user's signal that they want fresh analysis.
+    Logger.notice("[AIWeeklyEmail] Starting site=#{site.id}")
+
     case generate_analysis(site) do
       nil ->
-        Logger.warning("[AIWeeklyEmail] No analysis generated for site #{site.id}")
+        Logger.warning("[AIWeeklyEmail] No analysis generated for site=#{site.id}")
+        {:error, :no_analysis}
 
       analysis ->
         if Config.email_enabled?(site) do
           email_subscribers(site, analysis)
         else
-          Logger.info(
-            "[AIWeeklyEmail] Generated for site #{site.id}, email disabled — cache only"
-          )
+          Logger.notice("[AIWeeklyEmail] Generated site=#{site.id}, email disabled — cache only")
         end
+
+        :ok
     end
   end
 
@@ -58,10 +80,10 @@ defmodule Spectabas.Workers.AIWeeklyEmail do
     subscribers = Reports.weekly_subscribers(site.id)
 
     if subscribers == [] do
-      Logger.info("[AIWeeklyEmail] No subscribers for site #{site.id}")
+      Logger.notice("[AIWeeklyEmail] No subscribers for site=#{site.id}")
     else
       Enum.each(subscribers, fn user -> send_email(user, site, analysis) end)
-      Logger.info("[AIWeeklyEmail] Sent to #{length(subscribers)} users for site #{site.id}")
+      Logger.notice("[AIWeeklyEmail] Sent site=#{site.id} to #{length(subscribers)} users")
     end
   end
 
@@ -79,11 +101,11 @@ defmodule Spectabas.Workers.AIWeeklyEmail do
           text
 
         {:error, reason} ->
-          Logger.warning("[AIWeeklyEmail] AI generation failed: #{reason}")
+          Logger.warning("[AIWeeklyEmail] AI generation failed site=#{site.id}: #{reason}")
           nil
       end
     else
-      Logger.warning("[AIWeeklyEmail] No admin user found for site #{site.id}")
+      Logger.warning("[AIWeeklyEmail] No admin user found for site=#{site.id}")
       nil
     end
   end
