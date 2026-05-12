@@ -2056,6 +2056,44 @@ defmodule SpectabasWeb.HealthController do
 
           json(conn, %{enqueued: jobs, site_id: site_id})
 
+        "funnel_worker_run" ->
+          # Bypass Oban entirely — invoke the worker module's perform/1 inline
+          # so we can see what it returns and check funnel_stats immediately
+          # after, all in one web request. If this writes correct values but
+          # the Oban-scheduled run writes zeros, the gap is in the Oban
+          # execution context.
+          case Integer.parse(params["site_id"] || "") do
+            {site_id, _} ->
+              job = %Oban.Job{args: %{"site_id" => site_id}}
+              t0 = System.monotonic_time(:millisecond)
+              result = Spectabas.Workers.FunnelStatsSnapshot.perform(job)
+              elapsed = System.monotonic_time(:millisecond) - t0
+
+              rows =
+                Spectabas.Repo.all(
+                  from(s in "funnel_stats",
+                    where: s.site_id == ^site_id,
+                    select: %{
+                      funnel_id: s.funnel_id,
+                      entered: s.entered,
+                      completed: s.completed,
+                      conversion_rate: s.conversion_rate,
+                      refreshed_at: s.refreshed_at
+                    }
+                  )
+                )
+
+              json(conn, %{
+                site_id: site_id,
+                worker_result: inspect(result),
+                elapsed_ms: elapsed,
+                funnel_stats_after: rows
+              })
+
+            _ ->
+              conn |> put_status(400) |> json(%{error: "site_id param required"})
+          end
+
         "funnel_worker_dryrun" ->
           # Exact reproduction of FunnelStatsSnapshot.snapshot_site/1 but
           # returns each step's result instead of writing. Lets us see whether
