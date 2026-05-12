@@ -2065,11 +2065,7 @@ defmodule SpectabasWeb.HealthController do
               site = Spectabas.Sites.get_site(site_id)
               funnels = Spectabas.Goals.list_funnels(site)
 
-              {ok, summaries, error} =
-                case Spectabas.Analytics.funnel_summaries_system(site, funnels, "30d") do
-                  {:ok, s} -> {true, s, nil}
-                  {:error, r} -> {false, %{}, inspect(r) |> String.slice(0, 300)}
-                end
+              {:ok, summaries} = Spectabas.Analytics.funnel_summaries_system(site, funnels, "30d")
 
               rows =
                 Enum.map(funnels, fn funnel ->
@@ -2093,8 +2089,6 @@ defmodule SpectabasWeb.HealthController do
 
               json(conn, %{
                 site_id: site_id,
-                summaries_ok: ok,
-                summaries_error: error,
                 summaries_keys: Map.keys(summaries),
                 funnel_ids: Enum.map(funnels, & &1.id),
                 rows: rows
