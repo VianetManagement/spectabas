@@ -45,8 +45,20 @@ defmodule Spectabas.Goals do
   """
   def delete_goal(site, goal_id) do
     case Repo.one(from(g in Goal, where: g.id == ^goal_id and g.site_id == ^site.id)) do
-      nil -> {:error, :not_found}
-      goal -> Repo.delete(goal)
+      nil ->
+        {:error, :not_found}
+
+      goal ->
+        result = Repo.delete(goal)
+
+        # Drop the goal detail snapshot row so a deleted goal doesn't linger
+        # in dashboard_snapshots forever.
+        from(s in "dashboard_snapshots",
+          where: s.site_id == ^site.id and s.kind == ^"goal_detail:#{goal_id}"
+        )
+        |> Repo.delete_all()
+
+        result
     end
   end
 

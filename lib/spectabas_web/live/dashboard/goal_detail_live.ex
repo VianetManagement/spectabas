@@ -1,7 +1,7 @@
 defmodule SpectabasWeb.Dashboard.GoalDetailLive do
   use SpectabasWeb, :live_view
 
-  alias Spectabas.{Accounts, Sites, Goals, Analytics, Visitors}
+  alias Spectabas.{Accounts, Sites, Goals, Analytics, Visitors, DashboardSnapshots}
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers
 
@@ -31,6 +31,7 @@ defmodule SpectabasWeb.Dashboard.GoalDetailLive do
        |> assign(:recent_completers, [])
        |> assign(:email_map, %{})
        |> assign(:click_element_info, nil)
+       |> assign(:snapshot_refreshed_at, nil)
        |> assign(:loading, true)
        |> then(fn s ->
          send(self(), :load_data)
@@ -54,6 +55,67 @@ defmodule SpectabasWeb.Dashboard.GoalDetailLive do
     goal = socket.assigns.goal
     range = socket.assigns.range
 
+    case range == "30d" && DashboardSnapshots.fetch(site, "goal_detail:#{goal.id}") do
+      {data, refreshed_at} ->
+        load_from_snapshot(socket, data, refreshed_at)
+
+      _ ->
+        live_load(socket, site, user, goal, range)
+    end
+  end
+
+  defp load_from_snapshot(socket, data, refreshed_at) do
+    stats =
+      data
+      |> Map.get("stats", %{})
+      |> Map.new(fn {k, v} ->
+        case k do
+          k when is_binary(k) -> {String.to_existing_atom(k), v}
+          k -> {k, v}
+        end
+      end)
+
+    stats =
+      if Map.has_key?(stats, :total_completions), do: stats, else: @default_stats
+
+    timeseries = Map.get(data, "timeseries", [])
+
+    timeseries_json =
+      try do
+        Jason.encode!(%{
+          labels: Enum.map(timeseries, & &1["day"]),
+          visitors: Enum.map(timeseries, &to_num(&1["completions"])),
+          pageviews: Enum.map(timeseries, &to_num(&1["unique_completers"])),
+          metric: "visitors"
+        })
+      rescue
+        _ -> "{}"
+      end
+
+    # Snapshot stores email_map as %{visitor_id_string => email_string};
+    # the template expects %{vid => %{email: ...}}. Rebuild that shape.
+    email_map =
+      data
+      |> Map.get("email_map", %{})
+      |> Enum.map(fn {vid, email} -> {vid, %{email: email}} end)
+      |> Map.new()
+
+    {:noreply,
+     socket
+     |> assign(:stats, stats)
+     |> assign(:timeseries_json, timeseries_json)
+     |> assign(:top_sources, Map.get(data, "top_sources", []))
+     |> assign(:top_pages, Map.get(data, "top_pages", []))
+     |> assign(:devices, Map.get(data, "devices", []))
+     |> assign(:geo, Map.get(data, "geo", []))
+     |> assign(:recent_completers, Map.get(data, "recent_completers", []))
+     |> assign(:email_map, email_map)
+     |> assign(:click_element_info, Map.get(data, "click_element_info"))
+     |> assign(:snapshot_refreshed_at, refreshed_at)
+     |> assign(:loading, false)}
+  end
+
+  defp live_load(socket, site, user, goal, range) do
     # Run all 7 ClickHouse queries in parallel
     tasks = %{
       stats:
@@ -133,6 +195,7 @@ defmodule SpectabasWeb.Dashboard.GoalDetailLive do
      |> assign(:recent_completers, completers)
      |> assign(:email_map, email_map)
      |> assign(:click_element_info, click_info)
+     |> assign(:snapshot_refreshed_at, nil)
      |> assign(:loading, false)}
   rescue
     _ -> {:noreply, assign(socket, :loading, false)}
@@ -185,15 +248,20 @@ defmodule SpectabasWeb.Dashboard.GoalDetailLive do
             &larr; Back to Goals
           </.link>
           <div class="flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <h1 class="text-2xl font-bold text-gray-900">{@goal.name}</h1>
-              <span class={[
-                "inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-medium",
-                goal_type_classes(@goal.goal_type)
-              ]}>
-                {goal_type_label(@goal.goal_type)}
-              </span>
-              <span class="text-sm text-gray-500 font-mono">{goal_target(@goal)}</span>
+            <div>
+              <div class="flex items-center gap-3">
+                <h1 class="text-2xl font-bold text-gray-900">{@goal.name}</h1>
+                <span class={[
+                  "inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-medium",
+                  goal_type_classes(@goal.goal_type)
+                ]}>
+                  {goal_type_label(@goal.goal_type)}
+                </span>
+                <span class="text-sm text-gray-500 font-mono">{goal_target(@goal)}</span>
+              </div>
+              <p :if={@snapshot_refreshed_at} class="text-xs text-gray-400 mt-1">
+                Snapshot · last update {DashboardSnapshots.refreshed_label(@snapshot_refreshed_at)}
+              </p>
             </div>
             <div class="flex gap-1">
               <button

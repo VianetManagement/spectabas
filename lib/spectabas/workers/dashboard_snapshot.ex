@@ -21,10 +21,12 @@ defmodule Spectabas.Workers.DashboardSnapshot do
   use Oban.Worker, queue: :maintenance, max_attempts: 3
 
   require Logger
-  alias Spectabas.{Accounts, Analytics, DashboardSnapshots, Sites, Visitors}
+  alias Spectabas.{Accounts, Analytics, DashboardSnapshots, Goals, Sites, Visitors}
 
   @impl Oban.Worker
-  def timeout(_job), do: :timer.seconds(600)
+  # 15 min — per-goal detail snapshots dominate runtime on sites with many
+  # goals (16 goals × 7 CH queries × ~5s each ≈ 8 min for puppies.com).
+  def timeout(_job), do: :timer.seconds(900)
 
   @default_outbound_window 30
   @default_downloads_window 30
@@ -152,8 +154,90 @@ defmodule Spectabas.Workers.DashboardSnapshot do
       %{"rows" => list_or_empty(Analytics.suggested_funnels(site, user))}
     end)
 
+    # Per-goal detail snapshot. Stored as `goal_detail:<goal_id>` so the
+    # detail page renders instantly when the user clicks into a goal. 30d
+    # window matches the page default; other ranges fall back to live CH.
+    Goals.list_goals(site)
+    |> Enum.each(fn goal ->
+      snapshot_kind(site, "goal_detail:#{goal.id}", 30, fn ->
+        snapshot_goal_detail(site, user, goal)
+      end)
+    end)
+
     :ok
   end
+
+  defp snapshot_goal_detail(site, user, goal) do
+    tasks = %{
+      stats:
+        Task.async(fn ->
+          case Analytics.goal_detail_stats(site, user, goal, "30d") do
+            {:ok, m} -> m
+            _ -> %{}
+          end
+        end),
+      timeseries:
+        Task.async(fn ->
+          list_or_empty(Analytics.goal_completion_timeseries(site, user, goal, "30d"))
+        end),
+      sources:
+        Task.async(fn ->
+          list_or_empty(Analytics.goal_source_attribution(site, user, goal, "30d"))
+        end),
+      pages:
+        Task.async(fn -> list_or_empty(Analytics.goal_top_pages(site, user, goal, "30d")) end),
+      devices:
+        Task.async(fn ->
+          list_or_empty(Analytics.goal_device_breakdown(site, user, goal, "30d"))
+        end),
+      geo:
+        Task.async(fn -> list_or_empty(Analytics.goal_geo_breakdown(site, user, goal, "30d")) end),
+      completers:
+        Task.async(fn ->
+          list_or_empty(Analytics.goal_recent_completers(site, user, goal, "30d"))
+        end)
+    }
+
+    results = Map.new(tasks, fn {k, t} -> {k, Task.await(t, 60_000)} end)
+
+    # Resolve emails now so the LiveView doesn't need a second PG trip.
+    visitor_ids =
+      results.completers
+      |> Enum.map(& &1["visitor_id"])
+      |> Enum.reject(&(is_nil(&1) or &1 == ""))
+      |> Enum.uniq()
+
+    email_map =
+      visitor_ids
+      |> Spectabas.Visitors.emails_for_visitor_ids()
+      |> Map.new(fn {vid, %{email: email}} -> {to_string(vid), email} end)
+
+    click_info =
+      if goal.goal_type == "click_element" do
+        case Analytics.goal_click_element_details(site, user, goal) do
+          {:ok, [info | _]} -> info
+          _ -> nil
+        end
+      end
+
+    %{
+      "stats" => stats_to_string_keys(results.stats),
+      "timeseries" => results.timeseries,
+      "top_sources" => Enum.take(results.sources, 10),
+      "top_pages" => results.pages,
+      "devices" => results.devices,
+      "geo" => results.geo,
+      "recent_completers" => results.completers,
+      "email_map" => email_map,
+      "click_element_info" => click_info
+    }
+  end
+
+  defp stats_to_string_keys(stats) when is_map(stats) do
+    Map.new(stats, fn {k, v} -> {to_string(k), v} end)
+  end
+
+  defp stats_to_string_keys(_), do: %{}
 
   defp snapshot_kind(site, kind, window_days, fun) do
     started = System.monotonic_time(:millisecond)

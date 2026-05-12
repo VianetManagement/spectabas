@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.10", "2026-05-12T20:40:00Z",
+       [
+         %{
+           title: "Snapshot Goal Detail page so clicking into a goal is instant",
+           description:
+             "GoalDetailLive fires 7 parallel ClickHouse queries on every mount (stats, timeseries, sources, pages, devices, geo, recent_completers) plus an optional click_element_details query plus a Postgres email-map lookup. On puppies.com with 30 days of data each goal was taking many seconds to render. Now stored as `goal_detail:<goal_id>` kind in dashboard_snapshots. DashboardSnapshot worker iterates each site's goals at the end of its hourly run and refreshes them; LiveView reads the snapshot synchronously when range == 30d (the default) and falls back to live CH for 7d / 90d. The recent_completers email map is pre-resolved at snapshot time. Goals.delete_goal/2 drops the snapshot row so deleted goals don't linger forever. Worker timeout bumped 600s → 900s to cover 16+ goals on the heaviest site."
+         }
+       ]},
       {"v6.10.9", "2026-05-12T20:30:00Z",
        [
          %{
