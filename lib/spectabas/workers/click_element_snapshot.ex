@@ -18,7 +18,7 @@ defmodule Spectabas.Workers.ClickElementSnapshot do
   alias Spectabas.{ClickHouse, Goals, Sites}
 
   @impl Oban.Worker
-  def timeout(_job), do: :timer.seconds(120)
+  def timeout(_job), do: :timer.seconds(300)
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"site_id" => site_id}}) do
@@ -63,7 +63,7 @@ defmodule Spectabas.Workers.ClickElementSnapshot do
     HAVING clicks >= 2
     ORDER BY clicks DESC
     LIMIT 1000
-    SETTINGS max_execution_time = 60
+    SETTINGS max_execution_time = 240
     """
 
     case ClickHouse.query(sql) do

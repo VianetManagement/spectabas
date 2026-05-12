@@ -1973,6 +1973,17 @@ defmodule SpectabasWeb.HealthController do
             message: "GeoIP refresh job enqueued — will download + sync to R2"
           })
 
+        "list_sites" ->
+          sites =
+            Spectabas.Repo.all(
+              from(s in Spectabas.Sites.Site,
+                select: %{id: s.id, domain: s.domain, name: s.name},
+                order_by: [asc: s.id]
+              )
+            )
+
+          json(conn, %{sites: sites})
+
         "snapshot_status" ->
           # Per-snapshot-table row counts + most recent refreshed_at, so we can
           # tell at a glance whether the hourly snapshot workers are firing.
@@ -2018,6 +2029,15 @@ defmodule SpectabasWeb.HealthController do
         "trigger_snapshots" ->
           # Fire all four snapshot meta-jobs immediately. Each one will fan out
           # per-site jobs onto the maintenance queue.
+          # Optional ?site_id=N to snapshot a single site directly (skips fan-out).
+          site_id =
+            case Integer.parse(params["site_id"] || "") do
+              {n, _} -> n
+              _ -> nil
+            end
+
+          args = if site_id, do: %{"site_id" => site_id}, else: %{}
+
           jobs =
             Enum.map(
               [
@@ -2027,21 +2047,64 @@ defmodule SpectabasWeb.HealthController do
                 Spectabas.Workers.DashboardSnapshot
               ],
               fn worker ->
-                case worker.new(%{}) |> Oban.insert() do
+                case worker.new(args) |> Oban.insert() do
                   {:ok, job} -> %{worker: inspect(worker), ok: true, job_id: job.id}
                   {:error, reason} -> %{worker: inspect(worker), ok: false, error: inspect(reason)}
                 end
               end
             )
 
-          json(conn, %{enqueued: jobs})
+          json(conn, %{enqueued: jobs, site_id: site_id})
+
+        "snapshot_site_status" ->
+          # Per-site breakdown — which kinds are populated for a given site.
+          # Pass ?site_id=N.
+          case Integer.parse(params["site_id"] || "") do
+            {site_id, _} ->
+              click_elements =
+                Spectabas.Repo.aggregate(
+                  from(s in "click_element_stats", where: s.site_id == ^site_id),
+                  :count
+                )
+
+              goals =
+                Spectabas.Repo.aggregate(
+                  from(s in "goal_stats", where: s.site_id == ^site_id),
+                  :count
+                )
+
+              funnels =
+                Spectabas.Repo.aggregate(
+                  from(s in "funnel_stats", where: s.site_id == ^site_id),
+                  :count
+                )
+
+              dashboard =
+                Spectabas.Repo.all(
+                  from(s in "dashboard_snapshots",
+                    where: s.site_id == ^site_id,
+                    select: %{kind: s.kind, refreshed_at: s.refreshed_at}
+                  )
+                )
+
+              json(conn, %{
+                site_id: site_id,
+                click_elements: click_elements,
+                goals: goals,
+                funnels: funnels,
+                dashboard_snapshots: dashboard
+              })
+
+            _ ->
+              conn |> put_status(400) |> json(%{error: "site_id param required"})
+          end
 
         _ ->
           conn
           |> put_status(400)
           |> json(%{
             error:
-              "unknown action. use: status, cancel_worker, cancel_all_executing, refresh_geoip, snapshot_status, trigger_snapshots"
+              "unknown action. use: status, cancel_worker, cancel_all_executing, refresh_geoip, snapshot_status, trigger_snapshots, snapshot_site_status, list_sites"
           })
       end
     end
