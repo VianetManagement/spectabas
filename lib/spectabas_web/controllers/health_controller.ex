@@ -2048,8 +2048,11 @@ defmodule SpectabasWeb.HealthController do
               ],
               fn worker ->
                 case worker.new(args) |> Oban.insert() do
-                  {:ok, job} -> %{worker: inspect(worker), ok: true, job_id: job.id}
-                  {:error, reason} -> %{worker: inspect(worker), ok: false, error: inspect(reason)}
+                  {:ok, job} ->
+                    %{worker: inspect(worker), ok: true, job_id: job.id}
+
+                  {:error, reason} ->
+                    %{worker: inspect(worker), ok: false, error: inspect(reason)}
                 end
               end
             )
@@ -2185,8 +2188,7 @@ defmodule SpectabasWeb.HealthController do
                   %{
                     funnel_id: funnel.id,
                     funnel_steps: length(funnel.steps || []),
-                    lookup_used_default:
-                      Map.get(summaries, funnel.id) == nil,
+                    lookup_used_default: Map.get(summaries, funnel.id) == nil,
                     entered: stats.entered,
                     completed: stats.completed,
                     conversion_rate: stats.conversion_rate

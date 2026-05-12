@@ -89,7 +89,9 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
 
     # Refresh the snapshot too so other viewers benefit and "last update" resets.
     if is_list(suggestions) and suggestions != [] do
-      DashboardSnapshots.put(socket.assigns.site, "suggested_funnels", 30, %{"rows" => suggestions})
+      DashboardSnapshots.put(socket.assigns.site, "suggested_funnels", 30, %{
+        "rows" => suggestions
+      })
     end
 
     {:noreply,

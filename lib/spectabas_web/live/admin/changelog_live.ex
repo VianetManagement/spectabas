@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.9", "2026-05-12T20:30:00Z",
+       [
+         %{
+           title: "Snapshot bug fixes, AI insights overhaul, full markdown rendering",
+           description:
+             "Long debug session: (1) ClickHouse.query had a 30s HTTP receive_timeout that overrode the SQL max_execution_time, so heavy funnel + click element snapshot queries on puppies.com were getting cut at 30s and writing zeros. Fixed by passing receive_timeout: N explicitly. (2) replace_click_element_stats(site, []) wiped all site rows because Ecto rewrites NOT IN ^[] to TRUE. (3) DashboardSnapshot stored raw lists into a :map-typed jsonb column; Ecto cast rejected; rescue clause swallowed; Oban Pruner cleared. Now wraps lists as %{\"rows\" => list} and unwraps via DashboardSnapshots.with_fallback_list/5. (4) ClickElementSnapshot crashed with ON CONFLICT cardinality_violation when CH grouped by tag but element_key collisioned across tags — Enum.uniq_by added. (5) Added suggested_funnels as 8th dashboard snapshot kind so the heavy windowFunnel query runs hourly instead of on every button click. (6) AIWeeklyEmail completely rewritten: 60s timeout → 600s, single-job-iterates-everything → meta-job + per-site fan-out, AI.Completion HTTP timeout 60s → 300s. The weekly email was getting killed mid-generation every Monday and silently discarded. (7) New Spectabas.AI.MarkdownEmail module renders all markdown indicators (H1-H6, bold, italic, strikethrough, inline + fenced code, https/mailto links, bullets, numbered, blockquotes, hr) with email-safe inline styles + 33 unit tests covering each + XSS safety. (8) New /oban-admin diagnostic endpoints (snapshot_site_status, trigger_snapshots, click_element_probe, funnel_summaries_probe, funnel_worker_dryrun, funnel_worker_run, funnel_stats_dump, ai_insights_status, trigger_ai_weekly) for debugging the snapshot pipeline. (9) Dockerfile DB-IP download now loops over current/previous/previous2 months so the build doesn't fail on month rollover."
+         }
+       ]},
       {"v6.10.8", "2026-05-12T15:30:00Z",
        [
          %{
