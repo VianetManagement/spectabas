@@ -2056,6 +2056,30 @@ defmodule SpectabasWeb.HealthController do
 
           json(conn, %{enqueued: jobs, site_id: site_id})
 
+        "funnel_stats_dump" ->
+          case Integer.parse(params["site_id"] || "") do
+            {site_id, _} ->
+              rows =
+                Spectabas.Repo.all(
+                  from(s in "funnel_stats",
+                    where: s.site_id == ^site_id,
+                    select: %{
+                      funnel_id: s.funnel_id,
+                      entered: s.entered,
+                      completed: s.completed,
+                      conversion_rate: s.conversion_rate,
+                      window_days: s.window_days,
+                      refreshed_at: s.refreshed_at
+                    }
+                  )
+                )
+
+              json(conn, %{site_id: site_id, rows: rows})
+
+            _ ->
+              conn |> put_status(400) |> json(%{error: "site_id param required"})
+          end
+
         "click_element_probe" ->
           # Runs the ClickElementSnapshot's CH query directly for a site and
           # returns the row count + first 5 rows + elapsed_ms. Lets us see why
