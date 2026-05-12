@@ -2056,6 +2056,66 @@ defmodule SpectabasWeb.HealthController do
 
           json(conn, %{enqueued: jobs, site_id: site_id})
 
+        "ai_insights_status" ->
+          # Summarize the state of AI weekly insights — which sites have it
+          # enabled, which have subscribers, when the worker last ran, and
+          # the last 10 jobs in oban_jobs (including failures).
+          sites_with_ai =
+            Spectabas.Repo.all(
+              from(s in Spectabas.Sites.Site,
+                where: not is_nil(s.ai_config_encrypted),
+                select: %{id: s.id, name: s.name, domain: s.domain}
+              )
+            )
+
+          per_site =
+            Enum.map(sites_with_ai, fn s ->
+              site = Spectabas.Sites.get_site(s.id)
+
+              %{
+                site_id: s.id,
+                name: s.name,
+                domain: s.domain,
+                auto_generate: Spectabas.AI.Config.auto_generate?(site),
+                email_enabled: Spectabas.AI.Config.email_enabled?(site),
+                subscribers: length(Spectabas.Reports.weekly_subscribers(s.id))
+              }
+            end)
+
+          recent_jobs =
+            Spectabas.ObanRepo.all(
+              from(j in "oban_jobs",
+                where: j.worker == "Spectabas.Workers.AIWeeklyEmail",
+                order_by: [desc: j.id],
+                limit: 10,
+                select: %{
+                  id: j.id,
+                  state: j.state,
+                  attempt: j.attempt,
+                  max_attempts: j.max_attempts,
+                  inserted_at: j.inserted_at,
+                  scheduled_at: j.scheduled_at,
+                  attempted_at: j.attempted_at,
+                  completed_at: j.completed_at,
+                  errors: j.errors
+                }
+              )
+            )
+
+          json(conn, %{
+            sites_with_ai_config: length(sites_with_ai),
+            per_site: per_site,
+            recent_jobs: recent_jobs
+          })
+
+        "trigger_ai_weekly" ->
+          # Fire AIWeeklyEmail immediately (no args = full run across all
+          # auto_generate sites; or site_id=N to dry-run-then-write for one).
+          case Spectabas.Workers.AIWeeklyEmail.new(%{}) |> Oban.insert() do
+            {:ok, job} -> json(conn, %{ok: true, job_id: job.id})
+            {:error, reason} -> json(conn, %{ok: false, error: inspect(reason)})
+          end
+
         "funnel_worker_run" ->
           # Bypass Oban entirely — invoke the worker module's perform/1 inline
           # so we can see what it returns and check funnel_stats immediately
