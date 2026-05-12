@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.7", "2026-05-12T10:50:00Z",
+       [
+         %{
+           title: "Goals + Funnels: Postgres snapshot replaces per-load ClickHouse fan-out",
+           description:
+             "Same treatment as v6.10.6's Click Elements page. The Goals page was running a UNION-ALL completions query plus N parallel goal_source_attribution queries (one per goal) on every mount; the Funnels page was running N parallel windowFunnel queries on every mount. On puppies.com both pages were noticeably slow and added to ClickHouse CPU pressure. Two new Postgres tables (`goal_stats`, `funnel_stats`) are populated hourly by `Spectabas.Workers.GoalStatsSnapshot` and `Spectabas.Workers.FunnelStatsSnapshot`. Dashboards now read from Postgres synchronously — no deferred load, no spinners. Headers show 'last update Xm ago'. Creating a goal or funnel enqueues an immediate per-site snapshot so new entries get stats within minutes. Added `goal_completions_system/2`, `goal_source_attribution_system/3`, and `funnel_summaries_system/3` Analytics variants (no auth) used by the workers — mirrors the existing `scraper_candidates_system` pattern. Existing public functions (`goal_completions/3`, etc.) preserved for `goal_detail_live` and `insights_prompt` callers."
+         }
+       ]},
       {"v6.10.6", "2026-05-12T10:30:00Z",
        [
          %{

@@ -2456,6 +2456,8 @@ defmodule SpectabasWeb.DocsLive do
 
             The Click Elements page is backed by a snapshot that refreshes hourly (looking at the last 30 days of clicks, top 1000 elements per site). The header shows when the snapshot last updated. Newly clicked elements appear after the next snapshot, not in real time — this keeps the page fast on high-volume sites without taxing the analytics database.
 
+            > **Goals and Funnels work the same way.** The completions / unique visitors / conversion rate columns on the Goals page (last 7 days) and the entered / completed / conversion rate columns on the Funnels page (last 30 days) are also Postgres snapshots that refresh hourly. The header shows the last update time. Creating a new goal or funnel kicks off an immediate snapshot for the site so stats appear within minutes. Goal detail and funnel detail pages still query ClickHouse live for the deep dive.
+
             ### Funnels
 
             Define multi-step conversion paths to see where visitors drop off. Each step can be a pageview (URL path match), a custom event, a click element (with searchable autocomplete from detected buttons/links), or a goal (any goal type). Four step types give you full flexibility to track any conversion path.

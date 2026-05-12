@@ -34,8 +34,7 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
         end
 
       goals = Goals.list_goals(site)
-
-      send(self(), :load_analytics)
+      {completions, source_attribution, last_refreshed_at} = load_snapshot(site)
 
       {:ok,
        socket
@@ -43,8 +42,9 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
        |> assign(:site, site)
        |> assign(:user, user)
        |> assign(:goals, goals)
-       |> assign(:completions, %{})
-       |> assign(:source_attribution, %{})
+       |> assign(:completions, completions)
+       |> assign(:source_attribution, source_attribution)
+       |> assign(:last_refreshed_at, last_refreshed_at)
        |> assign(:show_form, false)
        |> assign(:form, to_form(goal_changeset()))
        |> assign(:goal_type, "pageview")
@@ -54,32 +54,37 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
     end
   end
 
-  @impl true
-  def handle_info(:load_analytics, socket) do
-    site = socket.assigns.site
-    user = socket.assigns.user
-    goals = socket.assigns.goals
+  defp load_snapshot(site) do
+    stats_map = Goals.goal_stats_map(site)
 
-    # Run completions + source attribution in parallel
-    completions_task =
-      Task.async(fn ->
-        case Analytics.goal_completions(site, user, :week) do
-          {:ok, data} -> Map.new(data, fn r -> {r.goal_id, r} end)
-          _ -> %{}
-        end
+    completions =
+      Map.new(stats_map, fn {goal_id, stat} ->
+        {goal_id,
+         %{
+           goal_id: goal_id,
+           completions: stat.completions,
+           unique_completers: stat.unique_completers,
+           conversion_rate: stat.conversion_rate
+         }}
       end)
 
-    sources_task = Task.async(fn -> load_source_attribution(goals, site, user) end)
+    source_attribution =
+      Map.new(stats_map, fn {goal_id, stat} -> {goal_id, stat.top_sources || []} end)
 
-    completions = Task.await(completions_task, 15_000)
-    source_attribution = Task.await(sources_task, 15_000)
+    {completions, source_attribution, Goals.goal_stats_last_refreshed_at(site)}
+  end
 
-    {:noreply,
-     socket
-     |> assign(:completions, completions)
-     |> assign(:source_attribution, source_attribution)}
-  rescue
-    _ -> {:noreply, socket}
+  defp refreshed_label(nil), do: "pending first snapshot"
+
+  defp refreshed_label(%DateTime{} = dt) do
+    secs = DateTime.diff(DateTime.utc_now(), dt, :second)
+
+    cond do
+      secs < 60 -> "just now"
+      secs < 3600 -> "#{div(secs, 60)}m ago"
+      secs < 86_400 -> "#{div(secs, 3600)}h ago"
+      true -> "#{div(secs, 86_400)}d ago"
+    end
   end
 
   @impl true
@@ -113,13 +118,11 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
     case Goals.create_goal(socket.assigns.site, params) do
       {:ok, _goal} ->
         goals = Goals.list_goals(socket.assigns.site)
-        sources = load_source_attribution(goals, socket.assigns.site, socket.assigns.user)
 
         {:noreply,
          socket
-         |> put_flash(:info, "Goal created.")
+         |> put_flash(:info, "Goal created. Stats will appear after the next snapshot runs.")
          |> assign(:goals, goals)
-         |> assign(:source_attribution, sources)
          |> assign(:show_form, false)
          |> assign(:form, to_form(goal_changeset()))}
 
@@ -241,21 +244,6 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
     Goals.Goal.changeset(%Goals.Goal{}, %{})
   end
 
-  defp load_source_attribution(goals, site, user) do
-    tasks =
-      Enum.map(goals, fn goal ->
-        Task.async(fn ->
-          {goal.id,
-           safe_query(fn -> Analytics.goal_source_attribution(site, user, goal, :week) end)
-           |> Enum.take(3)}
-        end)
-      end)
-
-    tasks
-    |> Task.await_many(10_000)
-    |> Map.new()
-  end
-
   @impl true
   def render(assigns) do
     ~H"""
@@ -271,6 +259,9 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
         <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
           <div>
             <h1 class="text-2xl font-bold text-gray-900">Goals</h1>
+            <p class="text-xs text-gray-400 mt-0.5">
+              Completions refresh hourly · last update {refreshed_label(@last_refreshed_at)}
+            </p>
           </div>
           <button
             phx-click="toggle_form"
@@ -539,25 +530,13 @@ defmodule SpectabasWeb.Dashboard.GoalsLive do
                     conversion_rate: 0.0
                   }) %>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right font-semibold tabular-nums">
-                  <%= if @completions == %{} do %>
-                    <.death_star_spinner class="w-3 h-3 text-gray-300 inline-block" />
-                  <% else %>
-                    {format_number(stats.completions)}
-                  <% end %>
+                  {format_number(stats.completions)}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
-                  <%= if @completions == %{} do %>
-                    <.death_star_spinner class="w-3 h-3 text-gray-300 inline-block" />
-                  <% else %>
-                    {format_number(stats.unique_completers)}
-                  <% end %>
+                  {format_number(stats.unique_completers)}
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-600 text-right tabular-nums">
-                  <%= if @completions == %{} do %>
-                    <.death_star_spinner class="w-3 h-3 text-gray-300 inline-block" />
-                  <% else %>
-                    {stats.conversion_rate}%
-                  <% end %>
+                  {stats.conversion_rate}%
                 </td>
                 <td class="px-6 py-4 text-right">
                   <button

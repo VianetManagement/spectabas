@@ -19,6 +19,8 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
        |> redirect(to: ~p"/")}
     else
       funnels = Goals.list_funnels(site)
+      summaries = load_funnel_summaries(site)
+      last_refreshed_at = Goals.funnel_stats_last_refreshed_at(site)
 
       {:ok,
        socket
@@ -35,12 +37,33 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
        |> assign(:goals, Goals.list_goals(site))
        |> assign(:suggestions, nil)
        |> assign(:suggestions_loading, false)
-       |> assign(:funnel_summaries, %{})
-       |> assign(:summaries_loading, funnels != [])
-       |> then(fn s ->
-         if funnels != [], do: send(self(), :load_summaries)
-         s
-       end)}
+       |> assign(:funnel_summaries, summaries)
+       |> assign(:last_refreshed_at, last_refreshed_at)}
+    end
+  end
+
+  defp load_funnel_summaries(site) do
+    Goals.funnel_stats_map(site)
+    |> Map.new(fn {funnel_id, s} ->
+      {funnel_id,
+       %{
+         entered: s.entered,
+         completed: s.completed,
+         conversion_rate: s.conversion_rate
+       }}
+    end)
+  end
+
+  defp refreshed_label(nil), do: "pending first snapshot"
+
+  defp refreshed_label(%DateTime{} = dt) do
+    secs = DateTime.diff(DateTime.utc_now(), dt, :second)
+
+    cond do
+      secs < 60 -> "just now"
+      secs < 3600 -> "#{div(secs, 60)}m ago"
+      secs < 86_400 -> "#{div(secs, 3600)}h ago"
+      true -> "#{div(secs, 86_400)}d ago"
     end
   end
 
@@ -52,24 +75,6 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
     {:noreply, assign(socket, suggestions: suggestions, suggestions_loading: false)}
   rescue
     _ -> {:noreply, assign(socket, suggestions: [], suggestions_loading: false)}
-  end
-
-  def handle_info(:load_summaries, socket) do
-    summaries =
-      safe_query(
-        fn ->
-          Analytics.funnel_summaries(
-            socket.assigns.site,
-            socket.assigns.user,
-            socket.assigns.funnels
-          )
-        end,
-        %{}
-      )
-
-    {:noreply, assign(socket, funnel_summaries: summaries, summaries_loading: false)}
-  rescue
-    _ -> {:noreply, assign(socket, funnel_summaries: %{}, summaries_loading: false)}
   end
 
   @impl true
@@ -93,13 +98,11 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
       case Goals.create_funnel(socket.assigns.site, %{"name" => name, "steps" => steps}) do
         {:ok, _funnel} ->
           funnels = Goals.list_funnels(socket.assigns.site)
-          send(self(), :load_summaries)
 
           {:noreply,
            socket
-           |> put_flash(:info, "Funnel created from suggestion.")
-           |> assign(:funnels, funnels)
-           |> assign(:summaries_loading, true)}
+           |> put_flash(:info, "Funnel created. Stats will appear after the next snapshot runs.")
+           |> assign(:funnels, funnels)}
 
         {:error, _} ->
           {:noreply, put_flash(socket, :error, "Failed to create funnel.")}
@@ -178,13 +181,11 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
       case Goals.create_funnel(socket.assigns.site, funnel_params) do
         {:ok, _funnel} ->
           funnels = Goals.list_funnels(socket.assigns.site)
-          send(self(), :load_summaries)
 
           {:noreply,
            socket
-           |> put_flash(:info, "Funnel created.")
+           |> put_flash(:info, "Funnel created. Stats will appear after the next snapshot runs.")
            |> assign(:funnels, funnels)
-           |> assign(:summaries_loading, true)
            |> assign(:show_form, false)
            |> assign(:form_name, "")
            |> assign(:form_steps, [%{name: "", type: "pageview", value: ""}])}
@@ -550,7 +551,9 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
         <div class="bg-white rounded-lg shadow overflow-x-auto">
           <div class="px-6 py-3 border-b border-gray-200 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-gray-700">Your Funnels</h2>
-            <span class="text-xs text-gray-400">Last 30 days</span>
+            <span class="text-xs text-gray-400">
+              Last 30 days · refreshed {refreshed_label(@last_refreshed_at)}
+            </span>
           </div>
           <table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-gray-50">
@@ -594,13 +597,11 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
                 <% summary = Map.get(@funnel_summaries || %{}, funnel.id) %>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
                   <span :if={summary}>{format_number(summary.entered)}</span>
-                  <span :if={!summary && @summaries_loading} class="text-gray-300">…</span>
-                  <span :if={!summary && !@summaries_loading} class="text-gray-300">—</span>
+                  <span :if={!summary} class="text-gray-300">—</span>
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900 text-right tabular-nums">
                   <span :if={summary}>{format_number(summary.completed)}</span>
-                  <span :if={!summary && @summaries_loading} class="text-gray-300">…</span>
-                  <span :if={!summary && !@summaries_loading} class="text-gray-300">—</span>
+                  <span :if={!summary} class="text-gray-300">—</span>
                 </td>
                 <td class="px-6 py-4 text-right">
                   <div :if={summary} class="flex items-center justify-end gap-2">
@@ -618,10 +619,7 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
                       {summary.conversion_rate}%
                     </span>
                   </div>
-                  <span :if={!summary && @summaries_loading} class="text-sm text-gray-300">…</span>
-                  <span :if={!summary && !@summaries_loading} class="text-sm text-gray-300">
-                    —
-                  </span>
+                  <span :if={!summary} class="text-sm text-gray-300">—</span>
                 </td>
                 <td class="px-6 py-4">
                   <span class={[

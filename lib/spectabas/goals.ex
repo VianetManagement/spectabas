@@ -6,16 +6,26 @@ defmodule Spectabas.Goals do
   import Ecto.Query, warn: false
 
   alias Spectabas.Repo
-  alias Spectabas.Goals.{Goal, Funnel, ClickElementName, ClickElementStat}
+  alias Spectabas.Goals.{Goal, Funnel, ClickElementName, ClickElementStat, GoalStat, FunnelStat}
   alias Spectabas.Analytics
 
   @doc """
   Create a goal for a site.
   """
   def create_goal(site, attrs) do
-    %Goal{}
-    |> Goal.changeset(Map.put(attrs, "site_id", site.id))
-    |> Repo.insert()
+    result =
+      %Goal{}
+      |> Goal.changeset(Map.put(attrs, "site_id", site.id))
+      |> Repo.insert()
+
+    case result do
+      {:ok, _} ->
+        Spectabas.Workers.GoalStatsSnapshot.new(%{"site_id" => site.id}) |> Oban.insert()
+        result
+
+      _ ->
+        result
+    end
   end
 
   @doc """
@@ -116,9 +126,19 @@ defmodule Spectabas.Goals do
   Create a funnel for a site.
   """
   def create_funnel(site, attrs) do
-    %Funnel{}
-    |> Funnel.changeset(Map.put(attrs, "site_id", site.id))
-    |> Repo.insert()
+    result =
+      %Funnel{}
+      |> Funnel.changeset(Map.put(attrs, "site_id", site.id))
+      |> Repo.insert()
+
+    case result do
+      {:ok, _} ->
+        Spectabas.Workers.FunnelStatsSnapshot.new(%{"site_id" => site.id}) |> Oban.insert()
+        result
+
+      _ ->
+        result
+    end
   end
 
   @doc """
@@ -341,6 +361,121 @@ defmodule Spectabas.Goals do
         select: max(s.refreshed_at)
       )
     )
+  end
+
+  # --- Goal stats snapshot ---
+
+  @doc """
+  Map of goal_id => GoalStat for a site. Used by the Goals dashboard to render
+  completions / unique visitors / conversion rate without hitting ClickHouse.
+  """
+  def goal_stats_map(site) do
+    Repo.all(from(s in GoalStat, where: s.site_id == ^site.id))
+    |> Map.new(fn s -> {s.goal_id, s} end)
+  end
+
+  @doc """
+  Replace the snapshot rows for every goal on the site. `rows` is a list of
+  maps keyed by goal_id with the full set of fields. Goals not present in
+  `rows` are deleted (so dashboard doesn't show stale stats for removed goals).
+  """
+  def replace_goal_stats(site, rows) when is_list(rows) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    goal_ids = Enum.map(rows, & &1[:goal_id])
+
+    entries =
+      Enum.map(rows, fn r ->
+        %{
+          site_id: site.id,
+          goal_id: r[:goal_id],
+          completions: r[:completions] || 0,
+          unique_completers: r[:unique_completers] || 0,
+          conversion_rate: r[:conversion_rate] || 0.0,
+          total_visitors: r[:total_visitors] || 0,
+          top_sources: r[:top_sources] || [],
+          window_days: r[:window_days] || 7,
+          refreshed_at: now
+        }
+      end)
+
+    Repo.transaction(fn ->
+      from(s in GoalStat,
+        where: s.site_id == ^site.id and s.goal_id not in ^goal_ids
+      )
+      |> Repo.delete_all()
+
+      if entries != [] do
+        Repo.insert_all(GoalStat, entries,
+          on_conflict:
+            {:replace,
+             [
+               :completions,
+               :unique_completers,
+               :conversion_rate,
+               :total_visitors,
+               :top_sources,
+               :window_days,
+               :refreshed_at
+             ]},
+          conflict_target: [:goal_id]
+        )
+      end
+
+      :ok
+    end)
+  end
+
+  def goal_stats_last_refreshed_at(site) do
+    Repo.one(from(s in GoalStat, where: s.site_id == ^site.id, select: max(s.refreshed_at)))
+  end
+
+  # --- Funnel stats snapshot ---
+
+  @doc """
+  Map of funnel_id => FunnelStat for a site.
+  """
+  def funnel_stats_map(site) do
+    Repo.all(from(s in FunnelStat, where: s.site_id == ^site.id))
+    |> Map.new(fn s -> {s.funnel_id, s} end)
+  end
+
+  def replace_funnel_stats(site, rows) when is_list(rows) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+    funnel_ids = Enum.map(rows, & &1[:funnel_id])
+
+    entries =
+      Enum.map(rows, fn r ->
+        %{
+          site_id: site.id,
+          funnel_id: r[:funnel_id],
+          entered: r[:entered] || 0,
+          completed: r[:completed] || 0,
+          conversion_rate: r[:conversion_rate] || 0.0,
+          window_days: r[:window_days] || 30,
+          refreshed_at: now
+        }
+      end)
+
+    Repo.transaction(fn ->
+      from(s in FunnelStat,
+        where: s.site_id == ^site.id and s.funnel_id not in ^funnel_ids
+      )
+      |> Repo.delete_all()
+
+      if entries != [] do
+        Repo.insert_all(FunnelStat, entries,
+          on_conflict:
+            {:replace, [:entered, :completed, :conversion_rate, :window_days, :refreshed_at]},
+          conflict_target: [:funnel_id]
+        )
+      end
+
+      :ok
+    end)
+  end
+
+  def funnel_stats_last_refreshed_at(site) do
+    Repo.one(from(s in FunnelStat, where: s.site_id == ^site.id, select: max(s.refreshed_at)))
   end
 
   # --- Private helpers ---

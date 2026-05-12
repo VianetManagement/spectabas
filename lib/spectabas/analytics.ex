@@ -3259,38 +3259,41 @@ defmodule Spectabas.Analytics do
   Funnel stats using ClickHouse windowFunnel().
   Steps is a list of event conditions (e.g., event_type/url_path matches).
   """
-  def funnel_stats(%Site{} = site, %User{} = user, %{steps: steps} = _funnel, date_range \\ "30d")
+  def funnel_stats(%Site{} = site, %User{} = user, %{steps: steps} = funnel, date_range \\ "30d")
       when is_list(steps) do
-    date_range = ensure_date_range(date_range)
-
     with :ok <- authorize(site, user) do
-      step_conditions = build_funnel_conditions(steps)
-      num_steps = length(steps)
-
-      level_selects =
-        Enum.map_join(1..num_steps, ", ", fn i ->
-          "countIf(level >= #{i}) AS step_#{i}"
-        end)
-
-      sql = """
-      SELECT #{level_selects}
-      FROM (
-        SELECT
-          visitor_id,
-          windowFunnel(86400)(timestamp, #{step_conditions}) AS level
-        FROM events
-        WHERE site_id = #{ClickHouse.param(site.id)}
-          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-          AND ip_is_bot = 0
-          AND event_type IN ('pageview', 'custom')
-        GROUP BY visitor_id
-      )
-      SETTINGS max_execution_time = 30
-      """
-
-      ClickHouse.query(sql)
+      do_funnel_stats(site, funnel, date_range)
     end
+  end
+
+  defp do_funnel_stats(%Site{} = site, %{steps: steps}, date_range) when is_list(steps) do
+    date_range = ensure_date_range(date_range)
+    step_conditions = build_funnel_conditions(steps)
+    num_steps = length(steps)
+
+    level_selects =
+      Enum.map_join(1..num_steps, ", ", fn i ->
+        "countIf(level >= #{i}) AS step_#{i}"
+      end)
+
+    sql = """
+    SELECT #{level_selects}
+    FROM (
+      SELECT
+        visitor_id,
+        windowFunnel(86400)(timestamp, #{step_conditions}) AS level
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+        AND event_type IN ('pageview', 'custom')
+      GROUP BY visitor_id
+    )
+    SETTINGS max_execution_time = 30
+    """
+
+    ClickHouse.query(sql)
   end
 
   @doc """
@@ -3301,21 +3304,33 @@ defmodule Spectabas.Analytics do
   def funnel_summaries(%Site{} = site, %User{} = user, funnels, date_range \\ "30d")
       when is_list(funnels) do
     with :ok <- authorize(site, user) do
-      results =
-        funnels
-        |> Task.async_stream(
-          fn funnel -> {funnel.id, funnel_summary_for(site, user, funnel, date_range)} end,
-          max_concurrency: 4,
-          timeout: 35_000,
-          on_timeout: :kill_task
-        )
-        |> Enum.reduce(%{}, fn
-          {:ok, {id, stats}}, acc -> Map.put(acc, id, stats)
-          _, acc -> acc
-        end)
-
-      {:ok, results}
+      do_funnel_summaries(site, funnels, date_range)
     end
+  end
+
+  @doc """
+  System variant of `funnel_summaries/4` (no auth) for background workers.
+  """
+  def funnel_summaries_system(%Site{} = site, funnels, date_range \\ "30d")
+      when is_list(funnels) do
+    do_funnel_summaries(site, funnels, date_range)
+  end
+
+  defp do_funnel_summaries(%Site{} = site, funnels, date_range) do
+    results =
+      funnels
+      |> Task.async_stream(
+        fn funnel -> {funnel.id, funnel_summary_for_system(site, funnel, date_range)} end,
+        max_concurrency: 4,
+        timeout: 35_000,
+        on_timeout: :kill_task
+      )
+      |> Enum.reduce(%{}, fn
+        {:ok, {id, stats}}, acc -> Map.put(acc, id, stats)
+        _, acc -> acc
+      end)
+
+    {:ok, results}
   end
 
   @doc """
@@ -3372,13 +3387,13 @@ defmodule Spectabas.Analytics do
     end
   end
 
-  defp funnel_summary_for(site, user, funnel, date_range) do
+  defp funnel_summary_for_system(site, funnel, date_range) do
     num_steps = length(funnel.steps || [])
 
     if num_steps == 0 do
       %{entered: 0, completed: 0, conversion_rate: 0.0}
     else
-      case funnel_stats(site, user, funnel, date_range) do
+      case do_funnel_stats(site, funnel, date_range) do
         {:ok, [row | _]} ->
           entered = Spectabas.TypeHelpers.to_int(row["step_1"] || 0)
           completed = Spectabas.TypeHelpers.to_int(row["step_#{num_steps}"] || 0)
@@ -3395,124 +3410,146 @@ defmodule Spectabas.Analytics do
   end
 
   @doc """
+  Goal completions per goal for a date range. System variant (no auth) used
+  by `Spectabas.Workers.GoalStatsSnapshot`.
+  """
+  def goal_completions_system(%Site{} = site, date_range) do
+    do_goal_completions(site, date_range)
+  end
+
+  @doc """
   Goal completions per goal for a date range.
   """
   def goal_completions(%Site{} = site, %User{} = user, date_range) do
-    date_range = ensure_date_range(date_range)
-
     with :ok <- authorize(site, user) do
-      goals = Spectabas.Goals.list_goals(site)
-
-      if goals == [] do
-        {:ok, []}
-      else
-        # Get total unique visitors for conversion rate calculation
-        total_visitors =
-          case ClickHouse.query("""
-                 SELECT uniq(visitor_id) AS total
-                 FROM events
-                 WHERE site_id = #{ClickHouse.param(site.id)}
-                   AND event_type = 'pageview' AND ip_is_bot = 0
-                   AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-                   AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-               """) do
-            {:ok, [%{"total" => t}]} -> to_int(t)
-            _ -> 0
-          end
-
-        # Batch all goals into a single query with UNION ALL
-        unions =
-          goals
-          |> Enum.map(fn goal ->
-            condition = goal_condition(goal)
-
-            """
-            SELECT #{ClickHouse.param(to_string(goal.id))} AS goal_id,
-              count() AS completions,
-              uniq(visitor_id) AS unique_completers
-            FROM events
-            WHERE site_id = #{ClickHouse.param(site.id)}
-              AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-              AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-              AND ip_is_bot = 0
-              AND #{condition}
-            """
-          end)
-          |> Enum.join("\nUNION ALL\n")
-
-        counts =
-          case ClickHouse.query(unions) do
-            {:ok, rows} ->
-              Map.new(rows, fn r ->
-                {r["goal_id"],
-                 %{
-                   completions: to_int(r["completions"]),
-                   unique_completers: to_int(r["unique_completers"])
-                 }}
-              end)
-
-            _ ->
-              %{}
-          end
-
-        results =
-          Enum.map(goals, fn goal ->
-            stats = Map.get(counts, to_string(goal.id), %{completions: 0, unique_completers: 0})
-
-            conv_rate =
-              if total_visitors > 0,
-                do: Float.round(stats.unique_completers / total_visitors * 100, 2),
-                else: 0.0
-
-            %{
-              goal_id: goal.id,
-              name: goal.name,
-              goal_type: goal.goal_type,
-              completions: stats.completions,
-              unique_completers: stats.unique_completers,
-              conversion_rate: conv_rate
-            }
-          end)
-
-        {:ok, results}
-      end
+      do_goal_completions(site, date_range)
     end
   end
 
-  def goal_source_attribution(%Site{} = site, %User{} = user, goal, date_range) do
+  defp do_goal_completions(%Site{} = site, date_range) do
     date_range = ensure_date_range(date_range)
 
-    with :ok <- authorize(site, user) do
-      # Build the subquery to find sessions that completed this goal
-      condition = goal_condition(goal)
+    goals = Spectabas.Goals.list_goals(site)
 
-      session_filter = """
-      SELECT DISTINCT session_id FROM events
-      WHERE site_id = #{ClickHouse.param(site.id)}
-        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-        AND ip_is_bot = 0
-        AND #{condition}
-      """
+    if goals == [] do
+      {:ok, []}
+    else
+      # Get total unique visitors for conversion rate calculation
+      total_visitors =
+        case ClickHouse.query("""
+               SELECT uniq(visitor_id) AS total
+               FROM events
+               WHERE site_id = #{ClickHouse.param(site.id)}
+                 AND event_type = 'pageview' AND ip_is_bot = 0
+                 AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+                 AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+             """) do
+          {:ok, [%{"total" => t}]} -> to_int(t)
+          _ -> 0
+        end
 
-      sql = """
-      SELECT
-        if(referrer_domain != '', referrer_domain, if(utm_source != '', utm_source, 'Direct')) AS source,
-        uniq(visitor_id) AS completers
-      FROM events
-      WHERE site_id = #{ClickHouse.param(site.id)}
-        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-        AND ip_is_bot = 0
-        AND event_type = 'pageview'
-        AND session_id IN (#{session_filter})
-      GROUP BY source
-      ORDER BY completers DESC
-      LIMIT 5
-      """
+      # Batch all goals into a single query with UNION ALL
+      unions =
+        goals
+        |> Enum.map(fn goal ->
+          condition = goal_condition(goal)
 
-      ClickHouse.query(sql)
+          """
+          SELECT #{ClickHouse.param(to_string(goal.id))} AS goal_id,
+            count() AS completions,
+            uniq(visitor_id) AS unique_completers
+          FROM events
+          WHERE site_id = #{ClickHouse.param(site.id)}
+            AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+            AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+            AND ip_is_bot = 0
+            AND #{condition}
+          """
+        end)
+        |> Enum.join("\nUNION ALL\n")
+
+      counts =
+        case ClickHouse.query(unions) do
+          {:ok, rows} ->
+            Map.new(rows, fn r ->
+              {r["goal_id"],
+               %{
+                 completions: to_int(r["completions"]),
+                 unique_completers: to_int(r["unique_completers"])
+               }}
+            end)
+
+          _ ->
+            %{}
+        end
+
+      results =
+        Enum.map(goals, fn goal ->
+          stats = Map.get(counts, to_string(goal.id), %{completions: 0, unique_completers: 0})
+
+          conv_rate =
+            if total_visitors > 0,
+              do: Float.round(stats.unique_completers / total_visitors * 100, 2),
+              else: 0.0
+
+          %{
+            goal_id: goal.id,
+            name: goal.name,
+            goal_type: goal.goal_type,
+            completions: stats.completions,
+            unique_completers: stats.unique_completers,
+            conversion_rate: conv_rate
+          }
+        end)
+
+      {:ok, results}
     end
+  end
+
+  @doc """
+  Top referrer/UTM sources of visitors who completed `goal`. System variant
+  (no auth) used by `Spectabas.Workers.GoalStatsSnapshot`.
+  """
+  def goal_source_attribution_system(%Site{} = site, goal, date_range) do
+    do_goal_source_attribution(site, goal, date_range)
+  end
+
+  def goal_source_attribution(%Site{} = site, %User{} = user, goal, date_range) do
+    with :ok <- authorize(site, user) do
+      do_goal_source_attribution(site, goal, date_range)
+    end
+  end
+
+  defp do_goal_source_attribution(%Site{} = site, goal, date_range) do
+    date_range = ensure_date_range(date_range)
+    condition = goal_condition(goal)
+
+    session_filter = """
+    SELECT DISTINCT session_id FROM events
+    WHERE site_id = #{ClickHouse.param(site.id)}
+      AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+      AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      AND ip_is_bot = 0
+      AND #{condition}
+    """
+
+    sql = """
+    SELECT
+      if(referrer_domain != '', referrer_domain, if(utm_source != '', utm_source, 'Direct')) AS source,
+      uniq(visitor_id) AS completers
+    FROM events
+    WHERE site_id = #{ClickHouse.param(site.id)}
+      AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+      AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+      AND ip_is_bot = 0
+      AND event_type = 'pageview'
+      AND session_id IN (#{session_filter})
+    GROUP BY source
+    ORDER BY completers DESC
+    LIMIT 5
+    """
+
+    ClickHouse.query(sql)
   end
 
   defp goal_condition(goal) do

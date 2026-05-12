@@ -95,7 +95,11 @@ config :spectabas, Oban,
        # Weekly on Sunday at 04:00 UTC — discover new datacenter ASNs from traffic patterns
        {"0 4 * * 0", Spectabas.Workers.ASNDiscovery},
        # Hourly at :20 — snapshot top click elements per site into Postgres
-       {"20 * * * *", Spectabas.Workers.ClickElementSnapshot}
+       {"20 * * * *", Spectabas.Workers.ClickElementSnapshot},
+       # Hourly at :25 — snapshot goal completions + top sources into Postgres
+       {"25 * * * *", Spectabas.Workers.GoalStatsSnapshot},
+       # Hourly at :30 — snapshot funnel entered/completed into Postgres
+       {"30 * * * *", Spectabas.Workers.FunnelStatsSnapshot}
      ]}
   ]
 
