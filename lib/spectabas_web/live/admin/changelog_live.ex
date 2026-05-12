@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.6", "2026-05-12T10:30:00Z",
+       [
+         %{
+           title: "Click Elements page: Postgres snapshot instead of per-load ClickHouse scan",
+           description:
+             "Click Elements was firing a 90-day full-table scan over `events` with five JSONExtract calls per row on every mount, sort, tag filter, and search keystroke. On a high-volume site (puppies.com) this was spiking ClickHouse CPU. Now there's a `click_element_stats` Postgres table that the LiveView reads from, and a `Spectabas.Workers.ClickElementSnapshot` Oban worker (hourly cron, per-site jobs on the maintenance queue) that runs the CH query once per site with a 30-day window and replaces the snapshot. Page loads, sort, tag filter, and search are now Postgres queries — sub-millisecond on indexed columns. Snapshot freshness shown in the page header ('last update Xm ago'). ClickHouse is hit at most once per site per hour for this page. Hidden cost: data is stale by up to an hour, which is fine for a discovery/registry view."
+         }
+       ]},
       {"v6.10.5", "2026-05-06T15:00:00Z",
        [
          %{

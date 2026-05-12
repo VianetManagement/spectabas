@@ -93,7 +93,9 @@ config :spectabas, Oban,
        # Every 15 minutes — scan for scrapers and fire webhooks
        {"*/15 * * * *", Spectabas.Workers.ScraperWebhookScan},
        # Weekly on Sunday at 04:00 UTC — discover new datacenter ASNs from traffic patterns
-       {"0 4 * * 0", Spectabas.Workers.ASNDiscovery}
+       {"0 4 * * 0", Spectabas.Workers.ASNDiscovery},
+       # Hourly at :20 — snapshot top click elements per site into Postgres
+       {"20 * * * *", Spectabas.Workers.ClickElementSnapshot}
      ]}
   ]
 

@@ -1,9 +1,9 @@
 defmodule SpectabasWeb.Dashboard.ClickElementsLive do
   use SpectabasWeb, :live_view
 
-  alias Spectabas.{Accounts, Sites, Goals, Analytics}
+  alias Spectabas.{Accounts, Sites, Goals}
   import SpectabasWeb.Dashboard.SidebarComponent
-  import Spectabas.TypeHelpers
+  import Spectabas.TypeHelpers, only: [format_number: 1]
 
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
@@ -32,6 +32,7 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
        |> assign(:edit_name, "")
        |> assign(:show_hidden, false)
        |> assign(:loading, true)
+       |> assign(:last_refreshed_at, nil)
        |> then(fn s ->
          send(self(), :load_data)
          s
@@ -42,28 +43,19 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
   @impl true
   def handle_info(:load_data, socket) do
     site = socket.assigns.site
-    user = socket.assigns.user
 
-    # Run ClickHouse + Postgres queries in parallel
-    ch_task =
-      Task.async(fn ->
-        safe_query(fn ->
-          Analytics.discovered_click_elements_full(site, user,
-            tag_filter: socket.assigns.tag_filter,
-            sort_by: socket.assigns.sort_by,
-            sort_dir: socket.assigns.sort_dir,
-            search: socket.assigns.search
-          )
-        end)
-      end)
+    elements =
+      Goals.list_click_element_stats(site,
+        tag_filter: socket.assigns.tag_filter,
+        sort_by: socket.assigns.sort_by,
+        sort_dir: socket.assigns.sort_dir,
+        search: socket.assigns.search
+      )
 
-    pg_task =
-      Task.async(fn ->
-        {Goals.element_names_map(site), Goals.list_goals(site), Goals.list_funnels(site)}
-      end)
-
-    elements = Task.await(ch_task, 15_000)
-    {names, goals, funnels} = Task.await(pg_task, 15_000)
+    names = Goals.element_names_map(site)
+    goals = Goals.list_goals(site)
+    funnels = Goals.list_funnels(site)
+    last_refreshed = Goals.click_element_stats_last_refreshed_at(site)
 
     {:noreply,
      socket
@@ -71,9 +63,8 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
      |> assign(:element_names, names)
      |> assign(:goals, goals)
      |> assign(:funnels, funnels)
+     |> assign(:last_refreshed_at, last_refreshed)
      |> assign(:loading, false)}
-  rescue
-    _ -> {:noreply, assign(socket, :loading, false)}
   end
 
   @impl true
@@ -83,6 +74,7 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
     {:noreply,
      socket
      |> assign(:tag_filter, tag)
+     |> assign(:page, 1)
      |> assign(:loading, true)
      |> then(fn s ->
        send(self(), :load_data)
@@ -183,29 +175,23 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
 
   defp total_pages(count, per_page), do: max(ceil(count / per_page), 1)
 
-  defp element_key(el) do
-    id = to_string(el["element_id"])
-    if id != "", do: "##{id}", else: "text:#{el["element_text"]}"
-  end
-
   defp element_display_name(el, names) do
-    key = element_key(el)
-    name_rec = Map.get(names, key)
+    name_rec = Map.get(names, el.element_key)
     if name_rec, do: name_rec.friendly_name, else: nil
   end
 
   defp element_is_ignored?(el, names) do
-    key = element_key(el)
-
-    case Map.get(names, key) do
+    case Map.get(names, el.element_key) do
       %{ignored: true} -> true
       _ -> false
     end
   end
 
   defp goals_for_element(el, goals) do
-    key = element_key(el)
-    Enum.filter(goals, &(&1.goal_type == "click_element" and &1.element_selector == key))
+    Enum.filter(
+      goals,
+      &(&1.goal_type == "click_element" and &1.element_selector == el.element_key)
+    )
   end
 
   defp tag_classes(tag) do
@@ -221,6 +207,19 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
     if col == sort_by, do: if(sort_dir == "ASC", do: " ↑", else: " ↓"), else: ""
   end
 
+  defp refreshed_label(nil), do: "never refreshed"
+
+  defp refreshed_label(%DateTime{} = dt) do
+    secs = DateTime.diff(DateTime.utc_now(), dt, :second)
+
+    cond do
+      secs < 60 -> "just now"
+      secs < 3600 -> "#{div(secs, 60)}m ago"
+      secs < 86_400 -> "#{div(secs, 3600)}h ago"
+      true -> "#{div(secs, 86_400)}d ago"
+    end
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -234,7 +233,12 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
     >
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div class="flex items-center justify-between mb-6">
-          <h1 class="text-2xl font-bold text-gray-900">Click Elements</h1>
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900">Click Elements</h1>
+            <p class="text-xs text-gray-400 mt-0.5">
+              Snapshot refreshed hourly · last update {refreshed_label(@last_refreshed_at)}
+            </p>
+          </div>
           <div class="flex items-center gap-3">
             <form phx-change="search" class="flex">
               <input
@@ -279,7 +283,7 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
         <div :if={!@loading && @elements == []} class="bg-white rounded-lg shadow p-8 text-center">
           <p class="text-gray-500 mb-2 font-medium">No click elements detected yet</p>
           <p class="text-sm text-gray-400">
-            Buttons and links on your site will appear here automatically once visitors start clicking them. This typically takes a few hours after the tracker is deployed.
+            Buttons and links on your site will appear here automatically once visitors start clicking them. Snapshots run hourly — first data typically appears within a couple of hours of tracker install.
           </p>
         </div>
 
@@ -326,23 +330,23 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
                 <td class="px-4 py-3">
                   <span class={[
                     "px-1.5 py-0.5 rounded text-xs font-mono",
-                    tag_classes(el["element_tag"])
+                    tag_classes(el.element_tag)
                   ]}>
-                    {el["element_tag"]}
+                    {el.element_tag}
                   </span>
                 </td>
                 <td class="px-4 py-3 max-w-[200px]">
                   <div class="text-sm font-medium text-gray-900 truncate">
-                    {el["element_text"] |> to_string() |> String.slice(0..59)}
+                    {el.element_text |> to_string() |> String.slice(0..59)}
                   </div>
-                  <div :if={to_string(el["element_id"]) != ""} class="text-xs text-gray-400 font-mono">
-                    #{el["element_id"]}
+                  <div :if={to_string(el.element_id) != ""} class="text-xs text-gray-400 font-mono">
+                    #{el.element_id}
                   </div>
                 </td>
                 <td class="px-4 py-3">
-                  <div :if={@editing_key == element_key(el)}>
+                  <div :if={@editing_key == el.element_key}>
                     <form phx-submit="save_name" class="flex gap-1">
-                      <input type="hidden" name="key" value={element_key(el)} />
+                      <input type="hidden" name="key" value={el.element_key} />
                       <input
                         type="text"
                         name="name"
@@ -362,7 +366,7 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
                       </button>
                     </form>
                   </div>
-                  <div :if={@editing_key != element_key(el)}>
+                  <div :if={@editing_key != el.element_key}>
                     <div
                       :if={element_display_name(el, @element_names)}
                       class="flex items-center gap-1.5"
@@ -372,7 +376,7 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
                       </span>
                       <button
                         phx-click="edit_name"
-                        phx-value-key={element_key(el)}
+                        phx-value-key={el.element_key}
                         class="text-gray-400 hover:text-indigo-600"
                         title="Edit name"
                       >
@@ -395,7 +399,7 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
                     <button
                       :if={!element_display_name(el, @element_names)}
                       phx-click="edit_name"
-                      phx-value-key={element_key(el)}
+                      phx-value-key={el.element_key}
                       class="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 border border-dashed border-indigo-300 rounded-lg px-2 py-1 hover:bg-indigo-50"
                     >
                       <svg
@@ -417,15 +421,15 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
                   </div>
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-900 text-right tabular-nums font-semibold">
-                  {format_number(to_num(el["clicks"]))}
+                  {format_number(el.clicks)}
                 </td>
                 <td class="px-4 py-3 text-sm text-gray-600 text-right tabular-nums">
-                  {format_number(to_num(el["visitors"]))}
+                  {format_number(el.visitors)}
                 </td>
                 <td class="px-4 py-3">
                   <div class="flex flex-wrap gap-1">
                     <span
-                      :for={page <- (el["sample_pages"] || []) |> Enum.take(3)}
+                      :for={page <- (el.sample_pages || []) |> Enum.take(3)}
                       class="inline-flex px-1.5 py-0.5 rounded bg-gray-100 text-[10px] font-mono text-gray-500 truncate max-w-[100px]"
                     >
                       {page}
@@ -448,15 +452,15 @@ defmodule SpectabasWeb.Dashboard.ClickElementsLive do
                     <button
                       :if={goals_for_element(el, @goals) == []}
                       phx-click="create_goal"
-                      phx-value-key={element_key(el)}
-                      phx-value-name={el["element_text"] |> to_string() |> String.slice(0..39)}
+                      phx-value-key={el.element_key}
+                      phx-value-name={el.element_text |> to_string() |> String.slice(0..39)}
                       class="text-xs text-indigo-600 hover:text-indigo-800 py-1"
                     >
                       Create Goal
                     </button>
                     <button
                       phx-click="toggle_ignore"
-                      phx-value-key={element_key(el)}
+                      phx-value-key={el.element_key}
                       class={[
                         "text-xs py-1",
                         if(element_is_ignored?(el, @element_names),

@@ -2454,6 +2454,8 @@ defmodule SpectabasWeb.DocsLive do
             - One-click goal creation from any element
             - Hide irrelevant elements from the list (toggle "Show hidden" to see and unhide them)
 
+            The Click Elements page is backed by a snapshot that refreshes hourly (looking at the last 30 days of clicks, top 1000 elements per site). The header shows when the snapshot last updated. Newly clicked elements appear after the next snapshot, not in real time — this keeps the page fast on high-volume sites without taxing the analytics database.
+
             ### Funnels
 
             Define multi-step conversion paths to see where visitors drop off. Each step can be a pageview (URL path match), a custom event, a click element (with searchable autocomplete from detected buttons/links), or a goal (any goal type). Four step types give you full flexibility to track any conversion path.

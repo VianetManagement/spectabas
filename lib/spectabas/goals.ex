@@ -6,7 +6,7 @@ defmodule Spectabas.Goals do
   import Ecto.Query, warn: false
 
   alias Spectabas.Repo
-  alias Spectabas.Goals.{Goal, Funnel, ClickElementName}
+  alias Spectabas.Goals.{Goal, Funnel, ClickElementName, ClickElementStat}
   alias Spectabas.Analytics
 
   @doc """
@@ -196,6 +196,151 @@ defmodule Spectabas.Goals do
         |> ClickElementName.changeset(%{"ignored" => !existing.ignored})
         |> Repo.update()
     end
+  end
+
+  # --- Click Element Stats (Postgres snapshot) ---
+
+  @doc """
+  List snapshotted click element stats for a site.
+
+  Postgres-backed mirror of the top click elements seen in the last 30 days.
+  Populated by `Spectabas.Workers.ClickElementSnapshot` hourly.
+
+  Opts: `:tag_filter`, `:search`, `:sort_by` (clicks|visitors|first_seen|last_seen),
+  `:sort_dir` (asc|desc).
+  """
+  def list_click_element_stats(site, opts \\ []) do
+    sort_col =
+      case Keyword.get(opts, :sort_by, "clicks") do
+        s when s in ~w(clicks visitors first_seen last_seen) -> String.to_existing_atom(s)
+        _ -> :clicks
+      end
+
+    sort_dir =
+      if Keyword.get(opts, :sort_dir, "DESC") |> to_string() |> String.upcase() == "ASC",
+        do: :asc,
+        else: :desc
+
+    query =
+      from(s in ClickElementStat,
+        where: s.site_id == ^site.id,
+        order_by: [{^sort_dir, field(s, ^sort_col)}],
+        limit: 500
+      )
+
+    query =
+      case Keyword.get(opts, :tag_filter) do
+        nil -> query
+        "" -> query
+        tag -> from(s in query, where: s.element_tag == ^tag)
+      end
+
+    query =
+      case Keyword.get(opts, :search) do
+        s when is_binary(s) and s != "" ->
+          escaped =
+            s
+            |> String.replace("\\", "\\\\")
+            |> String.replace("%", "\\%")
+            |> String.replace("_", "\\_")
+
+          pat = "%#{escaped}%"
+
+          from(r in query,
+            where:
+              ilike(r.element_text, ^pat) or ilike(r.element_id, ^pat) or
+                ilike(r.element_classes, ^pat) or ilike(r.element_href, ^pat)
+          )
+
+        _ ->
+          query
+      end
+
+    Repo.all(query)
+  end
+
+  @doc """
+  Upsert a batch of click element stats rows for a site.
+
+  Rows is a list of maps with string keys matching the schema fields. Uses
+  ON CONFLICT (site_id, element_key) so it's safe to re-run.
+  """
+  def upsert_click_element_stats(_site, []), do: {:ok, 0}
+
+  def upsert_click_element_stats(site, rows) when is_list(rows) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    entries =
+      Enum.map(rows, fn r ->
+        %{
+          site_id: site.id,
+          element_key: r["element_key"] || r[:element_key],
+          element_text: r["element_text"] || r[:element_text],
+          element_id: r["element_id"] || r[:element_id],
+          element_tag: r["element_tag"] || r[:element_tag],
+          element_href: r["element_href"] || r[:element_href],
+          element_classes: r["element_classes"] || r[:element_classes],
+          clicks: r["clicks"] || r[:clicks] || 0,
+          visitors: r["visitors"] || r[:visitors] || 0,
+          first_seen: r["first_seen"] || r[:first_seen],
+          last_seen: r["last_seen"] || r[:last_seen],
+          sample_pages: r["sample_pages"] || r[:sample_pages] || [],
+          refreshed_at: now
+        }
+      end)
+
+    {count, _} =
+      Repo.insert_all(ClickElementStat, entries,
+        on_conflict:
+          {:replace,
+           [
+             :element_text,
+             :element_id,
+             :element_tag,
+             :element_href,
+             :element_classes,
+             :clicks,
+             :visitors,
+             :first_seen,
+             :last_seen,
+             :sample_pages,
+             :refreshed_at
+           ]},
+        conflict_target: [:site_id, :element_key]
+      )
+
+    {:ok, count}
+  end
+
+  @doc """
+  Replace the site's click element snapshot with a fresh set of rows.
+
+  Deletes any keys that no longer appear in the latest snapshot so dead
+  elements don't linger forever.
+  """
+  def replace_click_element_stats(site, rows) when is_list(rows) do
+    keys = Enum.map(rows, fn r -> r["element_key"] || r[:element_key] end)
+
+    Repo.transaction(fn ->
+      from(s in ClickElementStat,
+        where: s.site_id == ^site.id and s.element_key not in ^keys
+      )
+      |> Repo.delete_all()
+
+      upsert_click_element_stats(site, rows)
+    end)
+  end
+
+  @doc """
+  Most-recent `refreshed_at` for the site's snapshot, or nil if never refreshed.
+  """
+  def click_element_stats_last_refreshed_at(site) do
+    Repo.one(
+      from(s in ClickElementStat,
+        where: s.site_id == ^site.id,
+        select: max(s.refreshed_at)
+      )
+    )
   end
 
   # --- Private helpers ---
