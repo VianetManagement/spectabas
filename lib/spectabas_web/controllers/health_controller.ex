@@ -1973,12 +1973,75 @@ defmodule SpectabasWeb.HealthController do
             message: "GeoIP refresh job enqueued — will download + sync to R2"
           })
 
+        "snapshot_status" ->
+          # Per-snapshot-table row counts + most recent refreshed_at, so we can
+          # tell at a glance whether the hourly snapshot workers are firing.
+          counts = %{
+            click_element_stats: snapshot_table_summary("click_element_stats"),
+            goal_stats: snapshot_table_summary("goal_stats"),
+            funnel_stats: snapshot_table_summary("funnel_stats"),
+            dashboard_snapshots: snapshot_table_summary("dashboard_snapshots")
+          }
+
+          # Recent jobs for each snapshot worker — surfaces failed/retried jobs.
+          workers = [
+            "Spectabas.Workers.ClickElementSnapshot",
+            "Spectabas.Workers.GoalStatsSnapshot",
+            "Spectabas.Workers.FunnelStatsSnapshot",
+            "Spectabas.Workers.DashboardSnapshot"
+          ]
+
+          jobs =
+            Spectabas.ObanRepo.all(
+              from(j in "oban_jobs",
+                where: j.worker in ^workers,
+                order_by: [desc: j.id],
+                limit: 40,
+                select: %{
+                  id: j.id,
+                  worker: j.worker,
+                  state: j.state,
+                  args: j.args,
+                  attempt: j.attempt,
+                  max_attempts: j.max_attempts,
+                  inserted_at: j.inserted_at,
+                  scheduled_at: j.scheduled_at,
+                  attempted_at: j.attempted_at,
+                  completed_at: j.completed_at,
+                  errors: j.errors
+                }
+              )
+            )
+
+          json(conn, %{tables: counts, recent_jobs: jobs})
+
+        "trigger_snapshots" ->
+          # Fire all four snapshot meta-jobs immediately. Each one will fan out
+          # per-site jobs onto the maintenance queue.
+          jobs =
+            Enum.map(
+              [
+                Spectabas.Workers.ClickElementSnapshot,
+                Spectabas.Workers.GoalStatsSnapshot,
+                Spectabas.Workers.FunnelStatsSnapshot,
+                Spectabas.Workers.DashboardSnapshot
+              ],
+              fn worker ->
+                case worker.new(%{}) |> Oban.insert() do
+                  {:ok, job} -> %{worker: inspect(worker), ok: true, job_id: job.id}
+                  {:error, reason} -> %{worker: inspect(worker), ok: false, error: inspect(reason)}
+                end
+              end
+            )
+
+          json(conn, %{enqueued: jobs})
+
         _ ->
           conn
           |> put_status(400)
           |> json(%{
             error:
-              "unknown action. use: status, cancel_worker, cancel_all_executing, refresh_geoip"
+              "unknown action. use: status, cancel_worker, cancel_all_executing, refresh_geoip, snapshot_status, trigger_snapshots"
           })
       end
     end
@@ -1986,6 +2049,21 @@ defmodule SpectabasWeb.HealthController do
 
   def oban_admin(conn, _params) do
     conn |> put_status(403) |> json(%{error: "forbidden"})
+  end
+
+  defp snapshot_table_summary(table) do
+    import Ecto.Query
+
+    case Spectabas.Repo.one(
+           from(t in table,
+             select: %{count: count(t.id), max_refreshed: max(t.refreshed_at)}
+           )
+         ) do
+      nil -> %{count: 0, max_refreshed: nil}
+      result -> result
+    end
+  rescue
+    e -> %{error: Exception.message(e)}
   end
 
   defp test_search_console do
