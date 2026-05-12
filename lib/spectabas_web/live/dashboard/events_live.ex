@@ -83,7 +83,7 @@ defmodule SpectabasWeb.Dashboard.EventsLive do
     %{site: site, user: user, date_range: range} = socket.assigns
 
     {events, refreshed_at} =
-      DashboardSnapshots.with_fallback(site, "events", "30d", range, fn ->
+      DashboardSnapshots.with_fallback_list(site, "events", "30d", range, fn ->
         safe_query(fn -> Analytics.custom_events(site, user, range_to_period(range)) end)
       end)
 

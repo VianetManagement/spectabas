@@ -55,15 +55,15 @@ defmodule Spectabas.Workers.DashboardSnapshot do
     user = system_user(site)
 
     snapshot_kind(site, "outbound_links", @default_outbound_window, fn ->
-      Analytics.outbound_links(site, user, :month)
+      %{"rows" => list_or_empty(Analytics.outbound_links(site, user, :month))}
     end)
 
     snapshot_kind(site, "downloads", @default_downloads_window, fn ->
-      Analytics.file_downloads(site, user, :month)
+      %{"rows" => list_or_empty(Analytics.file_downloads(site, user, :month))}
     end)
 
     snapshot_kind(site, "events", @default_events_window, fn ->
-      Analytics.custom_events(site, user, :month)
+      %{"rows" => list_or_empty(Analytics.custom_events(site, user, :month))}
     end)
 
     snapshot_kind(site, "site_search", @default_site_search_window, fn ->
@@ -154,9 +154,9 @@ defmodule Spectabas.Workers.DashboardSnapshot do
     started = System.monotonic_time(:millisecond)
 
     try do
-      data = fun.()
+      data = normalize(fun.())
 
-      case DashboardSnapshots.put(site, kind, window_days, normalize(data)) do
+      case DashboardSnapshots.put(site, kind, window_days, data) do
         {:ok, _} ->
           ms = System.monotonic_time(:millisecond) - started
 
@@ -166,12 +166,19 @@ defmodule Spectabas.Workers.DashboardSnapshot do
 
           :ok
 
+        {:error, %Ecto.Changeset{errors: errors}} ->
+          Logger.error(
+            "[DashboardSnapshot] site=#{site.id} kind=#{kind} changeset_failed: #{inspect(errors)} data_shape=#{shape(data)}"
+          )
+
+          :ok
+
         {:error, reason} ->
           Logger.error(
             "[DashboardSnapshot] site=#{site.id} kind=#{kind} put_failed: #{inspect(reason)}"
           )
 
-          {:error, reason}
+          :ok
       end
     rescue
       e ->
@@ -179,9 +186,15 @@ defmodule Spectabas.Workers.DashboardSnapshot do
           "[DashboardSnapshot] site=#{site.id} kind=#{kind} crashed: #{Exception.message(e)}"
         )
 
-        {:error, :crashed}
+        :ok
     end
   end
+
+  defp shape(data) when is_map(data),
+    do: "map(keys=#{data |> Map.keys() |> Enum.take(8) |> inspect()})"
+
+  defp shape(data) when is_list(data), do: "list(len=#{length(data)})"
+  defp shape(_), do: "other"
 
   # Acquisition: channel breakdown + each source tab + source_engagement per
   # dimension (so the LiveView can render any tab from the snapshot).
@@ -276,12 +289,11 @@ defmodule Spectabas.Workers.DashboardSnapshot do
   defp ok_or({:ok, data}, _default), do: data
   defp ok_or(_, default), do: default
 
-  # Many Analytics functions return raw CH rows (already string-keyed maps).
-  # Some return {:ok, rows} — we strip the wrapper. For misc shapes, store
-  # as-is and let the LiveView Map.get it.
-  defp normalize({:ok, data}), do: data
-  defp normalize(data) when is_list(data), do: data
+  # The `data` JSONB column is typed as `:map` in Ecto — lists fail to cast.
+  # Snapshot blocks must return a map; wrap raw lists in %{"rows" => ...}.
+  defp normalize({:ok, data}), do: normalize(data)
   defp normalize(data) when is_map(data), do: data
+  defp normalize(data) when is_list(data), do: %{"rows" => data}
   defp normalize(_), do: %{}
 
   defp system_user(site) do

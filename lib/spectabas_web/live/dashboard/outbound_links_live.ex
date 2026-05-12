@@ -46,7 +46,7 @@ defmodule SpectabasWeb.Dashboard.OutboundLinksLive do
     %{site: site, user: user, date_range: range} = socket.assigns
 
     {links, refreshed_at} =
-      DashboardSnapshots.with_fallback(site, "outbound_links", "30d", range, fn ->
+      DashboardSnapshots.with_fallback_list(site, "outbound_links", "30d", range, fn ->
         safe_query(fn -> Analytics.outbound_links(site, user, range_to_period(range)) end)
       end)
 

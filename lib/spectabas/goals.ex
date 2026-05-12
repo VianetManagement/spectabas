@@ -338,6 +338,12 @@ defmodule Spectabas.Goals do
   Deletes any keys that no longer appear in the latest snapshot so dead
   elements don't linger forever.
   """
+  # Empty `rows` would translate to `WHERE element_key NOT IN ()` which Ecto
+  # rewrites to `true`, wiping the whole site's snapshot. Guard against that —
+  # if the CH query returned no rows (likely a timeout or hiccup), preserve
+  # existing data and let the next cron retry.
+  def replace_click_element_stats(_site, []), do: {:ok, 0}
+
   def replace_click_element_stats(site, rows) when is_list(rows) do
     keys = Enum.map(rows, fn r -> r["element_key"] || r[:element_key] end)
 

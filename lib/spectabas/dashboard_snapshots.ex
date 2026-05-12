@@ -81,6 +81,20 @@ defmodule Spectabas.DashboardSnapshots do
   end
 
   @doc """
+  Like `with_fallback/5` but unwraps a list snapshot stored under the `"rows"`
+  key of the snapshot map. Use for list pages (Outbound Links, Downloads,
+  Events) whose `Analytics.*` function returns a bare list of rows.
+  """
+  def with_fallback_list(site, kind, default_range, current_range, live_fn)
+      when is_function(live_fn, 0) do
+    case with_fallback(site, kind, default_range, current_range, live_fn) do
+      {%{"rows" => rows}, refreshed_at} -> {rows, refreshed_at}
+      {data, refreshed_at} when is_list(data) -> {data, refreshed_at}
+      {_, refreshed_at} -> {[], refreshed_at}
+    end
+  end
+
+  @doc """
   Render a "last update Xm ago" style label for a snapshot timestamp.
   Returns nil when `refreshed_at` is nil (live data, no snapshot involved).
   """
