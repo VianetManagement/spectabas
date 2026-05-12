@@ -2056,6 +2056,59 @@ defmodule SpectabasWeb.HealthController do
 
           json(conn, %{enqueued: jobs, site_id: site_id})
 
+        "click_element_probe" ->
+          # Runs the ClickElementSnapshot's CH query directly for a site and
+          # returns the row count + first 5 rows + elapsed_ms. Lets us see why
+          # the worker produces 0 rows — is the query returning empty, or is
+          # something downstream failing?
+          case Integer.parse(params["site_id"] || "") do
+            {site_id, _} ->
+              sql = """
+              SELECT
+                JSONExtractString(properties, '_text') AS element_text,
+                replaceRegexpOne(JSONExtractString(properties, '_id'), '-\\d+$', '') AS element_id,
+                JSONExtractString(properties, '_tag') AS element_tag,
+                count() AS clicks,
+                uniq(visitor_id) AS visitors
+              FROM events
+              WHERE site_id = #{Spectabas.ClickHouse.param(site_id)}
+                AND event_type = 'custom'
+                AND event_name = '_click'
+                AND ip_is_bot = 0
+                AND timestamp >= now() - INTERVAL 30 DAY
+              GROUP BY element_text, element_id, element_tag
+              HAVING clicks >= 2
+              ORDER BY clicks DESC
+              LIMIT 1000
+              SETTINGS max_execution_time = 240
+              """
+
+              t0 = System.monotonic_time(:millisecond)
+
+              result =
+                case Spectabas.ClickHouse.query(sql) do
+                  {:ok, rows} ->
+                    %{
+                      ok: true,
+                      row_count: length(rows),
+                      first_rows: Enum.take(rows, 5),
+                      elapsed_ms: System.monotonic_time(:millisecond) - t0
+                    }
+
+                  {:error, reason} ->
+                    %{
+                      ok: false,
+                      error: inspect(reason) |> String.slice(0, 500),
+                      elapsed_ms: System.monotonic_time(:millisecond) - t0
+                    }
+                end
+
+              json(conn, Map.put(result, :site_id, site_id))
+
+            _ ->
+              conn |> put_status(400) |> json(%{error: "site_id param required"})
+          end
+
         "snapshot_site_status" ->
           # Per-site breakdown — which kinds are populated for a given site.
           # Pass ?site_id=N.
