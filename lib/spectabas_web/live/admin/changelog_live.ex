@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.8", "2026-05-12T15:30:00Z",
+       [
+         %{
+           title: "Seven more dashboard pages backed by hourly Postgres snapshots",
+           description:
+             "Extends the snapshot pattern (v6.10.6/v6.10.7) to Outbound Links, Downloads, Events, Site Search, Bot Traffic, Acquisition, and Ecommerce. New `dashboard_snapshots` Postgres table stores per-page widget data keyed by (site_id, kind). New `Spectabas.Workers.DashboardSnapshot` Oban worker (hourly at :35) fans out per-site jobs that refresh all 7 pages. Pages render from the snapshot when the user is on the default date range; if they pick a non-default range, the LiveView falls back to live ClickHouse exactly like before. Snapshots include all sub-tabs (acquisition channels + 6 source tabs + per-dimension engagement maps) and pre-resolved visitor → email maps for ecommerce. Each page shows 'Snapshot · last update Xm ago' when reading from PG. Acquisition was the biggest single-page CPU win (10 CH queries per mount); ecommerce (8) and bot traffic (5) close behind. No new `_system` Analytics variants needed — the worker calls existing public functions with a synthetic platform_admin user that always passes `can_access_site?`."
+         }
+       ]},
       {"v6.10.7", "2026-05-12T10:50:00Z",
        [
          %{

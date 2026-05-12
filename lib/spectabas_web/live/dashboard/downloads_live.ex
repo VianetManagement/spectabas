@@ -3,7 +3,7 @@ defmodule SpectabasWeb.Dashboard.DownloadsLive do
 
   @moduledoc "File downloads auto-tracked from link clicks on downloadable file types."
 
-  alias Spectabas.{Accounts, Sites, Analytics}
+  alias Spectabas.{Accounts, Sites, Analytics, DashboardSnapshots}
   import SpectabasWeb.Dashboard.SidebarComponent
   import SpectabasWeb.Dashboard.DateHelpers
   import Spectabas.TypeHelpers
@@ -22,6 +22,8 @@ defmodule SpectabasWeb.Dashboard.DownloadsLive do
         |> assign(:site, site)
         |> assign(:user, user)
         |> assign(:date_range, "30d")
+        |> assign(:downloads, [])
+        |> assign(:snapshot_refreshed_at, nil)
         |> assign(:loading, true)
 
       if connected?(socket), do: send(self(), :load_data)
@@ -43,10 +45,14 @@ defmodule SpectabasWeb.Dashboard.DownloadsLive do
   defp load_data(socket) do
     %{site: site, user: user, date_range: range} = socket.assigns
 
-    downloads =
-      safe_query(fn -> Analytics.file_downloads(site, user, range_to_period(range)) end)
+    {downloads, refreshed_at} =
+      DashboardSnapshots.with_fallback(site, "downloads", "30d", range, fn ->
+        safe_query(fn -> Analytics.file_downloads(site, user, range_to_period(range)) end)
+      end)
 
-    assign(socket, :downloads, downloads)
+    socket
+    |> assign(:downloads, downloads)
+    |> assign(:snapshot_refreshed_at, refreshed_at)
   end
 
   @impl true
@@ -66,6 +72,9 @@ defmodule SpectabasWeb.Dashboard.DownloadsLive do
             <h1 class="text-2xl font-bold text-gray-900 mt-2">File Downloads</h1>
             <p class="text-sm text-gray-500 mt-1">
               Files your visitors download (PDF, ZIP, DOC, XLS, CSV, MP3, MP4, and more)
+            </p>
+            <p :if={@snapshot_refreshed_at} class="text-xs text-gray-400 mt-0.5">
+              Snapshot · last update {DashboardSnapshots.refreshed_label(@snapshot_refreshed_at)}
             </p>
           </div>
           <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">

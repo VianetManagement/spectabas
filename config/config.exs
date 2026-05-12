@@ -99,7 +99,10 @@ config :spectabas, Oban,
        # Hourly at :25 — snapshot goal completions + top sources into Postgres
        {"25 * * * *", Spectabas.Workers.GoalStatsSnapshot},
        # Hourly at :30 — snapshot funnel entered/completed into Postgres
-       {"30 * * * *", Spectabas.Workers.FunnelStatsSnapshot}
+       {"30 * * * *", Spectabas.Workers.FunnelStatsSnapshot},
+       # Hourly at :35 — snapshot dashboard page data (outbound, downloads, events,
+       # site search, bot traffic, acquisition, ecommerce) into Postgres
+       {"35 * * * *", Spectabas.Workers.DashboardSnapshot}
      ]}
   ]
 

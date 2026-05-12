@@ -2458,6 +2458,8 @@ defmodule SpectabasWeb.DocsLive do
 
             > **Goals and Funnels work the same way.** The completions / unique visitors / conversion rate columns on the Goals page (last 7 days) and the entered / completed / conversion rate columns on the Funnels page (last 30 days) are also Postgres snapshots that refresh hourly. The header shows the last update time. Creating a new goal or funnel kicks off an immediate snapshot for the site so stats appear within minutes. Goal detail and funnel detail pages still query ClickHouse live for the deep dive.
 
+            > **Several other dashboard pages also snapshot their default-range view hourly**: Outbound Links, Downloads, Events, Site Search, Bot Traffic, Acquisition, and Ecommerce. When you're on the default date range, those pages render instantly from Postgres and show "Snapshot · last update Xm ago" near the page title. Switching to a different date range (or, on Acquisition, drilling into a specific channel) falls back to a live ClickHouse query.
+
             ### Funnels
 
             Define multi-step conversion paths to see where visitors drop off. Each step can be a pageview (URL path match), a custom event, a click element (with searchable autocomplete from detected buttons/links), or a goal (any goal type). Four step types give you full flexibility to track any conversion path.

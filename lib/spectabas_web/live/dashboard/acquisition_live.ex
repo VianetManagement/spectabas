@@ -3,7 +3,7 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
 
   use SpectabasWeb, :live_view
 
-  alias Spectabas.{Accounts, Sites, Analytics}
+  alias Spectabas.{Accounts, Sites, Analytics, DashboardSnapshots}
   alias Spectabas.Analytics.ChannelClassifier
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers
@@ -36,6 +36,7 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
         |> assign(:tab, "referrers")
         |> assign(:selected_channel, nil)
         |> assign(:utm_tabs, @utm_tabs)
+        |> assign(:snapshot_refreshed_at, nil)
         |> assign(:loading, true)
 
       if connected?(socket), do: send(self(), :load_data)
@@ -85,75 +86,115 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
 
   defp load_data(socket) do
     %{site: site, user: user, date_range: range, view: view} = socket.assigns
-    period = range_to_period(range)
+
+    snapshot =
+      if range == "7d" and is_nil(socket.assigns.selected_channel) do
+        DashboardSnapshots.fetch(site, "acquisition")
+      else
+        nil
+      end
 
     case view do
       "channels" ->
-        channels = safe_query(fn -> Analytics.channel_breakdown(site, user, period) end)
-
-        detail =
-          if socket.assigns.selected_channel do
-            safe_query(fn ->
-              Analytics.channel_detail(site, user, period, socket.assigns.selected_channel)
-            end)
-          else
-            []
-          end
-
-        # Enrich channel detail with engagement metrics from daily_session_facts
-        detail = enrich_with_engagement(detail, site, user, period, "referrer_domain")
-
-        socket
-        |> assign(:channels, channels)
-        |> assign(:channel_detail, detail)
+        load_channels_view(socket, site, user, range, snapshot)
 
       "sources" ->
-        tab = socket.assigns.tab
-        sources = load_sources(site, user, period, tab)
-
-        # Map tab → session_facts column for engagement lookup
-        eng_dim =
-          case tab do
-            "referrers" -> "referrer_domain"
-            "utm_source" -> "utm_source"
-            "utm_medium" -> "utm_medium"
-            "utm_campaign" -> "utm_campaign"
-            "utm_term" -> nil
-            "utm_content" -> nil
-            _ -> nil
-          end
-
-        sources =
-          if eng_dim,
-            do: enrich_with_engagement(sources, site, user, period, eng_dim),
-            else: sources
-
-        assign(socket, :sources, sources)
+        load_sources_view(socket, site, user, range, snapshot)
     end
   end
 
-  # Merge engagement metrics from daily_session_facts into existing rows.
-  # Each row gets "bounce_rate", "avg_duration", "pages_per_session" keys.
-  defp enrich_with_engagement([], _site, _user, _period, _dim), do: []
+  defp load_channels_view(socket, site, user, range, snapshot) do
+    period = range_to_period(range)
 
-  defp enrich_with_engagement(rows, site, user, period, dim) do
-    engagement =
-      case Analytics.source_engagement(site, user, period, dim) do
-        {:ok, map} -> map
-        _ -> %{}
+    {channels, refreshed_at} =
+      case snapshot do
+        {data, ra} -> {Map.get(data, "channels", []), ra}
+        nil -> {safe_query(fn -> Analytics.channel_breakdown(site, user, period) end), nil}
       end
 
-    # The key in engagement map matches the dimension value in the row.
-    # For referrers: row["referrer_domain"] or row["source"]
+    detail =
+      if socket.assigns.selected_channel do
+        safe_query(fn ->
+          Analytics.channel_detail(site, user, period, socket.assigns.selected_channel)
+        end)
+      else
+        []
+      end
+
+    detail =
+      enrich_with_engagement_or_snapshot(
+        detail,
+        site,
+        user,
+        period,
+        "referrer_domain",
+        snapshot
+      )
+
+    socket
+    |> assign(:channels, channels)
+    |> assign(:channel_detail, detail)
+    |> assign(:snapshot_refreshed_at, refreshed_at)
+  end
+
+  defp load_sources_view(socket, site, user, range, snapshot) do
+    period = range_to_period(range)
+    tab = socket.assigns.tab
+
+    {sources, refreshed_at} =
+      case snapshot do
+        {data, ra} -> {Map.get(data, tab, []), ra}
+        nil -> {load_sources(site, user, period, tab), nil}
+      end
+
+    eng_dim =
+      case tab do
+        "referrers" -> "referrer_domain"
+        "utm_source" -> "utm_source"
+        "utm_medium" -> "utm_medium"
+        "utm_campaign" -> "utm_campaign"
+        _ -> nil
+      end
+
+    sources =
+      if eng_dim,
+        do: enrich_with_engagement_or_snapshot(sources, site, user, period, eng_dim, snapshot),
+        else: sources
+
+    socket
+    |> assign(:sources, sources)
+    |> assign(:snapshot_refreshed_at, refreshed_at)
+  end
+
+  # If we have a snapshot, pull pre-computed engagement maps from it instead
+  # of querying. Otherwise do the live engagement lookup.
+  defp enrich_with_engagement_or_snapshot([], _site, _user, _period, _dim, _snapshot), do: []
+
+  defp enrich_with_engagement_or_snapshot(rows, site, user, period, dim, snapshot) do
+    engagement =
+      case snapshot do
+        {data, _} ->
+          data |> Map.get("engagement", %{}) |> Map.get(dim, %{})
+
+        nil ->
+          case Analytics.source_engagement(site, user, period, dim) do
+            {:ok, map} -> string_keyed_engagement(map)
+            _ -> %{}
+          end
+      end
+
     Enum.map(rows, fn row ->
       key = row["referrer_domain"] || row["source"] || row["value"] || ""
 
       case Map.get(engagement, key) do
-        %{bounce_rate: br, avg_duration: dur, pages_per_session: pps} ->
+        %{} = e ->
           row
-          |> Map.put("bounce_rate", to_string(br))
-          |> Map.put("avg_duration", to_string(dur))
-          |> Map.put("pages_per_session", to_string(pps))
+          |> Map.put("bounce_rate", to_string(get_eng(e, :bounce_rate, "bounce_rate")))
+          |> Map.put("avg_duration", to_string(get_eng(e, :avg_duration, "avg_duration")))
+          |> Map.put(
+            "pages_per_session",
+            to_string(get_eng(e, :pages_per_session, "pages_per_session"))
+          )
 
         _ ->
           row
@@ -162,6 +203,23 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
           |> Map.put("pages_per_session", nil)
       end
     end)
+  end
+
+  defp string_keyed_engagement(map) when is_map(map) do
+    Map.new(map, fn {k, v} ->
+      {k,
+       %{
+         "bounce_rate" => Map.get(v, :bounce_rate),
+         "avg_duration" => Map.get(v, :avg_duration),
+         "pages_per_session" => Map.get(v, :pages_per_session)
+       }}
+    end)
+  end
+
+  defp string_keyed_engagement(_), do: %{}
+
+  defp get_eng(map, atom_key, string_key) do
+    Map.get(map, atom_key) || Map.get(map, string_key) || ""
   end
 
   defp load_sources(site, user, period, tab) do
@@ -195,7 +253,12 @@ defmodule SpectabasWeb.Dashboard.AcquisitionLive do
     >
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
-          <h1 class="text-2xl font-bold text-gray-900">Acquisition</h1>
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900">Acquisition</h1>
+            <p :if={@snapshot_refreshed_at} class="text-xs text-gray-400 mt-0.5">
+              Snapshot · last update {DashboardSnapshots.refreshed_label(@snapshot_refreshed_at)}
+            </p>
+          </div>
           <div class="flex gap-2">
             <%!-- View Toggle --%>
             <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">

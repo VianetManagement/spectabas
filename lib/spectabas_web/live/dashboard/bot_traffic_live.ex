@@ -3,7 +3,7 @@ defmodule SpectabasWeb.Dashboard.BotTrafficLive do
 
   use SpectabasWeb, :live_view
 
-  alias Spectabas.{Accounts, Sites, Analytics}
+  alias Spectabas.{Accounts, Sites, Analytics, DashboardSnapshots}
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers
   import SpectabasWeb.Dashboard.DateHelpers
@@ -24,6 +24,7 @@ defmodule SpectabasWeb.Dashboard.BotTrafficLive do
         |> assign(:date_range, "7d")
         |> assign(:modal_ua, nil)
         |> assign(:modal_details, nil)
+        |> assign(:snapshot_refreshed_at, nil)
         |> assign(:loading, true)
 
       if connected?(socket), do: send(self(), :load_data)
@@ -84,12 +85,9 @@ defmodule SpectabasWeb.Dashboard.BotTrafficLive do
 
   defp load_data(socket) do
     %{site: site, user: user, date_range: range} = socket.assigns
-    period = range_to_period(range)
 
-    stats = safe_query(fn -> Analytics.bot_stats(site, user, period) end, %{})
-    top_pages = safe_query(fn -> Analytics.bot_top_pages(site, user, period) end)
-    top_uas = safe_query(fn -> Analytics.bot_top_user_agents(site, user, period) end)
-    daily_trend = safe_query(fn -> Analytics.bot_daily_trend(site, user, period) end)
+    {stats, top_pages, top_uas, daily_trend, refreshed_at} =
+      load_widgets(site, user, range)
 
     trend_chart_json = build_trend_chart_json(daily_trend)
     chart_key = "bot-#{range}-#{System.unique_integer([:positive])}"
@@ -101,6 +99,35 @@ defmodule SpectabasWeb.Dashboard.BotTrafficLive do
     |> assign(:daily_trend, daily_trend)
     |> assign(:trend_chart_json, trend_chart_json)
     |> assign(:chart_key, chart_key)
+    |> assign(:snapshot_refreshed_at, refreshed_at)
+  end
+
+  defp load_widgets(site, user, "7d") do
+    case DashboardSnapshots.fetch(site, "bot_traffic") do
+      {data, refreshed_at} ->
+        {
+          Map.get(data, "stats", %{}),
+          Map.get(data, "top_pages", []),
+          Map.get(data, "top_uas", []),
+          Map.get(data, "daily_trend", []),
+          refreshed_at
+        }
+
+      nil ->
+        live_load_widgets(site, user, range_to_period("7d"))
+    end
+  end
+
+  defp load_widgets(site, user, range) do
+    live_load_widgets(site, user, range_to_period(range))
+  end
+
+  defp live_load_widgets(site, user, period) do
+    stats = safe_query(fn -> Analytics.bot_stats(site, user, period) end, %{})
+    top_pages = safe_query(fn -> Analytics.bot_top_pages(site, user, period) end)
+    top_uas = safe_query(fn -> Analytics.bot_top_user_agents(site, user, period) end)
+    daily_trend = safe_query(fn -> Analytics.bot_daily_trend(site, user, period) end)
+    {stats, top_pages, top_uas, daily_trend, nil}
   end
 
   defp build_trend_chart_json(daily_trend) do
@@ -143,6 +170,9 @@ defmodule SpectabasWeb.Dashboard.BotTrafficLive do
         <div class="flex items-center justify-between mb-8">
           <div>
             <h1 class="text-2xl font-bold text-gray-900 mt-2">Bot Traffic</h1>
+            <p :if={@snapshot_refreshed_at} class="text-xs text-gray-400 mt-0.5">
+              Snapshot · last update {DashboardSnapshots.refreshed_label(@snapshot_refreshed_at)}
+            </p>
           </div>
           <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">
             <button

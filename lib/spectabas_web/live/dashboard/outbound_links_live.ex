@@ -3,7 +3,7 @@ defmodule SpectabasWeb.Dashboard.OutboundLinksLive do
 
   @moduledoc "Outbound links clicked by visitors, auto-tracked from external link clicks."
 
-  alias Spectabas.{Accounts, Sites, Analytics}
+  alias Spectabas.{Accounts, Sites, Analytics, DashboardSnapshots}
   import SpectabasWeb.Dashboard.SidebarComponent
   import SpectabasWeb.Dashboard.DateHelpers
   import Spectabas.TypeHelpers
@@ -22,6 +22,8 @@ defmodule SpectabasWeb.Dashboard.OutboundLinksLive do
         |> assign(:site, site)
         |> assign(:user, user)
         |> assign(:date_range, "30d")
+        |> assign(:links, [])
+        |> assign(:snapshot_refreshed_at, nil)
         |> assign(:loading, true)
 
       if connected?(socket), do: send(self(), :load_data)
@@ -43,10 +45,14 @@ defmodule SpectabasWeb.Dashboard.OutboundLinksLive do
   defp load_data(socket) do
     %{site: site, user: user, date_range: range} = socket.assigns
 
-    links =
-      safe_query(fn -> Analytics.outbound_links(site, user, range_to_period(range)) end)
+    {links, refreshed_at} =
+      DashboardSnapshots.with_fallback(site, "outbound_links", "30d", range, fn ->
+        safe_query(fn -> Analytics.outbound_links(site, user, range_to_period(range)) end)
+      end)
 
-    assign(socket, :links, links)
+    socket
+    |> assign(:links, links)
+    |> assign(:snapshot_refreshed_at, refreshed_at)
   end
 
   @impl true
@@ -66,6 +72,9 @@ defmodule SpectabasWeb.Dashboard.OutboundLinksLive do
             <h1 class="text-2xl font-bold text-gray-900 mt-2">Outbound Links</h1>
             <p class="text-sm text-gray-500 mt-1">
               External sites your visitors click through to
+            </p>
+            <p :if={@snapshot_refreshed_at} class="text-xs text-gray-400 mt-0.5">
+              Snapshot · last update {DashboardSnapshots.refreshed_label(@snapshot_refreshed_at)}
             </p>
           </div>
           <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">

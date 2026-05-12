@@ -3,7 +3,7 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
 
   @moduledoc "Ecommerce dashboard — revenue, orders, AOV, and top products."
 
-  alias Spectabas.{Accounts, Sites, Analytics}
+  alias Spectabas.{Accounts, Sites, Analytics, DashboardSnapshots}
   import SpectabasWeb.Dashboard.SidebarComponent
   import SpectabasWeb.Dashboard.DateHelpers
   import Spectabas.TypeHelpers
@@ -35,6 +35,7 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
         |> assign(:by_source, [])
         |> assign(:ltv, %{"total_customers" => 0, "avg_ltv" => 0, "avg_net_ltv" => 0})
         |> assign(:top_customers, [])
+        |> assign(:snapshot_refreshed_at, nil)
 
       if connected?(socket), do: send(self(), :load_data)
 
@@ -61,69 +62,10 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
 
   defp load_ecommerce(socket) do
     %{site: site, user: user, date_range: range} = socket.assigns
-    period = range_to_period(range)
 
-    stats =
-      case Analytics.ecommerce_stats(site, user, period) do
-        {:ok, data} -> data
-        _ -> %{"total_orders" => 0, "total_revenue" => 0, "avg_order_value" => 0}
-      end
-
-    products =
-      case Analytics.ecommerce_top_products(site, user, period) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
-
-    orders =
-      case Analytics.ecommerce_orders(site, user, period) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
-
-    timeseries =
-      case Analytics.ecommerce_timeseries(site, user, period) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
-
-    channel_task = Task.async(fn -> Analytics.ecommerce_by_channel(site, user, period) end)
-    source_task = Task.async(fn -> Analytics.ecommerce_by_source(site, user, period) end)
-
-    by_channel =
-      case Task.await(channel_task, 5_000) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
-
-    by_source =
-      case Task.await(source_task, 5_000) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
-
-    ltv =
-      case Analytics.ecommerce_ltv_stats(site, user) do
-        {:ok, data} -> data
-        _ -> %{"total_customers" => 0, "avg_ltv" => 0, "avg_net_ltv" => 0}
-      end
-
-    top_customers =
-      case Analytics.ecommerce_top_customers(site, user, limit: 10) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
-
-    # Enrich orders + top customers with visitor emails
-    order_vids = Enum.map(orders, & &1["visitor_id"])
-    customer_vids = Enum.map(top_customers, & &1["visitor_id"])
-
-    all_vids =
-      (order_vids ++ customer_vids)
-      |> Enum.reject(&(is_nil(&1) or &1 == ""))
-      |> Enum.uniq()
-
-    email_map = Spectabas.Visitors.emails_for_visitor_ids(all_vids)
+    {stats, products, orders, timeseries, by_channel, by_source, ltv, top_customers, email_map,
+     refreshed_at} =
+      load_widgets(site, user, range)
 
     socket
     |> assign(:ecommerce, stats)
@@ -135,8 +77,91 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
     |> assign(:by_source, by_source)
     |> assign(:ltv, ltv)
     |> assign(:top_customers, top_customers)
+    |> assign(:snapshot_refreshed_at, refreshed_at)
     |> push_ecommerce_chart(timeseries)
   end
+
+  defp load_widgets(site, user, "7d") do
+    case DashboardSnapshots.fetch(site, "ecommerce") do
+      {data, refreshed_at} ->
+        orders = Map.get(data, "orders", [])
+        top_customers = Map.get(data, "top_customers", [])
+        email_map_str = Map.get(data, "email_map", %{})
+
+        # Snapshot email_map is keyed by visitor_id strings; rebuild the
+        # %{visitor_id => %{email: ...}} shape the template expects.
+        email_map =
+          email_map_str
+          |> Enum.map(fn {vid, email} -> {vid, %{email: email}} end)
+          |> Map.new()
+
+        {
+          Map.get(data, "stats", %{
+            "total_orders" => 0,
+            "total_revenue" => 0,
+            "avg_order_value" => 0
+          }),
+          Map.get(data, "top_products", []),
+          orders,
+          Map.get(data, "timeseries", []),
+          Map.get(data, "by_channel", []),
+          Map.get(data, "by_source", []),
+          Map.get(data, "ltv", %{"total_customers" => 0, "avg_ltv" => 0, "avg_net_ltv" => 0}),
+          top_customers,
+          email_map,
+          refreshed_at
+        }
+
+      nil ->
+        live_load_widgets(site, user, range_to_period("7d"))
+    end
+  end
+
+  defp load_widgets(site, user, range) do
+    live_load_widgets(site, user, range_to_period(range))
+  end
+
+  defp live_load_widgets(site, user, period) do
+    stats =
+      case Analytics.ecommerce_stats(site, user, period) do
+        {:ok, data} -> data
+        _ -> %{"total_orders" => 0, "total_revenue" => 0, "avg_order_value" => 0}
+      end
+
+    products = list_or_empty(Analytics.ecommerce_top_products(site, user, period))
+    orders = list_or_empty(Analytics.ecommerce_orders(site, user, period))
+    timeseries = list_or_empty(Analytics.ecommerce_timeseries(site, user, period))
+
+    channel_task = Task.async(fn -> Analytics.ecommerce_by_channel(site, user, period) end)
+    source_task = Task.async(fn -> Analytics.ecommerce_by_source(site, user, period) end)
+
+    by_channel = list_or_empty(Task.await(channel_task, 5_000))
+    by_source = list_or_empty(Task.await(source_task, 5_000))
+
+    ltv =
+      case Analytics.ecommerce_ltv_stats(site, user) do
+        {:ok, data} -> data
+        _ -> %{"total_customers" => 0, "avg_ltv" => 0, "avg_net_ltv" => 0}
+      end
+
+    top_customers = list_or_empty(Analytics.ecommerce_top_customers(site, user, limit: 10))
+
+    order_vids = Enum.map(orders, & &1["visitor_id"])
+    customer_vids = Enum.map(top_customers, & &1["visitor_id"])
+
+    all_vids =
+      (order_vids ++ customer_vids)
+      |> Enum.reject(&(is_nil(&1) or &1 == ""))
+      |> Enum.uniq()
+
+    email_map = Spectabas.Visitors.emails_for_visitor_ids(all_vids)
+
+    {stats, products, orders, timeseries, by_channel, by_source, ltv, top_customers, email_map,
+     nil}
+  end
+
+  defp list_or_empty({:ok, rows}) when is_list(rows), do: rows
+  defp list_or_empty(_), do: []
 
   defp push_ecommerce_chart(socket, timeseries) do
     if Phoenix.LiveView.connected?(socket) do
@@ -177,6 +202,9 @@ defmodule SpectabasWeb.Dashboard.EcommerceLive do
         <div class="flex items-center justify-between mb-8">
           <div>
             <h1 class="text-2xl font-bold text-gray-900">Ecommerce</h1>
+            <p :if={@snapshot_refreshed_at} class="text-xs text-gray-400 mt-0.5">
+              Snapshot · last update {DashboardSnapshots.refreshed_label(@snapshot_refreshed_at)}
+            </p>
           </div>
           <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">
             <button

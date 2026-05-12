@@ -3,7 +3,7 @@ defmodule SpectabasWeb.Dashboard.EventsLive do
 
   @moduledoc "Custom events fired via Spectabas.track(), excluding internal events."
 
-  alias Spectabas.{Accounts, Sites, Analytics}
+  alias Spectabas.{Accounts, Sites, Analytics, DashboardSnapshots}
   import SpectabasWeb.Dashboard.SidebarComponent
   import SpectabasWeb.Dashboard.DateHelpers
   import Spectabas.TypeHelpers
@@ -22,6 +22,8 @@ defmodule SpectabasWeb.Dashboard.EventsLive do
         |> assign(:site, site)
         |> assign(:user, user)
         |> assign(:date_range, "30d")
+        |> assign(:events, [])
+        |> assign(:snapshot_refreshed_at, nil)
         |> assign(:expanded_event, nil)
         |> assign(:event_properties, [])
         |> assign(:loading, true)
@@ -80,10 +82,14 @@ defmodule SpectabasWeb.Dashboard.EventsLive do
   defp load_data(socket) do
     %{site: site, user: user, date_range: range} = socket.assigns
 
-    events =
-      safe_query(fn -> Analytics.custom_events(site, user, range_to_period(range)) end)
+    {events, refreshed_at} =
+      DashboardSnapshots.with_fallback(site, "events", "30d", range, fn ->
+        safe_query(fn -> Analytics.custom_events(site, user, range_to_period(range)) end)
+      end)
 
-    assign(socket, :events, events)
+    socket
+    |> assign(:events, events)
+    |> assign(:snapshot_refreshed_at, refreshed_at)
   end
 
   @impl true
@@ -104,6 +110,9 @@ defmodule SpectabasWeb.Dashboard.EventsLive do
             <p class="text-sm text-gray-500 mt-1">
               All custom events fired via <code class="text-xs bg-gray-100 px-1 py-0.5 rounded">Spectabas.track()</code>.
               Internal events (prefixed with _) are hidden.
+            </p>
+            <p :if={@snapshot_refreshed_at} class="text-xs text-gray-400 mt-0.5">
+              Snapshot · last update {DashboardSnapshots.refreshed_label(@snapshot_refreshed_at)}
             </p>
           </div>
           <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">

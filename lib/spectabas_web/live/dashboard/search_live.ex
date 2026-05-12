@@ -1,7 +1,7 @@
 defmodule SpectabasWeb.Dashboard.SearchLive do
   use SpectabasWeb, :live_view
 
-  alias Spectabas.{Accounts, Sites, Analytics}
+  alias Spectabas.{Accounts, Sites, Analytics, DashboardSnapshots}
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers
   import SpectabasWeb.Dashboard.DateHelpers
@@ -39,6 +39,7 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
         |> assign(:params_used, [])
         |> assign(:tracked_params, tracked_params)
         |> assign(:using_defaults, site.search_query_params in [nil, []])
+        |> assign(:snapshot_refreshed_at, nil)
 
       if connected?(socket) do
         send(self(), :load_critical)
@@ -89,27 +90,26 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
 
   @impl true
   def handle_info(:load_critical, socket) do
-    # Critical path: searches table + params_used (for filter pills) — render immediately
-    %{site: site, user: user, date_range: range, param_filter: param_filter} = socket.assigns
-    period = range_to_period(range)
+    %{site: site, date_range: range, param_filter: pf} = socket.assigns
 
-    tasks = [
-      Task.async(fn ->
-        {:searches, Analytics.site_searches(site, user, period, param: param_filter)}
-      end),
-      Task.async(fn -> {:params_used, Analytics.site_search_params_used(site, user, period)} end)
-    ]
+    with true <- range == "30d" and is_nil(pf),
+         {data, refreshed_at} <- DashboardSnapshots.fetch(site, "site_search") do
+      {:noreply,
+       socket
+       |> assign(:searches, Map.get(data, "searches", []))
+       |> assign(:params_used, Map.get(data, "params_used", []))
+       |> assign(:stats, Map.get(data, "stats"))
+       |> assign(:trend, Map.get(data, "trend", []))
+       |> assign(:search_pages, Map.get(data, "pages", []))
+       |> assign(:snapshot_refreshed_at, refreshed_at)
+       |> assign(:loading, false)}
+    else
+      _ -> live_load_critical(socket)
+    end
+  end
 
-    socket =
-      tasks
-      |> Task.await_many(30_000)
-      |> Enum.reduce(socket, fn
-        {:searches, {:ok, rows}}, sock -> assign(sock, :searches, rows)
-        {:params_used, {:ok, rows}}, sock -> assign(sock, :params_used, rows)
-        _, sock -> sock
-      end)
-
-    {:noreply, assign(socket, :loading, false)}
+  def handle_info(:load_deferred, %{assigns: %{snapshot_refreshed_at: %DateTime{}}} = socket) do
+    {:noreply, socket}
   end
 
   def handle_info(:load_deferred, socket) do
@@ -144,6 +144,29 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
 
   def handle_info({:deferred, _, _}, socket), do: {:noreply, socket}
 
+  defp live_load_critical(socket) do
+    %{site: site, user: user, date_range: range, param_filter: param_filter} = socket.assigns
+    period = range_to_period(range)
+
+    tasks = [
+      Task.async(fn ->
+        {:searches, Analytics.site_searches(site, user, period, param: param_filter)}
+      end),
+      Task.async(fn -> {:params_used, Analytics.site_search_params_used(site, user, period)} end)
+    ]
+
+    socket =
+      tasks
+      |> Task.await_many(30_000)
+      |> Enum.reduce(socket, fn
+        {:searches, {:ok, rows}}, sock -> assign(sock, :searches, rows)
+        {:params_used, {:ok, rows}}, sock -> assign(sock, :params_used, rows)
+        _, sock -> sock
+      end)
+
+    {:noreply, assign(socket, :loading, false) |> assign(:snapshot_refreshed_at, nil)}
+  end
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -161,6 +184,9 @@ defmodule SpectabasWeb.Dashboard.SearchLive do
             <h1 class="text-2xl font-bold text-gray-900">Site Search</h1>
             <p class="text-sm text-gray-500 mt-1">
               What visitors are searching for on your site
+            </p>
+            <p :if={@snapshot_refreshed_at} class="text-xs text-gray-400 mt-0.5">
+              Snapshot · last update {DashboardSnapshots.refreshed_label(@snapshot_refreshed_at)}
             </p>
           </div>
           <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">
