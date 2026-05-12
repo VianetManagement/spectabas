@@ -33,6 +33,7 @@ defmodule Spectabas.Workers.DashboardSnapshot do
   @default_bot_traffic_window 7
   @default_acquisition_window 7
   @default_ecommerce_window 7
+  @default_suggested_funnels_window 30
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"site_id" => site_id}}) do
@@ -145,6 +146,10 @@ defmodule Spectabas.Workers.DashboardSnapshot do
 
     snapshot_kind(site, "ecommerce", @default_ecommerce_window, fn ->
       snapshot_ecommerce(site, user)
+    end)
+
+    snapshot_kind(site, "suggested_funnels", @default_suggested_funnels_window, fn ->
+      %{"rows" => list_or_empty(Analytics.suggested_funnels(site, user))}
     end)
 
     :ok

@@ -3654,10 +3654,10 @@ defmodule Spectabas.Analytics do
     HAVING converters >= 3
     ORDER BY converters DESC
     LIMIT 10
-    SETTINGS max_execution_time = 20
+    SETTINGS max_execution_time = 120
     """
 
-    ClickHouse.query(sql)
+    ClickHouse.query(sql, receive_timeout: 150_000)
   end
 
   defp suggested_funnels_from_ecommerce(site) do
@@ -3691,10 +3691,10 @@ defmodule Spectabas.Analytics do
     HAVING converters >= 3
     ORDER BY converters DESC
     LIMIT 10
-    SETTINGS max_execution_time = 20
+    SETTINGS max_execution_time = 120
     """
 
-    ClickHouse.query(sql)
+    ClickHouse.query(sql, receive_timeout: 150_000)
   end
 
   # ---- Goal Detail Queries ----

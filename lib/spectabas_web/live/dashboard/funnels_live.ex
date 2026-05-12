@@ -3,7 +3,7 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
 
   @moduledoc "Conversion funnels — multi-step visitor flow analysis."
 
-  alias Spectabas.{Accounts, Sites, Goals, Analytics}
+  alias Spectabas.{Accounts, Sites, Goals, Analytics, DashboardSnapshots}
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers
 
@@ -35,10 +35,25 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
        |> assign(:form_steps, [%{name: "", type: "pageview", value: ""}])
        |> assign(:discovered_elements, [])
        |> assign(:goals, Goals.list_goals(site))
-       |> assign(:suggestions, nil)
+       |> assign(:suggestions, snapshot_suggestions(site))
        |> assign(:suggestions_loading, false)
+       |> assign(:suggestions_refreshed_at, snapshot_suggestions_refreshed_at(site))
        |> assign(:funnel_summaries, summaries)
        |> assign(:last_refreshed_at, last_refreshed_at)}
+    end
+  end
+
+  defp snapshot_suggestions(site) do
+    case DashboardSnapshots.fetch(site, "suggested_funnels") do
+      {%{"rows" => rows}, _refreshed_at} -> rows
+      _ -> nil
+    end
+  end
+
+  defp snapshot_suggestions_refreshed_at(site) do
+    case DashboardSnapshots.fetch(site, "suggested_funnels") do
+      {_, refreshed_at} -> refreshed_at
+      _ -> nil
     end
   end
 
@@ -72,7 +87,16 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
     suggestions =
       safe_query(fn -> Analytics.suggested_funnels(socket.assigns.site, socket.assigns.user) end)
 
-    {:noreply, assign(socket, suggestions: suggestions, suggestions_loading: false)}
+    # Refresh the snapshot too so other viewers benefit and "last update" resets.
+    if is_list(suggestions) and suggestions != [] do
+      DashboardSnapshots.put(socket.assigns.site, "suggested_funnels", 30, %{"rows" => suggestions})
+    end
+
+    {:noreply,
+     socket
+     |> assign(:suggestions, suggestions)
+     |> assign(:suggestions_loading, false)
+     |> assign(:suggestions_refreshed_at, DateTime.utc_now() |> DateTime.truncate(:second))}
   rescue
     _ -> {:noreply, assign(socket, suggestions: [], suggestions_loading: false)}
   end
@@ -478,7 +502,7 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
           </p>
         </div>
 
-        <%!-- Suggested Funnels (button-gated; the underlying CH query is heavy) --%>
+        <%!-- Suggested Funnels — snapshotted hourly, "Regenerate" forces live --%>
         <div class="bg-white rounded-lg shadow p-6 mb-8">
           <div class="flex items-start justify-between gap-3 mb-3">
             <div>
@@ -486,13 +510,16 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
               <p class="text-xs text-gray-400 mt-1">
                 Common page paths taken by converting visitors in the last 30 days.
               </p>
+              <p :if={@suggestions_refreshed_at} class="text-xs text-gray-400 mt-0.5">
+                Snapshot · last update {refreshed_label(@suggestions_refreshed_at)}
+              </p>
             </div>
             <button
               :if={!@suggestions_loading}
               phx-click="generate_suggestions"
               class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-indigo-300 text-indigo-600 hover:bg-indigo-50 transition-colors whitespace-nowrap"
             >
-              {if is_nil(@suggestions), do: "Generate suggestions", else: "Regenerate"}
+              {if is_nil(@suggestions), do: "Generate suggestions", else: "Regenerate now"}
             </button>
             <span
               :if={@suggestions_loading}
