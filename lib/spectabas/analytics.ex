@@ -3621,38 +3621,78 @@ defmodule Spectabas.Analytics do
     end
   end
 
-  # Single-pass scan: per-visitor sort via arraySort (no global ORDER BY),
-  # converter flag computed inline as maxIf so we don't double-scan events.
+  # URL paths that act as noise in funnel suggestions — auth flows and the
+  # homepage are visited by virtually everyone, so they dominate the top-N
+  # without telling you anything actionable. Stripped from path sequences
+  # before grouping. Kept conservative; if you need site-specific overrides,
+  # add a `funnel_suggestion_skip` field on sites.
+  @funnel_path_denylist [
+    "/",
+    "/sign-in",
+    "/sign-out",
+    "/login",
+    "/logout",
+    "/signup",
+    "/register",
+    "/users/reset_password",
+    "/users/sign_in",
+    "/users/sign_out",
+    "/users/sign_up",
+    "/auth/verify-identity",
+    "/forgot-password",
+    "/reset-password"
+  ]
+
+  # Lift-based suggestion: instead of "top paths converters take" (which is
+  # dominated by auth/homepage), we rank paths by how MUCH MORE LIKELY a
+  # converter is to take them than a non-converter. Score is
+  # `log(1 + converters) * lift` so we balance volume against signal.
+  #
+  # Path normalization: strip query strings (`?foo=bar`), drop noise paths
+  # from the denylist, and keep only the last 4 distinct content pages per
+  # visitor. Sequences shorter than 2 steps after denoise are skipped.
   defp suggested_funnels_from_goals(site, goal_conditions) do
     converter_expr = goal_conditions |> Enum.map(&"(#{&1})") |> Enum.join(" OR ")
+    denylist_sql = funnel_denylist_sql()
 
     sql = """
     SELECT
       path_sequence,
-      count() AS converters,
-      length(path_sequence) AS steps
+      converters,
+      non_converters,
+      round(converters / greatest(converters + non_converters, 1) * 100, 1) AS conversion_rate,
+      length(path_sequence) AS steps,
+      round((converters / greatest(non_converters, 1)) * log(1 + converters), 2) AS lift_score
     FROM (
       SELECT
-        visitor_id,
-        arrayDistinct(arraySlice(
-          arrayMap(t -> t.2,
-            arraySort(t -> t.1,
-              groupArrayIf((timestamp, url_path),
-                event_type = 'pageview' AND url_path != ''))),
-          -5
-        )) AS path_sequence,
-        maxIf(1, #{converter_expr}) AS is_converter
-      FROM events
-      WHERE site_id = #{ClickHouse.param(site.id)}
-        AND ip_is_bot = 0
-        AND event_type IN ('pageview', 'custom')
-        AND timestamp >= now() - INTERVAL 30 DAY
-      GROUP BY visitor_id
-      HAVING is_converter = 1 AND length(path_sequence) >= 2
+        path_sequence,
+        countIf(is_converter = 1) AS converters,
+        countIf(is_converter = 0) AS non_converters
+      FROM (
+        SELECT
+          visitor_id,
+          arraySlice(
+            arrayDistinct(arrayFilter(p -> p NOT IN (#{denylist_sql}) AND p NOT LIKE '/auth/%' AND p NOT LIKE '/api/%',
+              arrayMap(t -> splitByChar('?', t.2)[1],
+                arraySort(t -> t.1,
+                  groupArrayIf((timestamp, url_path),
+                    event_type = 'pageview' AND url_path != ''))))),
+            -4
+          ) AS path_sequence,
+          maxIf(1, #{converter_expr}) AS is_converter
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND ip_is_bot = 0
+          AND event_type IN ('pageview', 'custom')
+          AND timestamp >= now() - INTERVAL 30 DAY
+        GROUP BY visitor_id
+        HAVING length(path_sequence) >= 2
+      )
+      GROUP BY path_sequence
+      HAVING converters >= 3
     )
-    GROUP BY path_sequence
-    HAVING converters >= 3
-    ORDER BY converters DESC
+    WHERE non_converters >= 0
+    ORDER BY lift_score DESC, converters DESC
     LIMIT 10
     SETTINGS max_execution_time = 120
     """
@@ -3661,40 +3701,64 @@ defmodule Spectabas.Analytics do
   end
 
   defp suggested_funnels_from_ecommerce(site) do
+    denylist_sql = funnel_denylist_sql()
+
+    # Same lift idea but the "converter" universe is "visitors with any
+    # ecommerce event in the last 30 days". Non-converters here are
+    # pageview-only visitors over the same window.
     sql = """
     SELECT
       path_sequence,
-      count() AS converters,
-      length(path_sequence) AS steps
+      converters,
+      non_converters,
+      round(converters / greatest(converters + non_converters, 1) * 100, 1) AS conversion_rate,
+      length(path_sequence) AS steps,
+      round((converters / greatest(non_converters, 1)) * log(1 + converters), 2) AS lift_score
     FROM (
       SELECT
-        visitor_id,
-        arrayDistinct(arraySlice(
-          arrayMap(t -> t.2, arraySort(t -> t.1, groupArray((timestamp, url_path)))),
-          -5
-        )) AS path_sequence
-      FROM events
-      WHERE site_id = #{ClickHouse.param(site.id)}
-        AND ip_is_bot = 0
-        AND event_type = 'pageview'
-        AND url_path != ''
-        AND timestamp >= now() - INTERVAL 30 DAY
-        AND visitor_id IN (
-          SELECT DISTINCT visitor_id FROM ecommerce_events
-          WHERE site_id = #{ClickHouse.param(site.id)}
-            AND timestamp >= now() - INTERVAL 30 DAY
-        )
-      GROUP BY visitor_id
-      HAVING length(path_sequence) >= 2
+        path_sequence,
+        countIf(is_converter = 1) AS converters,
+        countIf(is_converter = 0) AS non_converters
+      FROM (
+        SELECT
+          visitor_id,
+          arraySlice(
+            arrayDistinct(arrayFilter(p -> p NOT IN (#{denylist_sql}) AND p NOT LIKE '/auth/%' AND p NOT LIKE '/api/%',
+              arrayMap(t -> splitByChar('?', t.2)[1],
+                arraySort(t -> t.1,
+                  groupArrayIf((timestamp, url_path),
+                    event_type = 'pageview' AND url_path != ''))))),
+            -4
+          ) AS path_sequence,
+          if(visitor_id IN (
+            SELECT DISTINCT visitor_id FROM ecommerce_events
+            WHERE site_id = #{ClickHouse.param(site.id)}
+              AND timestamp >= now() - INTERVAL 30 DAY
+          ), 1, 0) AS is_converter
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND ip_is_bot = 0
+          AND event_type = 'pageview'
+          AND url_path != ''
+          AND timestamp >= now() - INTERVAL 30 DAY
+        GROUP BY visitor_id
+        HAVING length(path_sequence) >= 2
+      )
+      GROUP BY path_sequence
+      HAVING converters >= 3
     )
-    GROUP BY path_sequence
-    HAVING converters >= 3
-    ORDER BY converters DESC
+    ORDER BY lift_score DESC, converters DESC
     LIMIT 10
     SETTINGS max_execution_time = 120
     """
 
     ClickHouse.query(sql, receive_timeout: 150_000)
+  end
+
+  defp funnel_denylist_sql do
+    @funnel_path_denylist
+    |> Enum.map(&ClickHouse.param/1)
+    |> Enum.join(", ")
   end
 
   # ---- Goal Detail Queries ----

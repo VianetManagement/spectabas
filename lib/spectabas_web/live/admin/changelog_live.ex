@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.11", "2026-05-12T21:00:00Z",
+       [
+         %{
+           title: "Funnel Suggestions: lift-based ranking + denoise",
+           description:
+             "On puppies.com the top 10 suggestions were all variations of `/ → /sign-in → /auth/verify-identity` — login flow, not useful funnels. Every converter signs in, so the path dominates the count. Fixes: (1) strip homepage `/` and auth paths (/sign-in, /login, /signup, /users/reset_password, /auth/*, /api/*) from candidate sequences. (2) Strip query strings so /listings?page=2 and /listings collapse. (3) Compute non-converters alongside converters for each sequence and rank by `log(1 + converters) * (converters / non_converters)` — high signal AND volume. (4) Sequence length capped at 4 distinct content pages (was 5). (5) UI surfaces conversion rate and non-converter count next to each suggestion so you can see the lift. Updated description text on the panel to reflect the new ranking semantics. Code: `Analytics.suggested_funnels_from_goals/2` + `suggested_funnels_from_ecommerce/1` rewritten; new `@funnel_path_denylist` module attribute (add to it if more noise paths emerge)."
+         }
+       ]},
       {"v6.10.10", "2026-05-12T20:40:00Z",
        [
          %{

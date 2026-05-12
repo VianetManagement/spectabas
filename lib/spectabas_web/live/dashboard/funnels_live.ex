@@ -510,7 +510,8 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
             <div>
               <h2 class="text-sm font-semibold text-gray-700">Suggested Funnels</h2>
               <p class="text-xs text-gray-400 mt-1">
-                Common page paths taken by converting visitors in the last 30 days.
+                Paths where converters land far more often than non-converters
+                (last 30 days, login/homepage filtered out).
               </p>
               <p :if={@suggestions_refreshed_at} class="text-xs text-gray-400 mt-0.5">
                 Snapshot · last update {refreshed_label(@suggestions_refreshed_at)}
@@ -561,9 +562,19 @@ defmodule SpectabasWeb.Dashboard.FunnelsLive do
                 </div>
               </div>
               <div class="flex items-center gap-3 shrink-0 ml-3">
-                <span class="text-xs text-gray-500 tabular-nums">
-                  {format_number(to_num(suggestion["converters"]))} converters
-                </span>
+                <div class="text-right">
+                  <div class="text-xs text-gray-500 tabular-nums">
+                    {format_number(to_num(suggestion["converters"]))} converters
+                  </div>
+                  <div
+                    :if={suggestion["conversion_rate"]}
+                    class="text-[10px] text-gray-400 tabular-nums"
+                  >
+                    {suggestion["conversion_rate"]}% conv · {format_number(
+                      to_num(suggestion["non_converters"])
+                    )} non-converters
+                  </div>
+                </div>
                 <button
                   phx-click="create_suggested"
                   phx-value-index={idx}
