@@ -44,6 +44,10 @@ defmodule Spectabas.Workers.FunnelStatsSnapshot do
       :ok
     else
       with {:ok, summaries} <- Analytics.funnel_summaries_system(site, funnels, "30d") do
+        Logger.notice(
+          "[FunnelStatsSnapshot] site=#{site.id} funnels=#{length(funnels)} summaries_keys=#{inspect(Map.keys(summaries))} sample=#{inspect(summaries |> Enum.take(1))}"
+        )
+
         rows =
           Enum.map(funnels, fn funnel ->
             stats =
@@ -60,7 +64,10 @@ defmodule Spectabas.Workers.FunnelStatsSnapshot do
 
         case Goals.replace_funnel_stats(site, rows) do
           {:ok, _} ->
-            Logger.notice("[FunnelStatsSnapshot] site=#{site.id} funnels=#{length(rows)}")
+            Logger.notice(
+              "[FunnelStatsSnapshot] site=#{site.id} wrote=#{length(rows)} rows_sample=#{inspect(Enum.take(rows, 1))}"
+            )
+
             :ok
 
           {:error, reason} ->
