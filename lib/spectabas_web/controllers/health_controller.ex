@@ -2252,6 +2252,68 @@ defmodule SpectabasWeb.HealthController do
               conn |> put_status(400) |> json(%{error: "site_id param required"})
           end
 
+        "backfill_click_element_cols" ->
+          # Fires `ALTER TABLE events MATERIALIZE COLUMN ...` for the
+          # element_text + element_id materialized columns. The columns are
+          # populated automatically for new INSERTs since they were added
+          # (in the schema init list); this fills in historical rows so
+          # that follow-up queries against `element_text` / `element_id`
+          # see real data. Returns immediately — the actual rewrite runs
+          # as a CH background mutation. Check progress with
+          # `click_element_backfill_status`.
+          db = Application.get_env(:spectabas, Spectabas.ClickHouse)[:database] || "spectabas"
+
+          results = [
+            {"element_text",
+             Spectabas.ClickHouse.execute_admin(
+               "ALTER TABLE #{db}.events MATERIALIZE COLUMN element_text"
+             )},
+            {"element_id",
+             Spectabas.ClickHouse.execute_admin(
+               "ALTER TABLE #{db}.events MATERIALIZE COLUMN element_id"
+             )}
+          ]
+
+          json(
+            conn,
+            %{
+              enqueued:
+                Enum.map(results, fn {col, r} ->
+                  %{column: col, ok: r == :ok, result: inspect(r) |> String.slice(0, 200)}
+                end),
+              hint:
+                "Mutations run in the background. Poll click_element_backfill_status for progress."
+            }
+          )
+
+        "click_element_backfill_status" ->
+          # Returns the most recent ALTER MATERIALIZE COLUMN mutations on
+          # the events table from system.mutations. is_done=1 means the
+          # column is fully backfilled across all parts.
+          db = Application.get_env(:spectabas, Spectabas.ClickHouse)[:database] || "spectabas"
+
+          sql = """
+          SELECT
+            mutation_id,
+            command,
+            create_time,
+            is_done,
+            parts_to_do,
+            latest_failed_part,
+            latest_fail_reason
+          FROM system.mutations
+          WHERE database = '#{db}'
+            AND table = 'events'
+            AND (command LIKE '%element_text%' OR command LIKE '%element_id%')
+          ORDER BY create_time DESC
+          LIMIT 10
+          """
+
+          case Spectabas.ClickHouse.query(sql) do
+            {:ok, rows} -> json(conn, %{rows: rows})
+            err -> conn |> put_status(500) |> json(%{error: inspect(err)})
+          end
+
         "goal_completions_probe" ->
           # Runs Analytics.goal_completions_system inline and returns the raw
           # result + elapsed_ms. Lets us see what the GoalStatsSnapshot worker

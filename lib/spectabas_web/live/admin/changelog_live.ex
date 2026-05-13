@@ -65,6 +65,15 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.23", "2026-05-13T19:50:00Z",
+       [
+         %{
+           title:
+             "Materialized columns for click element fields (schema-only — call sites still on JSONExtract)",
+           description:
+             "Adds two materialized columns to the events table: `element_text` (= `JSONExtractString(properties, '_text')`) and `element_id` (= `JSONExtractString(properties, '_id')`), with bloom-filter skip indexes on both. New INSERTs populate them automatically — every click_element query (goal detail, click registry, scraper detection, ad conversion uploader) currently does per-row JSON parsing across millions of rows; once these columns are filled, those queries become indexed column reads, which is 10-100x faster.\n\nThis PR is **schema-only** — the columns are added but no query has been swapped to read them yet. That's intentional: historical events have `''` for the new columns until `ALTER TABLE events MATERIALIZE COLUMN` runs (which is a background CH mutation that rewrites parts). Premature swap would break goal_detail on click_element goals because the click_text='Contact Me' filter would miss every click before today's deploy.\n\n**Runbook**:\n1. Deploy this. Schema init in `ensure_schema!` runs the ALTERs idempotently on boot. New `_click` INSERTs immediately have populated `element_text`/`element_id`.\n2. Hit `/oban-admin?action=backfill_click_element_cols&token=...` to enqueue `MATERIALIZE COLUMN element_text` + `MATERIALIZE COLUMN element_id` mutations.\n3. Poll `/oban-admin?action=click_element_backfill_status&token=...` until both mutations show `is_done=1`. May take 30 min to a few hours depending on table size.\n4. (Next PR) Swap `JSONExtractString(properties, '_text')` → `element_text` and `_id` → `element_id` in queries, then redeploy. That's the deploy that realizes the perf win.\n\nName chosen `element_*` not `click_*` because the existing `click_id` column is for ad click IDs (gclid/msclkid/fbclid) — overloading would collide with the existing `idx_click_id` index."
+         }
+       ]},
       {"v6.10.22", "2026-05-13T19:25:00Z",
        [
          %{

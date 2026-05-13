@@ -100,6 +100,14 @@ defmodule Spectabas.ClickHouse do
         click_id_type LowCardinality(String) DEFAULT '',
         duration_s UInt32 DEFAULT 0,
         properties String DEFAULT '{}',
+        -- Auto-click element fields extracted at INSERT time from `properties`
+        -- so click_element queries (goal_detail, registry, scraper, ad
+        -- conversion) read indexed columns instead of doing per-row JSON
+        -- parsing. Empty on non-`_click` events. NEW INSTALLS get these
+        -- via the CREATE TABLE here; existing tables get them via the
+        -- ALTER TABLE ... MATERIALIZED clauses below.
+        element_text String MATERIALIZED JSONExtractString(properties, '_text'),
+        element_id String MATERIALIZED JSONExtractString(properties, '_id'),
         is_bounce UInt8 DEFAULT 1,
         timestamp DateTime DEFAULT now(),
         sign Int8 DEFAULT 1
@@ -495,7 +503,16 @@ defmodule Spectabas.ClickHouse do
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_utm_source utm_source TYPE bloom_filter GRANULARITY 4",
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_utm_medium utm_medium TYPE bloom_filter GRANULARITY 4",
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_utm_campaign utm_campaign TYPE bloom_filter GRANULARITY 4",
-      "ALTER TABLE #{db}.events ADD COLUMN IF NOT EXISTS ip_vpn_provider LowCardinality(String) DEFAULT '' AFTER ip_is_tor"
+      "ALTER TABLE #{db}.events ADD COLUMN IF NOT EXISTS ip_vpn_provider LowCardinality(String) DEFAULT '' AFTER ip_is_tor",
+      # Materialized columns for auto-click element fields. Empty on
+      # non-`_click` events. New INSERTs populate automatically; existing
+      # rows show '' until backfilled via
+      # `/oban-admin?action=backfill_click_element_cols` which issues
+      # `ALTER TABLE events MATERIALIZE COLUMN element_text/element_id`.
+      "ALTER TABLE #{db}.events ADD COLUMN IF NOT EXISTS element_text String MATERIALIZED JSONExtractString(properties, '_text')",
+      "ALTER TABLE #{db}.events ADD COLUMN IF NOT EXISTS element_id String MATERIALIZED JSONExtractString(properties, '_id')",
+      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_element_text element_text TYPE bloom_filter GRANULARITY 4",
+      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_element_id element_id TYPE bloom_filter GRANULARITY 4"
     ]
 
     if connected do
