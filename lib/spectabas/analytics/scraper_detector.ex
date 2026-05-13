@@ -60,8 +60,13 @@ defmodule Spectabas.Analytics.ScraperDetector do
   # Chrome major version threshold — anything below this is considered stale
   @stale_chrome_version 100
 
+  # Tier thresholds — single source of truth across the whole scraper
+  # detection system. ScrapersLive UI, the webhook worker's tier-escalation
+  # gate, and the visitor profile badges all read from `verdict/1`.
+  # Suspicious bumped 60 → 70 v6.10.28 to align with CLAUDE.md and the
+  # webhook worker's hardcoded score_tier definitions.
   @score_watching 40
-  @score_suspicious 60
+  @score_suspicious 70
   @score_certain 85
 
   @doc "List of ASN prefixes classified as datacenter/hosting providers (fallback list)."
@@ -126,11 +131,17 @@ defmodule Spectabas.Analytics.ScraperDetector do
     %{score: min(points, 100), signals: Enum.reverse(signals)}
   end
 
-  @doc "Classify a score into a verdict atom."
+  @doc """
+  Classify a score into a verdict atom. Four tiers matching CLAUDE.md:
+  `:normal` (<40), `:watching` (40-69), `:suspicious` (70-84),
+  `:certain` (85+). The webhook worker uses `:watching` as the minimum
+  score-watching threshold for candidate detection.
+  """
   def verdict(score) when is_integer(score) do
     cond do
       score >= @score_certain -> :certain
       score >= @score_suspicious -> :suspicious
+      score >= @score_watching -> :watching
       true -> :normal
     end
   end

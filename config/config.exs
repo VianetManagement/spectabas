@@ -90,8 +90,15 @@ config :spectabas, Oban,
        {"0 2 * * *", Spectabas.Workers.SessionFactsRollup},
        # Daily at 02:30 UTC — refresh visitor first/last attribution for revenue queries
        {"30 2 * * *", Spectabas.Workers.VisitorAttributionRollup},
-       # Every 15 minutes — scan for scrapers and fire webhooks
-       {"*/15 * * * *", Spectabas.Workers.ScraperWebhookScan},
+       # Every 15 minutes — scan the last 24h for scrapers and fire webhooks
+       # on tier escalations. (Bumped from hours=1 in v6.10.28 — the 1h
+       # window missed slow scrapers that went quiet between 1h scans.)
+       {"*/15 * * * *", Spectabas.Workers.ScraperWebhookScan, args: %{"hours" => 24}},
+       # Daily at 03:00 UTC — wider 7d sweep catches long-tail scrapers
+       # whose activity is spread across days. Same worker, different
+       # window; the tier-escalation gate prevents re-flagging visitors
+       # already at their current tier.
+       {"0 3 * * *", Spectabas.Workers.ScraperWebhookScan, args: %{"hours" => 168}},
        # Weekly on Sunday at 04:00 UTC — discover new datacenter ASNs from traffic patterns
        {"0 4 * * 0", Spectabas.Workers.ASNDiscovery},
        # Hourly at :20 — snapshot top click elements per site into Postgres

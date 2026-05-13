@@ -19,13 +19,14 @@ defmodule Spectabas.Workers.ScraperWebhookScan do
   @downgrade_batch_size 500
 
   @impl Oban.Worker
-  def perform(_job) do
+  def perform(%Oban.Job{args: args}) do
+    hours = Map.get(args, "hours", 24)
     sites = sites_with_webhooks()
 
     if sites == [] do
       :ok
     else
-      Enum.each(sites, &scan_site/1)
+      Enum.each(sites, &scan_site(&1, hours))
       :ok
     end
   end
@@ -41,15 +42,15 @@ defmodule Spectabas.Workers.ScraperWebhookScan do
     )
   end
 
-  defp scan_site(site) do
+  defp scan_site(site, hours) do
     # 1. Scan recent traffic for new/escalating scrapers
     case Analytics.scraper_candidates_system(site,
-           hours: 1,
+           hours: hours,
            min_score: ScraperDetector.score_watching()
          ) do
       {:ok, candidates} ->
         Logger.notice(
-          "[ScraperWebhookScan] site=#{site.id} found #{length(candidates)} candidates"
+          "[ScraperWebhookScan] site=#{site.id} hours=#{hours} found #{length(candidates)} candidates"
         )
 
         Enum.each(candidates, fn row ->
@@ -79,11 +80,18 @@ defmodule Spectabas.Workers.ScraperWebhookScan do
       is_nil(visitor) ->
         :ok
 
-      # Whitelisted — never auto-flag, regardless of score.
+      # Whitelisted — never auto-flag, regardless of score. Still persist
+      # the scan score below so the profile shows what the worker saw.
       visitor.scraper_whitelisted ->
+        persist_last_scan(visitor, score)
         :ok
 
       true ->
+        # Always persist the latest scan score — separate from
+        # scraper_webhook_score (which only updates on webhook fire so
+        # the tier-escalation gate keeps working).
+        visitor = persist_last_scan(visitor, score)
+
         prev = visitor.scraper_webhook_score || 0
         prev_tier = score_tier(prev)
         curr_tier = score_tier(score)
@@ -97,7 +105,8 @@ defmodule Spectabas.Workers.ScraperWebhookScan do
           curr_tier > prev_tier ->
             send_and_record(site, visitor, score, signals, row)
 
-          # Same tier — skip
+          # Same tier — skip webhook, but the persist above still recorded
+          # the current score for UI consistency.
           true ->
             :ok
         end
@@ -107,6 +116,17 @@ defmodule Spectabas.Workers.ScraperWebhookScan do
       Logger.warning(
         "[ScraperWebhookScan] Failed processing visitor #{row["visitor_id"]}: #{inspect(e)}"
       )
+  end
+
+  defp persist_last_scan(visitor, score) do
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    {:ok, updated} =
+      visitor
+      |> Visitor.changeset(%{scraper_last_scan_score: score, scraper_last_scan_at: now})
+      |> Repo.update()
+
+    updated
   end
 
   defp check_downgrades(site) do
@@ -153,6 +173,10 @@ defmodule Spectabas.Workers.ScraperWebhookScan do
   end
 
   defp check_visitor_downgrade(site, visitor, curr_score) do
+    # Persist the latest scan score before any tier-change handling so the
+    # profile reflects what the worker just saw, even if no webhook fires.
+    visitor = persist_last_scan(visitor, curr_score)
+
     prev_score = visitor.scraper_webhook_score || 0
     prev_tier = score_tier(prev_score)
     curr_tier = score_tier(curr_score)
@@ -227,9 +251,15 @@ defmodule Spectabas.Workers.ScraperWebhookScan do
     end
   end
 
-  # Maps score to a numeric tier for escalation comparison:
-  # 0 = watching (40-69), 1 = suspicious/tarpit (70-84), 2 = certain/active (85+)
-  defp score_tier(score) when score >= 85, do: 2
-  defp score_tier(score) when score >= 70, do: 1
-  defp score_tier(_), do: 0
+  # Maps score to a numeric tier for escalation comparison. Delegates to
+  # ScraperDetector.verdict/1 so the tier thresholds live in one place
+  # — escalations happen when a visitor moves up the verdict ladder.
+  defp score_tier(score) do
+    case ScraperDetector.verdict(score) do
+      :certain -> 2
+      :suspicious -> 1
+      :watching -> 0
+      _ -> -1
+    end
+  end
 end

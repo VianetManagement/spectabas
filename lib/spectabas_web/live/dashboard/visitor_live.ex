@@ -48,6 +48,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
         |> assign(:orders, nil)
         |> assign(:ltv, nil)
         |> assign(:scraper, nil)
+        |> assign(:scraper_24h, nil)
         |> assign(:webhook_deliveries, nil)
         |> assign(:vpn_provider, nil)
         |> assign(:completed_goals, nil)
@@ -96,11 +97,18 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
         end)
         |> Enum.sort_by(& &1.started, :desc)
 
-      # Use dedicated ClickHouse aggregation for scraper score — matches the
-      # Scrapers page exactly. The timeline-based computation was limited to
-      # ~1000 events and undercounted unique pages for heavy scrapers.
+      # Two scores: lifetime (full history) + last 24h (matches the
+      # webhook scan window). Shows the user both numbers so it's clear
+      # why a webhook may or may not have fired — the worker only sees
+      # the 24h slice, not lifetime.
       scraper =
         case Analytics.scraper_score_for_visitor(site, visitor_id) do
+          {:ok, result} -> result
+          _ -> %{score: 0, signals: [], verdict: :normal, unique_pages: 0, ip_count: 0}
+        end
+
+      scraper_24h =
+        case Analytics.scraper_score_for_visitor(site, visitor_id, hours: 24) do
           {:ok, result} -> result
           _ -> %{score: 0, signals: [], verdict: :normal, unique_pages: 0, ip_count: 0}
         end
@@ -108,6 +116,7 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
       send(lv_pid, {:deferred_result, :timeline, timeline})
       send(lv_pid, {:deferred_result, :sessions, sessions})
       send(lv_pid, {:deferred_result, :scraper, scraper})
+      send(lv_pid, {:deferred_result, :scraper_24h, scraper_24h})
     end)
 
     # IP details + other visitors from same IP
@@ -707,7 +716,15 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
                 ext_link={"https://trustadmiral.com/scraper-defense?_target%5B%5D=sab_cookie&sab_cookie=#{@visitor.cookie_id}"}
               />
               <.field label="GDPR Mode" value={@site.gdpr_mode || "on"} />
-              <%!-- Scraper score (deferred) --%>
+              <%!-- Scraper scores (deferred). Three numbers because they
+                   measure different things and can legitimately disagree:
+                   - lifetime score: full event history (matches what this
+                     visitor "is")
+                   - 24h score: matches what the webhook scan looks at
+                     (so it's clear why a webhook may not have fired)
+                   - last scan score: what the worker most recently
+                     persisted to PG (may differ from a live recompute
+                     if the worker hasn't run since the last data) --%>
               <%= if @scraper == nil do %>
                 <div>
                   <dt class="text-xs font-medium text-gray-500">Scraper Score</dt>
@@ -718,26 +735,32 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
                   </dd>
                 </div>
               <% else %>
-                <div :if={@scraper.score > 0}>
+                <div :if={
+                  @scraper.score > 0 or (@scraper_24h && @scraper_24h.score > 0) or
+                    @visitor.scraper_last_scan_score
+                }>
                   <dt class="text-xs font-medium text-gray-500">Scraper Score</dt>
-                  <dd class="mt-0.5 flex items-center gap-2">
-                    <span class={[
-                      "inline-flex items-center px-2 py-0.5 rounded text-xs font-bold",
-                      cond do
-                        @scraper.score >= 85 -> "bg-red-100 text-red-800"
-                        @scraper.score >= 60 -> "bg-amber-100 text-amber-800"
-                        true -> "bg-gray-100 text-gray-700"
-                      end
-                    ]}>
-                      {@scraper.score}
-                    </span>
-                    <span class="text-xs text-gray-500">
-                      {cond do
-                        @scraper.score >= 85 -> "certain"
-                        @scraper.score >= 60 -> "suspicious"
-                        true -> "low"
-                      end}
-                    </span>
+                  <dd class="mt-0.5 flex flex-wrap items-center gap-3">
+                    <.scraper_score_badge
+                      label="Lifetime"
+                      score={@scraper.score}
+                      verdict={@scraper.verdict}
+                    />
+                    <.scraper_score_badge
+                      :if={@scraper_24h}
+                      label="Last 24h"
+                      score={@scraper_24h.score}
+                      verdict={@scraper_24h.verdict}
+                    />
+                    <.scraper_score_badge
+                      :if={@visitor.scraper_last_scan_score}
+                      label="Last worker scan"
+                      score={@visitor.scraper_last_scan_score}
+                      verdict={
+                        Spectabas.Analytics.ScraperDetector.verdict(@visitor.scraper_last_scan_score)
+                      }
+                      timestamp={@visitor.scraper_last_scan_at}
+                    />
                   </dd>
                   <dd :if={@scraper.signals != []} class="mt-1 flex flex-wrap gap-1">
                     <span
@@ -1675,6 +1698,34 @@ defmodule SpectabasWeb.Dashboard.VisitorLive do
           {v}
         </span>
       </dd>
+    </div>
+    """
+  end
+
+  attr :label, :string, required: true
+  attr :score, :integer, required: true
+  attr :verdict, :atom, required: true
+  attr :timestamp, :any, default: nil
+
+  defp scraper_score_badge(assigns) do
+    ~H"""
+    <div class="inline-flex items-center gap-1.5">
+      <span class="text-[10px] font-medium text-gray-400 uppercase tracking-wide">{@label}:</span>
+      <span class={[
+        "inline-flex items-center px-2 py-0.5 rounded text-xs font-bold",
+        cond do
+          @verdict == :certain -> "bg-red-100 text-red-800"
+          @verdict == :suspicious -> "bg-amber-100 text-amber-800"
+          @verdict == :watching -> "bg-yellow-50 text-yellow-700"
+          true -> "bg-gray-100 text-gray-700"
+        end
+      ]}>
+        {@score}
+      </span>
+      <span class="text-xs text-gray-500">{Atom.to_string(@verdict)}</span>
+      <span :if={@timestamp} class="text-[10px] text-gray-400">
+        ({DateTime.diff(DateTime.utc_now(), @timestamp, :minute)}m ago)
+      </span>
     </div>
     """
   end

@@ -33,6 +33,7 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
         |> assign(:modal_visitor, nil)
         |> assign(:loading, true)
         |> assign(:candidates, [])
+        |> assign(:needs_review, [])
         |> assign(:webhook_result, nil)
         |> assign(:tab, "scrapers")
         |> assign(:webhook_log, [])
@@ -303,11 +304,46 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
 
     candidates = annotate_visitor_status(candidates, site)
     summary = summarize_candidates(candidates)
+    needs_review = load_needs_review(site)
 
     socket
     |> assign(:summary, summary)
     |> assign(:candidates, candidates)
+    |> assign(:needs_review, needs_review)
     |> assign(:loading, false)
+  end
+
+  # PG-only query (no CH) for visitors the worker recently flagged that
+  # haven't been triaged. Distinct from the candidates list above:
+  # candidates is the live CH scan (what scores high right now); this
+  # is the durable "worker has seen these, action pending" queue. Drives
+  # the "Needs review" surface at the top of the page.
+  defp load_needs_review(site) do
+    import Ecto.Query
+    cutoff = DateTime.utc_now() |> DateTime.add(-24, :hour) |> DateTime.truncate(:second)
+
+    Spectabas.Repo.all(
+      from(v in Spectabas.Visitors.Visitor,
+        where:
+          v.site_id == ^site.id and
+            not is_nil(v.scraper_last_scan_at) and
+            v.scraper_last_scan_at >= ^cutoff and
+            not is_nil(v.scraper_last_scan_score) and
+            v.scraper_last_scan_score >= 70 and
+            v.scraper_manual_flag == false and
+            v.scraper_whitelisted == false,
+        order_by: [desc: v.scraper_last_scan_score, desc: v.scraper_last_scan_at],
+        limit: 25,
+        select: %{
+          visitor_id: v.id,
+          email: v.email,
+          last_ip: v.last_ip,
+          score: v.scraper_last_scan_score,
+          scanned_at: v.scraper_last_scan_at,
+          webhook_sent_at: v.scraper_webhook_sent_at
+        }
+      )
+    )
   end
 
   # Single Postgres lookup that stamps both `_manual_flag` and `_whitelisted`
@@ -596,6 +632,74 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
               <div class="text-2xl font-bold text-gray-900 mt-1">{@summary.total}</div>
               <div class="text-xs text-gray-500 mt-0.5">all scores &gt; 0</div>
             </div>
+          </div>
+
+          <%!-- Needs review — recently auto-flagged, not yet triaged --%>
+          <div
+            :if={@needs_review != []}
+            class="bg-white rounded-lg shadow mb-6 border-l-4 border-amber-400"
+          >
+            <div class="px-5 py-3 border-b border-gray-100">
+              <h2 class="font-semibold text-gray-900">
+                {length(@needs_review)} {if length(@needs_review) == 1,
+                  do: "visitor",
+                  else: "visitors"} flagged in last 24h, needs review
+              </h2>
+              <p class="text-xs text-gray-500 mt-0.5">
+                Auto-detected by the scraper worker (score ≥ 70) and not yet manually classified or whitelisted. Click through to confirm or whitelist.
+              </p>
+            </div>
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                    Visitor
+                  </th>
+                  <th class="px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                    Email
+                  </th>
+                  <th class="px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase">IP</th>
+                  <th class="px-5 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                    Score
+                  </th>
+                  <th class="px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                    Scanned
+                  </th>
+                  <th class="px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                    Webhook
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <tr :for={r <- @needs_review} class="hover:bg-amber-50/40">
+                  <td class="px-5 py-2">
+                    <.link
+                      navigate={~p"/dashboard/sites/#{@site.id}/visitors/#{r.visitor_id}"}
+                      class="text-indigo-600 hover:text-indigo-800 font-mono text-xs"
+                    >
+                      {r.visitor_id |> to_string() |> String.slice(0..11)}…
+                    </.link>
+                  </td>
+                  <td class="px-5 py-2 text-xs text-gray-600">{r.email || "—"}</td>
+                  <td class="px-5 py-2 text-xs text-gray-600 font-mono">{r.last_ip || "—"}</td>
+                  <td class="px-5 py-2 text-right">
+                    <span class={[
+                      "inline-flex items-center px-2 py-0.5 rounded text-xs font-bold tabular-nums",
+                      score_color(r.score)
+                    ]}>
+                      {r.score}
+                    </span>
+                  </td>
+                  <td class="px-5 py-2 text-xs text-gray-500">
+                    {DateTime.diff(DateTime.utc_now(), r.scanned_at, :minute)}m ago
+                  </td>
+                  <td class="px-5 py-2 text-xs">
+                    <span :if={r.webhook_sent_at} class="text-green-700">sent</span>
+                    <span :if={is_nil(r.webhook_sent_at)} class="text-gray-400">none</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
 
           <%= if @loading do %>
@@ -1334,9 +1438,18 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
 
   # ---------------- Helpers ----------------
 
-  defp score_color(s) when is_integer(s) and s >= 85, do: "bg-red-100 text-red-800"
-  defp score_color(s) when is_integer(s) and s >= 60, do: "bg-amber-100 text-amber-800"
-  defp score_color(s) when is_integer(s) and s >= 40, do: "bg-yellow-50 text-yellow-700"
+  # Uses ScraperDetector.verdict/1 as the single source of truth so the
+  # color thresholds always match the tier definitions used by the
+  # webhook worker (certain ≥ 85, suspicious ≥ 70, watching ≥ 40).
+  defp score_color(s) when is_integer(s) do
+    case Spectabas.Analytics.ScraperDetector.verdict(s) do
+      :certain -> "bg-red-100 text-red-800"
+      :suspicious -> "bg-amber-100 text-amber-800"
+      :watching -> "bg-yellow-50 text-yellow-700"
+      _ -> "bg-gray-100 text-gray-700"
+    end
+  end
+
   defp score_color(_), do: "bg-gray-100 text-gray-700"
 
   defp signal_color(:datacenter_asn), do: "bg-red-50 text-red-700"

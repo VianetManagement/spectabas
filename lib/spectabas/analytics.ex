@@ -4621,81 +4621,20 @@ defmodule Spectabas.Analytics do
     min_score = Keyword.get(opts, :min_score, 60)
 
     with :ok <- authorize(site, user) do
-      site_p = ClickHouse.param(site.id)
-      from_p = ClickHouse.param(format_datetime(date_range.from))
-      to_p = ClickHouse.param(format_datetime(date_range.to))
-      tz = tz_sql(site)
+      where =
+        " AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}" <>
+          " AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}"
 
-      # groupArray(N) caps array sizes to avoid OOM on high-volume scrapers.
-      # HAVING threshold at 30+ pageviews or 3+ IPs — tight enough to skip
-      # casual visitors, loose enough to catch moderate scrapers.
-      # NOTE: use ip_org (not ip_asn_org) — ip_org stores "AS16276 OVH SAS"
-      # which the ScraperDetector @datacenter_asns list matches against. ip_asn_org
-      # stores just "OVH SAS" (no AS prefix) and would never match.
-      # Also pull max(ip_is_datacenter) for the comprehensive 900-entry blocklist
-      # check from the ASNBlocklist ETS tables.
-      sql = """
-      SELECT
-        visitor_id,
-        ifNull(nullIf(argMaxIf(ip_org, timestamp, event_type = 'pageview'), ''), argMax(ip_org, timestamp)) AS asn,
-        ifNull(nullIf(argMaxIf(user_agent, timestamp, event_type = 'pageview'), ''), argMax(user_agent, timestamp)) AS user_agent,
-        uniq(ip_address) AS visitor_ip_count,
-        uniqIf(url_path, event_type = 'pageview') AS session_pageviews,
-        arrayFilter(p -> p != '',
-          groupArrayIf(50)(url_path, event_type = 'pageview')) AS page_paths,
-        ifNull(nullIf(argMaxIf(referrer_domain, timestamp, event_type = 'pageview'), ''), '') AS referrer,
-        concat(toString(argMaxIf(screen_width, timestamp, event_type = 'pageview')), 'x', toString(argMaxIf(screen_height, timestamp, event_type = 'pageview'))) AS screen_resolution,
-        arraySlice(arrayDifference(arraySort(
-          groupArrayIf(100)(toUnixTimestamp(timestamp) * 1000,
-            event_type = 'pageview'))), 2) AS request_intervals_ms,
-        toTimezone(min(timestamp), #{tz}) AS first_seen,
-        toTimezone(max(timestamp), #{tz}) AS last_seen,
-        ifNull(nullIf(argMaxIf(ip_country, timestamp, event_type = 'pageview'), ''), '') AS country,
-        ifNull(nullIf(argMaxIf(ip_city, timestamp, event_type = 'pageview'), ''), '') AS city,
-        maxIf(ip_is_datacenter, event_type = 'pageview') AS is_datacenter,
-        maxIf(ip_is_vpn, event_type = 'pageview') AS is_vpn,
-        ifNull(nullIf(argMaxIf(ip_vpn_provider, timestamp, event_type = 'pageview'), ''), '') AS vpn_provider,
-        ifNull(nullIf(argMaxIf(browser, timestamp, event_type = 'pageview'), ''), argMax(browser, timestamp)) AS browser,
-        ifNull(nullIf(argMaxIf(browser_version, timestamp, event_type = 'pageview'), ''), '') AS browser_version,
-        ifNull(nullIf(argMaxIf(device_type, timestamp, event_type = 'pageview'), ''), '') AS device_type
-      FROM events
-      WHERE site_id = #{site_p}
-        AND timestamp >= #{from_p}
-        AND timestamp <= #{to_p}
-        AND event_type IN ('pageview', 'custom')
-      GROUP BY visitor_id
-      HAVING uniqIf(url_path, event_type = 'pageview') >= 20 OR uniq(ip_address) >= 3
-      ORDER BY uniqIf(url_path, event_type = 'pageview') DESC
-      LIMIT #{limit * 2}
-      SETTINGS max_execution_time = 45
-      """
+      sql =
+        scraper_profile_sql(site,
+          where: where,
+          having: "uniqIf(url_path, event_type = 'pageview') >= 20 OR uniq(ip_address) >= 3",
+          order_by: "uniqIf(url_path, event_type = 'pageview') DESC",
+          limit: limit * 2,
+          list_extras: true
+        )
 
-      case ClickHouse.query(sql, receive_timeout: 60_000) do
-        {:ok, rows} ->
-          prefixes = List.wrap(site.scraper_content_prefixes)
-          weight_overrides = site.scraper_weight_overrides
-
-          scored =
-            rows
-            |> Enum.map(fn row ->
-              profile = row_to_profile(row, prefixes)
-              result = Spectabas.Analytics.ScraperDetector.score(profile, weight_overrides)
-
-              Map.merge(row, %{
-                "score" => result.score,
-                "signals" => result.signals,
-                "verdict" => Spectabas.Analytics.ScraperDetector.verdict(result.score)
-              })
-            end)
-            |> Enum.filter(fn r -> r["score"] >= min_score end)
-            |> Enum.sort_by(&(-&1["score"]))
-            |> Enum.take(limit)
-
-          {:ok, scored}
-
-        error ->
-          error
-      end
+      run_scraper_score_query(sql, site, min_score: min_score, take: limit)
     end
   end
 
@@ -4704,71 +4643,27 @@ defmodule Spectabas.Analytics do
   Scans last `hours` of traffic for visitors crossing the scraper threshold.
   """
   def scraper_candidates_system(%Site{} = site, opts \\ []) do
-    hours = Keyword.get(opts, :hours, 1)
+    hours = Keyword.get(opts, :hours, 24)
     min_score = Keyword.get(opts, :min_score, 60)
     limit = Keyword.get(opts, :limit, 200)
 
-    site_p = ClickHouse.param(site.id)
-    from_p = ClickHouse.param(format_datetime(DateTime.add(DateTime.utc_now(), -hours, :hour)))
+    from_p =
+      ClickHouse.param(format_datetime(DateTime.add(DateTime.utc_now(), -hours, :hour)))
+
     to_p = ClickHouse.param(format_datetime(DateTime.utc_now()))
 
-    sql = """
-    SELECT
-      visitor_id,
-      ifNull(nullIf(argMaxIf(ip_org, timestamp, event_type = 'pageview'), ''), argMax(ip_org, timestamp)) AS asn,
-      ifNull(nullIf(argMaxIf(user_agent, timestamp, event_type = 'pageview'), ''), argMax(user_agent, timestamp)) AS user_agent,
-      uniq(ip_address) AS visitor_ip_count,
-      uniqIf(url_path, event_type = 'pageview') AS session_pageviews,
-      arrayFilter(p -> p != '',
-        groupArrayIf(50)(url_path, event_type = 'pageview')) AS page_paths,
-      ifNull(nullIf(argMaxIf(referrer_domain, timestamp, event_type = 'pageview'), ''), '') AS referrer,
-      concat(toString(argMaxIf(screen_width, timestamp, event_type = 'pageview')), 'x', toString(argMaxIf(screen_height, timestamp, event_type = 'pageview'))) AS screen_resolution,
-      arraySlice(arrayDifference(arraySort(
-        groupArrayIf(100)(toUnixTimestamp(timestamp) * 1000,
-          event_type = 'pageview'))), 2) AS request_intervals_ms,
-      maxIf(ip_is_datacenter, event_type = 'pageview') AS is_datacenter,
-      maxIf(ip_is_vpn, event_type = 'pageview') AS is_vpn,
-      ifNull(nullIf(argMaxIf(ip_vpn_provider, timestamp, event_type = 'pageview'), ''), '') AS vpn_provider,
-      ifNull(nullIf(argMaxIf(browser, timestamp, event_type = 'pageview'), ''), argMax(browser, timestamp)) AS browser,
-      ifNull(nullIf(argMaxIf(browser_version, timestamp, event_type = 'pageview'), ''), '') AS browser_version,
-      ifNull(nullIf(argMaxIf(device_type, timestamp, event_type = 'pageview'), ''), '') AS device_type
-    FROM events
-    WHERE site_id = #{site_p}
-      AND timestamp >= #{from_p}
-      AND timestamp <= #{to_p}
-      AND event_type IN ('pageview', 'custom')
-    GROUP BY visitor_id
-    HAVING uniqIf(url_path, event_type = 'pageview') >= 3 OR uniq(ip_address) >= 2 OR max(ip_is_datacenter) = 1
-    ORDER BY uniqIf(url_path, event_type = 'pageview') DESC
-    LIMIT #{limit}
-    SETTINGS max_execution_time = 45
-    """
+    where = " AND timestamp >= #{from_p} AND timestamp <= #{to_p}"
 
-    case ClickHouse.query(sql, receive_timeout: 60_000) do
-      {:ok, rows} ->
-        prefixes = List.wrap(site.scraper_content_prefixes)
-        weight_overrides = site.scraper_weight_overrides
+    sql =
+      scraper_profile_sql(site,
+        where: where,
+        having:
+          "uniqIf(url_path, event_type = 'pageview') >= 3 OR uniq(ip_address) >= 2 OR max(ip_is_datacenter) = 1",
+        order_by: "uniqIf(url_path, event_type = 'pageview') DESC",
+        limit: limit
+      )
 
-        scored =
-          rows
-          |> Enum.map(fn row ->
-            profile = row_to_profile(row, prefixes)
-            result = Spectabas.Analytics.ScraperDetector.score(profile, weight_overrides)
-
-            Map.merge(row, %{
-              "score" => result.score,
-              "signals" => result.signals,
-              "verdict" => Spectabas.Analytics.ScraperDetector.verdict(result.score)
-            })
-          end)
-          |> Enum.filter(fn r -> r["score"] >= min_score end)
-          |> Enum.sort_by(&(-&1["score"]))
-
-        {:ok, scored}
-
-      error ->
-        error
-    end
+    run_scraper_score_query(sql, site, min_score: min_score)
   end
 
   defp row_to_profile(row, prefixes) do
@@ -4807,59 +4702,18 @@ defmodule Spectabas.Analytics do
   def scraper_scores_for_visitors(%Site{} = site, visitor_ids, opts)
       when is_list(visitor_ids) do
     hours = Keyword.get(opts, :hours, 24)
-    site_p = ClickHouse.param(site.id)
+    ids_p = Enum.map_join(visitor_ids, ", ", &ClickHouse.param/1)
     from_p = ClickHouse.param(format_datetime(DateTime.add(DateTime.utc_now(), -hours, :hour)))
     to_p = ClickHouse.param(format_datetime(DateTime.utc_now()))
-    ids_p = Enum.map_join(visitor_ids, ", ", &ClickHouse.param/1)
-    prefixes = List.wrap(site.scraper_content_prefixes)
 
-    sql = """
-    SELECT
-      visitor_id,
-      ifNull(nullIf(argMaxIf(ip_org, timestamp, event_type = 'pageview'), ''), argMax(ip_org, timestamp)) AS asn,
-      ifNull(nullIf(argMaxIf(user_agent, timestamp, event_type = 'pageview'), ''), argMax(user_agent, timestamp)) AS user_agent,
-      uniq(ip_address) AS visitor_ip_count,
-      uniqIf(url_path, event_type = 'pageview') AS session_pageviews,
-      arrayFilter(p -> p != '',
-        groupArrayIf(50)(url_path, event_type = 'pageview')) AS page_paths,
-      ifNull(nullIf(argMaxIf(referrer_domain, timestamp, event_type = 'pageview'), ''), '') AS referrer,
-      concat(toString(argMaxIf(screen_width, timestamp, event_type = 'pageview')), 'x', toString(argMaxIf(screen_height, timestamp, event_type = 'pageview'))) AS screen_resolution,
-      arraySlice(arrayDifference(arraySort(
-        groupArrayIf(100)(toUnixTimestamp(timestamp) * 1000,
-          event_type = 'pageview'))), 2) AS request_intervals_ms,
-      maxIf(ip_is_datacenter, event_type = 'pageview') AS is_datacenter,
-      maxIf(ip_is_vpn, event_type = 'pageview') AS is_vpn,
-      ifNull(nullIf(argMaxIf(ip_vpn_provider, timestamp, event_type = 'pageview'), ''), '') AS vpn_provider,
-      ifNull(nullIf(argMaxIf(browser, timestamp, event_type = 'pageview'), ''), argMax(browser, timestamp)) AS browser,
-      ifNull(nullIf(argMaxIf(browser_version, timestamp, event_type = 'pageview'), ''), '') AS browser_version,
-      ifNull(nullIf(argMaxIf(device_type, timestamp, event_type = 'pageview'), ''), '') AS device_type
-    FROM events
-    WHERE site_id = #{site_p}
-      AND visitor_id IN (#{ids_p})
-      AND timestamp >= #{from_p}
-      AND timestamp <= #{to_p}
-    GROUP BY visitor_id
-    """
+    where =
+      " AND visitor_id IN (#{ids_p}) AND timestamp >= #{from_p} AND timestamp <= #{to_p}"
+
+    sql = scraper_profile_sql(site, where: where, event_filter: "")
 
     case ClickHouse.query(sql, receive_timeout: 60_000) do
       {:ok, rows} ->
-        weight_overrides = site.scraper_weight_overrides
-
-        scores =
-          Map.new(rows, fn row ->
-            profile = row_to_profile(row, prefixes)
-            result = Spectabas.Analytics.ScraperDetector.score(profile, weight_overrides)
-
-            {row["visitor_id"],
-             %{
-               score: result.score,
-               signals: result.signals,
-               verdict: Spectabas.Analytics.ScraperDetector.verdict(result.score),
-               unique_pages: to_int(row["session_pageviews"]),
-               ip_count: to_int(row["visitor_ip_count"])
-             }}
-          end)
-
+        scores = Map.new(rows, fn row -> {row["visitor_id"], score_row(row, site)} end)
         {:ok, scores}
 
       error ->
@@ -4867,59 +4721,152 @@ defmodule Spectabas.Analytics do
     end
   end
 
-  def scraper_score_for_visitor(%Site{} = site, visitor_id) do
-    site_p = ClickHouse.param(site.id)
-    vid_p = ClickHouse.param(visitor_id)
-    prefixes = List.wrap(site.scraper_content_prefixes)
+  @doc """
+  Score one visitor. Default window is **all-time** (matches what the
+  visitor profile shows). Pass `hours: 24` to score over the last 24h
+  (matches what the webhook worker scans, so the profile can display
+  both side-by-side for the user to compare).
+  """
+  def scraper_score_for_visitor(site, visitor_id, opts \\ [])
 
-    # Use argMax to pick values from the MOST RECENT event, ensuring consistency
-    # with whatever time window the scraper candidates page uses.
-    sql = """
+  def scraper_score_for_visitor(%Site{} = site, visitor_id, opts) do
+    hours = Keyword.get(opts, :hours)
+
+    where =
+      case hours do
+        nil ->
+          " AND visitor_id = #{ClickHouse.param(visitor_id)}"
+
+        h when is_integer(h) ->
+          from_p =
+            ClickHouse.param(format_datetime(DateTime.add(DateTime.utc_now(), -h, :hour)))
+
+          to_p = ClickHouse.param(format_datetime(DateTime.utc_now()))
+
+          " AND visitor_id = #{ClickHouse.param(visitor_id)} AND timestamp >= #{from_p} AND timestamp <= #{to_p}"
+      end
+
+    sql = scraper_profile_sql(site, where: where, event_filter: "")
+
+    case ClickHouse.query(sql, receive_timeout: 60_000) do
+      {:ok, [row]} -> {:ok, score_row(row, site)}
+      {:ok, []} -> {:ok, %{score: 0, signals: [], verdict: :normal, unique_pages: 0, ip_count: 0}}
+      error -> error
+    end
+  end
+
+  # ---- Shared scraper SQL builder + row scorer ----
+
+  # Builds the SELECT body for scraper scoring. All four scoring queries
+  # (single-visitor / list / worker / batch) share this — the only
+  # variation is the WHERE and HAVING. Use `list_extras: true` to add
+  # tz-aware first_seen/last_seen + country/city for the candidates
+  # table UI. Use `event_filter: ""` to drop the
+  # `AND event_type IN ('pageview', 'custom')` clause (e.g. when the
+  # WHERE already filters by visitor_id and we want every row type).
+  defp scraper_profile_sql(site, opts) do
+    site_p = ClickHouse.param(site.id)
+    where_extra = Keyword.get(opts, :where, "")
+    having = Keyword.get(opts, :having)
+    order_by = Keyword.get(opts, :order_by)
+    limit = Keyword.get(opts, :limit)
+
+    event_filter =
+      Keyword.get(opts, :event_filter, "AND event_type IN ('pageview', 'custom')")
+
+    list_extras =
+      if Keyword.get(opts, :list_extras, false) do
+        tz = tz_sql(site)
+
+        """
+        ,
+          toTimezone(min(timestamp), #{tz}) AS first_seen,
+          toTimezone(max(timestamp), #{tz}) AS last_seen,
+          ifNull(nullIf(argMaxIf(ip_country, timestamp, event_type = 'pageview'), ''), '') AS country,
+          ifNull(nullIf(argMaxIf(ip_city, timestamp, event_type = 'pageview'), ''), '') AS city
+        """
+      else
+        ""
+      end
+
+    having_sql = if having, do: "HAVING #{having}", else: ""
+    order_sql = if order_by, do: "ORDER BY #{order_by}", else: ""
+    limit_sql = if limit, do: "LIMIT #{limit}", else: ""
+
+    """
     SELECT
       visitor_id,
       ifNull(nullIf(argMaxIf(ip_org, timestamp, event_type = 'pageview'), ''), argMax(ip_org, timestamp)) AS asn,
       ifNull(nullIf(argMaxIf(user_agent, timestamp, event_type = 'pageview'), ''), argMax(user_agent, timestamp)) AS user_agent,
       uniq(ip_address) AS visitor_ip_count,
       uniqIf(url_path, event_type = 'pageview') AS session_pageviews,
-      arrayFilter(p -> p != '',
-        groupArrayIf(50)(url_path, event_type = 'pageview')) AS page_paths,
+      arrayFilter(p -> p != '', groupArrayIf(50)(url_path, event_type = 'pageview')) AS page_paths,
       ifNull(nullIf(argMaxIf(referrer_domain, timestamp, event_type = 'pageview'), ''), '') AS referrer,
       concat(toString(argMaxIf(screen_width, timestamp, event_type = 'pageview')), 'x', toString(argMaxIf(screen_height, timestamp, event_type = 'pageview'))) AS screen_resolution,
-      arraySlice(arrayDifference(arraySort(
-        groupArrayIf(100)(toUnixTimestamp(timestamp) * 1000,
-          event_type = 'pageview'))), 2) AS request_intervals_ms,
+      arraySlice(arrayDifference(arraySort(groupArrayIf(100)(toUnixTimestamp(timestamp) * 1000, event_type = 'pageview'))), 2) AS request_intervals_ms,
       maxIf(ip_is_datacenter, event_type = 'pageview') AS is_datacenter,
       maxIf(ip_is_vpn, event_type = 'pageview') AS is_vpn,
       ifNull(nullIf(argMaxIf(ip_vpn_provider, timestamp, event_type = 'pageview'), ''), '') AS vpn_provider,
       ifNull(nullIf(argMaxIf(browser, timestamp, event_type = 'pageview'), ''), argMax(browser, timestamp)) AS browser,
       ifNull(nullIf(argMaxIf(browser_version, timestamp, event_type = 'pageview'), ''), '') AS browser_version,
-      ifNull(nullIf(argMaxIf(device_type, timestamp, event_type = 'pageview'), ''), '') AS device_type
+      ifNull(nullIf(argMaxIf(device_type, timestamp, event_type = 'pageview'), ''), '') AS device_type#{list_extras}
     FROM events
     WHERE site_id = #{site_p}
-      AND visitor_id = #{vid_p}
+      #{event_filter}
+      #{where_extra}
     GROUP BY visitor_id
+    #{having_sql}
+    #{order_sql}
+    #{limit_sql}
+    SETTINGS max_execution_time = 45
     """
+  end
 
-    case ClickHouse.query(sql) do
-      {:ok, [row]} ->
-        profile = row_to_profile(row, prefixes)
-        result = Spectabas.Analytics.ScraperDetector.score(profile, site.scraper_weight_overrides)
+  # Run a scraper score query and return list of rows annotated with
+  # score/signals/verdict (string keys, matching the legacy candidates
+  # return shape). Applies optional `min_score` filter and `take` cap.
+  defp run_scraper_score_query(sql, site, opts) do
+    min_score = Keyword.get(opts, :min_score, 0)
+    take = Keyword.get(opts, :take)
 
-        {:ok,
-         %{
-           score: result.score,
-           signals: result.signals,
-           verdict: Spectabas.Analytics.ScraperDetector.verdict(result.score),
-           unique_pages: to_int(row["session_pageviews"]),
-           ip_count: to_int(row["visitor_ip_count"])
-         }}
+    case ClickHouse.query(sql, receive_timeout: 60_000) do
+      {:ok, rows} ->
+        scored =
+          rows
+          |> Enum.map(fn row ->
+            s = score_row(row, site)
 
-      {:ok, []} ->
-        {:ok, %{score: 0, signals: [], verdict: :normal, unique_pages: 0, ip_count: 0}}
+            Map.merge(row, %{
+              "score" => s.score,
+              "signals" => s.signals,
+              "verdict" => s.verdict
+            })
+          end)
+          |> Enum.filter(&(&1["score"] >= min_score))
+          |> Enum.sort_by(&(-&1["score"]))
+
+        scored = if take, do: Enum.take(scored, take), else: scored
+        {:ok, scored}
 
       error ->
         error
     end
+  end
+
+  # Convert one CH result row to the score-result struct used by
+  # scraper_score_for_visitor and scraper_scores_for_visitors callers.
+  defp score_row(row, site) do
+    prefixes = List.wrap(site.scraper_content_prefixes)
+    profile = row_to_profile(row, prefixes)
+    result = Spectabas.Analytics.ScraperDetector.score(profile, site.scraper_weight_overrides)
+
+    %{
+      score: result.score,
+      signals: result.signals,
+      verdict: Spectabas.Analytics.ScraperDetector.verdict(result.score),
+      unique_pages: to_int(row["session_pageviews"]),
+      ip_count: to_int(row["visitor_ip_count"])
+    }
   end
 
   # ---- Visitor Log ----

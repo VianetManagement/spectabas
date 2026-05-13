@@ -27,6 +27,11 @@ defmodule Spectabas.Visitors.Visitor do
     field :scraper_webhook_score, :integer
     field :scraper_manual_flag, :boolean, default: false
     field :scraper_whitelisted, :boolean, default: false
+    # Always-current view of the worker's scoring (every scan updates),
+    # split from scraper_webhook_score so the tier-escalation webhook
+    # logic isn't disturbed by every score fluctuation.
+    field :scraper_last_scan_score, :integer
+    field :scraper_last_scan_at, :utc_datetime
     field :notes, :string
 
     timestamps()
@@ -36,7 +41,7 @@ defmodule Spectabas.Visitors.Visitor do
   @optional_fields ~w(fingerprint_id cookie_id user_id email email_hash
                        first_seen_at last_seen_at last_ip known_ips gdpr_mode external_id
                        scraper_webhook_sent_at scraper_webhook_score scraper_manual_flag
-                       scraper_whitelisted notes)a
+                       scraper_whitelisted scraper_last_scan_score scraper_last_scan_at notes)a
 
   def changeset(visitor, attrs) do
     visitor

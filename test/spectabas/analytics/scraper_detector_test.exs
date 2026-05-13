@@ -387,12 +387,20 @@ defmodule Spectabas.Analytics.ScraperDetectorTest do
       assert ScraperDetector.verdict(0) == :normal
     end
 
-    test "59 is :normal" do
-      assert ScraperDetector.verdict(59) == :normal
+    test "39 is :normal (just under watching)" do
+      assert ScraperDetector.verdict(39) == :normal
     end
 
-    test "60 is :suspicious (inclusive threshold)" do
-      assert ScraperDetector.verdict(60) == :suspicious
+    test "40 is :watching (inclusive threshold)" do
+      assert ScraperDetector.verdict(40) == :watching
+    end
+
+    test "69 is :watching (just under suspicious)" do
+      assert ScraperDetector.verdict(69) == :watching
+    end
+
+    test "70 is :suspicious (inclusive threshold)" do
+      assert ScraperDetector.verdict(70) == :suspicious
     end
 
     test "84 is :suspicious" do
@@ -425,7 +433,8 @@ defmodule Spectabas.Analytics.ScraperDetectorTest do
     end
 
     test "thresholds expose the documented values" do
-      assert ScraperDetector.score_suspicious() == 60
+      assert ScraperDetector.score_watching() == 40
+      assert ScraperDetector.score_suspicious() == 70
       assert ScraperDetector.score_certain() == 85
     end
   end
