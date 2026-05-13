@@ -3,7 +3,7 @@ defmodule SpectabasWeb.Dashboard.EntryExitLive do
 
   @moduledoc "Entry and exit pages — where visitors land and leave."
 
-  alias Spectabas.{Accounts, Sites, Analytics}
+  alias Spectabas.{Accounts, Sites, Analytics, DashboardSnapshots}
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers
   import SpectabasWeb.Dashboard.DateHelpers
@@ -26,6 +26,7 @@ defmodule SpectabasWeb.Dashboard.EntryExitLive do
         |> assign(:user, user)
         |> assign(:date_range, "7d")
         |> assign(:tab, "entry")
+        |> assign(:snapshot_refreshed_at, nil)
         |> assign(:loading, true)
 
       if connected?(socket), do: send(self(), :load_data)
@@ -51,28 +52,46 @@ defmodule SpectabasWeb.Dashboard.EntryExitLive do
 
   defp load_data(socket) do
     %{site: site, user: user, date_range: range, tab: tab} = socket.assigns
-    period = range_to_period(range)
 
-    data =
-      case tab do
-        "entry" ->
-          case Analytics.entry_pages_fast(site, user, period) do
-            {:ok, rows} -> rows
-            _ -> []
-          end
+    {data, refreshed_at} = load_tab(site, user, range, tab)
 
-        "exit" ->
-          case Analytics.exit_pages_fast(site, user, period) do
-            {:ok, rows} -> rows
-            _ -> []
-          end
-
-        _ ->
-          []
-      end
-
-    assign(socket, :data, data)
+    socket
+    |> assign(:data, data)
+    |> assign(:snapshot_refreshed_at, refreshed_at)
   end
+
+  # Default 7d range reads from the hourly Postgres snapshot for both tabs;
+  # other ranges fall through to live ClickHouse.
+  defp load_tab(site, user, "7d", tab) do
+    case DashboardSnapshots.fetch(site, "entry_exit") do
+      {data, refreshed_at} ->
+        key = if tab == "exit", do: "exit_pages", else: "entry_pages"
+        {Map.get(data, key, []), refreshed_at}
+
+      nil ->
+        {live_load_tab(site, user, range_to_period("7d"), tab), nil}
+    end
+  end
+
+  defp load_tab(site, user, range, tab) do
+    {live_load_tab(site, user, range_to_period(range), tab), nil}
+  end
+
+  defp live_load_tab(site, user, period, "entry") do
+    case Analytics.entry_pages_fast(site, user, period) do
+      {:ok, rows} -> rows
+      _ -> []
+    end
+  end
+
+  defp live_load_tab(site, user, period, "exit") do
+    case Analytics.exit_pages_fast(site, user, period) do
+      {:ok, rows} -> rows
+      _ -> []
+    end
+  end
+
+  defp live_load_tab(_, _, _, _), do: []
 
   defp count_key("entry"), do: "entries"
   defp count_key(_), do: "exits"
@@ -92,6 +111,9 @@ defmodule SpectabasWeb.Dashboard.EntryExitLive do
         <div class="flex items-center justify-between mb-8">
           <div>
             <h1 class="text-2xl font-bold text-gray-900 mt-2">Entry & Exit Pages</h1>
+            <p :if={@snapshot_refreshed_at} class="text-xs text-gray-400 mt-1">
+              Snapshot · last update {DashboardSnapshots.refreshed_label(@snapshot_refreshed_at)}
+            </p>
           </div>
           <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">
             <button

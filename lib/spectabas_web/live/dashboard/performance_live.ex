@@ -3,7 +3,7 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
 
   @moduledoc "Real User Monitoring — Core Web Vitals and page load timing."
 
-  alias Spectabas.{Accounts, Sites, Analytics}
+  alias Spectabas.{Accounts, Sites, Analytics, DashboardSnapshots}
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers
   import SpectabasWeb.Dashboard.DateHelpers
@@ -22,6 +22,7 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
         |> assign(:site, site)
         |> assign(:user, user)
         |> assign(:date_range, "7d")
+        |> assign(:snapshot_refreshed_at, nil)
         |> assign(:loading, true)
 
       if connected?(socket), do: send(self(), :load_data)
@@ -42,14 +43,9 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
 
   defp load_data(socket) do
     %{site: site, user: user, date_range: range} = socket.assigns
-    period = range_to_period(range)
 
-    overview = safe_query(fn -> Analytics.rum_overview(site, user, period) end, %{})
-    vitals = safe_query(fn -> Analytics.rum_web_vitals(site, user, period) end, %{})
-    by_page = safe_query(fn -> Analytics.rum_by_page(site, user, period) end)
-    by_device = safe_query(fn -> Analytics.rum_by_device(site, user, period) end)
-    vitals_ts = safe_query(fn -> Analytics.rum_vitals_timeseries(site, user, period) end)
-    timing_ts = safe_query(fn -> Analytics.rum_timing_timeseries(site, user, period) end)
+    {overview, vitals, by_page, by_device, vitals_ts, timing_ts, refreshed_at} =
+      load_widgets(site, user, range)
 
     vitals_chart_data = build_vitals_chart_data(vitals_ts)
     timing_chart_data = build_timing_chart_data(timing_ts)
@@ -63,6 +59,39 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
     |> assign(:vitals_chart_key, System.unique_integer([:positive]))
     |> assign(:timing_chart_data, timing_chart_data)
     |> assign(:timing_chart_key, System.unique_integer([:positive]))
+    |> assign(:snapshot_refreshed_at, refreshed_at)
+  end
+
+  defp load_widgets(site, user, "7d") do
+    case DashboardSnapshots.fetch(site, "performance") do
+      {data, refreshed_at} ->
+        {
+          Map.get(data, "overview", %{}),
+          Map.get(data, "vitals", %{}),
+          Map.get(data, "by_page", []),
+          Map.get(data, "by_device", []),
+          Map.get(data, "vitals_ts", []),
+          Map.get(data, "timing_ts", []),
+          refreshed_at
+        }
+
+      nil ->
+        live_load_widgets(site, user, range_to_period("7d"))
+    end
+  end
+
+  defp load_widgets(site, user, range) do
+    live_load_widgets(site, user, range_to_period(range))
+  end
+
+  defp live_load_widgets(site, user, period) do
+    overview = safe_query(fn -> Analytics.rum_overview(site, user, period) end, %{})
+    vitals = safe_query(fn -> Analytics.rum_web_vitals(site, user, period) end, %{})
+    by_page = safe_query(fn -> Analytics.rum_by_page(site, user, period) end)
+    by_device = safe_query(fn -> Analytics.rum_by_device(site, user, period) end)
+    vitals_ts = safe_query(fn -> Analytics.rum_vitals_timeseries(site, user, period) end)
+    timing_ts = safe_query(fn -> Analytics.rum_timing_timeseries(site, user, period) end)
+    {overview, vitals, by_page, by_device, vitals_ts, timing_ts, nil}
   end
 
   defp build_vitals_chart_data(rows) when is_list(rows) do
@@ -100,6 +129,9 @@ defmodule SpectabasWeb.Dashboard.PerformanceLive do
       live_visitors={0}
     >
       <div class="max-w-5xl mx-auto px-3 sm:px-6 lg:px-8 py-6">
+        <p :if={@snapshot_refreshed_at} class="text-xs text-gray-400 mb-4">
+          Snapshot · last update {DashboardSnapshots.refreshed_label(@snapshot_refreshed_at)}
+        </p>
         <%!-- Time range --%>
         <div class="flex items-center gap-2 mb-6">
           <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">

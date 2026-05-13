@@ -15,7 +15,7 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
   user knows what they've set up.
   """
 
-  alias Spectabas.{Accounts, Sites, Campaigns, Analytics}
+  alias Spectabas.{Accounts, Sites, Campaigns, Analytics, DashboardSnapshots}
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers
 
@@ -56,6 +56,7 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
         |> assign(:detected_count, 0)
         |> assign(:saved_count, 0)
         |> assign(:total_visitors, 0)
+        |> assign(:snapshot_refreshed_at, nil)
 
       if connected?(socket), do: send(self(), :load_data)
       {:ok, socket}
@@ -146,25 +147,8 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
     user = socket.assigns.user
     saved = Campaigns.list_campaigns(site)
 
-    period = range_to_period(socket.assigns.range)
-
-    detected =
-      case Analytics.campaign_performance_fast(site, user, period) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
-
-    engagement =
-      case Analytics.campaign_engagement(site, user, period) do
-        {:ok, map} -> map
-        _ -> %{}
-      end
-
-    ad_names =
-      case Analytics.campaign_names(site, user, period) do
-        {:ok, map} -> map
-        _ -> %{}
-      end
+    {detected, engagement, ad_names, refreshed_at} =
+      load_campaign_widgets(site, user, socket.assigns.range)
 
     # Map (campaign, source, medium) → saved record when present.
     saved_by_triple =
@@ -240,6 +224,65 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
     |> assign(:detected_count, length(detected_rows))
     |> assign(:saved_count, length(saved))
     |> assign(:total_visitors, Enum.reduce(rows, 0, &(&1.visitors + &2)))
+    |> assign(:snapshot_refreshed_at, refreshed_at)
+  end
+
+  # Default 30d range reads from the hourly Postgres snapshot. Other ranges
+  # fall through to live ClickHouse. The engagement map has tuple keys so
+  # we rebuild it from the flattened snapshot rows.
+  defp load_campaign_widgets(site, user, "30d") do
+    case DashboardSnapshots.fetch(site, "campaigns") do
+      {data, refreshed_at} ->
+        detected = Map.get(data, "performance", [])
+        engagement = rebuild_engagement_map(Map.get(data, "engagement", []))
+        ad_names = rebuild_names_map(Map.get(data, "names", []))
+        {detected, engagement, ad_names, refreshed_at}
+
+      nil ->
+        live_load_campaign_widgets(site, user, range_to_period("30d"))
+    end
+  end
+
+  defp load_campaign_widgets(site, user, range) do
+    live_load_campaign_widgets(site, user, range_to_period(range))
+  end
+
+  defp live_load_campaign_widgets(site, user, period) do
+    detected =
+      case Analytics.campaign_performance_fast(site, user, period) do
+        {:ok, rows} -> rows
+        _ -> []
+      end
+
+    engagement =
+      case Analytics.campaign_engagement(site, user, period) do
+        {:ok, map} -> map
+        _ -> %{}
+      end
+
+    ad_names =
+      case Analytics.campaign_names(site, user, period) do
+        {:ok, map} -> map
+        _ -> %{}
+      end
+
+    {detected, engagement, ad_names, nil}
+  end
+
+  defp rebuild_engagement_map(rows) do
+    Map.new(rows, fn r ->
+      {{r["campaign"] || "", r["source"] || "", r["medium"] || ""},
+       %{
+         bounce_rate: r["bounce_rate"] || 0.0,
+         avg_duration: r["avg_duration"] || 0
+       }}
+    end)
+  end
+
+  defp rebuild_names_map(rows) do
+    Map.new(rows, fn r ->
+      {r["key"] || "", %{name: r["name"] || "", platform: r["platform"] || ""}}
+    end)
   end
 
   defp norm(nil), do: ""
@@ -250,10 +293,15 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
     Campaigns.Campaign.changeset(%Campaigns.Campaign{}, %{})
   end
 
-  defp range_to_period("7d"), do: :"7d"
-  defp range_to_period("30d"), do: :"30d"
-  defp range_to_period("90d"), do: :"90d"
-  defp range_to_period(_), do: :"30d"
+  # `Analytics.ensure_date_range/1` keys on `:week`, `:month`, `:quarter`
+  # atoms — the `:"7d"` / `:"30d"` / `:"90d"` atoms that used to be returned
+  # here all fell through to the catch-all 7-day window, so every range
+  # selection rendered the same 7 days of data. Always use the names
+  # period_to_date_range understands.
+  defp range_to_period("7d"), do: :week
+  defp range_to_period("30d"), do: :month
+  defp range_to_period("90d"), do: :quarter
+  defp range_to_period(_), do: :month
 
   defp ad_platform_label("google_ads"), do: "Google Ads"
   defp ad_platform_label("bing_ads"), do: "Microsoft Ads"
@@ -289,6 +337,9 @@ defmodule SpectabasWeb.Dashboard.CampaignsLive do
               {format_number(@total_visitors)}
             </span>
             visitors in range
+            <span :if={@snapshot_refreshed_at} class="ml-2 text-xs text-gray-400">
+              · snapshot {DashboardSnapshots.refreshed_label(@snapshot_refreshed_at)}
+            </span>
           </div>
           <div class="flex items-center gap-3">
             <div class="flex rounded-lg border border-gray-300 overflow-hidden">

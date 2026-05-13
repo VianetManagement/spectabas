@@ -3,7 +3,7 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
 
   @moduledoc "Top pages ranked by pageviews with RUM load time indicators."
 
-  alias Spectabas.{Accounts, Sites, Analytics}
+  alias Spectabas.{Accounts, Sites, Analytics, DashboardSnapshots}
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers
   import SpectabasWeb.Dashboard.DateHelpers
@@ -29,6 +29,7 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
         |> assign(:sort_dir, "desc")
         |> assign(:expanded_row, nil)
         |> assign(:pages, [])
+        |> assign(:snapshot_refreshed_at, nil)
         |> assign(:loading, true)
 
       if connected?(socket), do: send(self(), :load_data)
@@ -93,14 +94,10 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
 
   defp load_pages(socket) do
     %{site: site, user: user, date_range: range} = socket.assigns
-    period = range_to_period(range)
 
-    pages = safe_query(fn -> Analytics.top_pages(site, user, period) end)
+    {pages, vitals_rows, device_rows, refreshed_at} = load_widgets(site, user, range)
 
-    # Fetch per-page RUM vitals summary and merge into page rows
     # Use normalized paths for matching (lowercase, no trailing slash)
-    vitals_rows = safe_query(fn -> Analytics.rum_vitals_summary(site, user, period) end)
-
     vitals_map =
       Map.new(vitals_rows, fn r ->
         path = (r["url_path"] || "/") |> String.downcase() |> String.trim_trailing("/")
@@ -108,8 +105,6 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
         {path, r}
       end)
 
-    # Fetch per-page device split
-    device_rows = safe_query(fn -> Analytics.page_device_split(site, user, period) end)
     device_map = build_device_map(device_rows)
 
     pages =
@@ -125,7 +120,37 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
         })
       end)
 
-    assign(socket, :pages, pages)
+    socket
+    |> assign(:pages, pages)
+    |> assign(:snapshot_refreshed_at, refreshed_at)
+  end
+
+  # Default 7d range reads from the hourly Postgres snapshot; other ranges
+  # fall through to live ClickHouse.
+  defp load_widgets(site, user, "7d") do
+    case DashboardSnapshots.fetch(site, "pages") do
+      {data, refreshed_at} ->
+        {
+          Map.get(data, "pages", []),
+          Map.get(data, "vitals", []),
+          Map.get(data, "devices", []),
+          refreshed_at
+        }
+
+      nil ->
+        live_load_widgets(site, user, range_to_period("7d"))
+    end
+  end
+
+  defp load_widgets(site, user, range) do
+    live_load_widgets(site, user, range_to_period(range))
+  end
+
+  defp live_load_widgets(site, user, period) do
+    pages = safe_query(fn -> Analytics.top_pages(site, user, period) end)
+    vitals = safe_query(fn -> Analytics.rum_vitals_summary(site, user, period) end)
+    devices = safe_query(fn -> Analytics.page_device_split(site, user, period) end)
+    {pages, vitals, devices, nil}
   end
 
   defp build_device_map(rows) do
@@ -162,6 +187,9 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
         <div class="flex items-center justify-between mb-8">
           <div>
             <h1 class="text-2xl font-bold text-gray-900 mt-2">Top Pages</h1>
+            <p :if={@snapshot_refreshed_at} class="text-xs text-gray-400 mt-1">
+              Snapshot · last update {DashboardSnapshots.refreshed_label(@snapshot_refreshed_at)}
+            </p>
           </div>
           <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">
             <button

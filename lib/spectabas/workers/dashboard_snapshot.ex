@@ -37,6 +37,12 @@ defmodule Spectabas.Workers.DashboardSnapshot do
   @default_acquisition_window 7
   @default_ecommerce_window 7
   @default_suggested_funnels_window 30
+  @default_pages_window 7
+  @default_entry_exit_window 7
+  @default_geography_window 7
+  @default_devices_window 7
+  @default_campaigns_window 30
+  @default_performance_window 7
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"site_id" => site_id}}) do
@@ -153,6 +159,30 @@ defmodule Spectabas.Workers.DashboardSnapshot do
 
     snapshot_kind(site, "suggested_funnels", @default_suggested_funnels_window, fn ->
       %{"rows" => list_or_empty(Analytics.suggested_funnels(site, user))}
+    end)
+
+    snapshot_kind(site, "pages", @default_pages_window, fn ->
+      snapshot_pages(site, user)
+    end)
+
+    snapshot_kind(site, "entry_exit", @default_entry_exit_window, fn ->
+      snapshot_entry_exit(site, user)
+    end)
+
+    snapshot_kind(site, "geography", @default_geography_window, fn ->
+      snapshot_geography(site, user)
+    end)
+
+    snapshot_kind(site, "devices", @default_devices_window, fn ->
+      snapshot_devices(site, user)
+    end)
+
+    snapshot_kind(site, "campaigns", @default_campaigns_window, fn ->
+      snapshot_campaigns(site, user)
+    end)
+
+    snapshot_kind(site, "performance", @default_performance_window, fn ->
+      snapshot_performance(site, user)
     end)
 
     # Per-goal detail snapshot. Stored as `goal_detail:<goal_id>` so the
@@ -370,6 +400,100 @@ defmodule Spectabas.Workers.DashboardSnapshot do
       "ltv" => ltv,
       "top_customers" => top_customers,
       "email_map" => email_map
+    }
+  end
+
+  # Pages — top_pages (slow path, full data including avg_duration) + RUM
+  # vitals + per-page device split. Stored at default 7d window. Three CH
+  # queries on every Pages mount otherwise.
+  defp snapshot_pages(site, user) do
+    %{
+      "pages" => list_or_empty(Analytics.top_pages(site, user, :week)),
+      "vitals" => list_or_empty(Analytics.rum_vitals_summary(site, user, :week)),
+      "devices" => list_or_empty(Analytics.page_device_split(site, user, :week))
+    }
+  end
+
+  # Entry/Exit — argMin/argMax(url_path, timestamp) per visitor is the
+  # heaviest visitor-grouped pattern in the analytics module.
+  defp snapshot_entry_exit(site, user) do
+    %{
+      "entry_pages" => list_or_empty(Analytics.entry_pages_fast(site, user, :week)),
+      "exit_pages" => list_or_empty(Analytics.exit_pages_fast(site, user, :week))
+    }
+  end
+
+  # Geography — country / region / summary all grouped by ip_country.
+  defp snapshot_geography(site, user) do
+    %{
+      "top_countries" => list_or_empty(Analytics.top_countries(site, user, :week)),
+      "top_regions" => list_or_empty(Analytics.top_regions(site, user, :week)),
+      "summary" => list_or_empty(Analytics.top_countries_summary(site, user, :week))
+    }
+  end
+
+  # Devices — browser / OS / device_type aggregations.
+  defp snapshot_devices(site, user) do
+    %{
+      "browsers" => list_or_empty(Analytics.top_browsers(site, user, :week)),
+      "os" => list_or_empty(Analytics.top_os(site, user, :week)),
+      "device_types" => list_or_empty(Analytics.top_device_types(site, user, :week))
+    }
+  end
+
+  # Campaigns — UTM campaign performance + engagement + name list. Default
+  # range is 30d (not 7d like the others). The engagement map has tuple
+  # keys (campaign, source, medium) which don't serialize to JSON; flatten
+  # to a list of rows here and let the LiveView rebuild the map on read.
+  defp snapshot_campaigns(site, user) do
+    engagement_rows =
+      case Analytics.campaign_engagement(site, user, :month) do
+        {:ok, map} ->
+          Enum.map(map, fn {{c, s, m}, %{bounce_rate: br, avg_duration: ad}} ->
+            %{
+              "campaign" => c,
+              "source" => s,
+              "medium" => m,
+              "bounce_rate" => br,
+              "avg_duration" => ad
+            }
+          end)
+
+        _ ->
+          []
+      end
+
+    names_rows =
+      case Analytics.campaign_names(site, user, :month) do
+        {:ok, map} ->
+          # campaign_names map is keyed by both campaign_id and campaign_name
+          # pointing at the same entry. We rebuild that on read.
+          map
+          |> Enum.map(fn {k, %{name: n, platform: p}} ->
+            %{"key" => k, "name" => n, "platform" => p}
+          end)
+
+        _ ->
+          []
+      end
+
+    %{
+      "performance" => list_or_empty(Analytics.campaign_performance_fast(site, user, :month)),
+      "engagement" => engagement_rows,
+      "names" => names_rows
+    }
+  end
+
+  # Performance (RUM) — overview + web vitals + per-page + per-device + two
+  # timeseries. 6 CH queries on every Performance mount.
+  defp snapshot_performance(site, user) do
+    %{
+      "overview" => ok_or(Analytics.rum_overview(site, user, :week), %{}),
+      "vitals" => ok_or(Analytics.rum_web_vitals(site, user, :week), %{}),
+      "by_page" => list_or_empty(Analytics.rum_by_page(site, user, :week)),
+      "by_device" => list_or_empty(Analytics.rum_by_device(site, user, :week)),
+      "vitals_ts" => list_or_empty(Analytics.rum_vitals_timeseries(site, user, :week)),
+      "timing_ts" => list_or_empty(Analytics.rum_timing_timeseries(site, user, :week))
     }
   end
 

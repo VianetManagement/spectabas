@@ -3,7 +3,7 @@ defmodule SpectabasWeb.Dashboard.GeoLive do
 
   @moduledoc "Geography dashboard with country/region/city drill-down."
 
-  alias Spectabas.{Accounts, Sites, Analytics}
+  alias Spectabas.{Accounts, Sites, Analytics, DashboardSnapshots}
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers
   import SpectabasWeb.Dashboard.DateHelpers
@@ -28,6 +28,7 @@ defmodule SpectabasWeb.Dashboard.GeoLive do
         |> assign(:drill_country, nil)
         |> assign(:drill_region, nil)
         |> assign(:geo_data, [])
+        |> assign(:snapshot_refreshed_at, nil)
         |> assign(:loading, true)
 
       if connected?(socket), do: send(self(), :load_data)
@@ -85,40 +86,65 @@ defmodule SpectabasWeb.Dashboard.GeoLive do
     %{site: site, user: user, date_range: range, drill_country: dc, drill_region: dr} =
       socket.assigns
 
-    period = range_to_period(range)
+    {data, refreshed_at} = load_geo_data(site, user, range, dc, dr)
 
-    data =
-      cond do
-        # Drilled to region: show cities
-        dc && dr ->
-          case Analytics.top_countries(site, user, period) do
-            {:ok, rows} ->
-              rows
-              |> Enum.filter(&(&1["ip_country"] == dc && &1["ip_region_name"] == dr))
+    socket
+    |> assign(:geo_data, data)
+    |> assign(:snapshot_refreshed_at, refreshed_at)
+  end
 
-            _ ->
-              []
-          end
+  # Default 7d range + no drill-down reads from the hourly Postgres snapshot.
+  # Drilled-down state hits live CH because the snapshot only stores the
+  # full result (filtering happens client-side here anyway).
+  defp load_geo_data(site, user, "7d", dc, dr) do
+    case DashboardSnapshots.fetch(site, "geography") do
+      {data, refreshed_at} ->
+        rows = pick_geo_rows(data, dc, dr)
+        {rows, refreshed_at}
 
-        # Drilled to country: show regions
-        dc ->
-          case Analytics.top_regions(site, user, period) do
-            {:ok, rows} ->
-              Enum.filter(rows, &(&1["ip_country"] == dc))
+      nil ->
+        {live_load_geo(site, user, range_to_period("7d"), dc, dr), nil}
+    end
+  end
 
-            _ ->
-              []
-          end
+  defp load_geo_data(site, user, range, dc, dr) do
+    {live_load_geo(site, user, range_to_period(range), dc, dr), nil}
+  end
 
-        # Top level: show countries (deduplicated)
-        true ->
-          case Analytics.top_countries_summary(site, user, period) do
-            {:ok, rows} -> rows
-            _ -> []
-          end
-      end
+  defp pick_geo_rows(data, dc, dr) when not is_nil(dc) and not is_nil(dr) do
+    Map.get(data, "top_countries", [])
+    |> Enum.filter(&(&1["ip_country"] == dc && &1["ip_region_name"] == dr))
+  end
 
-    assign(socket, :geo_data, data)
+  defp pick_geo_rows(data, dc, _dr) when not is_nil(dc) do
+    Map.get(data, "top_regions", [])
+    |> Enum.filter(&(&1["ip_country"] == dc))
+  end
+
+  defp pick_geo_rows(data, _, _), do: Map.get(data, "summary", [])
+
+  defp live_load_geo(site, user, period, dc, dr) when not is_nil(dc) and not is_nil(dr) do
+    case Analytics.top_countries(site, user, period) do
+      {:ok, rows} ->
+        Enum.filter(rows, &(&1["ip_country"] == dc && &1["ip_region_name"] == dr))
+
+      _ ->
+        []
+    end
+  end
+
+  defp live_load_geo(site, user, period, dc, _dr) when not is_nil(dc) do
+    case Analytics.top_regions(site, user, period) do
+      {:ok, rows} -> Enum.filter(rows, &(&1["ip_country"] == dc))
+      _ -> []
+    end
+  end
+
+  defp live_load_geo(site, user, period, _, _) do
+    case Analytics.top_countries_summary(site, user, period) do
+      {:ok, rows} -> rows
+      _ -> []
+    end
   end
 
   @impl true
@@ -136,6 +162,9 @@ defmodule SpectabasWeb.Dashboard.GeoLive do
         <div class="flex items-center justify-between mb-8">
           <div>
             <h1 class="text-2xl font-bold text-gray-900 mt-2">Geography</h1>
+            <p :if={@snapshot_refreshed_at} class="text-xs text-gray-400 mt-1">
+              Snapshot · last update {DashboardSnapshots.refreshed_label(@snapshot_refreshed_at)}
+            </p>
           </div>
           <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">
             <button

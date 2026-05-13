@@ -65,6 +65,15 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.19", "2026-05-13T18:15:00Z",
+       [
+         %{
+           title:
+             "Snapshot 6 more dashboard pages (Pages, Entry/Exit, Geography, Devices, Campaigns, Performance)",
+           description:
+             "Extends the hourly DashboardSnapshot worker with 6 new `kind`s so the most-loaded pages render from Postgres on their default date range instead of fanning out ClickHouse queries on every mount. (1) **pages** — top_pages + rum_vitals_summary + page_device_split. The slow path of top_pages (with avg_duration, no rollup) was the bottleneck on the Pages dashboard you flagged. (2) **entry_exit** — entry_pages_fast + exit_pages_fast. argMin/argMax(url_path, timestamp) per visitor is the heaviest visitor-grouped pattern in the codebase. (3) **geography** — top_countries + top_regions + top_countries_summary, served from PG when no country drill-down is active. (4) **devices** — top_browsers + top_os + top_device_types, one tab per snapshot key. (5) **campaigns** (default 30d, not 7d) — campaign_performance_fast + campaign_engagement + campaign_names. The engagement map's tuple keys flatten to a row list on write and rebuild to a tuple-keyed map on read. (6) **performance** — rum_overview + rum_web_vitals + rum_by_page + rum_by_device + vitals_ts + timing_ts. Every page renders a 'Snapshot · last update X' label under its header when reading from PG so it's obvious where the data came from. Non-default ranges fall through to live CH unchanged. Worker timeout already 1500s, comfortably fits the new kinds. Also fixed a pre-existing bug surfaced while wiring Campaigns: range_to_period was returning :\"30d\" / :\"7d\" / :\"90d\" atoms that fell through to the catch-all 7-day window in Analytics.ensure_date_range, so Campaigns has been showing 7 days of data regardless of range selection. Now returns :week / :month / :quarter so the right clause matches. Search Keywords was on the original 5-page list but defers to a follow-up — its 10 queries are inline raw SQL in the LiveView rather than going through Analytics functions, so snapshotting cleanly needs a small refactor."
+         }
+       ]},
       {"v6.10.18", "2026-05-13T17:55:00Z",
        [
          %{

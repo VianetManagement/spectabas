@@ -3,7 +3,7 @@ defmodule SpectabasWeb.Dashboard.DevicesLive do
 
   @moduledoc "Device type, browser, and OS breakdown with tabs and pie chart."
 
-  alias Spectabas.{Accounts, Sites, Analytics}
+  alias Spectabas.{Accounts, Sites, Analytics, DashboardSnapshots}
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers
   import SpectabasWeb.Dashboard.DateHelpers
@@ -29,6 +29,7 @@ defmodule SpectabasWeb.Dashboard.DevicesLive do
         |> assign(:loading, true)
         |> assign(:devices, [])
         |> assign(:total_visitors, 0)
+        |> assign(:snapshot_refreshed_at, nil)
 
       if connected?(socket), do: send(self(), :load_data)
       {:ok, socket}
@@ -53,28 +54,8 @@ defmodule SpectabasWeb.Dashboard.DevicesLive do
 
   defp load_devices(socket) do
     %{site: site, user: user, date_range: range, tab: tab} = socket.assigns
-    period = range_to_period(range)
 
-    devices =
-      case tab do
-        "browser" ->
-          case Analytics.top_browsers(site, user, period) do
-            {:ok, rows} -> Enum.map(rows, &Map.put(&1, "browser", &1["name"]))
-            _ -> []
-          end
-
-        "os" ->
-          case Analytics.top_os(site, user, period) do
-            {:ok, rows} -> Enum.map(rows, &Map.put(&1, "os", &1["name"]))
-            _ -> []
-          end
-
-        _ ->
-          case Analytics.top_device_types(site, user, period) do
-            {:ok, rows} -> rows
-            _ -> []
-          end
-      end
+    {devices, refreshed_at} = load_tab(site, user, range, tab)
 
     # Compute percentages
     total = Enum.reduce(devices, 0, fn d, acc -> acc + to_num(d["unique_visitors"]) end)
@@ -90,12 +71,64 @@ defmodule SpectabasWeb.Dashboard.DevicesLive do
     labels = Enum.map(devices, &(Map.get(&1, tab, "Unknown") || "Unknown"))
     values = Enum.map(devices, &to_num(&1["unique_visitors"]))
 
-    socket = socket |> assign(:devices, devices) |> assign(:total_visitors, total)
+    socket =
+      socket
+      |> assign(:devices, devices)
+      |> assign(:total_visitors, total)
+      |> assign(:snapshot_refreshed_at, refreshed_at)
 
     if connected?(socket) do
       push_event(socket, "pie-data", %{labels: Enum.take(labels, 8), values: Enum.take(values, 8)})
     else
       socket
+    end
+  end
+
+  # Default 7d range reads from the hourly Postgres snapshot. Each tab maps
+  # to a different snapshot key. Non-default ranges fall through to live CH.
+  defp load_tab(site, user, "7d", tab) do
+    case DashboardSnapshots.fetch(site, "devices") do
+      {data, refreshed_at} ->
+        rows = pick_tab_rows(data, tab)
+        {rows, refreshed_at}
+
+      nil ->
+        {live_load_tab(site, user, range_to_period("7d"), tab), nil}
+    end
+  end
+
+  defp load_tab(site, user, range, tab) do
+    {live_load_tab(site, user, range_to_period(range), tab), nil}
+  end
+
+  defp pick_tab_rows(data, "browser") do
+    Map.get(data, "browsers", []) |> Enum.map(&Map.put(&1, "browser", &1["name"]))
+  end
+
+  defp pick_tab_rows(data, "os") do
+    Map.get(data, "os", []) |> Enum.map(&Map.put(&1, "os", &1["name"]))
+  end
+
+  defp pick_tab_rows(data, _), do: Map.get(data, "device_types", [])
+
+  defp live_load_tab(site, user, period, "browser") do
+    case Analytics.top_browsers(site, user, period) do
+      {:ok, rows} -> Enum.map(rows, &Map.put(&1, "browser", &1["name"]))
+      _ -> []
+    end
+  end
+
+  defp live_load_tab(site, user, period, "os") do
+    case Analytics.top_os(site, user, period) do
+      {:ok, rows} -> Enum.map(rows, &Map.put(&1, "os", &1["name"]))
+      _ -> []
+    end
+  end
+
+  defp live_load_tab(site, user, period, _) do
+    case Analytics.top_device_types(site, user, period) do
+      {:ok, rows} -> rows
+      _ -> []
     end
   end
 
@@ -114,6 +147,9 @@ defmodule SpectabasWeb.Dashboard.DevicesLive do
         <div class="flex items-center justify-between mb-8">
           <div>
             <h1 class="text-2xl font-bold text-gray-900 mt-2">Devices</h1>
+            <p :if={@snapshot_refreshed_at} class="text-xs text-gray-400 mt-1">
+              Snapshot · last update {DashboardSnapshots.refreshed_label(@snapshot_refreshed_at)}
+            </p>
           </div>
           <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">
             <button
