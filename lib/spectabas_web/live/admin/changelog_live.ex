@@ -65,6 +65,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.24", "2026-05-13T20:30:00Z",
+       [
+         %{
+           title: "Fix: click_element_backfill_status uses reader (no system.mutations perms)",
+           description:
+             "v6.10.23's status endpoint called `Spectabas.ClickHouse.query/1` which uses the read-only credentials (`spectabas_reader`). That user doesn't have SELECT on `system.mutations`, so polling returned `Code: 497 (ACCESS_DENIED)`. Added `Spectabas.ClickHouse.query_admin/1` — same shape as `query/1` but uses the default user — and swapped the status endpoint to call it. The endpoint is read-only DDL telemetry, so admin-user reads are safe."
+         }
+       ]},
       {"v6.10.23", "2026-05-13T19:50:00Z",
        [
          %{

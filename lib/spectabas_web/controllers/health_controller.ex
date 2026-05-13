@@ -2309,7 +2309,8 @@ defmodule SpectabasWeb.HealthController do
           LIMIT 10
           """
 
-          case Spectabas.ClickHouse.query(sql) do
+          # Use admin user — reader doesn't have SELECT on system.mutations.
+          case Spectabas.ClickHouse.query_admin(sql) do
             {:ok, rows} -> json(conn, %{rows: rows})
             err -> conn |> put_status(500) |> json(%{error: inspect(err)})
           end

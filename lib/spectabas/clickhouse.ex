@@ -639,6 +639,39 @@ defmodule Spectabas.ClickHouse do
 
   def insert(_table, []), do: :ok
 
+  @doc """
+  Execute a SELECT as the admin/default user. Use only for system tables
+  the reader user can't access (e.g. `system.mutations`, `system.parts`).
+  Returns `{:ok, rows}` or `{:error, reason}`.
+  """
+  def query_admin(sql) do
+    cfg = Application.get_env(:spectabas, __MODULE__)
+
+    admin_req =
+      Req.new(
+        base_url: cfg[:url],
+        params: [user: "default", password: "", default_format: "JSONEachRow"],
+        headers: [{"content-type", "application/x-www-form-urlencoded"}],
+        finch: Spectabas.ClickHouseFinch
+      )
+      |> Req.merge(@default_opts)
+
+    req = Req.merge(admin_req, params: [query: sql])
+
+    case Req.get(req) do
+      {:ok, %{status: 200, body: body}} ->
+        {:ok, parse_rows(body)}
+
+      {:ok, %{status: s, body: b}} ->
+        Logger.error("[CH:admin-r] #{s}: #{inspect(b) |> String.slice(0, 300)}")
+        {:error, b}
+
+      {:error, r} ->
+        Logger.error("[CH:admin-r] #{inspect(r)}")
+        {:error, r}
+    end
+  end
+
   @doc "Execute SQL as admin/default user (for DDL: CREATE TABLE, ALTER TABLE ADD COLUMN, etc.)"
   def execute_admin(sql) do
     cfg = Application.get_env(:spectabas, __MODULE__)
