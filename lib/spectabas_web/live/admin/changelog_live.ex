@@ -65,6 +65,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.17", "2026-05-13T17:40:00Z",
+       [
+         %{
+           title: "Fix: goal_completions UNION-ALL needs 180s, not 90s",
+           description:
+             "Diagnosis from v6.10.16's probe: `goal_completions_system` runs in ~16s when warm, but hits 91s+ when cold/contended on puppies.com (UNION-ALL of 20 SELECTs, each with JSONExtractString filters on 7d of events). The v6.10.13/v6.10.14 `SETTINGS max_execution_time = 90` was firing and CH was canceling mid-flight, after which `do_goal_completions` falls through to its zero-defaults branch and the worker writes 20 rows of zeros. Bumped `SETTINGS max_execution_time` 90 → 180 and `receive_timeout` 90_000 → 200_000 on both queries in do_goal_completions (also the same pair in goal_detail_stats for defensive headroom on the heaviest sites). Worker timeout already 1200s, easily covers 180s + 180s + ~500s source-attribution worst case."
+         }
+       ]},
       {"v6.10.16", "2026-05-13T17:25:00Z",
        [
          %{

@@ -3448,9 +3448,9 @@ defmodule Spectabas.Analytics do
                    AND event_type = 'pageview' AND ip_is_bot = 0
                    AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
                    AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-                 SETTINGS max_execution_time = 90
+                 SETTINGS max_execution_time = 180
                """,
-               receive_timeout: 90_000
+               receive_timeout: 200_000
              ) do
           {:ok, [%{"total" => t}]} -> to_int(t)
           _ -> 0
@@ -3482,10 +3482,10 @@ defmodule Spectabas.Analytics do
       # UNION-ALL in a subquery so SETTINGS unambiguously applies to the
       # whole compound query (without the wrap, CH may bind the SETTINGS
       # clause only to the trailing SELECT).
-      wrapped_unions = "SELECT * FROM (\n#{unions}\n) SETTINGS max_execution_time = 90"
+      wrapped_unions = "SELECT * FROM (\n#{unions}\n) SETTINGS max_execution_time = 180"
 
       counts =
-        case ClickHouse.query(wrapped_unions, receive_timeout: 90_000) do
+        case ClickHouse.query(wrapped_unions, receive_timeout: 200_000) do
           {:ok, rows} ->
             Map.new(rows, fn r ->
               {r["goal_id"],
@@ -3818,9 +3818,9 @@ defmodule Spectabas.Analytics do
                    AND event_type = 'pageview' AND ip_is_bot = 0
                    AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
                    AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-                 SETTINGS max_execution_time = 90
+                 SETTINGS max_execution_time = 180
                """,
-               receive_timeout: 90_000
+               receive_timeout: 200_000
              ) do
           {:ok, [%{"total" => t}]} -> to_int(t)
           _ -> 0
