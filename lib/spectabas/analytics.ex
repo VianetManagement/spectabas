@@ -431,13 +431,21 @@ defmodule Spectabas.Analytics do
       {from_date, to_date, raw_cutoff} = rollup_date_bounds(date_range, site)
       site_id = ClickHouse.param(site.id)
 
+      # dur_state column added v6.10.25 — historical rollup rows have an
+      # empty state, which avgIfMerge returns as nan. Wrap in ifNotFinite
+      # so we return 0 instead of NaN for dates pre-backfill.
       sql = """
       SELECT
         url_path,
         countIfMerge(pv_s) AS pageviews,
-        uniqExactIfMerge(vis_s) AS unique_visitors
+        uniqExactIfMerge(vis_s) AS unique_visitors,
+        round(ifNotFinite(avgIfMerge(dur_s), 0), 0) AS avg_duration
       FROM (
-        SELECT url_path, pv_state AS pv_s, vis_state AS vis_s
+        SELECT
+          url_path,
+          pv_state AS pv_s,
+          vis_state AS vis_s,
+          dur_state AS dur_s
         FROM daily_page_rollup
         WHERE site_id = #{site_id}
           AND date >= #{ClickHouse.param(from_date)}
@@ -449,7 +457,8 @@ defmodule Spectabas.Analytics do
         SELECT
           url_path,
           countIfState(event_type = 'pageview' AND ip_is_bot = 0) AS pv_s,
-          uniqExactIfState(visitor_id, event_type = 'pageview' AND ip_is_bot = 0) AS vis_s
+          uniqExactIfState(visitor_id, event_type = 'pageview' AND ip_is_bot = 0) AS vis_s,
+          avgIfState(duration_s, event_type = 'duration' AND duration_s > 0) AS dur_s
         FROM events
         WHERE site_id = #{site_id}
           AND toDate(timestamp) >= #{ClickHouse.param(raw_cutoff)}

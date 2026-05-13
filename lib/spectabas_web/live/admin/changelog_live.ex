@@ -65,6 +65,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.25", "2026-05-13T20:45:00Z",
+       [
+         %{
+           title: "Rollup: avg_duration on daily_page_rollup + AnomalyDetection bot filter",
+           description:
+             "Two efficiency wins from Tier 3 of the post-CH-spike review.\n\n**(B) Add `avg_duration` to `daily_page_rollup`.** PagesLive had to call the slow `top_pages` (raw events scan) instead of `top_pages_fast` (rollup-backed) only because the rollup was missing a duration aggregate. Added a `dur_state AggregateFunction(avgIf, UInt32, UInt8)` column to the rollup; updated `DailyRollup` worker's INSERT to populate it with `avgIfState(duration_s, event_type = 'duration' AND duration_s > 0)`. Updated `top_pages_fast`'s SQL to merge the state via `avgIfMerge` wrapped in `ifNotFinite(..., 0)` (historical rollup rows have empty state until the next worker tick rewrites them — `avgIfMerge` on empty returns nan, the wrapper coerces to 0). Swapped PagesLive's `live_load_widgets` fallback from `top_pages` → `top_pages_fast`. The 7d snapshot's worker helper also now uses the fast path. Non-default ranges (24h, 30d) on the Pages dashboard load near-instantly now instead of scanning raw events.\n\n**(C) AnomalyDetection workers missing `ip_is_bot = 0` filter.** Both queries in `Workers.AnomalyDetection` (current-hour pageviews + 7d hourly average) counted ALL events including bots. Per CLAUDE.md's project-wide rule, all analytics queries must include `ip_is_bot = 0` (except the explicit exceptions: network_stats, realtime, visitor detail, RUM — and anomaly detection isn't on that list). Bot traffic surges would trigger false positive 'traffic spike' alerts. Added the filter to both queries plus `receive_timeout: 60_000` for safety.\n\nBackfill note for (B): existing `daily_page_rollup` rows have empty `dur_state` until the next `DailyRollup` worker run for those dates. The :01:30 UTC cron will rewrite today + yesterday automatically. For older dates, the `top_pages_fast` query already falls back to today+yesterday from raw events, so the missing-state rows just contribute 0 to the avg — which is then dropped by `ifNotFinite`. If you want strict historical backfill, re-run `DailyRollup` with the `start` arg covering older dates."
+         }
+       ]},
       {"v6.10.24", "2026-05-13T20:30:00Z",
        [
          %{

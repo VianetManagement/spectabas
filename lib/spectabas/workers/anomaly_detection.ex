@@ -70,16 +70,20 @@ defmodule Spectabas.Workers.AnomalyDetection do
     end
   end
 
+  # `ip_is_bot = 0` per CLAUDE.md's project-wide rule. Without it, scraper
+  # waves trigger false positive "traffic spike" alerts that wake on-call
+  # for what's actually bot activity (which has its own dashboards).
   defp current_hour_pageviews(site) do
     sql = """
     SELECT count() AS pageviews
     FROM events
     WHERE site_id = #{ClickHouse.param(site.id)}
       AND event_type = 'pageview'
+      AND ip_is_bot = 0
       AND timestamp >= toStartOfHour(now())
     """
 
-    case ClickHouse.query(sql) do
+    case ClickHouse.query(sql, receive_timeout: 60_000) do
       {:ok, [%{"pageviews" => count}]} -> {:ok, count}
       {:ok, []} -> {:ok, 0}
       {:error, reason} -> {:error, reason}
@@ -96,13 +100,14 @@ defmodule Spectabas.Workers.AnomalyDetection do
       FROM events
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND event_type = 'pageview'
+        AND ip_is_bot = 0
         AND timestamp >= now() - INTERVAL 7 DAY
         AND toHour(timestamp) = toHour(now())
       GROUP BY hour
     )
     """
 
-    case ClickHouse.query(sql) do
+    case ClickHouse.query(sql, receive_timeout: 60_000) do
       {:ok, [%{"avg_pageviews" => avg}]} when not is_nil(avg) -> {:ok, avg}
       {:ok, _} -> {:ok, 0}
       {:error, reason} -> {:error, reason}

@@ -136,7 +136,8 @@ defmodule Spectabas.Workers.DailyRollup do
       toDate(timestamp) AS date,
       url_path,
       countIfState(event_type = 'pageview' AND ip_is_bot = 0) AS pv_state,
-      uniqExactIfState(visitor_id, event_type = 'pageview' AND ip_is_bot = 0) AS vis_state
+      uniqExactIfState(visitor_id, event_type = 'pageview' AND ip_is_bot = 0) AS vis_state,
+      avgIfState(duration_s, event_type = 'duration' AND duration_s > 0) AS dur_state
     FROM events
     WHERE #{where_range} AND url_path != ''
     GROUP BY site_id, date, url_path

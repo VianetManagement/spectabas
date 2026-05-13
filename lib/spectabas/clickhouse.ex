@@ -365,7 +365,11 @@ defmodule Spectabas.ClickHouse do
         date Date,
         url_path String,
         pv_state AggregateFunction(countIf, UInt8, UInt8),
-        vis_state AggregateFunction(uniqExactIf, String, UInt8)
+        vis_state AggregateFunction(uniqExactIf, String, UInt8),
+        -- Added v6.10.25 so top_pages_fast can return avg_duration without
+        -- falling back to the slow events-table scan. Empty on historical
+        -- rollup rows until backfilled.
+        dur_state AggregateFunction(avgIf, UInt32, UInt8)
       ) ENGINE = AggregatingMergeTree()
       PARTITION BY toYYYYMM(date)
       ORDER BY (site_id, date, url_path)
@@ -512,7 +516,12 @@ defmodule Spectabas.ClickHouse do
       "ALTER TABLE #{db}.events ADD COLUMN IF NOT EXISTS element_text String MATERIALIZED JSONExtractString(properties, '_text')",
       "ALTER TABLE #{db}.events ADD COLUMN IF NOT EXISTS element_id String MATERIALIZED JSONExtractString(properties, '_id')",
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_element_text element_text TYPE bloom_filter GRANULARITY 4",
-      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_element_id element_id TYPE bloom_filter GRANULARITY 4"
+      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_element_id element_id TYPE bloom_filter GRANULARITY 4",
+      # Duration aggregate added v6.10.25 so top_pages_fast can return
+      # avg_duration. Existing rollup rows have empty state until the next
+      # DailyRollup tick re-writes them; for backfill, re-run the worker
+      # with a `start` arg covering historical dates.
+      "ALTER TABLE #{db}.daily_page_rollup ADD COLUMN IF NOT EXISTS dur_state AggregateFunction(avgIf, UInt32, UInt8)"
     ]
 
     if connected do

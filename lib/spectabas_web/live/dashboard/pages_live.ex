@@ -147,7 +147,12 @@ defmodule SpectabasWeb.Dashboard.PagesLive do
   end
 
   defp live_load_widgets(site, user, period) do
-    pages = safe_query(fn -> Analytics.top_pages(site, user, period) end)
+    # top_pages_fast (rollup-backed) used to be missing avg_duration which
+    # was the only reason this page called the slow top_pages instead. As
+    # of v6.10.25 the rollup carries a dur_state aggregate so the fast
+    # variant returns the same shape — non-default ranges now load
+    # instantly too, not just the 7d snapshot path.
+    pages = safe_query(fn -> Analytics.top_pages_fast(site, user, period) end)
     vitals = safe_query(fn -> Analytics.rum_vitals_summary(site, user, period) end)
     devices = safe_query(fn -> Analytics.page_device_split(site, user, period) end)
     {pages, vitals, devices, nil}

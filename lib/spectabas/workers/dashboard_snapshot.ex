@@ -418,12 +418,11 @@ defmodule Spectabas.Workers.DashboardSnapshot do
     }
   end
 
-  # Pages — top_pages (slow path, full data including avg_duration) + RUM
-  # vitals + per-page device split. Stored at default 7d window. Three CH
-  # queries on every Pages mount otherwise.
+  # Pages — top_pages_fast (rollup-backed, includes avg_duration since
+  # v6.10.25's dur_state aggregate) + RUM vitals + per-page device split.
   defp snapshot_pages(site, user) do
     %{
-      "pages" => list_or_empty(Analytics.top_pages(site, user, :week)),
+      "pages" => list_or_empty(Analytics.top_pages_fast(site, user, :week)),
       "vitals" => list_or_empty(Analytics.rum_vitals_summary(site, user, :week)),
       "devices" => list_or_empty(Analytics.page_device_split(site, user, :week))
     }
