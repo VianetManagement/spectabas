@@ -31,6 +31,9 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
         |> assign(:date_range, "7d")
         |> assign(:min_score, 60)
         |> assign(:modal_visitor, nil)
+        |> assign(:modal_lifetime, nil)
+        |> assign(:modal_24h, nil)
+        |> assign(:modal_pg_visitor, nil)
         |> assign(:loading, true)
         |> assign(:candidates, [])
         |> assign(:needs_review, [])
@@ -181,11 +184,42 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
 
   def handle_event("open_visitor", %{"visitor_id" => vid}, socket) do
     v = Enum.find(socket.assigns.candidates || [], &(&1["visitor_id"] == vid))
-    {:noreply, assign(socket, :modal_visitor, v)}
+    site = socket.assigns.site
+
+    # Fetch lifetime + 24h scores so the popup shows the same trio as the
+    # visitor profile (matches the v6.10.28 unification). Without this,
+    # popup shows the range-window score (e.g. 7d=85) and profile shows
+    # lifetime (100) — same visitor, different number, very confusing.
+    lifetime =
+      case Analytics.scraper_score_for_visitor(site, vid) do
+        {:ok, r} -> r
+        _ -> nil
+      end
+
+    last_24h =
+      case Analytics.scraper_score_for_visitor(site, vid, hours: 24) do
+        {:ok, r} -> r
+        _ -> nil
+      end
+
+    pg_visitor = Spectabas.Repo.get_by(Spectabas.Visitors.Visitor, id: vid, site_id: site.id)
+
+    {:noreply,
+     socket
+     |> assign(:modal_visitor, v)
+     |> assign(:modal_lifetime, lifetime)
+     |> assign(:modal_24h, last_24h)
+     |> assign(:modal_pg_visitor, pg_visitor)}
   end
 
   def handle_event("close_visitor", _params, socket) do
-    {:noreply, socket |> assign(:modal_visitor, nil) |> assign(:webhook_result, nil)}
+    {:noreply,
+     socket
+     |> assign(:modal_visitor, nil)
+     |> assign(:modal_lifetime, nil)
+     |> assign(:modal_24h, nil)
+     |> assign(:modal_pg_visitor, nil)
+     |> assign(:webhook_result, nil)}
   end
 
   def handle_event("send_webhook", %{"visitor_id" => visitor_id}, socket) do
@@ -882,12 +916,16 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
               </div>
 
               <div class="px-6 py-4 space-y-5">
+                <%!-- Range-window primary score + verdict (matches what gets
+                     the visitor into the list — its position is determined
+                     by the date_range filter at the top of the page). --%>
                 <div class="flex items-center flex-wrap gap-3">
                   <span class={[
                     "inline-flex items-center px-3 py-1 rounded-full text-sm font-bold",
                     score_color(to_num(v["score"]))
                   ]}>
                     Score {v["score"]}
+                    <span class="ml-1.5 text-[10px] font-normal opacity-75">({@date_range})</span>
                   </span>
                   <span class="text-sm font-medium text-gray-700">
                     Verdict: {verdict_label(v["verdict"])}
@@ -906,6 +944,69 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
                   >
                     <.icon name="hero-shield-check" class="w-4 h-4" /> Whitelisted
                   </span>
+                </div>
+
+                <%!-- Parity with the visitor profile: lifetime / 24h / last
+                     worker scan. Same trio, same labels, same verdict colors
+                     so the popup and the profile never disagree by accident. --%>
+                <div class="border-t border-gray-100 pt-3 flex items-center flex-wrap gap-4 text-xs">
+                  <div :if={@modal_lifetime} class="inline-flex items-center gap-1.5">
+                    <span class="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
+                      Lifetime:
+                    </span>
+                    <span class={[
+                      "inline-flex items-center px-2 py-0.5 rounded text-xs font-bold tabular-nums",
+                      score_color(@modal_lifetime.score)
+                    ]}>
+                      {@modal_lifetime.score}
+                    </span>
+                    <span class="text-gray-500">{Atom.to_string(@modal_lifetime.verdict)}</span>
+                  </div>
+                  <div :if={@modal_24h} class="inline-flex items-center gap-1.5">
+                    <span class="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
+                      Last 24h:
+                    </span>
+                    <span class={[
+                      "inline-flex items-center px-2 py-0.5 rounded text-xs font-bold tabular-nums",
+                      score_color(@modal_24h.score)
+                    ]}>
+                      {@modal_24h.score}
+                    </span>
+                    <span class="text-gray-500">{Atom.to_string(@modal_24h.verdict)}</span>
+                  </div>
+                  <div
+                    :if={@modal_pg_visitor && @modal_pg_visitor.scraper_last_scan_score}
+                    class="inline-flex items-center gap-1.5"
+                  >
+                    <span class="text-[10px] font-medium text-gray-400 uppercase tracking-wide">
+                      Last worker scan:
+                    </span>
+                    <span class={[
+                      "inline-flex items-center px-2 py-0.5 rounded text-xs font-bold tabular-nums",
+                      score_color(@modal_pg_visitor.scraper_last_scan_score)
+                    ]}>
+                      {@modal_pg_visitor.scraper_last_scan_score}
+                    </span>
+                    <span
+                      :if={@modal_pg_visitor.scraper_last_scan_at}
+                      class="text-[10px] text-gray-400"
+                    >
+                      ({DateTime.diff(
+                        DateTime.utc_now(),
+                        @modal_pg_visitor.scraper_last_scan_at,
+                        :minute
+                      )}m ago)
+                    </span>
+                  </div>
+                  <div
+                    :if={@modal_pg_visitor && @modal_pg_visitor.scraper_webhook_sent_at}
+                    class="inline-flex items-center gap-1.5 text-[10px] text-gray-400"
+                  >
+                    Webhook sent: {Calendar.strftime(
+                      @modal_pg_visitor.scraper_webhook_sent_at,
+                      "%Y-%m-%d %H:%M"
+                    )} ({@modal_pg_visitor.scraper_webhook_score})
+                  </div>
                 </div>
 
                 <div>
