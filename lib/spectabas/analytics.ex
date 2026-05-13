@@ -3550,9 +3550,10 @@ defmodule Spectabas.Analytics do
     GROUP BY source
     ORDER BY completers DESC
     LIMIT 5
+    SETTINGS max_execution_time = 90
     """
 
-    ClickHouse.query(sql)
+    ClickHouse.query(sql, receive_timeout: 90_000)
   end
 
   defp goal_condition(goal) do
@@ -3782,9 +3783,10 @@ defmodule Spectabas.Analytics do
         AND #{condition}
       GROUP BY day
       ORDER BY day ASC
+      SETTINGS max_execution_time = 90
       """
 
-      ClickHouse.query(sql)
+      ClickHouse.query(sql, receive_timeout: 90_000)
     end
   end
 
@@ -3795,14 +3797,18 @@ defmodule Spectabas.Analytics do
       condition = goal_condition(goal)
 
       total_visitors =
-        case ClickHouse.query("""
-               SELECT uniq(visitor_id) AS total
-               FROM events
-               WHERE site_id = #{ClickHouse.param(site.id)}
-                 AND event_type = 'pageview' AND ip_is_bot = 0
-                 AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-                 AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-             """) do
+        case ClickHouse.query(
+               """
+                 SELECT uniq(visitor_id) AS total
+                 FROM events
+                 WHERE site_id = #{ClickHouse.param(site.id)}
+                   AND event_type = 'pageview' AND ip_is_bot = 0
+                   AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+                   AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+                 SETTINGS max_execution_time = 90
+               """,
+               receive_timeout: 90_000
+             ) do
           {:ok, [%{"total" => t}]} -> to_int(t)
           _ -> 0
         end
@@ -3818,9 +3824,10 @@ defmodule Spectabas.Analytics do
         AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
         AND ip_is_bot = 0
         AND #{condition}
+      SETTINGS max_execution_time = 90
       """
 
-      case ClickHouse.query(sql) do
+      case ClickHouse.query(sql, receive_timeout: 90_000) do
         {:ok, [row]} ->
           completers = to_int(row["unique_completers"])
 
@@ -3872,9 +3879,10 @@ defmodule Spectabas.Analytics do
       GROUP BY url_path
       ORDER BY completions DESC
       LIMIT 20
+      SETTINGS max_execution_time = 90
       """
 
-      ClickHouse.query(sql)
+      ClickHouse.query(sql, receive_timeout: 90_000)
     end
   end
 
@@ -3897,9 +3905,10 @@ defmodule Spectabas.Analytics do
         AND #{condition}
       GROUP BY device
       ORDER BY completions DESC
+      SETTINGS max_execution_time = 90
       """
 
-      ClickHouse.query(sql)
+      ClickHouse.query(sql, receive_timeout: 90_000)
     end
   end
 
@@ -3925,9 +3934,10 @@ defmodule Spectabas.Analytics do
       GROUP BY country, country_code
       ORDER BY completions DESC
       LIMIT 20
+      SETTINGS max_execution_time = 90
       """
 
-      ClickHouse.query(sql)
+      ClickHouse.query(sql, receive_timeout: 90_000)
     end
   end
 
@@ -3954,9 +3964,10 @@ defmodule Spectabas.Analytics do
       GROUP BY visitor_id
       ORDER BY last_completed DESC
       LIMIT 50
+      SETTINGS max_execution_time = 90
       """
 
-      ClickHouse.query(sql)
+      ClickHouse.query(sql, receive_timeout: 90_000)
     end
   end
 
@@ -3982,9 +3993,10 @@ defmodule Spectabas.Analytics do
       GROUP BY element_tag, element_text, element_id, element_classes, element_href
       ORDER BY total_clicks DESC
       LIMIT 1
+      SETTINGS max_execution_time = 90
       """
 
-      ClickHouse.query(sql)
+      ClickHouse.query(sql, receive_timeout: 90_000)
     end
   end
 

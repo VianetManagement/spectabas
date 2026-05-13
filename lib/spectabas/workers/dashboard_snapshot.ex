@@ -24,9 +24,10 @@ defmodule Spectabas.Workers.DashboardSnapshot do
   alias Spectabas.{Accounts, Analytics, DashboardSnapshots, Goals, Sites, Visitors}
 
   @impl Oban.Worker
-  # 15 min — per-goal detail snapshots dominate runtime on sites with many
-  # goals (16 goals × 7 CH queries × ~5s each ≈ 8 min for puppies.com).
-  def timeout(_job), do: :timer.seconds(900)
+  # 25 min — per-goal detail snapshots dominate runtime on sites with many
+  # goals. Click-element goal queries (JSONExtractString full scan) can take
+  # close to the 90s CH max we set, so 16 goals × ~90s worst case = ~24 min.
+  def timeout(_job), do: :timer.seconds(1500)
 
   @default_outbound_window 30
   @default_downloads_window 30

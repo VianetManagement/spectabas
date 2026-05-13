@@ -151,7 +151,10 @@ defmodule SpectabasWeb.Dashboard.GoalDetailLive do
         end)
     }
 
-    results = Map.new(tasks, fn {key, task} -> {key, Task.await(task, 15_000)} end)
+    # 100s — matches the 90s CH max_execution_time in goal_detail Analytics
+    # queries with a 10s buffer. The old 15s would crash on the rescue clause
+    # for click-element goals on high-volume sites, leaving the page blank.
+    results = Map.new(tasks, fn {key, task} -> {key, Task.await(task, 100_000)} end)
 
     stats = results.stats
 

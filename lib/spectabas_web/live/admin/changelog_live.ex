@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.12", "2026-05-13T16:00:00Z",
+       [
+         %{
+           title: "Fix: empty Goal Detail page on high-volume sites",
+           description:
+             "After the v6.10.10 snapshot move, clicking into a goal on puppies.com showed zero completions, zero unique visitors, an empty trend chart and empty Top Sources / Pages / Devices / Countries / Recent Completers tables — even though the click element registry showed ~113k clicks for the same element over 30 days. The seven Analytics functions backing goal detail (goal_detail_stats, goal_completion_timeseries, goal_source_attribution, goal_top_pages, goal_device_breakdown, goal_geo_breakdown, goal_recent_completers, plus goal_click_element_details) were all using ClickHouse.query/1's default 30s HTTP receive_timeout. JSONExtractString(properties, '_text') over 30 days of events on a high-traffic site was exceeding that, so Req disconnected, the calls returned {:error, _}, and goal_detail_stats's fallback wrote a fully-zeroed stats map into the snapshot while the other six wrote []. Added SETTINGS max_execution_time = 90 + matching receive_timeout: 90_000 to all eight queries; bumped DashboardSnapshot worker timeout 900s → 1500s so 16 goals × ~90s worst-case still fits; bumped GoalDetailLive's live_load Task.await 15s → 100s so the 7d / 90d fallback path matches the new CH ceiling instead of crashing into the rescue clause."
+         }
+       ]},
       {"v6.10.11", "2026-05-12T21:00:00Z",
        [
          %{
