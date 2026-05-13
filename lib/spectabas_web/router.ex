@@ -258,6 +258,7 @@ defmodule SpectabasWeb.Router do
       live "/api-logs", Admin.ApiLogsLive, :index
       live "/geoip", Admin.GeoipLive, :index
       live "/asn-management", Admin.ASNManagementLive, :index
+      live "/scraper-labels", Admin.ScraperLabelsLive, :index
     end
   end
 

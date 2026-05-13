@@ -65,6 +65,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.27", "2026-05-13T21:45:00Z",
+       [
+         %{
+           title: "Scraper Labels Report (Stage 1 of detector-weight learning loop)",
+           description:
+             "First read of the `scraper_labels` table — surfaces accumulated human classifications so we can hand-tune the detector weights with data instead of intuition. New `Spectabas.ScraperLabels.signal_correlation_report/1` computes, for each of the 14 detector signals: how often it fired on visitors humans labeled scraper vs not-scraper, the ratio, and a heuristic verdict (underweighted / overweighted / weak signal / too few labels / ok). Reads only labels with `source_weight >= 0.7` (humans + ecommerce purchases) so the analysis isn't biased by the auto-fired flags it's trying to improve. Also lists **false positives** (visitors current rules scored ≥85 but a human whitelisted) and **false negatives** (visitors scored <40 but a human manually flagged) — those rows are the highest-leverage ones to eyeball.\n\nAdmin UI at `/admin/scraper-labels`. No model fitting yet (per docs/scraper-labels.md the logistic regression step waits for ~200 labels/site); this is the visualization layer that tells us whether labels have accumulated enough signal to be useful yet."
+         }
+       ]},
       {"v6.10.26", "2026-05-13T21:10:00Z",
        [
          %{
