@@ -3477,12 +3477,14 @@ defmodule Spectabas.Analytics do
 
       # JSONExtract on click-element goals over many days can exceed the
       # default 30s HTTP receive_timeout on high-volume sites — silently
-      # returning {:error, _} and writing zeros to goal_stats. The SETTINGS
-      # below applies to the outer UNION-ALL query as a whole.
-      unions = unions <> "\nSETTINGS max_execution_time = 90"
+      # returning {:error, _} and writing zeros to goal_stats. Wrap the
+      # UNION-ALL in a subquery so SETTINGS unambiguously applies to the
+      # whole compound query (without the wrap, CH may bind the SETTINGS
+      # clause only to the trailing SELECT).
+      wrapped_unions = "SELECT * FROM (\n#{unions}\n) SETTINGS max_execution_time = 90"
 
       counts =
-        case ClickHouse.query(unions, receive_timeout: 90_000) do
+        case ClickHouse.query(wrapped_unions, receive_timeout: 90_000) do
           {:ok, rows} ->
             Map.new(rows, fn r ->
               {r["goal_id"],

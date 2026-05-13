@@ -51,8 +51,28 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
     """
   end
 
+  @doc """
+  Current version string ("vX.Y.Z") — derived from the first entry below.
+  Single source of truth for the version: callers (e.g. the boot-time Slack
+  deploy notifier in `Spectabas.Application`) should read this rather than
+  hold their own constant, so the changelog can never drift out of sync
+  with the version a deploy reports.
+  """
+  def current_version do
+    [{ver, _ts, _items} | _] = entries()
+    ver
+  end
+
   def entries do
     [
+      {"v6.10.14", "2026-05-13T17:15:00Z",
+       [
+         %{
+           title: "Fix: deploy Slack pings now driven by changelog (no more silent drops)",
+           description:
+             "(1) Slack: the boot-time deploy-notifier in application.ex was reading a hardcoded `@version` module attribute and checking `app_settings.last_deploy_version` to decide whether the current boot is a new deploy. v6.10.12 and v6.10.13 only bumped the changelog entry, not this constant, so every boot saw 'same version, skip notify' and silently dropped the Slack ping. Fixed structurally instead of by-convention: deleted the constant entirely and now derive the current version at runtime from `ChangelogLive.current_version/0` (the first entry's version string). The changelog is now the single source of truth — bumping the changelog automatically bumps the deploy version, and the notification can't drift out of sync. (2) goal_stats backfill: v6.10.13 appended `SETTINGS max_execution_time = 90` to the end of a UNION-ALL string in `do_goal_completions/2`. ClickHouse may bind SETTINGS only to the trailing SELECT in a compound UNION query (or reject the syntax outright), which would leave the leading SELECTs back at the default 30s and still write zeros for the goals at the top of the union. Now wrapping the union in `SELECT * FROM (…) SETTINGS …` so the timeout unambiguously applies to the whole query. (3) Added `/oban-admin?action=goal_stats_dump&site_id=N` diagnostic that returns the actual rows from the goal_stats table so the contents are inspectable without psql access."
+         }
+       ]},
       {"v6.10.13", "2026-05-13T16:55:00Z",
        [
          %{

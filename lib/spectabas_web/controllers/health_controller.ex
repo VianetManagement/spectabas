@@ -2127,6 +2127,33 @@ defmodule SpectabasWeb.HealthController do
             {:error, reason} -> json(conn, %{ok: false, error: inspect(reason)})
           end
 
+        "goal_stats_dump" ->
+          case Integer.parse(params["site_id"] || "") do
+            {site_id, _} ->
+              rows =
+                Spectabas.Repo.all(
+                  from(s in "goal_stats",
+                    where: s.site_id == ^site_id,
+                    select: %{
+                      goal_id: s.goal_id,
+                      completions: s.completions,
+                      unique_completers: s.unique_completers,
+                      conversion_rate: s.conversion_rate,
+                      total_visitors: s.total_visitors,
+                      top_sources: s.top_sources,
+                      window_days: s.window_days,
+                      refreshed_at: s.refreshed_at
+                    },
+                    order_by: [asc: s.goal_id]
+                  )
+                )
+
+              json(conn, %{site_id: site_id, count: length(rows), rows: rows})
+
+            _ ->
+              conn |> put_status(400) |> json(%{error: "site_id param required"})
+          end
+
         "dashboard_snapshot_dump" ->
           case Integer.parse(params["site_id"] || "") do
             {site_id, _} ->

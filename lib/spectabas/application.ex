@@ -106,12 +106,18 @@ defmodule Spectabas.Application do
       :ok
   end
 
-  @version "v6.10.11"
+  # Version is derived from the latest ChangelogLive entry at runtime so the
+  # changelog is the single source of truth — bumping the changelog
+  # automatically bumps the deploy version, and a forgotten constant can't
+  # silently drop the Slack ping anymore.
+  defp current_version, do: SpectabasWeb.Admin.ChangelogLive.current_version()
 
   defp notify_if_new_version do
+    version = current_version()
+
     # Use a Postgres query to check if this version was already notified.
     # Only one instance wins the advisory lock — others skip silently.
-    lock_id = :erlang.phash2({:deploy_notify, @version}, 2_147_483_647)
+    lock_id = :erlang.phash2({:deploy_notify, version}, 2_147_483_647)
 
     case Spectabas.Repo.query("SELECT pg_try_advisory_lock($1)", [lock_id]) do
       {:ok, %{rows: [[true]]}} ->
@@ -119,7 +125,7 @@ defmodule Spectabas.Application do
         case Spectabas.Repo.query(
                "SELECT value FROM app_settings WHERE key = 'last_deploy_version' LIMIT 1"
              ) do
-          {:ok, %{rows: [[last]]}} when last == @version ->
+          {:ok, %{rows: [[last]]}} when last == version ->
             # Same version — autoscale, not a new deploy. Release the lock.
             Spectabas.Repo.query("SELECT pg_advisory_unlock($1)", [lock_id])
 
@@ -127,11 +133,11 @@ defmodule Spectabas.Application do
             # New version! Notify and record it.
             Spectabas.Repo.query(
               "INSERT INTO app_settings (key, value) VALUES ('last_deploy_version', $1) ON CONFLICT (key) DO UPDATE SET value = $1",
-              [@version]
+              [version]
             )
 
             Spectabas.Repo.query("SELECT pg_advisory_unlock($1)", [lock_id])
-            Spectabas.Notifications.Slack.notify(deploy_message())
+            Spectabas.Notifications.Slack.notify(deploy_message(version))
         end
 
       _ ->
@@ -141,10 +147,10 @@ defmodule Spectabas.Application do
   rescue
     _ ->
       # If app_settings table doesn't exist yet, fall back to always notifying
-      Spectabas.Notifications.Slack.notify(deploy_message())
+      Spectabas.Notifications.Slack.notify(deploy_message(current_version()))
   end
 
-  defp deploy_message do
+  defp deploy_message(version) do
     # Pull the latest changelog entry to include in the Slack notification.
     # The changelog is defined in ChangelogLive.entries/0 — the first entry
     # is always the current version.
@@ -159,7 +165,7 @@ defmodule Spectabas.Application do
         _ -> ""
       end
 
-    msg = ":rocket: *Spectabas deployed* — #{@version}"
+    msg = ":rocket: *Spectabas deployed* — #{version}"
     if changes != "", do: msg <> "\n\n" <> changes, else: msg
   end
 
