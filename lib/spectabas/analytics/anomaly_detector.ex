@@ -1213,10 +1213,10 @@ defmodule Spectabas.Analytics.AnomalyDetector do
       "click_element" ->
         case to_string(goal.element_selector || "") do
           "#" <> id ->
-            "(event_type = 'custom' AND event_name = '_click' AND JSONExtractString(properties, '_id') = #{ClickHouse.param(id)})"
+            "(event_type = 'custom' AND event_name = '_click' AND element_id = #{ClickHouse.param(id)})"
 
           "text:" <> text ->
-            "(event_type = 'custom' AND event_name = '_click' AND JSONExtractString(properties, '_text') = #{ClickHouse.param(text)})"
+            "(event_type = 'custom' AND event_name = '_click' AND element_text = #{ClickHouse.param(text)})"
 
           _ ->
             nil

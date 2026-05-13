@@ -65,6 +65,15 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.26", "2026-05-13T21:10:00Z",
+       [
+         %{
+           title:
+             "PR 2: swap JSONExtractString → element_text / element_id (the deploy that pays off the materialized columns)",
+           description:
+             "Backfill done — every `_click` row in `events` now has `element_text` and `element_id` populated, including historical. This deploy swaps the actual query call sites to read those columns instead of per-row JSON parsing. Affects: `click_element_condition` (3 WHERE-clause sites that drive every click_element goal query), `goal_click_element_details` (SELECT + GROUP BY), `page_clicks` + `discovered_click_elements` (registry queries), `Workers.ClickElementSnapshot` (hourly registry rebuild), `Analytics.AnomalyDetector` (click-element anomaly conditions), `Conversions.Detectors` (server-side ad conversion scan), `AI.InsightsPrompt` (weekly insights query), and the `click_element_probe` diagnostic. _tag, _classes, _href stay on JSONExtractString — they're SELECT-only (no WHERE/GROUP BY) so they don't benefit from materialization. Expected result: goal_detail snapshot for click_element goals drops from 60-90s to ~5-15s; click_element_probe diagnostic stays inside its 240s SETTINGS budget comfortably; the bloom-filter skip indexes (idx_element_text, idx_element_id) prune granules so the queries scale with selectivity instead of total click volume."
+         }
+       ]},
       {"v6.10.25", "2026-05-13T20:45:00Z",
        [
          %{

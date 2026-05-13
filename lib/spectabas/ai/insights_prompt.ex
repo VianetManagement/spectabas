@@ -457,7 +457,7 @@ defmodule Spectabas.AI.InsightsPrompt do
   defp query_click_elements(site_p) do
     case ClickHouse.query("""
          SELECT
-           JSONExtractString(properties, '_text') AS element_text,
+           element_text,
            JSONExtractString(properties, '_tag') AS element_tag,
            count() AS clicks,
            uniq(visitor_id) AS visitors

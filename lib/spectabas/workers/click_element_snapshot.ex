@@ -43,8 +43,8 @@ defmodule Spectabas.Workers.ClickElementSnapshot do
   defp snapshot_site(site) do
     sql = """
     SELECT
-      JSONExtractString(properties, '_text') AS element_text,
-      replaceRegexpOne(JSONExtractString(properties, '_id'), '-\\d+$', '') AS element_id,
+      element_text,
+      replaceRegexpOne(element_id, '-\\d+$', '') AS element_id,
       JSONExtractString(properties, '_tag') AS element_tag,
       any(JSONExtractString(properties, '_href')) AS element_href,
       any(JSONExtractString(properties, '_classes')) AS element_classes,

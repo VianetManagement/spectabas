@@ -233,7 +233,7 @@ defmodule Spectabas.Conversions.Detectors do
       AND event_name = '_click'
       AND ip_is_bot = 0
       AND timestamp >= #{ClickHouse.param(format_dt(since))}
-      AND JSONExtractString(properties, '_id') = #{ClickHouse.param(id)}
+      AND element_id = #{ClickHouse.param(id)}
     GROUP BY visitor_id
     LIMIT 5000
     SETTINGS max_execution_time = 30
@@ -251,7 +251,7 @@ defmodule Spectabas.Conversions.Detectors do
       AND event_name = '_click'
       AND ip_is_bot = 0
       AND timestamp >= #{ClickHouse.param(format_dt(since))}
-      AND JSONExtractString(properties, '_text') = #{ClickHouse.param(text)}
+      AND element_text = #{ClickHouse.param(text)}
     GROUP BY visitor_id
     LIMIT 5000
     SETTINGS max_execution_time = 30

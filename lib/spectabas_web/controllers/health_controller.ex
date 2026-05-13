@@ -2435,8 +2435,8 @@ defmodule SpectabasWeb.HealthController do
             {site_id, _} ->
               sql = """
               SELECT
-                JSONExtractString(properties, '_text') AS element_text,
-                replaceRegexpOne(JSONExtractString(properties, '_id'), '-\\d+$', '') AS element_id,
+                element_text,
+                replaceRegexpOne(element_id, '-\\d+$', '') AS element_id,
                 JSONExtractString(properties, '_tag') AS element_tag,
                 count() AS clicks,
                 uniq(visitor_id) AS visitors

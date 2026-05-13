@@ -3601,16 +3601,19 @@ defmodule Spectabas.Analytics do
     cond do
       String.starts_with?(selector, "#") ->
         id = String.slice(selector, 1..-1//1)
-        "#{base} AND JSONExtractString(properties, '_id') = #{ClickHouse.param(id)}"
+        # element_id/element_text are MATERIALIZED columns (v6.10.23) with
+        # bloom-filter skip indexes. Replaces the per-row JSON parsing that
+        # used to be the bottleneck on every click_element goal query.
+        "#{base} AND element_id = #{ClickHouse.param(id)}"
 
       String.starts_with?(selector, "text:") ->
         text = String.slice(selector, 5..-1//1)
 
         if String.contains?(text, "*") do
           pattern = text |> String.replace("*", "%")
-          "#{base} AND JSONExtractString(properties, '_text') LIKE #{ClickHouse.param(pattern)}"
+          "#{base} AND element_text LIKE #{ClickHouse.param(pattern)}"
         else
-          "#{base} AND JSONExtractString(properties, '_text') = #{ClickHouse.param(text)}"
+          "#{base} AND element_text = #{ClickHouse.param(text)}"
         end
 
       true ->
@@ -3997,11 +4000,14 @@ defmodule Spectabas.Analytics do
     with :ok <- authorize(site, user) do
       condition = click_element_condition(goal.element_selector)
 
+      # element_text + element_id are MATERIALIZED columns (v6.10.23) — use
+      # them directly. _tag / _classes / _href aren't materialized (lower
+      # filter value) so they still go through JSONExtractString.
       sql = """
       SELECT
         JSONExtractString(properties, '_tag') AS element_tag,
-        JSONExtractString(properties, '_text') AS element_text,
-        JSONExtractString(properties, '_id') AS element_id,
+        element_text,
+        element_id,
         JSONExtractString(properties, '_classes') AS element_classes,
         JSONExtractString(properties, '_href') AS element_href,
         groupUniqArray(10)(url_path) AS pages_clicked,
@@ -5358,8 +5364,8 @@ defmodule Spectabas.Analytics do
     with :ok <- authorize(site, user) do
       sql = """
       SELECT
-        JSONExtractString(properties, '_text') AS element_text,
-        replaceRegexpOne(JSONExtractString(properties, '_id'), '-\\d+$', '') AS element_id,
+        element_text,
+        replaceRegexpOne(element_id, '-\\d+$', '') AS element_id,
         JSONExtractString(properties, '_tag') AS element_tag,
         any(JSONExtractString(properties, '_href')) AS element_href,
         count() AS clicks,
@@ -5913,8 +5919,8 @@ defmodule Spectabas.Analytics do
     with :ok <- authorize(site, user) do
       sql = """
       SELECT
-        JSONExtractString(properties, '_text') AS element_text,
-        replaceRegexpOne(JSONExtractString(properties, '_id'), '-\\d+$', '') AS element_id,
+        element_text,
+        replaceRegexpOne(element_id, '-\\d+$', '') AS element_id,
         JSONExtractString(properties, '_tag') AS element_tag,
         any(JSONExtractString(properties, '_href')) AS element_href,
         count() AS clicks,
