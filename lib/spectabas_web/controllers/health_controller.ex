@@ -2252,6 +2252,51 @@ defmodule SpectabasWeb.HealthController do
               conn |> put_status(400) |> json(%{error: "site_id param required"})
           end
 
+        "goal_completions_probe" ->
+          # Runs Analytics.goal_completions_system inline and returns the raw
+          # result + elapsed_ms. Lets us see what the GoalStatsSnapshot worker
+          # actually gets back from CH — is it `{:ok, [zeros]}` (CH returned 0
+          # rows or our SQL is wrong) or `{:error, _}` (CH timeout / disconnect
+          # / syntax)?
+          case Integer.parse(params["site_id"] || "") do
+            {site_id, _} ->
+              site = Spectabas.Sites.get_site(site_id)
+              t0 = System.monotonic_time(:millisecond)
+              result = Spectabas.Analytics.goal_completions_system(site, :week)
+              elapsed = System.monotonic_time(:millisecond) - t0
+
+              shaped =
+                case result do
+                  {:ok, rows} ->
+                    %{
+                      ok: true,
+                      row_count: length(rows),
+                      first_5:
+                        Enum.take(rows, 5)
+                        |> Enum.map(fn r ->
+                          %{
+                            goal_id: r.goal_id,
+                            name: r[:name],
+                            completions: r.completions,
+                            unique_completers: r.unique_completers,
+                            conversion_rate: r.conversion_rate
+                          }
+                        end)
+                    }
+
+                  other ->
+                    %{ok: false, raw: inspect(other) |> String.slice(0, 1000)}
+                end
+
+              json(
+                conn,
+                Map.merge(shaped, %{site_id: site_id, elapsed_ms: elapsed})
+              )
+
+            _ ->
+              conn |> put_status(400) |> json(%{error: "site_id param required"})
+          end
+
         "funnel_summaries_probe" ->
           case Integer.parse(params["site_id"] || "") do
             {site_id, _} ->

@@ -65,6 +65,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.16", "2026-05-13T17:25:00Z",
+       [
+         %{
+           title: "Diag: goal_completions_probe to inspect goal_stats writes",
+           description:
+             "After v6.10.13 + v6.10.14 fixes deployed, the GoalStatsSnapshot worker still finishes in ~21s for site 7 and writes all zeros across 20 goals. That's faster than CH would take to time out, which suggests the queries are returning {:error, _} immediately (syntax / disconnect / quota) or {:ok, []} — and the worker's fallback path silently writes zeros either way. Added `/oban-admin?action=goal_completions_probe&site_id=N` that calls `Analytics.goal_completions_system/2` inline and returns the raw result tag + first 5 goal rows + elapsed_ms, so we can see what shape comes back instead of guessing."
+         }
+       ]},
       {"v6.10.15", "2026-05-13T17:20:00Z",
        [
          %{
