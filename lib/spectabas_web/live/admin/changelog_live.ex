@@ -65,6 +65,15 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.18", "2026-05-13T17:55:00Z",
+       [
+         %{
+           title:
+             "Fix: remaining `any()` on enrichment fields → `anyIf(...event_type='pageview')`",
+           description:
+             "Follow-up audit from v6.10.15. Three more user-facing call sites in analytics.ex were using unguarded `any(ip_*)` / `any(browser)` / etc. on grouped queries that mix pageview and custom-event rows, which since auto-click tracking shipped has caused empty values in dashboard panels: (1) `visitors_by_ip/2` — the 'other visitors from this IP' table on the visitor profile (5 fields); (2) `visitors_by_fingerprint/2` — the fingerprint-matched visitors table on the visitor profile (5 fields); (3) `visitor_log/4` — the main Visitor Log page table (8 fields). All converted to `anyIf(field, event_type = 'pageview')`. Three remaining `any()` sites in analytics.ex are intentionally left alone: `bot_ua_details/4` (filters to `ip_is_bot = 1` — bot rows that may not have pageviews, the filter could return empty), `visitor_locations_fast/3` (reads from `daily_geo_rollup` which is pre-filtered to pageviews at rollup time, has no event_type column), `page_countries/4` (implicitly safe via `ip_country != ''` since custom events store empty ip_country). One known remaining issue: `goal_recent_completers/4` for click-element goals — the query intentionally filters to `event_type = 'custom' AND event_name = '_click'`, so `any(device_type)` / `any(ip_country_name)` are reading empty rows. Fixing requires joining the visitor's pageview events to read enriched fields from there; deferred as a separate refactor."
+         }
+       ]},
       {"v6.10.17", "2026-05-13T17:40:00Z",
        [
          %{

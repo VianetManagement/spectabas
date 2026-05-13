@@ -4454,9 +4454,10 @@ defmodule Spectabas.Analytics do
       toTimezone(min(timestamp), #{tz}) AS first_seen,
       toTimezone(max(timestamp), #{tz}) AS last_seen,
       countIf(event_type = 'pageview') AS pageviews,
-      any(browser) AS browser,
-      any(os) AS os,
-      any(device_type) AS device_type
+      -- See visitor_profile: enrichment fields are empty on custom/duration events.
+      anyIf(browser, event_type = 'pageview') AS browser,
+      anyIf(os, event_type = 'pageview') AS os,
+      anyIf(device_type, event_type = 'pageview') AS device_type
     FROM events
     WHERE site_id = #{ClickHouse.param(site.id)}
       AND ip_address = #{ClickHouse.param(ip_address)}
@@ -4507,11 +4508,12 @@ defmodule Spectabas.Analytics do
       toTimezone(min(timestamp), #{tz}) AS first_seen,
       toTimezone(max(timestamp), #{tz}) AS last_seen,
       countIf(event_type = 'pageview') AS pageviews,
-      any(browser) AS browser,
-      any(os) AS os,
-      any(ip_address) AS ip_address,
-      any(ip_country) AS country,
-      any(ip_city) AS city
+      -- See visitor_profile: enrichment fields are empty on custom/duration events.
+      anyIf(browser, event_type = 'pageview') AS browser,
+      anyIf(os, event_type = 'pageview') AS os,
+      anyIf(ip_address, event_type = 'pageview') AS ip_address,
+      anyIf(ip_country, event_type = 'pageview') AS country,
+      anyIf(ip_city, event_type = 'pageview') AS city
     FROM events
     WHERE site_id = #{ClickHouse.param(site.id)}
       AND browser_fingerprint = #{ClickHouse.param(fingerprint)}
@@ -4952,14 +4954,15 @@ defmodule Spectabas.Analytics do
         maxIf(duration_s, event_type = 'duration') AS duration,
         argMinIf(url_path, timestamp, event_type = 'pageview') AS entry_page,
         argMaxIf(url_path, timestamp, event_type = 'pageview') AS exit_page,
-        any(ip_country) AS country,
-        any(ip_region_name) AS region,
-        any(ip_city) AS city,
-        any(visitor_intent) AS intent,
-        any(browser) AS browser,
-        any(os) AS os,
-        any(device_type) AS device_type,
-        any(referrer_domain) AS referrer
+        -- See visitor_profile: enrichment fields are empty on custom/duration events.
+        anyIf(ip_country, event_type = 'pageview') AS country,
+        anyIf(ip_region_name, event_type = 'pageview') AS region,
+        anyIf(ip_city, event_type = 'pageview') AS city,
+        anyIf(visitor_intent, event_type = 'pageview') AS intent,
+        anyIf(browser, event_type = 'pageview') AS browser,
+        anyIf(os, event_type = 'pageview') AS os,
+        anyIf(device_type, event_type = 'pageview') AS device_type,
+        anyIf(referrer_domain, event_type = 'pageview') AS referrer
       FROM events
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
