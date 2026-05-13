@@ -65,6 +65,15 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.21", "2026-05-13T18:55:00Z",
+       [
+         %{
+           title:
+             "Fix: search_keywords snapshot needs 180s ceiling (same pattern as goal_completions)",
+           description:
+             "v6.10.20 introduced the search_keywords kind but didn't pass `receive_timeout` to its 11 CH queries — they all ran at ClickHouse.query's default 30s HTTP timeout. On puppies.com the search_console table is 6M+ rows and several of these queries use `FROM search_console FINAL`, which forces dedup at query time. Multiple queries exceeded 30s, returned `{:error, _}`, and the snapshot_kind try/rescue silently dropped them — so the kind never got written even though the worker was running with the new code. Spiked CH CPU to 100% while the user was watching. Added a `ch_query/1` private helper in `Spectabas.SearchKeywords` that appends `SETTINGS max_execution_time = 180` and passes `receive_timeout: 200_000` (matching `do_funnel_stats` and `do_goal_completions`). All 11 query call sites now route through it."
+         }
+       ]},
       {"v6.10.20", "2026-05-13T18:35:00Z",
        [
          %{

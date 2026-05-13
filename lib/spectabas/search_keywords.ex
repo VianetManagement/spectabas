@@ -51,7 +51,7 @@ defmodule Spectabas.SearchKeywords do
       #{source_filter}
     """
 
-    case ClickHouse.query(sql) do
+    case ch_query(sql) do
       {:ok, [row | _]} -> row
       _ -> %{}
     end
@@ -78,7 +78,7 @@ defmodule Spectabas.SearchKeywords do
     LIMIT 100
     """
 
-    case ClickHouse.query(sql) do
+    case ch_query(sql) do
       {:ok, rows} -> rows
       _ -> []
     end
@@ -104,7 +104,7 @@ defmodule Spectabas.SearchKeywords do
     LIMIT 50
     """
 
-    case ClickHouse.query(sql) do
+    case ch_query(sql) do
       {:ok, rows} -> rows
       _ -> []
     end
@@ -138,7 +138,7 @@ defmodule Spectabas.SearchKeywords do
     LIMIT 20
     """
 
-    case ClickHouse.query(sql) do
+    case ch_query(sql) do
       {:ok, rows} -> rows
       _ -> []
     end
@@ -173,7 +173,7 @@ defmodule Spectabas.SearchKeywords do
     LIMIT 20
     """
 
-    case ClickHouse.query(sql) do
+    case ch_query(sql) do
       {:ok, rows} -> rows
       _ -> []
     end
@@ -198,7 +198,7 @@ defmodule Spectabas.SearchKeywords do
     LIMIT 15
     """
 
-    case ClickHouse.query(sql) do
+    case ch_query(sql) do
       {:ok, rows} -> rows
       _ -> []
     end
@@ -223,7 +223,7 @@ defmodule Spectabas.SearchKeywords do
     LIMIT 15
     """
 
-    case ClickHouse.query(sql) do
+    case ch_query(sql) do
       {:ok, rows} -> rows
       _ -> []
     end
@@ -247,7 +247,7 @@ defmodule Spectabas.SearchKeywords do
     )
     """
 
-    case ClickHouse.query(sql) do
+    case ch_query(sql) do
       {:ok, [row | _]} -> row
       _ -> %{}
     end
@@ -281,7 +281,7 @@ defmodule Spectabas.SearchKeywords do
     ORDER BY date ASC
     """
 
-    case ClickHouse.query(sql) do
+    case ch_query(sql) do
       {:ok, rows} ->
         rows
 
@@ -320,7 +320,7 @@ defmodule Spectabas.SearchKeywords do
     ORDER BY date ASC
     """
 
-    case ClickHouse.query(sql) do
+    case ch_query(sql) do
       {:ok, rows} ->
         Enum.group_by(rows, & &1["query"], &{&1["bucket"], to_num(&1["total_clicks"])})
 
@@ -366,7 +366,7 @@ defmodule Spectabas.SearchKeywords do
     LIMIT 15
     """
 
-    case ClickHouse.query(sql) do
+    case ch_query(sql) do
       {:ok, rows} ->
         Enum.map(rows, fn r ->
           Map.merge(r, %{
@@ -388,4 +388,15 @@ defmodule Spectabas.SearchKeywords do
   defp ensure_list(nil), do: []
   defp ensure_list(l) when is_list(l), do: l
   defp ensure_list(_), do: []
+
+  # Every query in this module either FINALs over `search_console` (heavy
+  # dedup at query time) or scans 6M+ rows for daily_trends/sparklines.
+  # The ClickHouse module's default 30s HTTP receive_timeout is far too
+  # short — on puppies.com these silently return {:error, _} and the
+  # snapshot kind never gets written. Match the established 200_000ms
+  # pattern used by do_funnel_stats / do_goal_completions, with a 180s
+  # SQL ceiling on top to bound CPU per query.
+  defp ch_query(sql) do
+    ClickHouse.query(sql <> "\nSETTINGS max_execution_time = 180", receive_timeout: 200_000)
+  end
 end
