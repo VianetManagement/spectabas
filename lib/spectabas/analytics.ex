@@ -2075,17 +2075,18 @@ defmodule Spectabas.Analytics do
       countIf(event_type = 'pageview') AS pageviews,
       toTimezone(min(timestamp), #{tz}) AS session_start,
       toTimezone(max(timestamp), #{tz}) AS last_activity,
-      any(ip_country) AS country,
-      any(ip_region_name) AS region,
-      any(ip_city) AS city,
-      any(browser) AS browser,
-      any(os) AS os,
-      any(device_type) AS device_type,
-      any(referrer_domain) AS referrer,
-      any(visitor_intent) AS intent,
+      -- Enrichment fields only on pageview rows — see visitor_profile note.
+      anyIf(ip_country, event_type = 'pageview') AS country,
+      anyIf(ip_region_name, event_type = 'pageview') AS region,
+      anyIf(ip_city, event_type = 'pageview') AS city,
+      anyIf(browser, event_type = 'pageview') AS browser,
+      anyIf(os, event_type = 'pageview') AS os,
+      anyIf(device_type, event_type = 'pageview') AS device_type,
+      anyIf(referrer_domain, event_type = 'pageview') AS referrer,
+      anyIf(visitor_intent, event_type = 'pageview') AS intent,
       anyIf(click_id_type, click_id_type != '') AS click_id_type,
-      any(ip_is_vpn) AS is_vpn,
-      any(ip_vpn_provider) AS vpn_provider
+      anyIf(ip_is_vpn, event_type = 'pageview') AS is_vpn,
+      anyIf(ip_vpn_provider, event_type = 'pageview') AS vpn_provider
     FROM events
     WHERE site_id = #{ClickHouse.param(site.id)}
       AND timestamp >= now() - INTERVAL 5 MINUTE
@@ -4363,25 +4364,31 @@ defmodule Spectabas.Analytics do
       argMinIf(url_path, timestamp, event_type = 'pageview') AS first_page,
       argMaxIf(url_path, timestamp, event_type = 'pageview') AS last_page,
       argMinIf(referrer_domain, timestamp, referrer_domain != '') AS original_referrer,
-      any(ip_country) AS country,
-      any(ip_country_name) AS country_name,
-      any(ip_region_name) AS region,
-      any(ip_city) AS city,
-      any(ip_timezone) AS timezone,
-      any(browser) AS browser,
-      any(browser_version) AS browser_version,
-      any(os) AS os,
-      any(os_version) AS os_version,
-      any(device_type) AS device_type,
-      any(screen_width) AS screen_width,
-      any(screen_height) AS screen_height,
-      any(ip_org) AS org,
-      any(ip_is_datacenter) AS is_datacenter,
-      any(ip_is_vpn) AS is_vpn,
-      any(ip_is_bot) AS is_bot,
-      any(ip_vpn_provider) AS vpn_provider,
-      any(user_agent) AS user_agent,
-      any(browser_fingerprint) AS browser_fingerprint,
+      -- Enrichment fields (ip_*, browser, os, device_type, etc.) are only
+      -- populated on the full ingest path (pageviews + ecommerce). Custom
+      -- and duration events (auto-click `_click`, `_outbound`, `_rum`, etc.)
+      -- skip enrichment and store empty strings / zeros. Filter aggregates
+      -- to event_type = 'pageview' so we don't pick an empty value off a
+      -- custom-event row.
+      anyIf(ip_country, event_type = 'pageview') AS country,
+      anyIf(ip_country_name, event_type = 'pageview') AS country_name,
+      anyIf(ip_region_name, event_type = 'pageview') AS region,
+      anyIf(ip_city, event_type = 'pageview') AS city,
+      anyIf(ip_timezone, event_type = 'pageview') AS timezone,
+      anyIf(browser, event_type = 'pageview') AS browser,
+      anyIf(browser_version, event_type = 'pageview') AS browser_version,
+      anyIf(os, event_type = 'pageview') AS os,
+      anyIf(os_version, event_type = 'pageview') AS os_version,
+      anyIf(device_type, event_type = 'pageview') AS device_type,
+      anyIf(screen_width, event_type = 'pageview') AS screen_width,
+      anyIf(screen_height, event_type = 'pageview') AS screen_height,
+      anyIf(ip_org, event_type = 'pageview') AS org,
+      anyIf(ip_is_datacenter, event_type = 'pageview') AS is_datacenter,
+      anyIf(ip_is_vpn, event_type = 'pageview') AS is_vpn,
+      anyIf(ip_is_bot, event_type = 'pageview') AS is_bot,
+      anyIf(ip_vpn_provider, event_type = 'pageview') AS vpn_provider,
+      anyIf(user_agent, event_type = 'pageview') AS user_agent,
+      anyIf(browser_fingerprint, event_type = 'pageview') AS browser_fingerprint,
       groupUniqArray(10)(url_path) AS top_pages,
       groupUniqArray(5)(referrer_domain) AS referrers,
       groupUniqArrayIf(5)(utm_source, utm_source != '') AS utm_sources,
@@ -4416,11 +4423,12 @@ defmodule Spectabas.Analytics do
       toTimezone(min(timestamp), #{tz}) AS first_seen,
       toTimezone(max(timestamp), #{tz}) AS last_seen,
       count() AS events,
-      any(ip_country) AS country,
-      any(ip_city) AS city,
-      any(ip_org) AS org,
-      any(ip_is_datacenter) AS is_datacenter,
-      any(ip_is_vpn) AS is_vpn
+      -- Enrichment fields only on pageview rows — see visitor_profile note.
+      anyIf(ip_country, event_type = 'pageview') AS country,
+      anyIf(ip_city, event_type = 'pageview') AS city,
+      anyIf(ip_org, event_type = 'pageview') AS org,
+      anyIf(ip_is_datacenter, event_type = 'pageview') AS is_datacenter,
+      anyIf(ip_is_vpn, event_type = 'pageview') AS is_vpn
     FROM events
     WHERE site_id = #{ClickHouse.param(site.id)}
       AND visitor_id = #{ClickHouse.param(visitor_id)}
@@ -4521,6 +4529,12 @@ defmodule Spectabas.Analytics do
   Get enriched IP data from the most recent event with this IP.
   """
   def ip_details(%Site{} = site, ip_address) when is_binary(ip_address) and ip_address != "" do
+    # The lightweight ingest path skips GeoIP/ASN enrichment on custom and
+    # duration events (e.g. auto-tracked `_click`, `_outbound`, `_rum`), so
+    # those rows have empty ip_country / ip_city / ip_asn fields. Without
+    # the event_type filter, ORDER BY timestamp DESC returns the most recent
+    # custom event for active visitors and the panel renders blanks. Filter
+    # to pageviews so we always read from an enriched row.
     sql = """
     SELECT
       ip_address, ip_country, ip_country_name, ip_continent, ip_continent_name,
@@ -4531,6 +4545,7 @@ defmodule Spectabas.Analytics do
     FROM events
     WHERE site_id = #{ClickHouse.param(site.id)}
       AND ip_address = #{ClickHouse.param(ip_address)}
+      AND event_type = 'pageview'
     ORDER BY timestamp DESC
     LIMIT 1
     """

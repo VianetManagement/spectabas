@@ -65,6 +65,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.15", "2026-05-13T17:20:00Z",
+       [
+         %{
+           title: "Fix: empty location / network data on visitor profiles + realtime",
+           description:
+             "After auto-click tracking shipped, every active visitor's most recent event in ClickHouse is usually a custom `_click` row — and the fast ingest path skips GeoIP / ASN / UA enrichment on custom and duration events, so those rows have empty ip_country / ip_city / ip_asn / browser / device_type / etc. The dashboard panels rendering these fields used `any(ip_country)` / `ORDER BY timestamp DESC LIMIT 1` style queries, which would return an unenriched custom-event row and the panel showed blanks. Fixed in `Analytics.ip_details/2` (now filters `event_type = 'pageview'` before picking the latest row), `Analytics.visitor_profile/2` and `Analytics.visitor_ips/2` (19 + 5 fields converted from `any(...)` to `anyIf(..., event_type = 'pageview')`), and `Analytics.realtime_visitors_grouped/1` (the Realtime page — 11 fields converted). Broadened the CLAUDE.md query-rules note from 'scraper queries' to a project-wide rule so the trap doesn't repeat. Several lower-traffic queries in analytics.ex still use unguarded `any()` on enrichment fields (sessions, ip aggregation, goal_recent_completers); flagged for a follow-up audit but unlikely to be user-visible right now."
+         }
+       ]},
       {"v6.10.14", "2026-05-13T17:15:00Z",
        [
          %{
