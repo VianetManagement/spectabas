@@ -605,7 +605,8 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
       {:entry_pages, [],
        fn ->
          timed("entry_pages", site.id, days_in_range, fn ->
-           safe_query(fn -> Analytics.entry_pages(site, user, date_range) end) |> Enum.take(5)
+           safe_query(fn -> Analytics.entry_pages_fast(site, user, date_range) end)
+           |> Enum.take(5)
          end)
        end},
       {:locations, [],

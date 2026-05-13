@@ -45,6 +45,12 @@ defmodule Spectabas.SearchKeywords do
       if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS avg_ctr,
       round(avg(position), 1) AS avg_position,
       uniqExact(query) AS unique_queries
+    -- FINAL kept here: the stats card shows exact aggregate numbers and
+    -- needs query-time dedup. Dropped on all other SearchKeywords queries
+    -- (top_queries / top_pages / ranking_changes / opportunity_queue /
+    -- new_keywords / lost_keywords / pos_distribution / cannibalization)
+    -- since top-N + comparison queries tolerate the few-minute lag that
+    -- comes from reading un-merged parts.
     FROM search_console FINAL
     WHERE site_id = #{site_p}
       AND date >= today() - #{days}
@@ -68,7 +74,7 @@ defmodule Spectabas.SearchKeywords do
       sum(impressions) AS total_impressions,
       if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
       round(avg(position), 1) AS avg_pos
-    FROM search_console FINAL
+    FROM search_console
     WHERE site_id = #{site_p}
       AND date >= today() - #{days}
       AND query != ''
@@ -95,7 +101,7 @@ defmodule Spectabas.SearchKeywords do
       sum(impressions) AS total_impressions,
       if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
       round(avg(position), 1) AS avg_pos
-    FROM search_console FINAL
+    FROM search_console
     WHERE site_id = #{site_p}
       AND date >= today() - #{days}
       #{source_filter}
@@ -123,13 +129,13 @@ defmodule Spectabas.SearchKeywords do
       round(prev.pos - cur.pos, 1) AS pos_change
     FROM (
       SELECT query, sum(clicks) AS clicks, round(avg(position), 1) AS pos
-      FROM search_console FINAL
+      FROM search_console
       WHERE site_id = #{site_p} AND date >= today() - 7 #{source_filter}
       GROUP BY query HAVING sum(impressions) >= 5
     ) cur
     LEFT JOIN (
       SELECT query, round(avg(position), 1) AS pos
-      FROM search_console FINAL
+      FROM search_console
       WHERE site_id = #{site_p} AND date >= today() - 14 AND date < today() - 7 #{source_filter}
       GROUP BY query HAVING sum(impressions) >= 5
     ) prev ON cur.query = prev.query
@@ -162,7 +168,7 @@ defmodule Spectabas.SearchKeywords do
       toUInt32(greatest(0, round(
         sum(impressions) * (#{@target_ctr_top3} - if(sum(impressions) > 0, sum(clicks) / sum(impressions), 0))
       ))) AS projected_gain
-    FROM search_console FINAL
+    FROM search_console
     WHERE site_id = #{site_p}
       AND date >= today() - #{days}
       AND query != ''
@@ -186,10 +192,10 @@ defmodule Spectabas.SearchKeywords do
     sql = """
     SELECT query, sum(clicks) AS clicks, sum(impressions) AS impressions,
       round(avg(position), 1) AS avg_pos
-    FROM search_console FINAL
+    FROM search_console
     WHERE site_id = #{site_p} AND date >= today() - 7 #{source_filter}
       AND query NOT IN (
-        SELECT query FROM search_console FINAL
+        SELECT query FROM search_console
         WHERE site_id = #{site_p} AND date >= today() - 14 AND date < today() - 7 #{source_filter}
       )
     GROUP BY query
@@ -211,10 +217,10 @@ defmodule Spectabas.SearchKeywords do
     sql = """
     SELECT query, sum(clicks) AS clicks, sum(impressions) AS impressions,
       round(avg(position), 1) AS avg_pos
-    FROM search_console FINAL
+    FROM search_console
     WHERE site_id = #{site_p} AND date >= today() - 14 AND date < today() - 7 #{source_filter}
       AND query NOT IN (
-        SELECT query FROM search_console FINAL
+        SELECT query FROM search_console
         WHERE site_id = #{site_p} AND date >= today() - 7 #{source_filter}
       )
     GROUP BY query
@@ -241,7 +247,7 @@ defmodule Spectabas.SearchKeywords do
       countIf(avg_pos > 20) AS beyond20
     FROM (
       SELECT query, avg(position) AS avg_pos
-      FROM search_console FINAL
+      FROM search_console
       WHERE site_id = #{site_p} AND date >= today() - #{days} #{source_filter}
       GROUP BY query HAVING sum(impressions) >= 1
     )
@@ -352,7 +358,7 @@ defmodule Spectabas.SearchKeywords do
         sum(clicks) AS clicks,
         sum(impressions) AS imps,
         avg(position) AS pos
-      FROM search_console FINAL
+      FROM search_console
       WHERE site_id = #{site_p}
         AND date >= today() - #{days}
         AND query != ''

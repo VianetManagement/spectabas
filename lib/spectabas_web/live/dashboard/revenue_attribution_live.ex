@@ -1,7 +1,7 @@
 defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
   use SpectabasWeb, :live_view
 
-  alias Spectabas.{Accounts, Sites, Analytics}
+  alias Spectabas.{Accounts, Sites, Analytics, DashboardSnapshots}
   import SpectabasWeb.Dashboard.SidebarComponent
   import SpectabasWeb.Dashboard.DateHelpers
   import Spectabas.TypeHelpers
@@ -48,6 +48,7 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
         |> assign(:total_ad_impressions, 0)
         |> assign(:total_roas, nil)
         |> assign(:has_ad_data, false)
+        |> assign(:snapshot_refreshed_at, nil)
 
       if connected?(socket), do: send(self(), :load_data)
       {:ok, socket}
@@ -95,45 +96,9 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
 
   defp load_data(socket) do
     %{site: site, user: user, date_range: range, group_by: group, touch: touch} = socket.assigns
-    period = range_to_period(range)
 
-    rows =
-      case Analytics.revenue_by_source(site, user, period, group_by: group, touch: touch) do
-        {:ok, data} -> data
-        _ -> []
-      end
-
-    channels =
-      case Analytics.revenue_by_channel(site, user, period) do
-        {:ok, data} -> data
-        _ -> []
-      end
-
-    # Ad spend data
-    ad_campaigns =
-      case Analytics.ad_spend_by_campaign(site, user, period) do
-        {:ok, data} -> data
-        _ -> []
-      end
-
-    ad_platforms =
-      case Analytics.ad_spend_by_platform(site, user, period) do
-        {:ok, data} -> data
-        _ -> []
-      end
-
-    ad_totals =
-      case Analytics.ad_spend_totals(site, user, period) do
-        {:ok, [row | _]} -> row
-        _ -> %{}
-      end
-
-    # Revenue attributed via click IDs (gclid/msclkid/fbclid)
-    ad_revenue =
-      case Analytics.ad_revenue_by_platform(site, user, period, touch: touch) do
-        {:ok, data} -> data
-        _ -> []
-      end
+    {rows, channels, ad_campaigns, ad_platforms, ad_totals, ad_revenue, refreshed_at} =
+      load_widgets(site, user, range, group, touch)
 
     # Build spend lookups keyed by both campaign_name and campaign_id
     # so we match whether utm_campaign contains a name or an ID
@@ -235,7 +200,73 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
     |> assign(:total_ad_impressions, to_num(ad_totals["total_impressions"]))
     |> assign(:total_roas, total_roas)
     |> assign(:has_ad_data, has_ad_data)
+    |> assign(:snapshot_refreshed_at, refreshed_at)
     |> sort_rows()
+  end
+
+  # Default config (30d / group_by=source / touch=last) reads from the
+  # hourly Postgres snapshot. Any other group_by tab, the first-touch
+  # toggle, or a different range falls through to a live CH fan-out.
+  defp load_widgets(site, user, "30d", "source", "last") do
+    case DashboardSnapshots.fetch(site, "revenue_attribution") do
+      {data, refreshed_at} ->
+        {
+          Map.get(data, "rows", []),
+          Map.get(data, "channels", []),
+          Map.get(data, "ad_campaigns", []),
+          Map.get(data, "ad_platforms", []),
+          Map.get(data, "ad_totals", %{}),
+          Map.get(data, "ad_revenue", []),
+          refreshed_at
+        }
+
+      nil ->
+        live_load_widgets(site, user, range_to_period("30d"), "source", "last")
+    end
+  end
+
+  defp load_widgets(site, user, range, group, touch) do
+    live_load_widgets(site, user, range_to_period(range), group, touch)
+  end
+
+  defp live_load_widgets(site, user, period, group, touch) do
+    rows =
+      case Analytics.revenue_by_source(site, user, period, group_by: group, touch: touch) do
+        {:ok, data} -> data
+        _ -> []
+      end
+
+    channels =
+      case Analytics.revenue_by_channel(site, user, period) do
+        {:ok, data} -> data
+        _ -> []
+      end
+
+    ad_campaigns =
+      case Analytics.ad_spend_by_campaign(site, user, period) do
+        {:ok, data} -> data
+        _ -> []
+      end
+
+    ad_platforms =
+      case Analytics.ad_spend_by_platform(site, user, period) do
+        {:ok, data} -> data
+        _ -> []
+      end
+
+    ad_totals =
+      case Analytics.ad_spend_totals(site, user, period) do
+        {:ok, [row | _]} -> row
+        _ -> %{}
+      end
+
+    ad_revenue =
+      case Analytics.ad_revenue_by_platform(site, user, period, touch: touch) do
+        {:ok, data} -> data
+        _ -> []
+      end
+
+    {rows, channels, ad_campaigns, ad_platforms, ad_totals, ad_revenue, nil}
   end
 
   defp sort_rows(socket) do
@@ -286,6 +317,9 @@ defmodule SpectabasWeb.Dashboard.RevenueAttributionLive do
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
           <h1 class="text-2xl font-bold text-gray-900">Revenue Attribution</h1>
+          <p :if={@snapshot_refreshed_at} class="text-xs text-gray-400 mt-1">
+            Snapshot · last update {DashboardSnapshots.refreshed_label(@snapshot_refreshed_at)}
+          </p>
           <div class="flex gap-2">
             <%!-- First/Last Touch Toggle --%>
             <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">

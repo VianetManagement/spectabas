@@ -65,6 +65,15 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.22", "2026-05-13T19:25:00Z",
+       [
+         %{
+           title:
+             "Snapshot Revenue Attribution + MRR; drop FINAL from non-stats SearchKeywords queries",
+           description:
+             "Tier 1 + Tier 2 wins from the efficiency review. (1) **Revenue Attribution** now snapshots at the default config (30d / group_by=source / touch=last). The page was firing 6 CH queries on every mount, including `revenue_by_source` and `ad_revenue_by_platform` which both do argMin/argMax(channel_expr, timestamp) per visitor — the heaviest attribution pattern in the codebase. Other UTM tabs (medium / campaign / term / content) and the first-touch toggle fall through to live. (2) **MRR & Subscriptions** queries extracted from inline LiveView SQL into a new `Spectabas.MRR` context module (same pattern as `Spectabas.SearchKeywords`). 8 queries → 1 PG read on every mount. No user filters on this page, so the snapshot path is unconditional with live fallback only when the row doesn't exist yet. All MRR queries also get the 200_000ms / 180s ceiling via a `ch_query/1` helper. (3) **Drop FINAL from 8 of 11 SearchKeywords queries** (top_queries, top_pages, ranking_changes, opportunity_queue, new_keywords, lost_keywords, pos_distribution, cannibalization). FINAL kept only on query_stats which feeds the exact-numbers stats card. Top-N and week-over-week comparison queries tolerate the few-minute lag from reading un-merged parts; should roughly halve the search_keywords snapshot's CH cost. (4) `site_live.ex` overview now calls `entry_pages_fast` instead of the slow `entry_pages` — the fast variant already existed, just wasn't wired up."
+         }
+       ]},
       {"v6.10.21", "2026-05-13T18:55:00Z",
        [
          %{

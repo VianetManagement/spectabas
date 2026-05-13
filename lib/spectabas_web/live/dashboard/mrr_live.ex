@@ -1,7 +1,7 @@
 defmodule SpectabasWeb.Dashboard.MrrLive do
   use SpectabasWeb, :live_view
 
-  alias Spectabas.{Accounts, Sites, ClickHouse}
+  alias Spectabas.{Accounts, Sites, MRR, DashboardSnapshots}
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers
 
@@ -28,6 +28,7 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
         |> assign(:renewals_by_month, [])
         |> assign(:has_data, false)
         |> assign(:has_subs, false)
+        |> assign(:snapshot_refreshed_at, nil)
         |> assign(:loading, true)
 
       if connected?(socket) do
@@ -45,183 +46,9 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
 
   defp load_data(socket) do
     site = socket.assigns.site
-    site_p = ClickHouse.param(site.id)
 
-    # Revenue stats from all ecommerce_events (charges from Stripe, Braintree, API)
-    revenue_sql = """
-    SELECT
-      sum(revenue) - sum(refund_amount) AS net_revenue,
-      sum(revenue) AS gross_revenue,
-      sum(refund_amount) AS total_refunds,
-      countDistinct(order_id) AS total_orders,
-      round(avg(revenue), 2) AS avg_order
-    FROM ecommerce_events
-    WHERE site_id = #{site_p}
-      #{Spectabas.Analytics.ecommerce_source_filter(site)}
-    """
-
-    revenue_stats =
-      case ClickHouse.query(revenue_sql) do
-        {:ok, [row | _]} -> row
-        _ -> %{}
-      end
-
-    # Revenue by month (all time, in site timezone)
-    tz_p = ClickHouse.param(site.timezone || "UTC")
-
-    monthly_sql = """
-    SELECT
-      toStartOfMonth(toTimezone(timestamp, #{tz_p})) AS month,
-      sum(revenue) - sum(refund_amount) AS net_revenue,
-      countDistinct(order_id) AS orders
-    FROM ecommerce_events
-    WHERE site_id = #{site_p}
-      #{Spectabas.Analytics.ecommerce_source_filter(site)}
-    GROUP BY month
-    ORDER BY month ASC
-    """
-
-    monthly_revenue =
-      case ClickHouse.query(monthly_sql) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
-
-    # MRR from latest subscription snapshots
-    # Stripe only counts 'active' subscriptions in MRR — not trialing or past_due
-    mrr_sql = """
-    SELECT
-      sumIf(mrr_amount, status = 'active') AS total_mrr,
-      countIf(status = 'active') AS active_subs,
-      countIf(status = 'canceled') AS canceled_subs,
-      countIf(status = 'past_due') AS past_due_subs,
-      countIf(status = 'trialing') AS trialing_subs,
-      if(countIf(status = 'active') > 0,
-        round(sumIf(mrr_amount, status = 'active') / countIf(status = 'active'), 2),
-        0) AS avg_mrr_per_sub,
-      count() AS total_subs
-    FROM subscription_events FINAL
-    WHERE site_id = #{site_p}
-      AND snapshot_date = (SELECT max(snapshot_date) FROM subscription_events FINAL WHERE site_id = #{site_p})
-    """
-
-    mrr_stats =
-      case ClickHouse.query(mrr_sql) do
-        {:ok, [row | _]} -> row
-        _ -> %{}
-      end
-
-    # MRR trend — only active subscriptions to match Stripe
-    trend_sql = """
-    SELECT
-      snapshot_date AS date,
-      sum(mrr_amount) AS mrr,
-      count() AS subs
-    FROM subscription_events FINAL
-    WHERE site_id = #{site_p}
-      AND snapshot_date >= today() - 30
-      AND status = 'active'
-    GROUP BY snapshot_date
-    ORDER BY snapshot_date ASC
-    """
-
-    mrr_trend =
-      case ClickHouse.query(trend_sql) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
-
-    # Plan breakdown
-    plan_sql = """
-    SELECT plan_name, plan_interval, count() AS sub_count, sum(mrr_amount) AS plan_mrr
-    FROM subscription_events FINAL
-    WHERE site_id = #{site_p}
-      AND snapshot_date = (SELECT max(snapshot_date) FROM subscription_events FINAL WHERE site_id = #{site_p})
-      AND status = 'active'
-    GROUP BY plan_name, plan_interval
-    ORDER BY plan_mrr DESC
-    """
-
-    plans =
-      case ClickHouse.query(plan_sql) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
-
-    # All subscriptions
-    subs_sql = """
-    SELECT subscription_id, customer_email, plan_name, plan_interval,
-      mrr_amount, currency, status, started_at, canceled_at, current_period_end
-    FROM subscription_events FINAL
-    WHERE site_id = #{site_p}
-      AND snapshot_date = (SELECT max(snapshot_date) FROM subscription_events FINAL WHERE site_id = #{site_p})
-    ORDER BY mrr_amount DESC
-    LIMIT 100
-    """
-
-    subscriptions =
-      case ClickHouse.query(subs_sql) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
-
-    # Recent cancellations
-    churn_sql = """
-    SELECT subscription_id, customer_email, plan_name, mrr_amount, currency, canceled_at
-    FROM subscription_events FINAL
-    WHERE site_id = #{site_p}
-      AND status = 'canceled'
-      AND canceled_at >= now() - INTERVAL 30 DAY
-      AND canceled_at > toDateTime(0)
-    ORDER BY canceled_at DESC
-    LIMIT 20
-    """
-
-    recent_churn =
-      case ClickHouse.query(churn_sql) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
-
-    # Upcoming renewals — actual billing amounts grouped by renewal month
-    renewals_sql = """
-    SELECT
-      toStartOfMonth(current_period_end) AS renewal_month,
-      plan_interval,
-      count() AS sub_count,
-      sum(if(plan_interval = 'year', mrr_amount * 12, mrr_amount)) AS billing_amount,
-      sum(mrr_amount) AS mrr_contribution
-    FROM subscription_events FINAL
-    WHERE site_id = #{site_p}
-      AND snapshot_date = (SELECT max(snapshot_date) FROM subscription_events FINAL WHERE site_id = #{site_p})
-      AND status IN ('active', 'past_due', 'trialing')
-      AND current_period_end > now()
-      AND current_period_end > toDateTime(0)
-    GROUP BY renewal_month, plan_interval
-    ORDER BY renewal_month ASC
-    LIMIT 24
-    """
-
-    upcoming_renewals =
-      case ClickHouse.query(renewals_sql) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
-
-    # Aggregate renewals by month (combine monthly + annual into one row per month)
-    renewals_by_month =
-      upcoming_renewals
-      |> Enum.group_by(& &1["renewal_month"])
-      |> Enum.map(fn {month, rows} ->
-        %{
-          "month" => month,
-          "sub_count" => rows |> Enum.map(&to_num(&1["sub_count"])) |> Enum.sum(),
-          "billing_amount" => rows |> Enum.map(&to_float(&1["billing_amount"])) |> Enum.sum(),
-          "mrr_at_risk" => rows |> Enum.map(&to_float(&1["mrr_contribution"])) |> Enum.sum(),
-          "has_annual" => Enum.any?(rows, &(&1["plan_interval"] == "year"))
-        }
-      end)
-      |> Enum.sort_by(& &1["month"])
+    {revenue_stats, monthly_revenue, mrr_stats, mrr_trend, plans, subscriptions, recent_churn,
+     renewals_by_month, refreshed_at} = load_widgets(site)
 
     has_revenue = to_float(revenue_stats["gross_revenue"] || "0") > 0
     has_subs = to_num(mrr_stats["total_subs"] || "0") > 0
@@ -237,6 +64,45 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
     |> assign(:renewals_by_month, renewals_by_month)
     |> assign(:has_data, has_revenue or has_subs)
     |> assign(:has_subs, has_subs)
+    |> assign(:snapshot_refreshed_at, refreshed_at)
+  end
+
+  # MRR has no user-selectable filters — there's only one config to
+  # snapshot. Read from PG on every mount; the natural hourly cron
+  # keeps it fresh. Falls back to live CH only when the snapshot
+  # row doesn't exist yet (new site / first deploy).
+  defp load_widgets(site) do
+    case DashboardSnapshots.fetch(site, "mrr") do
+      {data, refreshed_at} ->
+        {
+          Map.get(data, "revenue_stats", %{}),
+          Map.get(data, "monthly_revenue", []),
+          Map.get(data, "mrr_stats", %{}),
+          Map.get(data, "mrr_trend", []),
+          Map.get(data, "plans", []),
+          Map.get(data, "subscriptions", []),
+          Map.get(data, "recent_churn", []),
+          Map.get(data, "renewals_by_month", []),
+          refreshed_at
+        }
+
+      nil ->
+        live_load_widgets(site)
+    end
+  end
+
+  defp live_load_widgets(site) do
+    {
+      MRR.revenue_stats(site),
+      MRR.monthly_revenue(site),
+      MRR.mrr_stats(site),
+      MRR.mrr_trend(site),
+      MRR.plans(site),
+      MRR.subscriptions(site),
+      MRR.recent_churn(site),
+      MRR.renewals_by_month(site),
+      nil
+    }
   end
 
   @impl true
@@ -248,6 +114,9 @@ defmodule SpectabasWeb.Dashboard.MrrLive do
           <div>
             <h1 class="text-2xl font-bold text-gray-900">Revenue & Subscriptions</h1>
             <p class="text-sm text-gray-500 mt-1">All charges, refunds, and recurring revenue</p>
+            <p :if={@snapshot_refreshed_at} class="text-xs text-gray-400 mt-1">
+              Snapshot · last update {DashboardSnapshots.refreshed_label(@snapshot_refreshed_at)}
+            </p>
           </div>
           <.link
             navigate={~p"/dashboard/sites/#{@site.id}/settings"}

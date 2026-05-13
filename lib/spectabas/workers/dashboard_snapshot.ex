@@ -44,6 +44,8 @@ defmodule Spectabas.Workers.DashboardSnapshot do
   @default_campaigns_window 30
   @default_performance_window 7
   @default_search_keywords_window 30
+  @default_revenue_attribution_window 30
+  @default_mrr_window 30
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"site_id" => site_id}}) do
@@ -188,6 +190,14 @@ defmodule Spectabas.Workers.DashboardSnapshot do
 
     snapshot_kind(site, "search_keywords", @default_search_keywords_window, fn ->
       snapshot_search_keywords(site)
+    end)
+
+    snapshot_kind(site, "revenue_attribution", @default_revenue_attribution_window, fn ->
+      snapshot_revenue_attribution(site, user)
+    end)
+
+    snapshot_kind(site, "mrr", @default_mrr_window, fn ->
+      snapshot_mrr(site)
     end)
 
     # Per-goal detail snapshot. Stored as `goal_detail:<goal_id>` so the
@@ -499,6 +509,79 @@ defmodule Spectabas.Workers.DashboardSnapshot do
       "by_device" => list_or_empty(Analytics.rum_by_device(site, user, :week)),
       "vitals_ts" => list_or_empty(Analytics.rum_vitals_timeseries(site, user, :week)),
       "timing_ts" => list_or_empty(Analytics.rum_timing_timeseries(site, user, :week))
+    }
+  end
+
+  # MRR & Subscriptions — 8 queries from the Spectabas.MRR context module.
+  # No date_range param; data is all-time + a 30d MRR trend. Heaviest
+  # offender is `subscription_events FINAL` which can have lots of pending
+  # parts on busy stores — the context module's ch_query/1 already passes
+  # 200_000ms receive_timeout.
+  defp snapshot_mrr(site) do
+    alias Spectabas.MRR, as: M
+
+    %{
+      "revenue_stats" => M.revenue_stats(site),
+      "monthly_revenue" => M.monthly_revenue(site),
+      "mrr_stats" => M.mrr_stats(site),
+      "mrr_trend" => M.mrr_trend(site),
+      "plans" => M.plans(site),
+      "subscriptions" => M.subscriptions(site),
+      "recent_churn" => M.recent_churn(site),
+      "renewals_by_month" => M.renewals_by_month(site)
+    }
+  end
+
+  # Revenue Attribution — 6 queries at the LiveView's default config
+  # (30d / group_by=source / touch=last). Other group_by tabs (medium /
+  # campaign / term / content) and the first-touch toggle fall through
+  # to live CH. `revenue_by_source` and `ad_revenue_by_platform` both
+  # do argMin/argMax(channel_expr, timestamp) per visitor — the heaviest
+  # attribution pattern in the codebase.
+  defp snapshot_revenue_attribution(site, user) do
+    rows =
+      case Analytics.revenue_by_source(site, user, :month, group_by: "source", touch: "last") do
+        {:ok, data} -> data
+        _ -> []
+      end
+
+    channels =
+      case Analytics.revenue_by_channel(site, user, :month) do
+        {:ok, data} -> data
+        _ -> []
+      end
+
+    ad_campaigns =
+      case Analytics.ad_spend_by_campaign(site, user, :month) do
+        {:ok, data} -> data
+        _ -> []
+      end
+
+    ad_platforms =
+      case Analytics.ad_spend_by_platform(site, user, :month) do
+        {:ok, data} -> data
+        _ -> []
+      end
+
+    ad_totals =
+      case Analytics.ad_spend_totals(site, user, :month) do
+        {:ok, [row | _]} -> row
+        _ -> %{}
+      end
+
+    ad_revenue =
+      case Analytics.ad_revenue_by_platform(site, user, :month, touch: "last") do
+        {:ok, data} -> data
+        _ -> []
+      end
+
+    %{
+      "rows" => rows,
+      "channels" => channels,
+      "ad_campaigns" => ad_campaigns,
+      "ad_platforms" => ad_platforms,
+      "ad_totals" => ad_totals,
+      "ad_revenue" => ad_revenue
     }
   end
 
