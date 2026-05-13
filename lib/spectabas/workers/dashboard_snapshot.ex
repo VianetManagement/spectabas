@@ -43,6 +43,7 @@ defmodule Spectabas.Workers.DashboardSnapshot do
   @default_devices_window 7
   @default_campaigns_window 30
   @default_performance_window 7
+  @default_search_keywords_window 30
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"site_id" => site_id}}) do
@@ -183,6 +184,10 @@ defmodule Spectabas.Workers.DashboardSnapshot do
 
     snapshot_kind(site, "performance", @default_performance_window, fn ->
       snapshot_performance(site, user)
+    end)
+
+    snapshot_kind(site, "search_keywords", @default_search_keywords_window, fn ->
+      snapshot_search_keywords(site)
     end)
 
     # Per-goal detail snapshot. Stored as `goal_detail:<goal_id>` so the
@@ -494,6 +499,54 @@ defmodule Spectabas.Workers.DashboardSnapshot do
       "by_device" => list_or_empty(Analytics.rum_by_device(site, user, :week)),
       "vitals_ts" => list_or_empty(Analytics.rum_vitals_timeseries(site, user, :week)),
       "timing_ts" => list_or_empty(Analytics.rum_timing_timeseries(site, user, :week))
+    }
+  end
+
+  # Search Keywords — 10 GSC/Bing aggregations at the LiveView's default
+  # config (30d, all sources, total_clicks desc) plus sparklines for the
+  # top 20 default-sorted queries. Other sort orders / sources / ranges
+  # fall through to live CH; the snapshot only covers the default view.
+  defp snapshot_search_keywords(site) do
+    alias Spectabas.SearchKeywords, as: SK
+
+    {days, source, _sb, _sd} = SK.default_config()
+    order = SK.default_order()
+
+    stats = SK.query_stats(site.id, days, source)
+    queries = SK.query_top_queries(site.id, days, source, order)
+    pages = SK.query_top_pages(site.id, days, source, order)
+    ranking_changes = SK.query_ranking_changes(site.id, source)
+    opportunity_queue = SK.query_opportunity_queue(site.id, days, source)
+    new_keywords = SK.query_new_keywords(site.id, source)
+    lost_keywords = SK.query_lost_keywords(site.id, source)
+    pos_dist = SK.query_pos_distribution(site.id, days, source)
+    daily_trends = SK.query_daily_trends(site.id, days, source)
+    cannibalization = SK.query_cannibalization(site.id, days, source)
+
+    top_query_strings = queries |> Enum.take(20) |> Enum.map(& &1["query"])
+
+    # query_sparklines returns %{query => [{bucket, clicks}, ...]} with
+    # 2-tuples. Tuples don't serialize to JSON; flatten to [[bucket, clicks]]
+    # and the LiveView's read path will re-tuple before render.
+    sparklines =
+      site.id
+      |> SK.query_sparklines(days, source, top_query_strings)
+      |> Map.new(fn {q, pairs} ->
+        {q, Enum.map(pairs, fn {b, c} -> [b, c] end)}
+      end)
+
+    %{
+      "stats" => stats,
+      "queries" => queries,
+      "pages" => pages,
+      "ranking_changes" => ranking_changes,
+      "opportunity_queue" => opportunity_queue,
+      "new_keywords" => new_keywords,
+      "lost_keywords" => lost_keywords,
+      "pos_dist" => pos_dist,
+      "cannibalization" => cannibalization,
+      "daily_trends" => daily_trends,
+      "sparklines" => sparklines
     }
   end
 

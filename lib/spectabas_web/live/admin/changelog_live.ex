@@ -65,6 +65,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.20", "2026-05-13T18:35:00Z",
+       [
+         %{
+           title: "Snapshot Search Keywords (closes out the 7-page snapshot batch)",
+           description:
+             "Extracts the 10 inline ClickHouse queries that backed the Search Keywords LiveView into a new `Spectabas.SearchKeywords` context module — `query_stats`, `query_top_queries`, `query_top_pages`, `query_ranking_changes`, `query_opportunity_queue`, `query_new_keywords`, `query_lost_keywords`, `query_pos_distribution`, `query_daily_trends`, `query_sparklines`, `query_cannibalization`. Both the worker and LiveView now call into the context. Adds a `search_keywords` snapshot kind that captures the default config (30d / all sources / total_clicks desc) plus sparklines for the top 20 default-sorted queries. The LiveView reads from PG only when the user is on that exact default config; any deviation (different sort, different source, different range, drawer expansion) falls through to live parallel CH. Sparkline storage flattens 2-tuples to `[bucket, clicks]` arrays for JSON, then the read path re-tuples on the way in. Closes out the 7-page snapshot batch started in v6.10.19 (Pages / Entry-Exit / Geography / Devices / Campaigns / Performance)."
+         }
+       ]},
       {"v6.10.19", "2026-05-13T18:15:00Z",
        [
          %{

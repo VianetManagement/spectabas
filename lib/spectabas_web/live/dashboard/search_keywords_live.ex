@@ -1,18 +1,12 @@
 defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
   use SpectabasWeb, :live_view
 
-  alias Spectabas.{Accounts, Sites, ClickHouse}
+  alias Spectabas.{Accounts, Sites, ClickHouse, SearchKeywords, DashboardSnapshots}
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers
 
   @allowed_sort_cols ~w(total_clicks total_impressions ctr avg_pos)
   @allowed_sort_dirs ~w(asc desc)
-
-  # Industry-average click-through rate by SERP position (Google organic).
-  # Used to project the clicks a query would gain if moved to top 3.
-  # These numbers are deliberately conservative — the opportunity queue errs
-  # toward flagging fewer, higher-value queries rather than noisy small wins.
-  @target_ctr_top3 0.12
 
   @impl true
   def mount(%{"site_id" => site_id}, _session, socket) do
@@ -60,6 +54,7 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
         |> assign(:chart_ctr_json, "{}")
         |> assign(:chart_position_json, "{}")
         |> assign(:has_data, false)
+        |> assign(:snapshot_refreshed_at, nil)
 
       if connected?(socket), do: send(self(), :load_data)
       {:ok, socket}
@@ -137,88 +132,20 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
 
   defp load_data(socket) do
     site = socket.assigns.site
-    site_p = ClickHouse.param(site.id)
     range = socket.assigns.date_range
     source = socket.assigns.source_filter
     sort_by = socket.assigns.sort_by
     sort_dir = socket.assigns.sort_dir
     days = range_to_days(range)
-    source_filter = source_filter_sql(source)
     order = "#{sort_by} #{sort_dir}"
 
-    # Fire all queries in parallel. Each returns its own assign key → value.
-    # timed/2 logs the elapsed time so we can spot slow/timing-out queries.
-    tasks = [
-      Task.async(fn ->
-        {:stats, timed("stats", fn -> query_stats(site_p, days, source_filter) end)}
-      end),
-      Task.async(fn ->
-        {:queries,
-         timed("queries", fn -> query_top_queries(site_p, days, source_filter, order) end)}
-      end),
-      Task.async(fn ->
-        {:pages, timed("pages", fn -> query_top_pages(site_p, days, source_filter, order) end)}
-      end),
-      Task.async(fn ->
-        {:ranking_changes,
-         timed("ranking_changes", fn -> query_ranking_changes(site_p, source_filter) end)}
-      end),
-      Task.async(fn ->
-        {:opportunity_queue,
-         timed("opportunity_queue", fn -> query_opportunity_queue(site_p, days, source_filter) end)}
-      end),
-      Task.async(fn ->
-        {:new_keywords,
-         timed("new_keywords", fn -> query_new_keywords(site_p, source_filter) end)}
-      end),
-      Task.async(fn ->
-        {:lost_keywords,
-         timed("lost_keywords", fn -> query_lost_keywords(site_p, source_filter) end)}
-      end),
-      Task.async(fn ->
-        {:pos_dist,
-         timed("pos_dist", fn -> query_pos_distribution(site_p, days, source_filter) end)}
-      end),
-      Task.async(fn ->
-        {:daily_trends,
-         timed("daily_trends", fn -> query_daily_trends(site_p, days, source_filter) end)}
-      end),
-      Task.async(fn ->
-        {:cannibalization,
-         timed("cannibalization", fn -> query_cannibalization(site_p, days, source_filter) end)}
-      end)
-    ]
-
-    results =
-      Enum.reduce(tasks, %{}, fn task, acc ->
-        case Task.yield(task, 30_000) || Task.shutdown(task) do
-          {:ok, {key, value}} ->
-            if key == :daily_trends do
-              require Logger
-              Logger.notice("[SearchKeywords] daily_trends returned #{length(value)} rows")
-            end
-
-            Map.put(acc, key, value)
-
-          _ ->
-            require Logger
-            Logger.warning("[SearchKeywords] task timed out")
-            acc
-        end
-      end)
+    {results, sparklines, refreshed_at} =
+      load_widgets(site.id, days, source, order, sort_by, sort_dir, range)
 
     stats = Map.get(results, :stats, %{})
     queries = Map.get(results, :queries, [])
     daily_trends = Map.get(results, :daily_trends, [])
 
-    # Second-phase: per-query sparklines for the top 20 rendered rows.
-    top_query_strings = queries |> Enum.take(20) |> Enum.map(& &1["query"])
-    sparklines = query_sparklines(site_p, days, source_filter, top_query_strings)
-
-    # Pre-render chart JSON as assigns so data-chart attributes render inline
-    # (guaranteed delivery — no push_event race with hook mount). chart_key
-    # changes on every load so DOM ids change, which forces the hook to
-    # remount with the new data on range/source/sort change.
     {ci_json, ctr_json, pos_json} = build_chart_jsons(daily_trends)
 
     socket
@@ -233,10 +160,6 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     |> assign(:cannibalization, Map.get(results, :cannibalization, []))
     |> assign(:daily_trends, daily_trends)
     |> assign(:query_sparklines, sparklines)
-    # chart_key is derived from the user-selected filters (not a unique id per
-    # load). This makes it stable across re-renders that don't change what the
-    # chart should display (e.g. sort), but change when date_range or source
-    # change — which is when we want the hook to remount with fresh data.
     |> assign(:chart_key, "#{range}-#{source}")
     |> assign(:chart_clicks_impressions_json, ci_json)
     |> assign(:chart_ctr_json, ctr_json)
@@ -247,6 +170,114 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
         to_num(stats["total_impressions"] || "0") > 0 or
         queries != []
     )
+    |> assign(:snapshot_refreshed_at, refreshed_at)
+  end
+
+  # Default config (30d / all sources / total_clicks desc) reads from the
+  # hourly Postgres snapshot. Any deviation falls through to a live parallel
+  # ClickHouse fan-out.
+  defp load_widgets(site_id, 30, "all", _order, "total_clicks", "desc", "30d") do
+    case DashboardSnapshots.fetch(%{id: site_id}, "search_keywords") do
+      {data, refreshed_at} ->
+        results =
+          %{
+            stats: Map.get(data, "stats", %{}),
+            queries: Map.get(data, "queries", []),
+            pages: Map.get(data, "pages", []),
+            ranking_changes: Map.get(data, "ranking_changes", []),
+            opportunity_queue: Map.get(data, "opportunity_queue", []),
+            new_keywords: Map.get(data, "new_keywords", []),
+            lost_keywords: Map.get(data, "lost_keywords", []),
+            pos_dist: Map.get(data, "pos_dist", %{}),
+            cannibalization: Map.get(data, "cannibalization", []),
+            daily_trends: Map.get(data, "daily_trends", [])
+          }
+
+        # sparklines are stored as %{"query" => [[bucket, clicks], ...]} on
+        # write; the template's query_sparkline_json/2 expects 2-tuples.
+        sparklines =
+          data
+          |> Map.get("sparklines", %{})
+          |> Map.new(fn {q, pairs} ->
+            {q,
+             Enum.map(pairs, fn
+               [b, c] -> {b, c}
+               other -> other
+             end)}
+          end)
+
+        {results, sparklines, refreshed_at}
+
+      nil ->
+        live_load_widgets(site_id, 30, "all", "total_clicks desc")
+    end
+  end
+
+  defp load_widgets(site_id, days, source, order, _sort_by, _sort_dir, _range) do
+    live_load_widgets(site_id, days, source, order)
+  end
+
+  defp live_load_widgets(site_id, days, source, order) do
+    # Fire all queries in parallel via the context module.
+    tasks = [
+      Task.async(fn ->
+        {:stats, timed("stats", fn -> SearchKeywords.query_stats(site_id, days, source) end)}
+      end),
+      Task.async(fn ->
+        {:queries,
+         timed("queries", fn -> SearchKeywords.query_top_queries(site_id, days, source, order) end)}
+      end),
+      Task.async(fn ->
+        {:pages,
+         timed("pages", fn -> SearchKeywords.query_top_pages(site_id, days, source, order) end)}
+      end),
+      Task.async(fn ->
+        {:ranking_changes,
+         timed("ranking_changes", fn -> SearchKeywords.query_ranking_changes(site_id, source) end)}
+      end),
+      Task.async(fn ->
+        {:opportunity_queue,
+         timed("opportunity_queue", fn ->
+           SearchKeywords.query_opportunity_queue(site_id, days, source)
+         end)}
+      end),
+      Task.async(fn ->
+        {:new_keywords,
+         timed("new_keywords", fn -> SearchKeywords.query_new_keywords(site_id, source) end)}
+      end),
+      Task.async(fn ->
+        {:lost_keywords,
+         timed("lost_keywords", fn -> SearchKeywords.query_lost_keywords(site_id, source) end)}
+      end),
+      Task.async(fn ->
+        {:pos_dist,
+         timed("pos_dist", fn -> SearchKeywords.query_pos_distribution(site_id, days, source) end)}
+      end),
+      Task.async(fn ->
+        {:daily_trends,
+         timed("daily_trends", fn -> SearchKeywords.query_daily_trends(site_id, days, source) end)}
+      end),
+      Task.async(fn ->
+        {:cannibalization,
+         timed("cannibalization", fn ->
+           SearchKeywords.query_cannibalization(site_id, days, source)
+         end)}
+      end)
+    ]
+
+    results =
+      Enum.reduce(tasks, %{}, fn task, acc ->
+        case Task.yield(task, 30_000) || Task.shutdown(task) do
+          {:ok, {key, value}} -> Map.put(acc, key, value)
+          _ -> acc
+        end
+      end)
+
+    queries = Map.get(results, :queries, [])
+    top_query_strings = queries |> Enum.take(20) |> Enum.map(& &1["query"])
+    sparklines = SearchKeywords.query_sparklines(site_id, days, source, top_query_strings)
+
+    {results, sparklines, nil}
   end
 
   defp build_chart_jsons(daily_trends) do
@@ -423,331 +454,6 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
     {clicks, imp, ctr, pos}
   end
 
-  # ---------------- Query functions ----------------
-
-  defp query_stats(site_p, days, source_filter) do
-    sql = """
-    SELECT
-      sum(clicks) AS total_clicks,
-      sum(impressions) AS total_impressions,
-      if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS avg_ctr,
-      round(avg(position), 1) AS avg_position,
-      uniqExact(query) AS unique_queries
-    FROM search_console FINAL
-    WHERE site_id = #{site_p}
-      AND date >= today() - #{days}
-      #{source_filter}
-    """
-
-    case ClickHouse.query(sql) do
-      {:ok, [row | _]} -> row
-      _ -> %{}
-    end
-  end
-
-  defp query_top_queries(site_p, days, source_filter, order) do
-    sql = """
-    SELECT
-      query,
-      sum(clicks) AS total_clicks,
-      sum(impressions) AS total_impressions,
-      if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
-      round(avg(position), 1) AS avg_pos
-    FROM search_console FINAL
-    WHERE site_id = #{site_p}
-      AND date >= today() - #{days}
-      AND query != ''
-      #{source_filter}
-    GROUP BY query
-    ORDER BY #{order}
-    LIMIT 100
-    """
-
-    case ClickHouse.query(sql) do
-      {:ok, rows} -> rows
-      _ -> []
-    end
-  end
-
-  defp query_top_pages(site_p, days, source_filter, order) do
-    sql = """
-    SELECT
-      page,
-      sum(clicks) AS total_clicks,
-      sum(impressions) AS total_impressions,
-      if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
-      round(avg(position), 1) AS avg_pos
-    FROM search_console FINAL
-    WHERE site_id = #{site_p}
-      AND date >= today() - #{days}
-      #{source_filter}
-    GROUP BY page
-    ORDER BY #{order}
-    LIMIT 50
-    """
-
-    case ClickHouse.query(sql) do
-      {:ok, rows} -> rows
-      _ -> []
-    end
-  end
-
-  defp query_ranking_changes(site_p, source_filter) do
-    sql = """
-    SELECT
-      cur.query,
-      cur.clicks AS current_clicks,
-      cur.pos AS current_pos,
-      prev.pos AS previous_pos,
-      round(prev.pos - cur.pos, 1) AS pos_change
-    FROM (
-      SELECT query, sum(clicks) AS clicks, round(avg(position), 1) AS pos
-      FROM search_console FINAL
-      WHERE site_id = #{site_p} AND date >= today() - 7 #{source_filter}
-      GROUP BY query HAVING sum(impressions) >= 5
-    ) cur
-    LEFT JOIN (
-      SELECT query, round(avg(position), 1) AS pos
-      FROM search_console FINAL
-      WHERE site_id = #{site_p} AND date >= today() - 14 AND date < today() - 7 #{source_filter}
-      GROUP BY query HAVING sum(impressions) >= 5
-    ) prev ON cur.query = prev.query
-    WHERE prev.pos > 0 AND abs(cur.pos - prev.pos) >= 2
-    ORDER BY pos_change DESC
-    LIMIT 20
-    """
-
-    case ClickHouse.query(sql) do
-      {:ok, rows} -> rows
-      _ -> []
-    end
-  end
-
-  # Queries at position 8-20 with meaningful impressions, ranked by projected
-  # additional clicks if moved into the top 3. This is more actionable than
-  # the previous "low CTR" heuristic because it surfaces queries where an
-  # SEO win would translate to a lot of extra traffic.
-  defp query_opportunity_queue(site_p, days, source_filter) do
-    sql = """
-    SELECT
-      query,
-      sum(clicks) AS total_clicks,
-      sum(impressions) AS total_impressions,
-      if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
-      round(avg(position), 1) AS avg_pos,
-      toUInt32(greatest(0, round(
-        sum(impressions) * (#{@target_ctr_top3} - if(sum(impressions) > 0, sum(clicks) / sum(impressions), 0))
-      ))) AS projected_gain
-    FROM search_console FINAL
-    WHERE site_id = #{site_p}
-      AND date >= today() - #{days}
-      AND query != ''
-      #{source_filter}
-    GROUP BY query
-    HAVING sum(impressions) >= 50 AND avg_pos >= 8 AND avg_pos <= 20
-    ORDER BY projected_gain DESC
-    LIMIT 20
-    """
-
-    case ClickHouse.query(sql) do
-      {:ok, rows} -> rows
-      _ -> []
-    end
-  end
-
-  defp query_new_keywords(site_p, source_filter) do
-    sql = """
-    SELECT query, sum(clicks) AS clicks, sum(impressions) AS impressions,
-      round(avg(position), 1) AS avg_pos
-    FROM search_console FINAL
-    WHERE site_id = #{site_p} AND date >= today() - 7 #{source_filter}
-      AND query NOT IN (
-        SELECT query FROM search_console FINAL
-        WHERE site_id = #{site_p} AND date >= today() - 14 AND date < today() - 7 #{source_filter}
-      )
-    GROUP BY query
-    HAVING impressions >= 3
-    ORDER BY clicks DESC
-    LIMIT 15
-    """
-
-    case ClickHouse.query(sql) do
-      {:ok, rows} -> rows
-      _ -> []
-    end
-  end
-
-  defp query_lost_keywords(site_p, source_filter) do
-    sql = """
-    SELECT query, sum(clicks) AS clicks, sum(impressions) AS impressions,
-      round(avg(position), 1) AS avg_pos
-    FROM search_console FINAL
-    WHERE site_id = #{site_p} AND date >= today() - 14 AND date < today() - 7 #{source_filter}
-      AND query NOT IN (
-        SELECT query FROM search_console FINAL
-        WHERE site_id = #{site_p} AND date >= today() - 7 #{source_filter}
-      )
-    GROUP BY query
-    HAVING impressions >= 3
-    ORDER BY clicks DESC
-    LIMIT 15
-    """
-
-    case ClickHouse.query(sql) do
-      {:ok, rows} -> rows
-      _ -> []
-    end
-  end
-
-  defp query_pos_distribution(site_p, days, source_filter) do
-    sql = """
-    SELECT
-      countIf(avg_pos <= 3) AS top3,
-      countIf(avg_pos > 3 AND avg_pos <= 10) AS top10,
-      countIf(avg_pos > 10 AND avg_pos <= 20) AS top20,
-      countIf(avg_pos > 20) AS beyond20
-    FROM (
-      SELECT query, avg(position) AS avg_pos
-      FROM search_console FINAL
-      WHERE site_id = #{site_p} AND date >= today() - #{days} #{source_filter}
-      GROUP BY query HAVING sum(impressions) >= 1
-    )
-    """
-
-    case ClickHouse.query(sql) do
-      {:ok, [row | _]} -> row
-      _ -> %{}
-    end
-  end
-
-  # Per-day totals across all queries. Drives the three trend charts at the
-  # top of the page (clicks+impressions combo, CTR, position).
-  defp query_daily_trends(site_p, days, source_filter) do
-    # Aliases MUST NOT shadow column names.
-    # 1) `sum(clicks) AS clicks` made the inner `sum(clicks)` resolve to
-    #    `sum(the_alias)` = nested agg → ILLEGAL_AGGREGATION. Renamed to
-    #    total_clicks / total_impressions.
-    # 2) `toString(date) AS date` made `GROUP BY date` ambiguous between the
-    #    Date column and the String alias → NO_COMMON_TYPE. Renamed alias
-    #    to `bucket` and kept GROUP BY / ORDER BY on the Date column directly.
-    # FINAL is skipped — with 6M+ rows, FINAL + GROUP BY date silently returns
-    # 0 rows. Stats card uses FINAL for exact aggregate numbers.
-    sql = """
-    SELECT
-      toString(date) AS bucket,
-      sum(clicks) AS total_clicks,
-      sum(impressions) AS total_impressions,
-      if(sum(impressions) > 0, round(sum(clicks) / sum(impressions) * 100, 2), 0) AS ctr,
-      round(avg(position), 1) AS avg_position
-    FROM search_console
-    WHERE site_id = #{site_p}
-      AND date >= today() - #{days}
-      #{source_filter}
-    GROUP BY date
-    ORDER BY date ASC
-    """
-
-    case ClickHouse.query(sql) do
-      {:ok, rows} ->
-        rows
-
-      {:error, err} ->
-        require Logger
-
-        Logger.error(
-          "[SearchKeywords] daily_trends error: #{inspect(err) |> String.slice(0, 300)}"
-        )
-
-        []
-    end
-  end
-
-  # One row per (top_query, date) over the given range. Used to populate
-  # per-query sparklines in the Top Queries table. Returns %{query => [clicks]}
-  # aligned to the same date sequence used for the trend charts.
-  defp query_sparklines(_site_p, _days, _source_filter, []), do: %{}
-
-  defp query_sparklines(site_p, days, source_filter, queries) do
-    in_clause = Enum.map_join(queries, ", ", &ClickHouse.param/1)
-
-    # FINAL dropped + alias renamed to avoid shadowing Date column.
-    sql = """
-    SELECT query, toString(date) AS bucket, sum(clicks) AS total_clicks
-    FROM search_console
-    WHERE site_id = #{site_p}
-      AND date >= today() - #{days}
-      AND query IN (#{in_clause})
-      #{source_filter}
-    GROUP BY query, date
-    ORDER BY date ASC
-    """
-
-    case ClickHouse.query(sql) do
-      {:ok, rows} ->
-        Enum.group_by(rows, & &1["query"], &{&1["bucket"], to_num(&1["total_clicks"])})
-
-      _ ->
-        %{}
-    end
-  end
-
-  # Queries where 3+ pages rank in the top 30 with meaningful impressions —
-  # an indicator that Google is splitting authority across duplicate content.
-  # Returns pages/positions/impressions/clicks as parallel arrays.
-  defp query_cannibalization(site_p, days, source_filter) do
-    sql = """
-    SELECT
-      query,
-      count() AS page_count,
-      sum(clicks) AS total_clicks,
-      sum(imps) AS total_impressions,
-      groupArray(page) AS pages,
-      groupArray(round(pos, 1)) AS positions,
-      groupArray(imps) AS page_impressions,
-      groupArray(clicks) AS page_clicks
-    FROM (
-      SELECT
-        query, page,
-        sum(clicks) AS clicks,
-        sum(impressions) AS imps,
-        avg(position) AS pos
-      FROM search_console FINAL
-      WHERE site_id = #{site_p}
-        AND date >= today() - #{days}
-        AND query != ''
-        #{source_filter}
-      GROUP BY query, page
-      HAVING imps >= 10 AND pos <= 30
-    )
-    GROUP BY query
-    HAVING page_count >= 3
-    ORDER BY total_impressions DESC
-    LIMIT 15
-    """
-
-    case ClickHouse.query(sql) do
-      {:ok, rows} ->
-        Enum.map(rows, fn r ->
-          Map.merge(r, %{
-            "pages_zip" =>
-              Enum.zip([
-                ensure_list(r["pages"]),
-                ensure_list(r["positions"]),
-                ensure_list(r["page_impressions"]),
-                ensure_list(r["page_clicks"])
-              ])
-          })
-        end)
-
-      _ ->
-        []
-    end
-  end
-
-  defp ensure_list(nil), do: []
-  defp ensure_list(l) when is_list(l), do: l
-  defp ensure_list(_), do: []
-
   # ---------------- Drawer queries ----------------
 
   # Drawer queries: aliases use total_clicks / total_impressions to avoid
@@ -874,6 +580,9 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
           <div>
             <h1 class="text-2xl font-bold text-gray-900">Search Keywords</h1>
             <p class="text-sm text-gray-500 mt-1">Organic search queries from Google and Bing</p>
+            <p :if={@snapshot_refreshed_at} class="text-xs text-gray-400 mt-1">
+              Snapshot · last update {DashboardSnapshots.refreshed_label(@snapshot_refreshed_at)}
+            </p>
           </div>
           <div class="flex items-center gap-3">
             <form phx-change="change_source">
