@@ -53,6 +53,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.13", "2026-05-13T16:55:00Z",
+       [
+         %{
+           title: "Fix: empty Goals landing-page table on high-volume sites",
+           description:
+             "Sibling bug to v6.10.12. The Goals landing page reads from the `goal_stats` Postgres table populated by GoalStatsSnapshot. That worker calls `Analytics.goal_completions_system/2`, which fires two ClickHouse queries (total_visitors + a UNION-ALL across every goal's condition) — both at the default 30s HTTP receive_timeout. On puppies.com with 20 goals, several of them click-element selectors that JSONExtractString into properties over 7 days, the UNION-ALL was disconnecting at 30s and writing zeros for completions / unique completers / conversion_rate across every goal. Separately, `load_source_attribution/2` ran each goal's source query through `Task.async_stream(timeout: 30_000, on_timeout: :kill_task)` — so even after v6.10.12 bumped the underlying CH query to a 90s ceiling, the async_stream killed it at 30s first and the result was silently dropped, leaving `top_sources` empty. Added SETTINGS max_execution_time = 90 + receive_timeout: 90_000 to both queries in do_goal_completions/2; bumped the async_stream timeout 30_000 → 100_000; bumped GoalStatsSnapshot worker timeout 300s → 1200s."
+         }
+       ]},
       {"v6.10.12", "2026-05-13T16:00:00Z",
        [
          %{

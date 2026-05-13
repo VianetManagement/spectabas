@@ -3439,14 +3439,18 @@ defmodule Spectabas.Analytics do
     else
       # Get total unique visitors for conversion rate calculation
       total_visitors =
-        case ClickHouse.query("""
-               SELECT uniq(visitor_id) AS total
-               FROM events
-               WHERE site_id = #{ClickHouse.param(site.id)}
-                 AND event_type = 'pageview' AND ip_is_bot = 0
-                 AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
-                 AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
-             """) do
+        case ClickHouse.query(
+               """
+                 SELECT uniq(visitor_id) AS total
+                 FROM events
+                 WHERE site_id = #{ClickHouse.param(site.id)}
+                   AND event_type = 'pageview' AND ip_is_bot = 0
+                   AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+                   AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+                 SETTINGS max_execution_time = 90
+               """,
+               receive_timeout: 90_000
+             ) do
           {:ok, [%{"total" => t}]} -> to_int(t)
           _ -> 0
         end
@@ -3471,8 +3475,14 @@ defmodule Spectabas.Analytics do
         end)
         |> Enum.join("\nUNION ALL\n")
 
+      # JSONExtract on click-element goals over many days can exceed the
+      # default 30s HTTP receive_timeout on high-volume sites — silently
+      # returning {:error, _} and writing zeros to goal_stats. The SETTINGS
+      # below applies to the outer UNION-ALL query as a whole.
+      unions = unions <> "\nSETTINGS max_execution_time = 90"
+
       counts =
-        case ClickHouse.query(unions) do
+        case ClickHouse.query(unions, receive_timeout: 90_000) do
           {:ok, rows} ->
             Map.new(rows, fn r ->
               {r["goal_id"],

@@ -15,7 +15,12 @@ defmodule Spectabas.Workers.GoalStatsSnapshot do
   alias Spectabas.{Analytics, Goals, Sites}
 
   @impl Oban.Worker
-  def timeout(_job), do: :timer.seconds(300)
+  # 20 min — load_source_attribution runs up to 4 goals concurrently, each
+  # query capped at 90s. With 20 goals on the heaviest site that's ~5 batches
+  # × 90s = 450s, plus the UNION-ALL completions query (up to 90s) and the
+  # total_visitors query (up to 90s). Generous ceiling so a single slow goal
+  # doesn't blow the whole snapshot.
+  def timeout(_job), do: :timer.seconds(1200)
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"site_id" => site_id}}) do
@@ -102,7 +107,10 @@ defmodule Spectabas.Workers.GoalStatsSnapshot do
         {goal.id, rows}
       end,
       max_concurrency: 4,
-      timeout: 30_000,
+      # 100s — matches the 90s CH max_execution_time + 10s buffer. The old
+      # 30s killed click-element source-attribution tasks before they could
+      # finish on high-volume sites, leaving top_sources empty in goal_stats.
+      timeout: 100_000,
       on_timeout: :kill_task
     )
     |> Enum.reduce(%{}, fn
