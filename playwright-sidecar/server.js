@@ -142,8 +142,15 @@ app.post('/audit', async (req, res) => {
     });
   } catch (e) {
     const elapsed = Date.now() - started;
+    // Log to stdout so the Render Logs tab shows the actual reason,
+    // not just the 502 access-log line. The body is also returned to
+    // the caller (Elixir side) — both paths are useful for debugging.
+    console.error(
+      `[/audit ${url}] ${e.name || 'Error'}: ${e.message || 'unknown'}\n${e.stack || ''}`
+    );
     res.status(502).json({
       error: e.message || 'fetch_failed',
+      error_name: e.name || 'Error',
       response_time_ms: elapsed,
     });
   } finally {
