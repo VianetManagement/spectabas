@@ -5842,6 +5842,7 @@ defmodule Spectabas.Analytics do
         JSONExtractString(properties, '_form_id') AS form_id,
         anyIf(JSONExtractString(properties, '_form_name'), event_name = '_form_view') AS form_name,
         anyIf(JSONExtractString(properties, '_form_action'), event_name = '_form_view') AS form_action,
+        anyIf(JSONExtractString(properties, '_form_kind'), event_name = '_form_view') AS form_kind,
         countIf(event_name = '_form_view') AS views,
         countIf(event_name = '_form_start') AS starts,
         countIf(event_name = '_form_submit') AS submits,
@@ -5884,7 +5885,10 @@ defmodule Spectabas.Analytics do
         countIf(event_name = '_form_abandon') AS total_abandons,
         round(countIf(event_name = '_form_submit') / greatest(countIf(event_name = '_form_view'), 1) * 100, 1) AS submit_rate,
         round(countIf(event_name = '_form_abandon') / greatest(countIf(event_name = '_form_start'), 1) * 100, 1) AS abandon_rate,
-        uniqIf(JSONExtractString(properties, '_form_id'), event_name = '_form_view') AS forms_tracked
+        uniqIf(JSONExtractString(properties, '_form_id'), event_name = '_form_view') AS forms_tracked,
+        uniqIf(JSONExtractString(properties, '_form_id'), event_name = '_form_view' AND JSONExtractString(properties, '_form_kind') = 'form') AS native_forms_tracked,
+        uniqIf(JSONExtractString(properties, '_form_id'), event_name = '_form_view' AND JSONExtractString(properties, '_form_kind') = 'cluster') AS clusters_tracked,
+        countIf(event_name = '_form_submit' AND JSONExtractString(properties, '_submit_trigger') = 'button_text') AS heuristic_submits
       FROM events
       WHERE site_id = #{ClickHouse.param(site.id)}
         AND event_type = 'custom'

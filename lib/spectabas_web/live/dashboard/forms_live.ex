@@ -1,9 +1,22 @@
 defmodule SpectabasWeb.Dashboard.FormsLive do
   @moduledoc """
-  Forms dashboard. Auto-tracked HTML `<form>` interactions: view (form
-  in DOM at pageview), start (first focus inside), submit, abandon
-  (started but left without submitting). Click a row to see which
-  field is the abandonment funnel breakpoint for that form.
+  Forms dashboard. Two kinds of form-like surfaces are tracked:
+  - `<form>` tags (most reliable — submit detected from the browser's
+    native submit event).
+  - Input clusters: groups of ≥2 `<input>`/`<select>`/`<textarea>`
+    elements sharing an identifiable ancestor container, with no
+    wrapping `<form>` — common in React/Next.js apps that submit via
+    `fetch`. Submits are inferred from clicks on buttons whose text
+    matches submit-like verbs, and only fire if the user previously
+    focused an input in that cluster.
+
+  Events: `_form_view` (form present in DOM at pageview / cluster
+  detected), `_form_start` (first input focus), `_form_submit`,
+  `_form_abandon` (started but visibilitychange-hidden / pagehide
+  without submit). All carry `_form_id`, `_form_kind` (`"form"` or
+  `"cluster"`), and field metadata where relevant. Click a row to
+  see which field is the abandonment funnel breakpoint for that
+  form.
   """
   use SpectabasWeb, :live_view
 
@@ -111,6 +124,19 @@ defmodule SpectabasWeb.Dashboard.FormsLive do
     if name && name != "", do: name, else: id
   end
 
+  defp kind_label("cluster"), do: "Cluster"
+  defp kind_label("form"), do: "Form"
+  defp kind_label(_), do: "—"
+
+  defp kind_badge_class("cluster"),
+    do: "inline-block px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 font-medium"
+
+  defp kind_badge_class("form"),
+    do: "inline-block px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-medium"
+
+  defp kind_badge_class(_),
+    do: "inline-block px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 font-medium"
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -118,7 +144,7 @@ defmodule SpectabasWeb.Dashboard.FormsLive do
       flash={@flash}
       site={@site}
       page_title="Forms"
-      page_description="Form views, starts, submits, and per-field abandonment auto-tracked from your site's `<form>` tags."
+      page_description="Form views, starts, submits, and per-field abandonment auto-tracked from both `<form>` tags and input clusters (groups of inputs without a wrapping form, common in React/Next.js apps)."
       active="forms"
       live_visitors={0}
     >
@@ -177,7 +203,9 @@ defmodule SpectabasWeb.Dashboard.FormsLive do
                 {format_number(to_num(@summary["total_views"] || 0))}
               </p>
               <p class="text-[10px] text-gray-400 mt-0.5">
-                {format_number(to_num(@summary["forms_tracked"] || 0))} distinct forms
+                {format_number(to_num(@summary["native_forms_tracked"] || 0))} &lt;form&gt; · {format_number(
+                  to_num(@summary["clusters_tracked"] || 0)
+                )} clusters
               </p>
             </div>
             <div class="bg-white rounded-lg shadow p-4">
@@ -193,7 +221,9 @@ defmodule SpectabasWeb.Dashboard.FormsLive do
                 {format_number(to_num(@summary["total_submits"] || 0))}
               </p>
               <p class="text-[10px] text-gray-400 mt-0.5">
-                Submit rate {to_num(@summary["submit_rate"] || 0)}%
+                Submit rate {to_num(@summary["submit_rate"] || 0)}% · {format_number(
+                  to_num(@summary["heuristic_submits"] || 0)
+                )} heuristic
               </p>
             </div>
             <div class="bg-white rounded-lg shadow p-4">
@@ -213,6 +243,9 @@ defmodule SpectabasWeb.Dashboard.FormsLive do
                 <tr>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Form
+                  </th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Kind
                   </th>
                   <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                     Views
@@ -236,8 +269,8 @@ defmodule SpectabasWeb.Dashboard.FormsLive do
               </thead>
               <tbody class="divide-y divide-gray-200">
                 <tr :if={@forms == []}>
-                  <td colspan="7" class="px-6 py-8 text-center text-gray-500">
-                    No form interactions found in this range. Forms are auto-tracked from &lt;form&gt; tags on your site.
+                  <td colspan="8" class="px-6 py-8 text-center text-gray-500">
+                    No form interactions found in this range. The tracker auto-detects both &lt;form&gt; tags and input clusters (groups of inputs without a wrapping form).
                   </td>
                 </tr>
                 <tr
@@ -261,6 +294,11 @@ defmodule SpectabasWeb.Dashboard.FormsLive do
                       {f["form_action"]}
                     </div>
                   </td>
+                  <td class="px-6 py-3 text-xs">
+                    <span class={kind_badge_class(f["form_kind"])}>
+                      {kind_label(f["form_kind"])}
+                    </span>
+                  </td>
                   <td class="px-6 py-3 text-sm text-gray-900 text-right tabular-nums">
                     {format_number(to_num(f["views"]))}
                   </td>
@@ -283,6 +321,18 @@ defmodule SpectabasWeb.Dashboard.FormsLive do
               </tbody>
             </table>
           </div>
+
+          <p :if={@forms != []} class="text-xs text-gray-500 mb-6 leading-relaxed">
+            <strong>Kind:</strong>
+            <span class="inline-block px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-medium">
+              Form
+            </span>
+            = HTML &lt;form&gt; tag — submits detected from the browser's native event (most reliable).
+            <span class="inline-block px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 font-medium">
+              Cluster
+            </span>
+            = group of ≥2 inputs sharing an identifiable container with no wrapping &lt;form&gt; (common in React / Next.js apps). Submits are inferred from clicks on buttons whose text matches submit verbs (submit, send, sign up, continue, save, checkout, etc.), only counted if the user previously focused an input in the cluster. The "heuristic" count in the summary card above is just the cluster submits — keep an eye on it as a quality check.
+          </p>
 
           <div :if={@selected_form_id} class="bg-white rounded-lg shadow overflow-hidden">
             <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
