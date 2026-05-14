@@ -1030,6 +1030,57 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                   class="mt-1 block w-32 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
                 />
               </div>
+
+              <div class="mt-4">
+                <label class="block text-sm font-medium text-gray-700">
+                  Audit User-Agent (optional override)
+                </label>
+                <p class="text-xs text-gray-500 mt-1 mb-1">
+                  Leave blank to use the default. The default is a real Chrome UA with a
+                  <code class="bg-gray-100 px-1 rounded">SpectabasBot</code>
+                  suffix so it passes generic UA filters but is identifiable in raw logs:
+                </p>
+                <p class="text-[10px] text-gray-400 font-mono break-all mb-2">
+                  Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 SpectabasBot/1.0 (+https://www.spectabas.com/bot)
+                </p>
+                <input
+                  type="text"
+                  name="site[seo_user_agent]"
+                  value={@site.seo_user_agent || ""}
+                  placeholder="(use default)"
+                  maxlength="512"
+                  class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5 font-mono text-xs"
+                />
+                <div class="mt-3 bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-900">
+                  <p class="font-medium mb-1">Cloudflare-protected site?</p>
+                  <p class="mb-2">
+                    If audits fail with fetch errors, your WAF is likely blocking us. Add a Cloudflare allow-rule:
+                  </p>
+                  <ol class="list-decimal list-inside space-y-1 ml-1">
+                    <li>
+                      Cloudflare dashboard → Security → WAF → Custom rules →
+                      <strong>Create rule</strong>
+                    </li>
+                    <li>
+                      Rule name:
+                      <code class="bg-amber-100 px-1 rounded">Allow Spectabas SEO audit</code>
+                    </li>
+                    <li>
+                      Field: <code class="bg-amber-100 px-1 rounded">User Agent</code>, Operator: <code class="bg-amber-100 px-1 rounded">contains</code>, Value:
+                      <code class="bg-amber-100 px-1 rounded">SpectabasBot</code>
+                    </li>
+                    <li>
+                      Action: <strong>Skip</strong>
+                      → check <em>All remaining custom rules</em>, <em>Bot Fight Mode</em>,
+                      <em>WAF managed rules</em>
+                    </li>
+                    <li>Deploy</li>
+                  </ol>
+                  <p class="mt-2">
+                    If your WAF still blocks us (Turnstile / JS challenges can't be solved in headless), set a unique UA above and whitelist that exact string instead.
+                  </p>
+                </div>
+              </div>
             </div>
 
             <div :if={@settings_tab == "content"} class="border-t border-gray-200 pt-6">

@@ -38,6 +38,12 @@ defmodule Spectabas.Sites.Site do
     # On-demand audits via the UI don't count.
     field :seo_crawl_budget, :integer, default: 500
 
+    # Per-site User-Agent override for SEO audits (v6.10.48). Empty =
+    # use the sidecar's default. Set this when your WAF / Cloudflare
+    # rules block the default UA and you want to match a custom
+    # allow-rule on a specific string.
+    field :seo_user_agent, :string
+
     timestamps(type: :utc_datetime)
   end
 
@@ -72,7 +78,8 @@ defmodule Spectabas.Sites.Site do
       :scraper_webhook_url,
       :scraper_webhook_secret,
       :scraper_webhook_enabled,
-      :seo_crawl_budget
+      :seo_crawl_budget,
+      :seo_user_agent
     ])
     |> validate_required([:name, :domain])
     |> validate_length(:name, max: 255)
@@ -83,6 +90,7 @@ defmodule Spectabas.Sites.Site do
       greater_than_or_equal_to: 100,
       less_than_or_equal_to: 5000
     )
+    |> validate_length(:seo_user_agent, max: 512)
     |> validate_length(:currency, is: 3)
     |> validate_webhook_url()
     |> unique_constraint(:domain)

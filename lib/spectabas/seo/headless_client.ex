@@ -22,6 +22,10 @@ defmodule Spectabas.SEO.HeadlessClient do
   @doc """
   Fetch a URL through the headless browser sidecar.
 
+  Options:
+  - `:timeout` — total request timeout in ms (default 35_000)
+  - `:user_agent` — per-request UA override (default: sidecar decides)
+
   Returns:
   - `{:ok, %{html: _, status_code: _, response_time_ms: _, final_url: _}}`
     on success
@@ -31,20 +35,23 @@ defmodule Spectabas.SEO.HeadlessClient do
   def fetch(url, opts \\ []) when is_binary(url) do
     sidecar = Application.get_env(:spectabas, :playwright_url) || System.get_env("PLAYWRIGHT_URL")
     timeout = Keyword.get(opts, :timeout, @default_timeout)
+    user_agent = Keyword.get(opts, :user_agent)
 
     cond do
       is_nil(sidecar) or sidecar == "" ->
         {:error, "PLAYWRIGHT_URL not configured", %{response_time_ms: 0}}
 
       true ->
-        do_fetch(sidecar, url, timeout)
+        do_fetch(sidecar, url, timeout, user_agent)
     end
   end
 
-  defp do_fetch(sidecar, url, timeout) do
+  defp do_fetch(sidecar, url, timeout, user_agent) do
     started = System.monotonic_time(:millisecond)
 
-    body = %{"url" => url, "timeout_ms" => timeout - 5_000}
+    body =
+      %{"url" => url, "timeout_ms" => timeout - 5_000}
+      |> maybe_add_user_agent(user_agent)
 
     case Req.post(sidecar <> "/audit",
            json: body,
@@ -73,6 +80,10 @@ defmodule Spectabas.SEO.HeadlessClient do
         {:error, "Headless fetch failed: #{inspect(reason)}", %{response_time_ms: elapsed}}
     end
   end
+
+  defp maybe_add_user_agent(body, nil), do: body
+  defp maybe_add_user_agent(body, ""), do: body
+  defp maybe_add_user_agent(body, ua) when is_binary(ua), do: Map.put(body, "user_agent", ua)
 
   @doc """
   Whether the sidecar is configured at all. UI uses this to surface a

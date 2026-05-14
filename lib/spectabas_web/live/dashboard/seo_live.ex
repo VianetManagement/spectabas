@@ -34,6 +34,7 @@ defmodule SpectabasWeb.Dashboard.SEOLive do
        |> assign(:headless_configured, SEO.HeadlessClient.configured?())
        |> assign(:sort, :score_asc)
        |> assign(:audit_url_input, "")
+       |> assign(:expanded_audit_id, nil)
        |> load_audits()}
     end
   end
@@ -68,6 +69,15 @@ defmodule SpectabasWeb.Dashboard.SEOLive do
 
   def handle_event("update_audit_url", %{"audit_url_input" => v}, socket) do
     {:noreply, assign(socket, :audit_url_input, v)}
+  end
+
+  def handle_event("toggle_audit", %{"id" => id_str}, socket) do
+    {id, _} = Integer.parse(id_str)
+
+    expanded =
+      if socket.assigns.expanded_audit_id == id, do: nil, else: id
+
+    {:noreply, assign(socket, :expanded_audit_id, expanded)}
   end
 
   def handle_event("audit_url", _params, socket) do
@@ -158,9 +168,12 @@ defmodule SpectabasWeb.Dashboard.SEOLive do
     assign(socket, :audits, audits)
   end
 
-  defp score_class(nil), do: "bg-gray-100 text-gray-500"
+  defp score_class(_score, %{error: e}) when is_binary(e) and e != "",
+    do: "bg-gray-200 text-gray-700"
 
-  defp score_class(s) when is_integer(s) do
+  defp score_class(nil, _), do: "bg-gray-100 text-gray-500"
+
+  defp score_class(s, _) when is_integer(s) do
     cond do
       s >= 80 -> "bg-emerald-100 text-emerald-800"
       s >= 60 -> "bg-amber-100 text-amber-800"
@@ -168,8 +181,11 @@ defmodule SpectabasWeb.Dashboard.SEOLive do
     end
   end
 
-  defp issue_count(%{issues: %{"items" => items}}) when is_list(items), do: length(items)
-  defp issue_count(_), do: 0
+  # Display the score, or "Failed" when the fetch errored out (rather
+  # than a confusing 0 with no obvious cause).
+  defp score_display(%{error: e}) when is_binary(e) and e != "", do: "Failed"
+  defp score_display(%{score: nil}), do: "—"
+  defp score_display(%{score: s}), do: s
 
   defp severity_breakdown(%{issues: %{"items" => items}}) when is_list(items) do
     items
@@ -177,6 +193,151 @@ defmodule SpectabasWeb.Dashboard.SEOLive do
   end
 
   defp severity_breakdown(_), do: %{}
+
+  # Human-readable summary in the Issues column. Single-line, no
+  # cryptic abbreviations. Examples:
+  #   "Fetch failed"          (when score=0 + error set)
+  #   "Looks good"            (zero issues)
+  #   "1 critical, 2 major"   (the typical case)
+  defp render_issue_summary(%{error: e} = _audit) when is_binary(e) and e != "" do
+    assigns = %{e: e}
+
+    ~H"""
+    <span class="text-rose-700 font-medium">Fetch failed</span>
+    """
+  end
+
+  defp render_issue_summary(audit) do
+    items = (audit.issues && audit.issues["items"]) || []
+    breakdown = severity_breakdown(audit)
+    crit = Map.get(breakdown, "critical", 0)
+    major = Map.get(breakdown, "major", 0)
+    minor = Map.get(breakdown, "minor", 0)
+
+    assigns = %{items: items, crit: crit, major: major, minor: minor}
+
+    ~H"""
+    <span :if={@items == []} class="text-emerald-700 font-medium">Looks good</span>
+    <span :if={@items != []} class="text-gray-700">
+      <span :if={@crit > 0} class="text-rose-700 font-medium">
+        {@crit} critical
+      </span>
+      <span :if={@crit > 0 and (@major > 0 or @minor > 0)} class="text-gray-400">, </span>
+      <span :if={@major > 0} class="text-amber-700">
+        {@major} major
+      </span>
+      <span :if={@major > 0 and @minor > 0} class="text-gray-400">, </span>
+      <span :if={@minor > 0} class="text-gray-500">
+        {@minor} minor
+      </span>
+    </span>
+    """
+  end
+
+  # Expanded detail row shown when a user clicks an audit. Lists each
+  # issue with severity, a plain-English message, and key metadata so
+  # the user can act on it without leaving the page.
+  defp render_audit_detail(audit) do
+    items = (audit.issues && audit.issues["items"]) || []
+    assigns = %{audit: audit, items: items}
+
+    ~H"""
+    <div class="space-y-3">
+      <div :if={@audit.error} class="bg-rose-50 border border-rose-200 rounded p-3">
+        <p class="text-xs font-semibold text-rose-900 mb-1">Fetch error</p>
+        <p class="text-xs text-rose-800 font-mono break-all">{@audit.error}</p>
+        <p class="text-xs text-rose-800 mt-2">
+          The headless browser couldn't fetch this URL. Common causes:
+          Cloudflare / WAF blocking the request, the URL returning a non-200 status, the page taking longer than the per-request timeout, or the Playwright sidecar service being unreachable. Check Site Settings → Content → SEO audit for the Cloudflare allow-rule recipe.
+        </p>
+      </div>
+
+      <div :if={@items != []}>
+        <p class="text-xs font-semibold text-gray-700 mb-2">Issues to fix</p>
+        <ul class="space-y-2">
+          <li
+            :for={issue <- @items}
+            class={[
+              "border-l-4 pl-3 py-1",
+              case issue["severity"] do
+                "critical" -> "border-rose-500 bg-rose-50"
+                "major" -> "border-amber-500 bg-amber-50"
+                _ -> "border-gray-300 bg-gray-50"
+              end
+            ]}
+          >
+            <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+              {issue["severity"]}
+            </p>
+            <p class="text-xs text-gray-800">{issue["message"]}</p>
+          </li>
+        </ul>
+      </div>
+
+      <div :if={@items == [] and !@audit.error} class="text-xs text-emerald-700">
+        ✓ No issues detected on this page.
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs pt-3 border-t border-gray-200">
+        <div>
+          <p class="text-gray-500">Title length</p>
+          <p class="text-gray-900 tabular-nums">
+            {if @audit.title, do: String.length(@audit.title), else: "—"}
+          </p>
+        </div>
+        <div>
+          <p class="text-gray-500">Meta length</p>
+          <p class="text-gray-900 tabular-nums">
+            {if @audit.meta_description, do: String.length(@audit.meta_description), else: "—"}
+          </p>
+        </div>
+        <div>
+          <p class="text-gray-500">Word count</p>
+          <p class="text-gray-900 tabular-nums">{@audit.word_count || "—"}</p>
+        </div>
+        <div>
+          <p class="text-gray-500">Internal / External links</p>
+          <p class="text-gray-900 tabular-nums">
+            {@audit.internal_link_count || 0} / {@audit.external_link_count || 0}
+          </p>
+        </div>
+        <div>
+          <p class="text-gray-500">Image alt coverage</p>
+          <p class="text-gray-900 tabular-nums">
+            {alt_pct(@audit)}
+          </p>
+        </div>
+        <div>
+          <p class="text-gray-500">Status code</p>
+          <p class="text-gray-900 tabular-nums">{@audit.status_code || "—"}</p>
+        </div>
+        <div>
+          <p class="text-gray-500">Schema types</p>
+          <p class="text-gray-900 truncate">
+            {if @audit.schema_types && @audit.schema_types != [],
+              do: Enum.join(@audit.schema_types, ", "),
+              else: "—"}
+          </p>
+        </div>
+        <div>
+          <p class="text-gray-500">Canonical</p>
+          <p class="text-gray-900 font-mono truncate text-[11px]">
+            {@audit.canonical || "—"}
+          </p>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  defp alt_pct(%{image_count: 0}), do: "—"
+  defp alt_pct(%{image_count: nil}), do: "—"
+
+  defp alt_pct(%{image_count: ic, image_alt_count: ac}) when is_integer(ic) and ic > 0 do
+    "#{round(ac / ic * 100)}% (#{ac} of #{ic})"
+  end
+
+  defp alt_pct(_), do: "—"
 
   @impl true
   def render(assigns) do
@@ -323,43 +484,45 @@ defmodule SpectabasWeb.Dashboard.SEOLive do
                   No audits yet. Click "Audit top pages" or paste a URL above to start.
                 </td>
               </tr>
-              <tr :for={a <- @audits} class="hover:bg-indigo-50">
-                <td class="px-5 py-2 font-mono text-xs truncate max-w-md">
-                  <.link
-                    navigate={~p"/dashboard/sites/#{@site.id}/transitions?path=#{url_path(a.url)}"}
-                    class="text-indigo-700 hover:text-indigo-900"
-                  >
+              <%= for a <- @audits do %>
+                <tr
+                  phx-click="toggle_audit"
+                  phx-value-id={a.id}
+                  class={[
+                    "cursor-pointer hover:bg-indigo-50",
+                    if(@expanded_audit_id == a.id, do: "bg-indigo-50", else: "")
+                  ]}
+                >
+                  <td class="px-5 py-2 font-mono text-xs truncate max-w-md">
+                    <span class="mr-1 text-gray-400">
+                      {if @expanded_audit_id == a.id, do: "▾", else: "▸"}
+                    </span>
                     {a.url}
-                  </.link>
-                </td>
-                <td class="px-5 py-2 text-right">
-                  <span class={[
-                    "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium tabular-nums",
-                    score_class(a.score)
-                  ]}>
-                    {a.score || "—"}
-                  </span>
-                </td>
-                <td class="px-5 py-2 text-right tabular-nums text-xs">
-                  <% breakdown = severity_breakdown(a) %>
-                  <span :if={Map.get(breakdown, "critical", 0) > 0} class="text-rose-700">
-                    {Map.get(breakdown, "critical", 0)}c
-                  </span>
-                  <span :if={Map.get(breakdown, "major", 0) > 0} class="text-amber-700 ml-1">
-                    {Map.get(breakdown, "major", 0)}M
-                  </span>
-                  <span :if={Map.get(breakdown, "minor", 0) > 0} class="text-gray-500 ml-1">
-                    {Map.get(breakdown, "minor", 0)}m
-                  </span>
-                  <span :if={issue_count(a) == 0} class="text-emerald-700">0</span>
-                </td>
-                <td class="px-5 py-2 text-right tabular-nums text-xs">
-                  {format_response(a.response_time_ms)}
-                </td>
-                <td class="px-5 py-2 text-right text-xs text-gray-500">
-                  {format_relative(a.captured_at)}
-                </td>
-              </tr>
+                  </td>
+                  <td class="px-5 py-2 text-right">
+                    <span class={[
+                      "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium tabular-nums",
+                      score_class(a.score, a)
+                    ]}>
+                      {score_display(a)}
+                    </span>
+                  </td>
+                  <td class="px-5 py-2 text-left text-xs">
+                    {render_issue_summary(a)}
+                  </td>
+                  <td class="px-5 py-2 text-right tabular-nums text-xs">
+                    {format_response(a.response_time_ms)}
+                  </td>
+                  <td class="px-5 py-2 text-right text-xs text-gray-500">
+                    {format_relative(a.captured_at)}
+                  </td>
+                </tr>
+                <tr :if={@expanded_audit_id == a.id} class="bg-gray-50">
+                  <td colspan="5" class="px-5 py-4">
+                    {render_audit_detail(a)}
+                  </td>
+                </tr>
+              <% end %>
             </tbody>
           </table>
         </div>
@@ -402,13 +565,4 @@ defmodule SpectabasWeb.Dashboard.SEOLive do
       true -> "#{div(diff, 86_400)}d ago"
     end
   end
-
-  defp url_path(url) when is_binary(url) do
-    case URI.parse(url) do
-      %URI{path: p} when is_binary(p) -> p
-      _ -> "/"
-    end
-  end
-
-  defp url_path(_), do: "/"
 end

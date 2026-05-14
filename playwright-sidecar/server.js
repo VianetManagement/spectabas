@@ -19,8 +19,22 @@ app.use(express.json({ limit: '256kb' }));
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.PLAYWRIGHT_API_KEY || '';
 const DEFAULT_TIMEOUT_MS = parseInt(process.env.DEFAULT_TIMEOUT_MS || '25000', 10);
+
+// Default UA: real-Chrome with a SpectabasBot suffix.
+//
+// Why Chrome-flavored: Cloudflare's Bot Fight Mode and most generic
+// "block bots" filters trigger on any UA containing the literal word
+// "Bot" at the start. Putting "Bot" after a real Chrome string lets
+// us pass those filters while still identifying ourselves in raw
+// server logs and via the +https://... contact URL.
+//
+// The site admin can override this per-site via Site Settings →
+// Content → SEO audit → User agent. We pass that string here in the
+// POST body's `user_agent` field.
 const USER_AGENT =
-  process.env.USER_AGENT || 'SpectabasBot/1.0 (+https://www.spectabas.com/bot)';
+  process.env.USER_AGENT ||
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) ' +
+    'Chrome/131.0.0.0 Safari/537.36 SpectabasBot/1.0 (+https://www.spectabas.com/bot)';
 
 let browser = null;
 let launching = null;
@@ -66,6 +80,11 @@ app.post('/audit', async (req, res) => {
 
   const url = (req.body && req.body.url) || '';
   const timeoutMs = parseInt(req.body?.timeout_ms || DEFAULT_TIMEOUT_MS, 10);
+  // Per-request UA override (set by the Elixir caller from
+  // sites.seo_user_agent). Falls back to the sidecar's default.
+  const userAgent =
+    (req.body && typeof req.body.user_agent === 'string' && req.body.user_agent.trim()) ||
+    USER_AGENT;
 
   if (!url || !/^https?:\/\//i.test(url)) {
     return res.status(400).json({ error: 'invalid_url', detail: 'url must be http(s)' });
@@ -78,7 +97,7 @@ app.post('/audit', async (req, res) => {
   try {
     const b = await getBrowser();
     context = await b.newContext({
-      userAgent: USER_AGENT,
+      userAgent: userAgent,
       viewport: { width: 1280, height: 1024 },
       // Block heavy resources to keep audits fast — we only care about
       // the HTML/DOM, not images/fonts. Saves a few seconds per audit.

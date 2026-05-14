@@ -34,8 +34,12 @@ defmodule Spectabas.Workers.SEOPageAudit do
 
     Logger.notice("[SEOPageAudit] site=#{site_id} trigger=#{trigger} url=#{url}")
 
+    site = Spectabas.Sites.get_site!(site_id)
+
+    fetch_opts = [user_agent: site.seo_user_agent]
+
     fetch_result =
-      case SEO.HeadlessClient.fetch(url) do
+      case SEO.HeadlessClient.fetch(url, fetch_opts) do
         {:ok, result} ->
           Map.put(result, :trigger, trigger)
 

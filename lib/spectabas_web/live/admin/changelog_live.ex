@@ -65,6 +65,15 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.48", "2026-05-15T01:30:00Z",
+       [
+         %{
+           title:
+             "SEO audit v2 — Chrome-flavored UA, per-site UA override, Cloudflare allow-rule docs, expandable issue rows",
+           description:
+             "Iteration on v6.10.47 driven by real-world testing: the original `SpectabasBot/1.0` default UA was getting blocked by Cloudflare's default Bot Fight Mode, and the listing page's `1c / 2M / 1m` issue badges were unreadable.\n\n**Better default UA** — sidecar default is now a real Chrome UA with a `SpectabasBot/1.0 (+https://www.spectabas.com/bot)` suffix: `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 SpectabasBot/1.0 …`. Passes generic UA-based blocks (which trip on UAs starting with bot names); still identifiable in raw access logs and via the `+url` for site admins to recognize. **Important: redeploy the Playwright sidecar on Render** to pick up the new default.\n\n**Per-site UA override** — new `sites.seo_user_agent` text field. Set in Site Settings → Content → SEO audit → 'Audit User-Agent'. Elixir passes the value as `user_agent` in the POST body to the sidecar. Lets admins use a unique UA string and write a precise Cloudflare allow-rule against it.\n\n**Cloudflare allow-rule documentation** — bright amber callout in Site Settings → SEO audit section, with the exact WAF rule recipe: Field=User Agent, Operator=contains, Value=SpectabasBot, Action=Skip (Bot Fight Mode + managed rules). Walks the admin through the dashboard click path.\n\n**Expandable audit rows** — clicking any row in the SEO listing now expands a detail panel showing:\n- Plain-English issue list (was `1c/0M/0m`, now `1 critical, 2 major`) grouped by severity with color-coded severity bars and full messages\n- Fetch error message prominently displayed when the audit failed (so a 0-score / 'Failed' row is immediately understandable)\n- Title length / meta length / word count / link counts / image alt coverage / status code / schema types / canonical at a glance\n\n**'Failed' label** — score column shows the word 'Failed' (not the confusing '0') when the fetch errored. Score badge greys out instead of using the red-for-zero color so it's clearly a missing audit, not a bad one.\n\nMigration `20260515000002_add_seo_user_agent_to_sites`. 1009 tests still passing."
+         }
+       ]},
       {"v6.10.47", "2026-05-15T01:00:00Z",
        [
          %{
