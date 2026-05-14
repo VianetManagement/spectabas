@@ -65,6 +65,15 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.41", "2026-05-14T22:00:00Z",
+       [
+         %{
+           title:
+             "Docs refresh — Forms, Languages, Cohorts, Insights, Segments & Filters (+ chatbot picks them up automatically)",
+           description:
+             "User-facing documentation under `/docs` was three to six versions behind. Five new entries added under the Dashboard category:\n\n- **Forms** — what's tracked, two form kinds (real `<form>` vs detected input cluster), list page, detail page features, common pitfalls (cluster ID stability under emotion/styled-components, no pre-v6.10.35 backfill)\n- **Languages** — `navigator.language` + `<html lang>` signals, mismatch detection rules (primary subtag comparison), country crosstab, snapshot freshness\n- **Cohorts** — saved segments vs cohorts, builder grammar, three field flavors (CH-direct / virtual / PG-resolved + 10k cap warning), 'Create cohort of abandoners' deep-link from form detail page\n- **Insights** — anomaly feed, daily 04:00 UTC generator, AI explanations via Haiku, per-user dismissals, goal-pace stub caveat\n- **Segments & Filters** — full grammar reference covering all CH-direct fields (incl. `browser_language` / `page_language` / `ip_continent_name` / `click_id_type` / UTM term+content), virtual fields (`returning` / `form_submitted` / `form_abandoned`), PG-resolved (`identified` / `scraper_whitelisted`), with worked examples\n\nThree updates to existing entries:\n\n- **Tracker Configuration** — new 'Auto-Tracked Events' table covering all 12 internal event types; new 'Form Tracking' section explaining `<form>` vs cluster detection + the per-event payload fields including `_lang` / `_plang` on every event\n- **Scraper Detection** — added 'Scraper Labels' section covering Stage 1 (`/admin/scraper-labels` correlation report) and Stage 2 (calibration prompt grounds AI in label data when ≥ 5 labels per class); Stage 3 logistic regression noted on roadmap\n- **Dashboard Overview** — refreshed Layout section to list current 41 pages across 7 categories including the new Behavior → Forms, Audience → Languages + Cohorts, Overview → Insights\n\n**Chatbot automatically gets all of this** — `Spectabas.AI.HelpChat`'s system prompt is built at request time from `SpectabasWeb.DocsLive.sections()`, so the Haiku-backed help chat now answers questions about Forms / Languages / Cohorts / Insights / the form_abandoned virtual field / etc. without any extra wiring. The `/docs` search (substring match on title + body across every entry) verified against `form_abandoned`, `browser_language`, `navigator.language` — all hit the new entries."
+         }
+       ]},
       {"v6.10.40", "2026-05-14T21:30:00Z",
        [
          %{

@@ -626,6 +626,39 @@ defmodule SpectabasWeb.DocsLive do
             ```
 
             This passes a temporary token via URL parameter (`_sabt`) when visitors click links between your domains. Only works with GDPR mode off.
+
+            ### Auto-Tracked Events
+
+            Without any extra JS, the tracker emits these events from page interactions:
+
+            | Event | Fires when | Powers |
+            |-------|-----------|--------|
+            | `pageview` | initial load + SPA pathname change | every dashboard page |
+            | `_outbound` | click on a link to a different hostname | Outbound Links page |
+            | `_download` | click on a link to a downloadable file extension | File Downloads page |
+            | `_click` | click on `<button>`, internal `<a>`, `[role=button]`, or `<input[type=submit]>` | Click Elements / click-element goals |
+            | `_rum` | page load complete (with nav-timing metrics) | Performance (RUM) |
+            | `_cwv` | Core Web Vitals (LCP/CLS/FID) measured | Performance (RUM) |
+            | `_form_view` | a `<form>` is in the DOM at pageview, or an input cluster is detected | Forms page (views column) |
+            | `_form_start` | first focus into an input inside a form / cluster | Forms page (starts) |
+            | `_form_submit` | native submit, or click on a submit-verb button inside a started cluster | Forms page (submits) |
+            | `_form_abandon` | tab hidden / pagehide with form started but no submit | Forms page (abandons) |
+            | `_form_validation_error` | browser fires `invalid` on an input | Form detail → Validation errors |
+            | `_form_abuse` | form-submit-bot heuristic (rapid clicks, pastes, sub-2s submit) | Spam filter |
+
+            Every event also carries `_lang` (visitor's `navigator.language`, e.g. `"en-US"`) and `_plang` (page's `<html lang>` attribute, e.g. `"en"`) on its properties payload. The server materializes these into `browser_language` and `page_language` columns and powers the Languages dashboard page.
+
+            ### Form Tracking
+
+            Two kinds of form-like surfaces are auto-detected:
+
+            1. **`<form>` tags** — the most reliable. Submit detected via the browser's native `submit` event. Form ID derives from `form.id` → `name:<form.name>` → `action:<url.pathname>` → `form:<index>`.
+
+            2. **Input clusters** — groups of ≥ 2 `<input>` / `<select>` / `<textarea>` not inside a `<form>` but sharing an identifiable ancestor container (with `id`, `data-testid`, `aria-label`, or a non-CSS-generated className). Treated as a synthetic form. **Submit is inferred** from clicks on buttons whose text matches `submit|send|sign up|sign in|log in|register|subscribe|continue|next|save|join|create account|get started|order|checkout|pay|buy`, only counted if the user previously focused an input in the same cluster ancestry. Common in React / Next.js apps that submit via `fetch`.
+
+            Each event carries `_form_id`, `_form_name`, `_form_action`, `_form_kind` (`"form"` or `"cluster"`). Submit and abandon also carry `_t_to_submit` / `_t_to_abandon` (milliseconds from form start) and `_field_times` (JSON blob `{field: total_ms_focused}`). Start events carry `_first_field` + `_field_type`. Abandon events carry `_last_field`.
+
+            **Disable tracking on a specific form** — there's no built-in opt-out attribute yet. If you need to skip a noisy form (search bar, cookie consent), make sure its container doesn't get an identifiable handle (no `id`, no `data-testid`, no semantic className), or wrap inputs in a form-with-no-id that lacks `name` / `action` and the synthesized `form:<index>` ID will be unstable enough to ignore. We'll add a `data-spectabas-skip` attr if requests come in.
             """
           },
           %{
@@ -1185,6 +1218,172 @@ defmodule SpectabasWeb.DocsLive do
             ### Saved Segments
 
             Save your frequently used filter combinations as named presets. When you have active filters, click **Save current** in the filter bar, enter a name, and the segment is saved. Click a saved segment name to instantly reload those filters. Each user has their own saved segments per site. Delete a saved segment with the **x** button.
+
+            > **Cohorts** are the bigger sibling of saved segments — site-wide visibility (everyone with site access sees them), comparison view, side-by-side metrics. See the **Cohorts** doc for details.
+
+            ### Dashboard Layout
+
+            41 pages organized in 7 sidebar categories:
+
+            - **Overview** — Dashboard, Insights (anomaly feed with AI explanations), Journeys, Realtime
+            - **Behavior** — Pages, Entry/Exit, Page detail, Site Search, Outbound Links, Downloads, **Forms** (auto-tracked forms + input clusters), Custom Events, Performance (RUM)
+            - **Acquisition** — Acquisition, Campaigns, Search Keywords (GSC + Bing)
+            - **Audience** — Geography, Visitor Map, Devices, **Languages** (browser language + `<html lang>` + country crosstab + mismatch detection), Network, Bot Traffic, Scrapers, Visitor Log, **Cohort Retention**, **Cohorts** (saved segments), Churn Risk
+            - **Conversions** — Goals, Click Elements, Funnels, Ecommerce, Revenue Attribution, Revenue Cohorts, Buyer Patterns, MRR & Subscriptions
+            - **Ad Effectiveness** — Visitor Quality, Time to Convert, Ad Visitor Paths, Ad-to-Churn, Organic Lift
+            - **Tools** — Reports, Email Reports, Exports, Settings
+
+            Many of the highest-traffic pages (Geography, Devices, Languages, Forms, Search Keywords, Pages, etc.) read from hourly Postgres snapshots on their default date range, falling back to live ClickHouse queries on non-default ranges. The "Snapshot · last update X" label under a page title indicates the data came from cache.
+            """
+          },
+          %{
+            id: "segments-filters",
+            title: "Segments & Filters",
+            body: """
+            The same filter grammar powers three places in the product:
+
+            1. **Dashboard filter bar** — slice any page (Pages, Sources, Geography, etc.) by one or more filters
+            2. **Saved segments** — name a filter combo as a personal preset for quick re-apply
+            3. **Cohorts** — name a filter combo as a site-wide named visitor group with its own comparison view
+
+            ### Filter shape
+
+            Every filter is a `field op value` triple. Combine multiple filters with implicit AND.
+
+            **Operators:**
+
+            | Op | Behavior | Example |
+            |----|---------|---------|
+            | `is` | exact match | `browser is Chrome` |
+            | `is_not` | exact non-match | `ip_country is_not US` |
+            | `contains` | substring (LIKE `%v%`) | `url_path contains /blog` |
+            | `not_contains` | substring negated | `referrer_domain not_contains google` |
+
+            ### Available fields
+
+            Three flavors, depending on how the filter translates to SQL:
+
+            **CH-direct fields** — direct columns on the events table. Fastest.
+
+            | Field | Type | Notes |
+            |-------|------|-------|
+            | `ip_country` | string | ISO 2-letter country code (`US`, `FR`) |
+            | `ip_country_name` | string | Full name (`United States`) |
+            | `ip_continent_name` | string | (`Europe`, `Asia`) |
+            | `ip_region_name` | string | Region / state |
+            | `ip_city` | string | City |
+            | `ip_timezone` | string | (`America/New_York`) |
+            | `ip_asn` | int | ASN number |
+            | `ip_org` | string | ASN organization name |
+            | `ip_is_bot` | 0/1 | UA-detected bot |
+            | `ip_is_datacenter` | 0/1 | datacenter IP (NOT bot — corporate proxies + VPNs hit this) |
+            | `ip_is_vpn` | 0/1 | consumer VPN |
+            | `browser` | string | (`Chrome`, `Firefox`) |
+            | `os` | string | (`Windows`, `macOS`) |
+            | `device_type` | string | (`desktop`, `smartphone`, `tablet`) |
+            | `referrer_domain` | string | (`google.com`, empty = direct) |
+            | `utm_source` / `utm_medium` / `utm_campaign` / `utm_term` / `utm_content` | string | UTM params |
+            | `click_id_type` | string | (`google_ads`, `bing_ads`, `meta_ads`, …) |
+            | `url_path` / `url_host` | string | path or hostname |
+            | `event_type` | string | (`pageview`, `custom`) |
+            | `event_name` | string | for custom events |
+            | `visitor_intent` | string | (`buying`, `researching`, …) |
+            | `browser_language` | string | `navigator.language` (`en-US`) — added v6.10.37 |
+            | `page_language` | string | `<html lang>` (`en`) — added v6.10.37 |
+
+            **Virtual fields** (emit CH subqueries):
+
+            | Field | Value | Meaning |
+            |-------|-------|---------|
+            | `returning` | `yes` / `no` | Visitor seen on 2+ distinct days |
+            | `form_submitted` | `<form_id>` | Visitor fired `_form_submit` for that form |
+            | `form_abandoned` | `<form_id>` | Visitor fired `_form_start` but no `_form_submit` for that form |
+
+            **PG-resolved fields** (pre-resolved in Postgres, capped at 10,000 visitor IDs — exceed the cap and the cohort detail view shows an amber truncation warning):
+
+            | Field | Value | Meaning |
+            |-------|-------|---------|
+            | `identified` | `yes` / `no` | Visitor has an associated email (via `Spectabas.identify()`) |
+            | `scraper_whitelisted` | `yes` / `no` | Manually whitelisted from scraper detection |
+
+            ### Examples
+
+            **Mobile traffic from Reddit that converted:**
+
+            ```
+            device_type is smartphone
+            referrer_domain is reddit.com
+            form_submitted is signup-form
+            ```
+
+            **French-Canadian expats reading the English site:**
+
+            ```
+            browser_language is fr-CA
+            page_language is en
+            ```
+
+            **Returning buyers who haven't been seen this week:**
+
+            ```
+            returning is yes
+            visitor_intent is buying
+            ```
+
+            **Non-bot visitors who started but didn't finish checkout:**
+
+            ```
+            form_abandoned is checkout-form
+            ip_is_bot is 0
+            ```
+
+            ### Where to use which
+
+            - **One-off slicing** → dashboard filter bar
+            - **"I always want to check this view"** → save as a personal segment
+            - **"My team needs to track this group long-term"** → cohort with `site` visibility
+            - **"I want to compare two groups side-by-side"** → two cohorts + the compare view (`/cohorts/compare?a=X&b=Y`)
+            """
+          },
+          %{
+            id: "insights",
+            title: "Insights",
+            body: """
+            An actionable feed of detected anomalies on your site, each annotated with a plain-English AI explanation. The point is to surface things that need your attention without you having to scan every dashboard page for changes.
+
+            ### Where it appears
+
+            - **Dashboard overview** — a compact "What's happening" card showing the top 5 active insights. Each has a ✕ to dismiss it per-user (so your dismissals don't hide insights from teammates).
+            - **Full feed** — `/dashboard/sites/:id/insights-feed`. Every active insight with full context.
+
+            ### What gets detected
+
+            The daily anomaly detector runs nightly and compares the last 24h against a baseline of the prior 7-day rolling average. 17 anomaly types ship:
+
+            - Pageview spike / drop
+            - Bounce-rate jump
+            - New top country / source / browser
+            - Bot traffic share spike
+            - Scraper detection volume change
+            - Conversion-rate drop on a goal
+            - Search keyword position drop (GSC / Bing)
+            - New high-volume referrer domain
+            - … and several more
+
+            Each anomaly that fires gets turned into an `Insight` row by the `Workers.InsightsGenerator` Oban worker at 04:00 UTC. Rows are deduplicated per `(site, kind, dedupe_key)` so re-running detection doesn't multiply them.
+
+            ### AI explanations
+
+            For every anomaly insight, an async job calls Anthropic Haiku via the platform's `HELP_AI_API_KEY` (not your per-site AI config — these explanations are platform-provided, not metered to you). It returns 2-3 sentences explaining what the metric is, why the change is notable, and what to investigate first. The explanation lands on the insight a few seconds after it's created.
+
+            ### Dismissals
+
+            Dismissals are **per-user** (stored in `insight_dismissals`), so dismissing an insight only hides it for you. Teammates still see it on their dashboards until they dismiss it themselves.
+
+            ### Caveats
+
+            - **Goal-pace insights are stubbed in v1** — the detector returns `[]` for that source. Pace anomalies (a goal that's running behind a target) will land in a future deploy.
+            - The detector uses a 7-day rolling baseline, so brand-new sites won't generate useful insights for the first week.
             """
           },
           %{
@@ -1326,6 +1525,61 @@ defmodule SpectabasWeb.DocsLive do
             """
           },
           %{
+            id: "forms",
+            title: "Forms",
+            body: """
+            Auto-tracked form analytics. **No code changes needed** — the tracker detects every `<form>` on the page plus "input clusters" (groups of inputs without a wrapping form, common in React / Next.js apps) and emits view / start / submit / abandon events as visitors interact.
+
+            ### What's tracked
+
+            Per form (or cluster), you get:
+
+            - **Views** — pageviews where the form was in the DOM
+            - **Starts** — visitors who focused into any field
+            - **Submits** — native form submits + heuristic-inferred cluster submits
+            - **Abandons** — started but left the page (tab hidden / pagehide) without submitting
+            - **Submit rate** = submits / views · **Abandon rate** = abandons / starts
+            - **Per-field drop-off** — which field was the visitor's last touch when they abandoned. The field with the most abandons is your funnel breakpoint.
+            - **Per-field time spent** — average ms each field was focused (long times = friction)
+            - **Time-to-submit distribution** — p10 / p50 / p90 / suspicious-fast (< 2s, likely bot) / slow-friction (> 60s)
+            - **Validation errors** — counts per field of HTML5 `invalid` events, plus a sample browser message
+
+            ### Two form kinds
+
+            - **Form** (badge: emerald) — actual `<form>` tag. Submit detected via the browser's native event — most reliable.
+            - **Cluster** (badge: indigo) — group of ≥ 2 inputs sharing an identifiable ancestor container, no wrapping `<form>`. Submit is **inferred** from a click on a button whose text matches a submit verb (`submit`, `send`, `sign up`, `continue`, `save`, `checkout`, etc.) AND the click bubbles up through an ancestor of a cluster the visitor previously focused. The Summary card on the list page shows a "heuristic" count beside the submit total — keep an eye on it as a sanity check.
+
+            ### Forms list page
+
+            `/dashboard/sites/:id/forms` — table of every detected form with views / starts / submits / abandons + both rates. **Every column header is clickable** to sort; clicking the same column flips the direction. Default sort is Views desc. Click a row to open the detail page.
+
+            ### Form detail page
+
+            `/dashboard/sites/:id/forms/:form_id` — deep-dive on a single form:
+
+            - **KPI cards** with period-over-period ↑/↓ % vs the prior equal range
+            - **Conversion funnel** visualization (Views → Starts → Submits as horizontal bars)
+            - **Daily timeseries** of all four event types
+            - **Per-field drop-off** + **time per field** side-by-side
+            - **Top URLs hosting this form** — same form_id often appears on multiple pages
+            - **Breakdowns** — submit rate by device type, country, browser language, UTM source
+            - **Time-to-submit distribution** — p10/p50/p90/avg + suspicious + slow counts
+            - **Submit trigger split** (clusters only) — native vs button-text
+            - **Validation errors** table
+            - **Recent activity** feed — last 50 submits + abandons with linkable visitor IDs
+
+            ### Create cohort of abandoners
+
+            The header has a **+ Create cohort of abandoners** button that deep-links into the cohort builder with `form_abandoned is <this_form_id>` pre-filled. Saved cohorts then segment the rest of the dashboard — e.g. "what are abandoners of the checkout form viewing first?"
+
+            ### Common pitfalls
+
+            - **Search bars and login forms** also get tracked — they're forms. Use the kind / form_id columns to mentally filter on the list page.
+            - **Cluster ID stability**: clusters get an ID derived from the container's `id` → `data-testid` → `aria-label` → first className. If you re-deploy with a new className hash (emotion / styled-components with auto-generated classes starting with `css-`), the cluster ID changes and metrics fork — add a stable `id` or `data-testid` on the container to lock the ID.
+            - **No backfill for pre-v6.10.35 traffic** — the tracker only started emitting `_form_*` events from then. Charts that span the deploy boundary will look low/empty before that date.
+            """
+          },
+          %{
             id: "custom-events",
             title: "Custom Events",
             body: """
@@ -1437,6 +1691,44 @@ defmodule SpectabasWeb.DocsLive do
             """
           },
           %{
+            id: "languages",
+            title: "Languages",
+            body: """
+            What language are your visitors browsing in, and what language did your site serve them? Two signals on every event:
+
+            - **Browser language** — from `navigator.language` (e.g. `"en-US"`, `"fr-FR"`, `"es"`). What the visitor's OS / browser is set to. Strong proxy for the language a person prefers — much more reliable than country IP alone (a French speaker in Canada and an English speaker in Spain look identical by country but obvious by language).
+            - **Page language** — from `<html lang="...">` on the page that fired the event (e.g. `"en"`, `"es"`). What language your site served them. Pages that don't set `<html lang>` show empty; adding it is a one-line markup change that also helps screen readers and SEO.
+
+            ### What you'll see
+
+            - **Summary cards** — distinct browser languages, distinct page languages, mismatch rate
+            - **Top browser languages** — visitor + pageview counts per language code
+            - **Top page languages** — same metrics but for the pages your site served
+            - **Language × country crosstab** — the dominant pair (e.g. `en-US` in `US`) sits at the top; scroll for the unusual combinations that reveal **diaspora / expat / multilingual segments** worth targeting
+            - **Mismatches** — visitor's browser primary subtag ≠ page's `<html lang>` primary subtag. So `en-US` reading `en-GB` content is fine, but `en-US` reading `fr` is flagged. Strong signal that someone reached your translated content in a non-native language — usually means the language picker is hard to find, the auto-detect is wrong, or you don't have a translated version available.
+
+            ### How it's compared
+
+            Mismatch detection uses just the **primary subtag** (the part before the hyphen). So:
+
+            | Browser | Page | Mismatch? |
+            |---------|------|----------|
+            | `en-US` | `en-GB` | No — both `en` |
+            | `pt-BR` | `pt` | No — both `pt` |
+            | `en-US` | `fr` | **Yes** |
+            | `fr-CA` | `en` | **Yes** |
+
+            ### Performance
+
+            The page loads its default 30-day range from an hourly Postgres snapshot — instant load. 7-day and 90-day ranges fall back to live ClickHouse. Look for the "Snapshot · last update X" line under the page title.
+
+            ### Caveats
+
+            - **No backfill for pre-v6.10.37 traffic** — language data is empty on events before the tracker started sending `_lang` and `_plang`. Charts that span the deploy boundary have a hard cutoff.
+            - Page languages depend on customer sites actually setting `<html lang>`. Many don't, especially WordPress sites with single-language content. The "Top page languages" table will look sparse on those sites until the markup is added.
+            """
+          },
+          %{
             id: "network",
             title: "Network",
             body: """
@@ -1538,12 +1830,22 @@ defmodule SpectabasWeb.DocsLive do
 
             The **Calibration** tab analyzes your site's traffic with AI and recommends per-site weight adjustments:
 
-            1. Click **Run AI Calibration** — gathers 14 data dimensions from ClickHouse (pageview distribution, session duration, network breakdown, device types, top ASNs, IP rotation, referrers, VPN providers, request timing, screen resolutions, Chrome versions, content crawl patterns)
-            2. AI analyzes each signal with per-signal reasoning and confidence level
+            1. Click **Run AI Calibration** — gathers 14 behavioral dimensions from ClickHouse (pageview distribution, session duration, network breakdown, device types, top ASNs, IP rotation, referrers, VPN providers, request timing, screen resolutions, Chrome versions, content crawl patterns) PLUS the Label Correlation Report (see below)
+            2. AI analyzes each signal with per-signal reasoning and confidence level. **When ≥ 5 labels exist per class** (humans flagged scrapers + humans whitelisted), the AI is instructed to weigh the label evidence above the behavioral inference — labels are ground truth.
             3. Weight cards show current → recommended with color coding (green = decreased, red = increased)
             4. **Approve** to apply as per-site overrides, or **Reject** to dismiss
 
             Per-site weight overrides apply to all scoring — Scrapers page, visitor profiles, and webhook notifications.
+
+            ### Scraper Labels
+
+            Every Mark-as-Scraper / Whitelist / Unflag click, plus every auto-flag and ecommerce-purchase-on-flagged-visitor, gets appended to a `scraper_labels` table along with the visitor's signal vector at that moment. The table is append-only — past labels are evidence that doesn't change when current scoring changes.
+
+            Stage 1 ships a **label correlation report at `/admin/scraper-labels`**: per-signal P(signal | scraper) vs P(signal | not_scraper), a heuristic verdict (`underweighted` / `overweighted` / `weak_signal` / `too_few_labels`), counts by label source, a false-positives list (visitors scored ≥ 85 but later whitelisted) and false-negatives list (visitors scored < 40 but manually flagged). Eyeball this to spot weights that need hand-tuning.
+
+            Stage 2 wires the same report directly into the AI Calibration prompt (above), so weight recommendations are grounded in what humans actually flag, not just behavioral percentiles.
+
+            Stage 3 — full logistic-regression fitting once ≥ 200 high-confidence labels accumulate per site — is on the roadmap.
 
             ### Visitor Profile Integration
 
@@ -1637,6 +1939,53 @@ defmodule SpectabasWeb.DocsLive do
           },
           %{
             id: "cohort",
+            title: "Cohorts",
+            body: """
+            Named, persisted segments of visitors that you can compare side-by-side. The bigger sibling of saved segments: site-wide visibility, comparison view, dedicated metrics page.
+
+            ### When to use cohorts vs saved segments
+
+            - **Saved segments** are personal filter presets — quick-apply on dashboard pages. Stored per-user.
+            - **Cohorts** are named visitor groups with their own metrics page, shared across teammates if visibility is "site", and built for **comparison** ("how do mobile-Reddit visitors behave vs desktop-Google visitors?").
+
+            ### Building a cohort
+
+            Visit `/dashboard/sites/:id/cohorts`. Click **New cohort**. Give it a name + visibility (`private` = creator only, `site` = everyone with access to this site), then add filters using the same `field op value` grammar as dashboard segments — see the **Segments & Filters** doc for the full field list. Save.
+
+            Example filter combinations:
+
+            - `device_type is smartphone` AND `referrer_domain is reddit.com` → "Mobile Redditors"
+            - `browser_language is fr-CA` AND `ip_country is US` → "French-Canadian expats in the US"
+            - `form_abandoned is signup-form` → "Visitors who started but didn't finish the signup form"
+            - `returning is yes` AND `identified is yes` → "Logged-in returning users"
+
+            ### Detail page
+
+            Click any cohort to see:
+
+            - Unique visitor + pageview + bounce + avg-duration cards
+            - Top pages, top sources, goal conversion rates — all cohort-scoped
+            - A truncation warning if the cohort matches more than 10,000 visitors in Postgres (for PG-resolved fields, see below)
+
+            ### Compare view
+
+            Side-by-side comparison at `/cohorts/compare?a=X&b=Y`. Same metric layout, two columns. Useful for asking "what does cohort A do that cohort B doesn't?"
+
+            ### Field flavors
+
+            Three categories of fields you can filter on:
+
+            1. **CH-direct** — direct columns on the events table (`device_type`, `ip_country`, `browser_language`, `utm_source`, etc.). Fastest path.
+            2. **Virtual (CH subquery)** — `returning` (visitor seen on 2+ distinct days), `form_submitted` (fired a `_form_submit` for the given form_id), `form_abandoned` (fired `_form_start` but no `_form_submit`). Emit `visitor_id IN (subquery)` clauses.
+            3. **PG-resolved** — `scraper_whitelisted`, `identified`. Pre-resolved in Postgres to a visitor_id list (capped at 10,000) and passed into the CH query as an `IN` clause. If your filter matches more than 10k visitors in PG, you'll see an amber **truncation warning** on the detail page — tighten the filters for an exact result.
+
+            ### Create cohort from a form
+
+            On any form's detail page (Behavior → Forms → click a form), the header has a **+ Create cohort of abandoners** button that deep-links into the cohort builder with `form_abandoned is <form_id>` pre-filled. Save it and the abandoners are a comparable cohort across the rest of the dashboard.
+            """
+          },
+          %{
+            id: "cohort-retention",
             title: "Cohort Retention",
             body: """
             A weekly retention grid showing what percentage of visitors return after their first visit.
