@@ -65,6 +65,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.49", "2026-05-15T02:00:00Z",
+       [
+         %{
+           title: "Per-page SEO audit panel on Page Detail + live polling",
+           description:
+             "Closes out task #86 from the SEO Phase 1 plan. The dedicated `/dashboard/sites/:id/seo` listing existed since v6.10.47, but per-page detail still required clicking back over there. Now every Page Detail view (`/dashboard/sites/:id/transitions?page=...`) has a 'SEO audit' panel at the bottom showing the latest audit for that URL, with full issue list, error display, and key metadata at a glance.\n\n**Run audit now** button enqueues an on-demand audit (doesn't count against weekly budget) and the panel auto-refreshes when the audit completes — `Process.send_after(self(), :poll_seo_audit, 5_000)` polls until a new audit row lands (captured_at within last 90s) or gives up if the worker takes too long. Spinner + 'Auditing… (auto-refreshes when complete)' label while polling.\n\n**Permissions:** Run audit button is hidden for viewers (gated on `Accounts.can_write?/1`). Anyone with site access can SEE the audit data, just not trigger new ones.\n\n**URL construction:** new shared helper `Spectabas.SEO.build_audit_url/2` builds the customer URL by stripping the `b.` analytics-subdomain prefix from `site.domain` and appending the page path. Refactored SEOLive to use it (removes duplicate logic).\n\nNo new tests — existing TransitionsLive smoke tests cover mount + render; SEO panel uses the same template-conditional pattern proven elsewhere. 1009 tests still passing."
+         }
+       ]},
       {"v6.10.48", "2026-05-15T01:30:00Z",
        [
          %{

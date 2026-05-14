@@ -108,6 +108,20 @@ defmodule Spectabas.SEO do
     end
   end
 
+  @doc """
+  Build a full URL from a site + path. Strips the leading `b.`
+  analytics-subdomain prefix so we audit the actual customer site
+  (`example.com/page`), not their analytics subdomain
+  (`b.example.com/page`). Shared between SEOLive (bulk audit URL
+  generation) and TransitionsLive (per-page audit button).
+  """
+  def build_audit_url(site, path) when is_binary(path) and path != "" do
+    domain = site.domain |> String.replace_prefix("b.", "")
+    "https://#{domain}#{path}"
+  end
+
+  def build_audit_url(_, _), do: nil
+
   defp do_enqueue(site_id, url, trigger) do
     %{"site_id" => site_id, "url" => url, "trigger" => trigger}
     |> Spectabas.Workers.SEOPageAudit.new()

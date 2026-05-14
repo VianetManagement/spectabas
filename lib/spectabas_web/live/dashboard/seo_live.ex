@@ -152,13 +152,7 @@ defmodule SpectabasWeb.Dashboard.SEOLive do
 
   defp row_to_url(row, site) do
     path = row["url_path"] || row[:url_path]
-
-    if is_binary(path) and path != "" do
-      scheme = if site.gdpr_mode == "off", do: "https", else: "https"
-      "#{scheme}://#{site.domain |> String.replace_prefix("b.", "")}#{path}"
-    else
-      nil
-    end
+    SEO.build_audit_url(site, path)
   end
 
   defp system_user, do: %Spectabas.Accounts.User{role: :platform_admin}
