@@ -65,10 +65,19 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.30", "2026-05-14T13:50:00Z",
+       [
+         %{
+           title: "Diag: search_keywords_probe endpoint",
+           description:
+             "Search Keywords snapshot for site 7 was last written 2026-05-13 18:35:55 — before v6.10.21 deployed. Every other dashboard_snapshot kind refreshed today at 13:35, but this one specifically keeps failing silently in the worker (snapshot_kind's try/rescue catches the crash and skips it, leaving the stale row). Need to know which query is the culprit. `/oban-admin?action=search_keywords_probe&site_id=N` runs each of the 11 Spectabas.SearchKeywords functions in isolation with try/rescue/catch and reports per-query elapsed_ms + result summary. Tells us exactly where the crash is so the next deploy can fix the right thing."
+         }
+       ]},
       {"v6.10.29", "2026-05-13T22:50:00Z",
        [
          %{
-           title: "Scraper Detail popup now shows Lifetime / 24h / Last scan trio (matches profile)",
+           title:
+             "Scraper Detail popup now shows Lifetime / 24h / Last scan trio (matches profile)",
            description:
              "Follow-up to v6.10.28. After the consistency overhaul, the visitor profile correctly showed three scores (Lifetime / Last 24h / Last worker scan) but the Scrapers list popup still only showed the date-range score. Same visitor on profile vs popup = different numbers, still confusing. This deploy makes the popup display the same trio. When the popup opens it fires two extra scoring queries for the modal visitor (lifetime + 24h) and reads the worker's last-scan score from the visitor's PG row. The primary score in the popup header is still labeled with the date range (e.g. \"Score 85 (7d)\") so the connection to the list filter is clear, but underneath now sits the trio of badges that exactly mirrors the profile. The webhook-sent timestamp also shows up so it's obvious whether a webhook has fired and when."
          }

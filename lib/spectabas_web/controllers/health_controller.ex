@@ -2315,6 +2315,82 @@ defmodule SpectabasWeb.HealthController do
             err -> conn |> put_status(500) |> json(%{error: inspect(err)})
           end
 
+        "search_keywords_probe" ->
+          # Runs each Spectabas.SearchKeywords query in isolation and
+          # reports which ones succeed vs fail. Diagnoses the case where
+          # the snapshot kind isn't getting written — search_keywords
+          # alone among ~17 kinds was stuck at 2026-05-13 18:35 as of
+          # 2026-05-14 morning despite the hourly worker running fine
+          # on every other kind.
+          case Integer.parse(params["site_id"] || "") do
+            {site_id, _} ->
+              alias Spectabas.SearchKeywords, as: SK
+              {days, source, _sb, _sd} = SK.default_config()
+              order = SK.default_order()
+
+              run = fn name, fun ->
+                t0 = System.monotonic_time(:millisecond)
+
+                result =
+                  try do
+                    {:ok, fun.()}
+                  rescue
+                    e -> {:rescue, Exception.message(e) |> String.slice(0, 300)}
+                  catch
+                    kind, reason ->
+                      {:catch, "#{kind}: #{inspect(reason) |> String.slice(0, 300)}"}
+                  end
+
+                elapsed = System.monotonic_time(:millisecond) - t0
+
+                summary =
+                  case result do
+                    {:ok, v} when is_list(v) -> "ok, #{length(v)} rows"
+                    {:ok, %{} = v} -> "ok, map with #{map_size(v)} keys"
+                    {:ok, other} -> "ok: #{inspect(other) |> String.slice(0, 200)}"
+                    {:rescue, msg} -> "RESCUE: #{msg}"
+                    {:catch, msg} -> "CATCH: #{msg}"
+                  end
+
+                %{name: name, elapsed_ms: elapsed, result: summary}
+              end
+
+              results = [
+                run.("query_stats", fn -> SK.query_stats(site_id, days, source) end),
+                run.("query_top_queries", fn ->
+                  SK.query_top_queries(site_id, days, source, order)
+                end),
+                run.("query_top_pages", fn ->
+                  SK.query_top_pages(site_id, days, source, order)
+                end),
+                run.("query_ranking_changes", fn ->
+                  SK.query_ranking_changes(site_id, source)
+                end),
+                run.("query_opportunity_queue", fn ->
+                  SK.query_opportunity_queue(site_id, days, source)
+                end),
+                run.("query_new_keywords", fn -> SK.query_new_keywords(site_id, source) end),
+                run.("query_lost_keywords", fn -> SK.query_lost_keywords(site_id, source) end),
+                run.("query_pos_distribution", fn ->
+                  SK.query_pos_distribution(site_id, days, source)
+                end),
+                run.("query_daily_trends", fn ->
+                  SK.query_daily_trends(site_id, days, source)
+                end),
+                run.("query_cannibalization", fn ->
+                  SK.query_cannibalization(site_id, days, source)
+                end),
+                run.("query_sparklines", fn ->
+                  SK.query_sparklines(site_id, days, source, ["test"])
+                end)
+              ]
+
+              json(conn, %{site_id: site_id, days: days, source: source, queries: results})
+
+            _ ->
+              conn |> put_status(400) |> json(%{error: "site_id param required"})
+          end
+
         "goal_completions_probe" ->
           # Runs Analytics.goal_completions_system inline and returns the raw
           # result + elapsed_ms. Lets us see what the GoalStatsSnapshot worker
