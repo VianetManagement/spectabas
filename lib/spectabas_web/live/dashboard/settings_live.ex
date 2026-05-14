@@ -1009,6 +1009,30 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
             </div>
 
             <div :if={@settings_tab == "content"} class="border-t border-gray-200 pt-6">
+              <h3 class="text-base font-medium text-gray-900 mb-2">SEO audit</h3>
+              <p class="text-xs text-gray-500 mb-3">
+                Weekly crawl budget for the <.link
+                  navigate={~p"/dashboard/sites/#{@site.id}/seo"}
+                  class="text-indigo-600 underline"
+                >SEO audit page</.link>. The scheduled crawler audits the top pages by traffic each week, capped at this number. On-demand audits (the "Audit this URL" form) don't count against the budget. Range: 100-5000.
+              </p>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">
+                  Weekly crawl budget
+                </label>
+                <input
+                  type="number"
+                  name="site[seo_crawl_budget]"
+                  value={@site.seo_crawl_budget}
+                  min="100"
+                  max="5000"
+                  step="50"
+                  class="mt-1 block w-32 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
+                />
+              </div>
+            </div>
+
+            <div :if={@settings_tab == "content"} class="border-t border-gray-200 pt-6">
               <h3 class="text-base font-medium text-gray-900 mb-2">Visitor Journeys</h3>
               <p class="text-xs text-gray-500 mb-3">
                 Pages that count as conversions for the <.link

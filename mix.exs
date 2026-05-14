@@ -54,7 +54,9 @@ defmodule Spectabas.MixProject do
       {:dns_cluster, "~> 0.1"},
       {:csv, "~> 3.0"},
       {:lazy_html, ">= 0.1.0", only: :test},
-      {:floki, ">= 0.30.0", only: :test},
+      # Runtime-needed since v6.10.47 for SEO audit HTML parsing. Was
+      # test-only before then (LiveView render assertions).
+      {:floki, ">= 0.30.0"},
       {:esbuild, "~> 0.8", runtime: Mix.env() == :dev},
       {:tailwind, "~> 0.2", runtime: Mix.env() == :dev},
       {:heroicons,

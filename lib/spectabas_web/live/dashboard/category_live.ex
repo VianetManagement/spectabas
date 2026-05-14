@@ -130,6 +130,13 @@ defmodule SpectabasWeb.Dashboard.CategoryLive do
             "Traffic channels with drill-down, referrer domains, UTM parameters, and engagement metrics — all in one view. Switch between channel overview and individual sources."
         },
         %{
+          key: "seo",
+          path: "seo",
+          label: "SEO Audit",
+          desc:
+            "Per-page SEO audit via a real-browser crawl. Title / meta / H1 / canonical / schema / image-alt / response-time checks scored 0-100 with prioritized recommendations. Site admin sets a weekly crawl budget; on-demand audits don't count."
+        },
+        %{
           key: "campaigns",
           path: "campaigns",
           label: "Campaigns",

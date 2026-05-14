@@ -34,6 +34,10 @@ defmodule Spectabas.Sites.Site do
     field :scraper_webhook_enabled, :boolean, default: false
     field :scraper_weight_overrides, :map
 
+    # Weekly SEO crawl budget (v6.10.47). 100..5000, default 500.
+    # On-demand audits via the UI don't count.
+    field :seo_crawl_budget, :integer, default: 500
+
     timestamps(type: :utc_datetime)
   end
 
@@ -67,13 +71,18 @@ defmodule Spectabas.Sites.Site do
       :search_query_params,
       :scraper_webhook_url,
       :scraper_webhook_secret,
-      :scraper_webhook_enabled
+      :scraper_webhook_enabled,
+      :seo_crawl_budget
     ])
     |> validate_required([:name, :domain])
     |> validate_length(:name, max: 255)
     |> validate_length(:domain, max: 255)
     |> validate_inclusion(:gdpr_mode, ["on", "off"])
     |> validate_number(:retention_days, greater_than: 0, less_than_or_equal_to: 3650)
+    |> validate_number(:seo_crawl_budget,
+      greater_than_or_equal_to: 100,
+      less_than_or_equal_to: 5000
+    )
     |> validate_length(:currency, is: 3)
     |> validate_webhook_url()
     |> unique_constraint(:domain)
