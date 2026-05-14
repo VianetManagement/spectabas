@@ -65,6 +65,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.44", "2026-05-14T23:30:00Z",
+       [
+         %{
+           title: "Scraper calibration: JSON encoding fix — `counts_by_source` tuples + false-positive Ecto structs",
+           description:
+             "v6.10.43's exception rescue surfaced the real bug from v6.10.35: `ScraperLabels.counts_by_source/1` returns 3-tuples like `{\"scraper\", \"webhook_auto_flag\", 723}`, and tuples have no Jason.Encoder impl. The whole baseline is stored as JSONB in `scraper_calibrations.baseline`, so encoding fails the instant the AI calibration tries to persist the result. Same issue applied to `false_positives` / `false_negatives` — they were full Ecto structs without `@derive Jason.Encoder`. Calibration ran in v6.10.35-43 only when the site had zero high-confidence labels yet (counts_by_source = []).\n\n**Fix:** `counts_by_source/1` now returns `[%{\"label\" => _, \"source\" => _, \"count\" => _}, ...]` (list of maps, string keys for clean JSONB round-trip). `signal_correlation_report/1`'s false-positive / false-negative queries `SELECT` plain maps with the relevant fields instead of full Ecto structs. The admin `/admin/scraper-labels` template updated to read map keys. `format_label_sources/1` in calibration prompt updated for the new shape.\n\nCalibration runs cleanly now on sites with any non-zero label history. 988 tests still passing."
+         }
+       ]},
       {"v6.10.43", "2026-05-14T23:00:00Z",
        [
          %{

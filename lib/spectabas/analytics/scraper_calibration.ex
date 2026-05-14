@@ -911,10 +911,16 @@ defmodule Spectabas.Analytics.ScraperCalibration do
     """
   end
 
-  defp format_label_sources(counts) when is_map(counts) and map_size(counts) > 0 do
+  defp format_label_sources([_ | _] = counts) do
     rows =
       counts
-      |> Enum.map(fn {source, n} -> "- #{source}: #{n}" end)
+      |> Enum.map(fn
+        %{"label" => label, "source" => source, "count" => n} ->
+          "- #{source} (#{label}): #{n}"
+
+        {source, n} ->
+          "- #{source}: #{n}"
+      end)
       |> Enum.join("\n")
 
     "Label sources (how each label entered the system):\n#{rows}"

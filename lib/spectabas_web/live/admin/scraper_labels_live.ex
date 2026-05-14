@@ -156,20 +156,20 @@ defmodule SpectabasWeb.Admin.ScraperLabelsLive do
                   No labels yet
                 </td>
               </tr>
-              <tr :for={{label, source, count} <- @report.counts_by_source}>
-                <td class="px-5 py-2 font-mono text-xs">{source}</td>
+              <tr :for={row <- @report.counts_by_source}>
+                <td class="px-5 py-2 font-mono text-xs">{row["source"]}</td>
                 <td class="px-5 py-2">
                   <span class={[
                     "inline-flex px-2 py-0.5 rounded text-xs font-medium",
-                    if(label == "scraper",
+                    if(row["label"] == "scraper",
                       do: "bg-rose-100 text-rose-700",
                       else: "bg-green-100 text-green-700"
                     )
                   ]}>
-                    {label}
+                    {row["label"]}
                   </span>
                 </td>
-                <td class="px-5 py-2 text-right tabular-nums">{count}</td>
+                <td class="px-5 py-2 text-right tabular-nums">{row["count"]}</td>
               </tr>
             </tbody>
           </table>

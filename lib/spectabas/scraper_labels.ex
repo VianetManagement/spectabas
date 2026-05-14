@@ -127,7 +127,14 @@ defmodule Spectabas.ScraperLabels do
     |> Repo.all()
   end
 
-  @doc "Counts of labels by source for a site (sanity / health check)."
+  @doc """
+  Counts of labels by (label, source) pair for a site. Returns a list
+  of `%{"label" => _, "source" => _, "count" => _}` maps. String keys
+  because the result is embedded in `signal_correlation_report/1` and
+  written through to `scraper_calibrations.baseline` (JSONB) — Jason
+  can't encode tuples and atom keys round-trip to strings on JSON
+  decode anyway.
+  """
   def counts_by_source(site_id) do
     from(l in ScraperLabels,
       where: l.site_id == ^site_id,
@@ -135,6 +142,9 @@ defmodule Spectabas.ScraperLabels do
       select: {l.label, l.source, count(l.id)}
     )
     |> Repo.all()
+    |> Enum.map(fn {label, source, count} ->
+      %{"label" => label, "source" => source, "count" => count}
+    end)
   end
 
   defp normalize_keys(attrs) do
@@ -249,29 +259,38 @@ defmodule Spectabas.ScraperLabels do
       end)
       |> Enum.sort_by(&sort_key/1)
 
-    false_positives =
-      from(l in ScraperLabels,
-        where:
-          l.site_id == ^site_id and
-            l.label == "not_scraper" and
-            l.source_weight >= ^min_weight and
-            l.score >= ^fp_threshold,
-        order_by: [desc: l.labeled_at],
-        limit: ^limit
-      )
-      |> Repo.all()
+    # SELECT plain columns rather than full Ecto structs so the result
+    # is Jason-encodable (scraper_calibrations.baseline is JSONB; Ecto
+    # structs without @derive Jason.Encoder fail to encode). Same shape
+    # as before from the consumer's perspective — `row.signals`,
+    # `row.score`, etc. still work since the result is a list of maps
+    # with atom keys.
+    fp_query = fn label, score_op_value ->
+      base =
+        from(l in ScraperLabels,
+          where: l.site_id == ^site_id,
+          where: l.label == ^label,
+          where: l.source_weight >= ^min_weight,
+          order_by: [desc: l.labeled_at],
+          limit: ^limit,
+          select: %{
+            label: l.label,
+            score: l.score,
+            source: l.source,
+            source_weight: l.source_weight,
+            signals: l.signals,
+            labeled_at: l.labeled_at
+          }
+        )
 
-    false_negatives =
-      from(l in ScraperLabels,
-        where:
-          l.site_id == ^site_id and
-            l.label == "scraper" and
-            l.source_weight >= ^min_weight and
-            l.score < ^fn_threshold,
-        order_by: [desc: l.labeled_at],
-        limit: ^limit
-      )
-      |> Repo.all()
+      case score_op_value do
+        {:gte, v} -> base |> where([l], l.score >= ^v) |> Repo.all()
+        {:lt, v} -> base |> where([l], l.score < ^v) |> Repo.all()
+      end
+    end
+
+    false_positives = fp_query.("not_scraper", {:gte, fp_threshold})
+    false_negatives = fp_query.("scraper", {:lt, fn_threshold})
 
     %{
       n_scraper: n_s,
