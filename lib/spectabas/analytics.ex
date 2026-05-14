@@ -5819,6 +5819,146 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  # ---- Form Analytics ----
+
+  @doc """
+  Per-form view/start/submit/abandon counts over the date range. Joined
+  via JSONExtractString(properties, '_form_id') so the four event_names
+  (_form_view, _form_start, _form_submit, _form_abandon) reduce to a
+  single row per form.
+
+  Submit rate is submits/views, abandon rate is abandons/starts. A form
+  with no views (started but never viewed — possible if the form was
+  rendered into the DOM after the tracker's initial scan) will still
+  show in the list with views = 0; the row stays useful because the
+  start/submit/abandon counts are accurate.
+  """
+  def top_forms(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        JSONExtractString(properties, '_form_id') AS form_id,
+        anyIf(JSONExtractString(properties, '_form_name'), event_name = '_form_view') AS form_name,
+        anyIf(JSONExtractString(properties, '_form_action'), event_name = '_form_view') AS form_action,
+        countIf(event_name = '_form_view') AS views,
+        countIf(event_name = '_form_start') AS starts,
+        countIf(event_name = '_form_submit') AS submits,
+        countIf(event_name = '_form_abandon') AS abandons,
+        round(countIf(event_name = '_form_submit') / greatest(countIf(event_name = '_form_view'), 1) * 100, 1) AS submit_rate,
+        round(countIf(event_name = '_form_abandon') / greatest(countIf(event_name = '_form_start'), 1) * 100, 1) AS abandon_rate,
+        uniqIf(visitor_id, event_name = '_form_submit') AS submitters,
+        uniqIf(visitor_id, event_name = '_form_view') AS viewers
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND event_type = 'custom'
+        AND event_name IN ('_form_view', '_form_start', '_form_submit', '_form_abandon')
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+        AND JSONExtractString(properties, '_form_id') != ''
+      GROUP BY form_id
+      ORDER BY views DESC, submits DESC
+      LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
+  Site-wide form totals for the date range. Returns a single-row map:
+  total_views, total_starts, total_submits, total_abandons, overall
+  submit_rate, overall abandon_rate, distinct forms tracked.
+  """
+  def form_analytics_summary(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        countIf(event_name = '_form_view') AS total_views,
+        countIf(event_name = '_form_start') AS total_starts,
+        countIf(event_name = '_form_submit') AS total_submits,
+        countIf(event_name = '_form_abandon') AS total_abandons,
+        round(countIf(event_name = '_form_submit') / greatest(countIf(event_name = '_form_view'), 1) * 100, 1) AS submit_rate,
+        round(countIf(event_name = '_form_abandon') / greatest(countIf(event_name = '_form_start'), 1) * 100, 1) AS abandon_rate,
+        uniqIf(JSONExtractString(properties, '_form_id'), event_name = '_form_view') AS forms_tracked
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND event_type = 'custom'
+        AND event_name IN ('_form_view', '_form_start', '_form_submit', '_form_abandon')
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
+  Per-field abandonment for a specific form. Returns one row per field,
+  showing how often visitors abandoned the form with that field as the
+  last field they touched. The field-with-the-most-abandons is the
+  funnel breakpoint — that's where to focus UX work.
+
+  Also returns first-field-touched counts so the UI can show the entry
+  pattern (which field do people start with, vs which field do they
+  leave on).
+  """
+  def form_field_dropoff(%Site{} = site, %User{} = user, form_id, date_range)
+      when is_binary(form_id) and form_id != "" do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      from_p = ClickHouse.param(format_datetime(date_range.from))
+      to_p = ClickHouse.param(format_datetime(date_range.to))
+      site_p = ClickHouse.param(site.id)
+      form_p = ClickHouse.param(form_id)
+
+      sql = """
+      SELECT
+        field_name,
+        sum(starts_here) AS starts_here,
+        sum(abandons) AS abandons
+      FROM (
+        SELECT
+          JSONExtractString(properties, '_first_field') AS field_name,
+          1 AS starts_here,
+          0 AS abandons
+        FROM events
+        WHERE site_id = #{site_p}
+          AND event_type = 'custom'
+          AND event_name = '_form_start'
+          AND JSONExtractString(properties, '_form_id') = #{form_p}
+          AND JSONExtractString(properties, '_first_field') != ''
+          AND timestamp >= #{from_p} AND timestamp <= #{to_p}
+          AND ip_is_bot = 0
+        UNION ALL
+        SELECT
+          JSONExtractString(properties, '_last_field') AS field_name,
+          0 AS starts_here,
+          1 AS abandons
+        FROM events
+        WHERE site_id = #{site_p}
+          AND event_type = 'custom'
+          AND event_name = '_form_abandon'
+          AND JSONExtractString(properties, '_form_id') = #{form_p}
+          AND JSONExtractString(properties, '_last_field') != ''
+          AND timestamp >= #{from_p} AND timestamp <= #{to_p}
+          AND ip_is_bot = 0
+      )
+      GROUP BY field_name
+      ORDER BY abandons DESC, starts_here DESC
+      LIMIT 50
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
   # ---- Custom Events ----
 
   @doc "Custom events (excluding internal _ prefixed events), grouped by event name."

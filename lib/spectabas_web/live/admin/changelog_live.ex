@@ -65,6 +65,15 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.35", "2026-05-14T17:30:00Z",
+       [
+         %{
+           title:
+             "Scraper Labels Stage 2 + Forms dashboard (auto-tracked, per-field abandonment)",
+           description:
+             "Two features in one deploy.\n\n**Scraper Labels Stage 2** closes the loop between human labels and AI weight calibration. The `ScraperCalibration` AI prompt now includes a new section 13 — 'Human + Ecommerce Label Correlation' — fed by `ScraperLabels.signal_correlation_report/1`. The prompt receives n_scraper / n_not_scraper counts, label-source breakdown, per-signal P(signal|scraper) vs P(signal|not_scraper) with ratios, the heuristic verdict per signal (`underweighted` / `overweighted` / `weak_signal` / `too_few_labels`), the false-positives list (visitors humans whitelisted that the model scored ≥ 85), and the false-negatives list (visitors humans flagged that the model scored < 40). The analysis instructions tell the AI to **prefer label data over behavioral inference when ≥ 5 labels exist in each class**, with explicit guidance on raising weights for under-weighted signals, lowering weights for weak signals, and using the false-positive vectors to identify over-firing combinations. AI recommendations are now grounded in what humans actually flag, not just behavioral percentiles. Stage 3 (logistic regression fitting once ≥ 200 labels accumulate) remains deferred per `docs/scraper-labels.md`.\n\n**Forms dashboard** — auto-tracked `<form>` analytics with per-field abandonment. Tracker adds four new event types: `_form_view` (form in DOM at pageview time), `_form_start` (first focus inside a form), `_form_submit` (submission), `_form_abandon` (started but left without submitting; fired on visibilitychange-hidden or pagehide). Form IDs derive from `form.id`, falling back to `name:<form.name>`, then `action:<url.pathname>`, then `form:<index>`. Field name from `input.name`, fallback to `input.id`/`type`. All caps at 100 chars. New page at `/dashboard/sites/:id/forms` under Behavior — summary cards (views / starts / submits / abandons + submit rate / abandon rate / distinct forms tracked), per-form table sorted by views with both rate metrics, and an inline per-field drop-off section that opens when a row is clicked — surfaces which field is the funnel breakpoint. Three new Analytics functions: `top_forms/3`, `form_analytics_summary/3`, `form_field_dropoff/4`. The dropoff query unions `_form_start.first_field` and `_form_abandon.last_field` so one row per field shows both entry and exit counts.\n\n965 → 973 tests, all passing."
+         }
+       ]},
       {"v6.10.34", "2026-05-14T16:30:00Z",
        [
          %{

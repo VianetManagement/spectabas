@@ -116,7 +116,55 @@ defmodule Spectabas.Analytics.ScraperCalibrationTest do
       prefixes: ["/listings/", "/breeds/"]
     },
     current_weights: Spectabas.Analytics.ScraperDetector.default_weights(),
-    current_overrides: nil
+    current_overrides: nil,
+    label_correlation: %{
+      n_scraper: 12,
+      n_not_scraper: 18,
+      counts_by_source: %{
+        "mark_as_scraper" => 8,
+        "whitelist" => 14,
+        "unflag" => 4,
+        "ecommerce_purchase" => 4
+      },
+      signal_stats: [
+        %{
+          signal: "datacenter_asn",
+          scraper_count: 10,
+          scraper_pct: 83.3,
+          not_scraper_count: 2,
+          not_scraper_pct: 11.1,
+          ratio: 7.5,
+          current_weight: 40,
+          verdict: :ok
+        },
+        %{
+          signal: "no_referrer",
+          scraper_count: 8,
+          scraper_pct: 66.7,
+          not_scraper_count: 12,
+          not_scraper_pct: 66.7,
+          ratio: 1.0,
+          current_weight: 10,
+          verdict: :weak_signal
+        }
+      ],
+      false_positives: [
+        %{
+          score: 92,
+          source: "whitelist",
+          source_weight: Decimal.new("1.0"),
+          signals: %{"datacenter_asn" => true, "no_referrer" => true, "high_pageviews_50" => true}
+        }
+      ],
+      false_negatives: [
+        %{
+          score: 35,
+          source: "mark_as_scraper",
+          source_weight: Decimal.new("1.0"),
+          signals: %{"systematic_crawl" => true}
+        }
+      ]
+    }
   }
 
   describe "build_prompt/2 (via Module introspection)" do
@@ -212,6 +260,71 @@ defmodule Spectabas.Analytics.ScraperCalibrationTest do
 
       assert String.contains?(prompt, "Active Per-Site Weight Overrides")
       assert String.contains?(prompt, "REPLACE them entirely")
+    end
+
+    test "prompt includes label correlation section with signal table and false-positive list" do
+      site = %Spectabas.Sites.Site{
+        id: 4,
+        name: "Labeled Site",
+        domain: "b.labeled.com",
+        scraper_content_prefixes: nil,
+        scraper_weight_overrides: nil
+      }
+
+      prompt = build_prompt_via_send(site, @sample_baseline)
+
+      assert String.contains?(prompt, "Human + Ecommerce Label Correlation")
+      assert String.contains?(prompt, "n_scraper = 12")
+      assert String.contains?(prompt, "n_not_scraper = 18")
+      assert String.contains?(prompt, "mark_as_scraper")
+      assert String.contains?(prompt, "datacenter_asn")
+      assert String.contains?(prompt, "7.5")
+      assert String.contains?(prompt, "weak_signal")
+      assert String.contains?(prompt, "False positives")
+      assert String.contains?(prompt, "score=92")
+      assert String.contains?(prompt, "False negatives")
+      assert String.contains?(prompt, "score=35")
+      assert String.contains?(prompt, "Section 13 (Label Correlation) is ground truth")
+    end
+
+    test "prompt handles empty label correlation gracefully" do
+      site = %Spectabas.Sites.Site{
+        id: 5,
+        name: "Unlabeled Site",
+        domain: "b.unlabeled.com",
+        scraper_content_prefixes: nil,
+        scraper_weight_overrides: nil
+      }
+
+      baseline =
+        Map.put(@sample_baseline, :label_correlation, %{
+          n_scraper: 0,
+          n_not_scraper: 0,
+          counts_by_source: %{},
+          signal_stats: [],
+          false_positives: [],
+          false_negatives: []
+        })
+
+      prompt = build_prompt_via_send(site, baseline)
+
+      assert String.contains?(prompt, "No high-confidence labels")
+      assert String.contains?(prompt, "Fall back to the behavioral data")
+    end
+
+    test "prompt handles missing label_correlation key" do
+      site = %Spectabas.Sites.Site{
+        id: 6,
+        name: "Legacy Baseline",
+        domain: "b.legacy.com",
+        scraper_content_prefixes: nil,
+        scraper_weight_overrides: nil
+      }
+
+      baseline = Map.delete(@sample_baseline, :label_correlation)
+      prompt = build_prompt_via_send(site, baseline)
+
+      assert String.contains?(prompt, "No label data available")
     end
   end
 

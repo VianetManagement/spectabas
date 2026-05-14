@@ -158,6 +158,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
               active={@active == "downloads"}
             />
             <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/forms"}
+              label="Forms"
+              active={@active == "forms"}
+            />
+            <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/events"}
               label="Events"
               active={@active == "events"}
@@ -577,6 +582,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
       {~p"/dashboard/sites/#{site_id}/search", "Search"},
       {~p"/dashboard/sites/#{site_id}/outbound-links", "Outbound Links"},
       {~p"/dashboard/sites/#{site_id}/downloads", "Downloads"},
+      {~p"/dashboard/sites/#{site_id}/forms", "Forms"},
       {~p"/dashboard/sites/#{site_id}/events", "Events"},
       {~p"/dashboard/sites/#{site_id}/performance", "Performance"},
       {~p"/dashboard/sites/#{site_id}/acquisition", "Acquisition"},
@@ -661,6 +667,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
     "search" => "Behavior",
     "outbound-links" => "Behavior",
     "downloads" => "Behavior",
+    "forms" => "Behavior",
     "events" => "Behavior",
     "performance" => "Behavior",
     # Acquisition

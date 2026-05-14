@@ -93,6 +93,13 @@ defmodule SpectabasWeb.Dashboard.CategoryLive do
             "File downloads tracked automatically (PDF, ZIP, DOC, XLS, CSV, MP3, MP4, DMG, EXE, ISO). See which files are most popular."
         },
         %{
+          key: "forms",
+          path: "forms",
+          label: "Forms",
+          desc:
+            "Form views, starts, submits, and per-field abandonment auto-tracked from every <form> on your site. See which field most often loses visitors mid-fill."
+        },
+        %{
           key: "events",
           path: "events",
           label: "Custom Events",

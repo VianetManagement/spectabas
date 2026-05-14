@@ -466,7 +466,8 @@ defmodule Spectabas.Analytics.ScraperCalibration do
            prefixes: content_prefixes
          },
          current_weights: ScraperDetector.default_weights(),
-         current_overrides: site.scraper_weight_overrides
+         current_overrides: site.scraper_weight_overrides,
+         label_correlation: Spectabas.ScraperLabels.signal_correlation_report(site.id)
        }}
     end
   end
@@ -624,6 +625,9 @@ defmodule Spectabas.Analytics.ScraperCalibration do
 
     The "Flagged" column shows which resolutions trigger the suspicious_resolution signal.
 
+    ## 13. Human + Ecommerce Label Correlation (ground truth)
+    #{format_label_correlation(baseline[:label_correlation])}
+
     ## Current Scoring Model
 
     ### Default Signal Weights
@@ -652,6 +656,12 @@ defmodule Spectabas.Analytics.ScraperCalibration do
     - datacenter_asn (40) + spoofed_mobile_ua (20) = 60, which alone puts a visitor in the watching tier. Is that appropriate for this site?
     - A power user hitting 50+ pages from residential IP with a referrer shouldn't be penalized. But 50+ pages from a datacenter with no referrer is 65 points. Check if this matches the site's actual patterns.
     - If the site has very few visitors, statistical conclusions are weaker. Note when sample size limits confidence.
+
+    **Section 13 (Label Correlation) is ground truth.** When that table has ≥ 5 labels in each class (scraper / not_scraper), prefer its evidence over the behavioral inferences in sections 1-12. Specifically:
+    - If P(signal | scraper) >> P(signal | not_scraper) (ratio ≥ 2) and the current weight is low, raise it — humans are flagging this signal as scraper-indicative on this site.
+    - If P(signal | scraper) ≈ P(signal | not_scraper) (ratio between 0.66 and 1.5) and the current weight is ≥ 10, the signal is doing nothing useful here — lower it or zero it out.
+    - The false_positives list (score ≥ 85 but whitelisted) directly identifies which weights are over-firing. The false_negatives list (score < 40 but flagged) identifies signals that should fire more aggressively.
+    - When the label sample is small (< 5 in either class), fall back to the behavioral inferences in sections 1-12 and mention the small sample size in your reasoning.
 
     ## Response Format
 
@@ -866,6 +876,118 @@ defmodule Spectabas.Analytics.ScraperCalibration do
       header <> rows
     end
   end
+
+  defp format_label_correlation(nil), do: "No label data available for this site yet."
+
+  defp format_label_correlation(%{n_scraper: 0, n_not_scraper: 0}),
+    do:
+      "No high-confidence labels (source_weight ≥ 0.7) recorded for this site yet. As humans flag visitors via Mark as Scraper / Whitelist on the visitor profile, the signal correlation table will populate here. Fall back to the behavioral data in sections 1-12 for now."
+
+  defp format_label_correlation(%{n_scraper: ns, n_not_scraper: nns} = report) do
+    """
+    High-confidence labels collected (source_weight ≥ 0.7 — human clicks + ecommerce purchases):
+    - **n_scraper = #{ns}** (visitors humans marked as scrapers or auto-purchase visitors who can't be scrapers)
+    - **n_not_scraper = #{nns}** (visitors humans whitelisted, or auto-buying visitors)
+
+    #{format_label_sources(report.counts_by_source)}
+
+    ### Per-signal correlation
+    For each signal, this table shows how often it fired on labeled scrapers vs labeled non-scrapers. Ratio = P(signal|scraper) / P(signal|not_scraper). A ratio of 4.0 means scrapers fire this signal 4× as often as legitimate users — strong indicator. A ratio of 1.0 means the signal is doing nothing.
+
+    | Signal | Current weight | Scrapers % | Not-scrapers % | Ratio | Verdict |
+    |--------|---------------|-----------|----------------|-------|---------|
+    #{format_label_signal_rows(report.signal_stats)}
+
+    Verdict legend: **underweighted** = signal discriminates well but weight is low; **overweighted** = weight is high but signal doesn't actually discriminate on this site; **weak_signal** = signal fires equally often in both classes (kill or lower the weight); **too_few_labels** = < 5 labels total for this signal, defer to behavioral data.
+
+    #{format_label_false_positives(report.false_positives)}
+
+    #{format_label_false_negatives(report.false_negatives)}
+    """
+  end
+
+  defp format_label_sources(counts) when is_map(counts) and map_size(counts) > 0 do
+    rows =
+      counts
+      |> Enum.map(fn {source, n} -> "- #{source}: #{n}" end)
+      |> Enum.join("\n")
+
+    "Label sources (how each label entered the system):\n#{rows}"
+  end
+
+  defp format_label_sources(_), do: ""
+
+  defp format_label_signal_rows([]), do: "| _no signal data_ | | | | | |"
+
+  defp format_label_signal_rows(rows) do
+    rows
+    |> Enum.map(fn r ->
+      ratio_str =
+        case r.ratio do
+          :infinity -> "∞"
+          n when is_number(n) -> Float.to_string(Float.round(n * 1.0, 2))
+          _ -> "—"
+        end
+
+      "| #{r.signal} | +#{r.current_weight} | #{r.scraper_pct}% (#{r.scraper_count}/#{max(r.scraper_count + 1, 1)}) | #{r.not_scraper_pct}% | #{ratio_str} | #{r.verdict} |"
+    end)
+    |> Enum.join("\n")
+  end
+
+  defp format_label_false_positives([]),
+    do:
+      "**False positives**: none on record (no visitors scored ≥ 85 were later whitelisted). Good — high-tier flags hold up to human review."
+
+  defp format_label_false_positives(rows) do
+    summary =
+      rows
+      |> Enum.take(10)
+      |> Enum.map(fn fp ->
+        fired = fired_signal_names(fp.signals)
+
+        "- score=#{fp.score} signals=[#{fired}] (label source: #{fp.source}, weight #{fp.source_weight})"
+      end)
+      |> Enum.join("\n")
+
+    """
+    **False positives** (#{length(rows)} visitors humans whitelisted that the model scored ≥ 85):
+    #{summary}
+
+    These tell you which signal combinations are over-firing. If a signal appears in many false-positive vectors, its weight may be too high or it may need a suppression rule (like the existing VPN-suppression for datacenter_asn).
+    """
+  end
+
+  defp format_label_false_negatives([]),
+    do:
+      "**False negatives**: none on record (no visitors scored < 40 were manually flagged). Good — the model catches what humans catch."
+
+  defp format_label_false_negatives(rows) do
+    summary =
+      rows
+      |> Enum.take(10)
+      |> Enum.map(fn fp ->
+        fired = fired_signal_names(fp.signals)
+
+        "- score=#{fp.score} signals=[#{fired}] (label source: #{fp.source}, weight #{fp.source_weight})"
+      end)
+      |> Enum.join("\n")
+
+    """
+    **False negatives** (#{length(rows)} visitors humans flagged as scrapers that the model scored < 40):
+    #{summary}
+
+    These tell you which signals should fire more aggressively or which weights need raising. If many false negatives share a signal that's already firing but at a low weight, raise that weight.
+    """
+  end
+
+  defp fired_signal_names(signals) when is_map(signals) do
+    signals
+    |> Enum.filter(fn {_k, v} -> v == true end)
+    |> Enum.map(fn {k, _v} -> k end)
+    |> Enum.join(", ")
+  end
+
+  defp fired_signal_names(_), do: ""
 
   defp pct(_, 0), do: 0.0
   defp pct(n, total), do: Float.round(n / total * 100, 1)
