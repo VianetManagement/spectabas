@@ -558,7 +558,7 @@ defmodule SpectabasWeb.DocsLive do
 
             That's it! Pageviews will start appearing in your dashboard within seconds.
 
-            > **Tip:** The tracker is only 8KB, loads asynchronously, and is designed to avoid ad blockers. For maximum evasion, use the [Cloudflare Worker proxy](#ad-blocker-evasion).
+            > **Tip:** The tracker is ~19KB minified, loads asynchronously, and is designed to avoid ad blockers. For maximum evasion, use the [Cloudflare Worker proxy](#ad-blocker-evasion).
             """
           },
           %{
@@ -634,6 +634,7 @@ defmodule SpectabasWeb.DocsLive do
             | Event | Fires when | Powers |
             |-------|-----------|--------|
             | `pageview` | initial load + SPA pathname change | every dashboard page |
+            | `duration` (event_type) | tab becomes hidden, on SPA navigation, on pagehide | session duration / engagement metrics |
             | `_outbound` | click on a link to a different hostname | Outbound Links page |
             | `_download` | click on a link to a downloadable file extension | File Downloads page |
             | `_click` | click on `<button>`, internal `<a>`, `[role=button]`, or `<input[type=submit]>` | Click Elements / click-element goals |
@@ -1223,7 +1224,7 @@ defmodule SpectabasWeb.DocsLive do
 
             ### Dashboard Layout
 
-            41 pages organized in 7 sidebar categories:
+            Pages are organized in 7 sidebar categories:
 
             - **Overview** — Dashboard, Insights (anomaly feed with AI explanations), Journeys, Realtime
             - **Behavior** — Pages, Entry/Exit, Page detail, Site Search, Outbound Links, Downloads, **Forms** (auto-tracked forms + input clusters), Custom Events, Performance (RUM)
@@ -1233,7 +1234,7 @@ defmodule SpectabasWeb.DocsLive do
             - **Ad Effectiveness** — Visitor Quality, Time to Convert, Ad Visitor Paths, Ad-to-Churn, Organic Lift
             - **Tools** — Reports, Email Reports, Exports, Settings
 
-            Many of the highest-traffic pages (Geography, Devices, Languages, Forms, Search Keywords, Pages, etc.) read from hourly Postgres snapshots on their default date range, falling back to live ClickHouse queries on non-default ranges. The "Snapshot · last update X" label under a page title indicates the data came from cache.
+            Many of the highest-traffic pages (Pages, Entry/Exit, Geography, Devices, Languages, Outbound Links, Downloads, Custom Events, Site Search, Bot Traffic, Acquisition, Ecommerce, Campaigns, Performance, Search Keywords, Revenue Attribution, MRR) read from hourly Postgres snapshots on their default date range, falling back to live ClickHouse queries on non-default ranges. The "Snapshot · last update X" label under a page title indicates the data came from cache. Forms, Cohorts, and the Form Detail page query CH live on every load.
             """
           },
           %{
@@ -1358,17 +1359,13 @@ defmodule SpectabasWeb.DocsLive do
 
             ### What gets detected
 
-            The daily anomaly detector runs nightly and compares the last 24h against a baseline of the prior 7-day rolling average. 17 anomaly types ship:
+            The daily anomaly detector runs nightly and compares the last 24h against a baseline of the prior 7-day rolling average. 17 anomaly types ship across five themes:
 
-            - Pageview spike / drop
-            - Bounce-rate jump
-            - New top country / source / browser
-            - Bot traffic share spike
-            - Scraper detection volume change
-            - Conversion-rate drop on a goal
-            - Search keyword position drop (GSC / Bing)
-            - New high-volume referrer domain
-            - … and several more
+            - **Traffic / engagement** — overall traffic spike or drop, bounce-rate jump, new high-volume source domain, top-page change, exit-page change, entry-page bounce spike
+            - **Revenue** — revenue change, churn risk
+            - **Ad performance** — ad traffic volume change, ROAS shift on ad-spend integrations
+            - **Search (GSC + Bing)** — keyword position drop, CTR opportunity, query-volume dropouts, page-two opportunity, landing-page traffic decline, new keyword wins
+            - **Conversions** — per-goal conversion-rate drop
 
             Each anomaly that fires gets turned into an `Insight` row by the `Workers.InsightsGenerator` Oban worker at 04:00 UTC. Rows are deduplicated per `(site, kind, dedupe_key)` so re-running detection doesn't multiply them.
 
@@ -1380,10 +1377,14 @@ defmodule SpectabasWeb.DocsLive do
 
             Dismissals are **per-user** (stored in `insight_dismissals`), so dismissing an insight only hides it for you. Teammates still see it on their dashboards until they dismiss it themselves.
 
+            ### Goal-pace insights
+
+            A second insight source (kind `goal_pace`) runs alongside the anomalies. For each goal on the site, the worker compares this week's unique completers against last week's. If the change is ≥ 25%, an insight fires (severity `notice` at ≥ 50%, `info` otherwise). Title format: `Goal "X" is up/down N% this week`.
+
             ### Caveats
 
-            - **Goal-pace insights are stubbed in v1** — the detector returns `[]` for that source. Pace anomalies (a goal that's running behind a target) will land in a future deploy.
             - The detector uses a 7-day rolling baseline, so brand-new sites won't generate useful insights for the first week.
+            - AI explanations are fire-and-forget per insight — if the platform Anthropic key is rate-limited or temporarily down, the insight still ships, just without the explanation paragraph. Re-running the worker won't retry old insights.
             """
           },
           %{
@@ -1839,7 +1840,22 @@ defmodule SpectabasWeb.DocsLive do
 
             ### Scraper Labels
 
-            Every Mark-as-Scraper / Whitelist / Unflag click, plus every auto-flag and ecommerce-purchase-on-flagged-visitor, gets appended to a `scraper_labels` table along with the visitor's signal vector at that moment. The table is append-only — past labels are evidence that doesn't change when current scoring changes.
+            Ten event sources append to the `scraper_labels` table along with the visitor's signal vector at that moment:
+
+            | Source | Weight | Fires when |
+            |--------|--------|-----------|
+            | `manual_flag` | 1.0 | Human clicks "Mark as Scraper" on a visitor profile |
+            | `manual_whitelist` | 1.0 | Human clicks "Whitelist" on a visitor profile |
+            | `manual_unflag` | 0.5 | Human clicks "Unflag" |
+            | `manual_unwhitelist` | 0.4 | Human removes a whitelist |
+            | `api_whitelist` | 1.0 | API call adds visitor to whitelist |
+            | `api_unwhitelist` | 0.4 | API call removes from whitelist |
+            | `webhook_auto_flag` | 0.3 | Detector auto-fires a webhook (downweighted — circular evidence) |
+            | `webhook_downgrade` | 0.3 | Detector auto-downgrades a flagged visitor |
+            | `goal_conversion` | 0.7 | Flagged visitor completed a goal (negative signal — probably not a scraper) |
+            | `ecommerce_purchase` | 0.9 | Flagged visitor made a purchase (strong negative signal) |
+
+            The table is append-only — past labels are evidence that doesn't change when current scoring changes. Confidence weights matter at training time (Stage 3) but also at Stage 1 reporting: the `signal_correlation_report/1` filters to labels with `source_weight >= 0.7` so the verdict is grounded in human + purchase signal, not in the detector's own auto-fires.
 
             Stage 1 ships a **label correlation report at `/admin/scraper-labels`**: per-signal P(signal | scraper) vs P(signal | not_scraper), a heuristic verdict (`underweighted` / `overweighted` / `weak_signal` / `too_few_labels`), counts by label source, a false-positives list (visitors scored ≥ 85 but later whitelisted) and false-negatives list (visitors scored < 40 but manually flagged). Eyeball this to spot weights that need hand-tuning.
 
