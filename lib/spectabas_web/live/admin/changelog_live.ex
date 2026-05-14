@@ -65,6 +65,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.40", "2026-05-14T21:30:00Z",
+       [
+         %{
+           title: "Forms table: clickable column headers for sorting",
+           description:
+             "Every column on the Forms list — Form, Kind, Views, Starts, Submits, Abandons, Submit %, Abandon % — is now clickable to sort. Sort is client-side over the already-loaded rows (Enum.sort_by on the LiveView assigns) so there's no extra CH round-trip; clicking the same column again flips the direction. Numeric columns default to descending on first click (biggest first); text columns default to ascending. The active column shows ↑ / ↓ in the header. Default sort is still Views desc, matching the CH ORDER BY in `Analytics.top_forms/3`."
+         }
+       ]},
       {"v6.10.39", "2026-05-14T21:00:00Z",
        [
          %{

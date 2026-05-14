@@ -41,6 +41,8 @@ defmodule SpectabasWeb.Dashboard.FormsLive do
         |> assign(:date_range, "30d")
         |> assign(:summary, %{})
         |> assign(:forms, [])
+        |> assign(:sort_by, "views")
+        |> assign(:sort_dir, :desc)
         |> assign(:loading, true)
 
       if connected?(socket), do: send(self(), :load_data)
@@ -53,6 +55,24 @@ defmodule SpectabasWeb.Dashboard.FormsLive do
     send(self(), :load_data)
     {:noreply, socket |> assign(:date_range, range) |> assign(:loading, true)}
   end
+
+  def handle_event("sort", %{"col" => col}, socket) do
+    dir =
+      cond do
+        socket.assigns.sort_by != col -> default_dir_for(col)
+        socket.assigns.sort_dir == :asc -> :desc
+        true -> :asc
+      end
+
+    {:noreply, socket |> assign(:sort_by, col) |> assign(:sort_dir, dir)}
+  end
+
+  # Numeric columns start descending (biggest first); text columns ascending.
+  defp default_dir_for(col)
+       when col in ~w(views starts submits abandons submit_rate abandon_rate),
+       do: :desc
+
+  defp default_dir_for(_), do: :asc
 
   @impl true
   def handle_info(:load_data, socket) do
@@ -84,6 +104,27 @@ defmodule SpectabasWeb.Dashboard.FormsLive do
     name = form["form_name"]
     id = form["form_id"]
     if name && name != "", do: name, else: id
+  end
+
+  defp sorted_forms(forms, sort_by, sort_dir) do
+    Enum.sort_by(forms, &sort_key(&1, sort_by), sort_dir)
+  end
+
+  defp sort_key(row, "form"), do: row |> display_form_label() |> String.downcase()
+  defp sort_key(row, "form_kind"), do: row["form_kind"] || ""
+
+  defp sort_key(row, col)
+       when col in ~w(views starts submits abandons submit_rate abandon_rate),
+       do: to_num(row[col])
+
+  defp sort_key(row, col), do: row[col] || 0
+
+  defp sort_indicator(col, sort_by, sort_dir) do
+    cond do
+      col != sort_by -> " "
+      sort_dir == :asc -> " ↑"
+      true -> " ↓"
+    end
   end
 
   defp kind_label("cluster"), do: "Cluster"
@@ -203,29 +244,61 @@ defmodule SpectabasWeb.Dashboard.FormsLive do
             <table class="min-w-full divide-y divide-gray-200">
               <thead class="bg-gray-50">
                 <tr>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Form
+                  <th
+                    phx-click="sort"
+                    phx-value-col="form"
+                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700"
+                  >
+                    Form{sort_indicator("form", @sort_by, @sort_dir)}
                   </th>
-                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Kind
+                  <th
+                    phx-click="sort"
+                    phx-value-col="form_kind"
+                    class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700"
+                  >
+                    Kind{sort_indicator("form_kind", @sort_by, @sort_dir)}
                   </th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Views
+                  <th
+                    phx-click="sort"
+                    phx-value-col="views"
+                    class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700"
+                  >
+                    Views{sort_indicator("views", @sort_by, @sort_dir)}
                   </th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Starts
+                  <th
+                    phx-click="sort"
+                    phx-value-col="starts"
+                    class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700"
+                  >
+                    Starts{sort_indicator("starts", @sort_by, @sort_dir)}
                   </th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Submits
+                  <th
+                    phx-click="sort"
+                    phx-value-col="submits"
+                    class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700"
+                  >
+                    Submits{sort_indicator("submits", @sort_by, @sort_dir)}
                   </th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Abandons
+                  <th
+                    phx-click="sort"
+                    phx-value-col="abandons"
+                    class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700"
+                  >
+                    Abandons{sort_indicator("abandons", @sort_by, @sort_dir)}
                   </th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Submit %
+                  <th
+                    phx-click="sort"
+                    phx-value-col="submit_rate"
+                    class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700"
+                  >
+                    Submit %{sort_indicator("submit_rate", @sort_by, @sort_dir)}
                   </th>
-                  <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                    Abandon %
+                  <th
+                    phx-click="sort"
+                    phx-value-col="abandon_rate"
+                    class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700"
+                  >
+                    Abandon %{sort_indicator("abandon_rate", @sort_by, @sort_dir)}
                   </th>
                 </tr>
               </thead>
@@ -236,7 +309,7 @@ defmodule SpectabasWeb.Dashboard.FormsLive do
                   </td>
                 </tr>
                 <tr
-                  :for={f <- @forms}
+                  :for={f <- sorted_forms(@forms, @sort_by, @sort_dir)}
                   onclick={"window.location.href='/dashboard/sites/#{@site.id}/forms/#{URI.encode_www_form(f["form_id"] || "")}'"}
                   class="cursor-pointer hover:bg-indigo-50"
                 >
