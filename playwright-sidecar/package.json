@@ -5,8 +5,7 @@
   "description": "Headless Chromium service for Spectabas SEO page audits. Deployed as a separate Render web service; the Elixir app calls it via PLAYWRIGHT_URL.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "postinstall": "playwright install chromium --with-deps"
+    "start": "node server.js"
   },
   "engines": {
     "node": ">=20"
