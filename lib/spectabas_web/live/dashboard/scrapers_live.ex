@@ -86,6 +86,36 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
     {:noreply, socket |> assign(:calibrating, false) |> assign(:calibrations, calibrations)}
   end
 
+  # Defensive auto-recovery: every 30s while @calibrating is true, check
+  # the Oban job state. If no live job exists (worker crashed, was killed
+  # by Oban timeout, or otherwise never reached the PubSub broadcast),
+  # force-clear the UI flag and refresh the calibrations list so the
+  # user sees the latest persisted row + can re-run. Without this, any
+  # path that fails to broadcast `:calibration_done` would leave the UI
+  # in "calibrating…" indefinitely.
+  def handle_info(:check_calibration_state, socket) do
+    if socket.assigns.calibrating do
+      if calibration_job_running?(socket.assigns.site.id) do
+        Process.send_after(self(), :check_calibration_state, 30_000)
+        {:noreply, socket}
+      else
+        calibrations =
+          Spectabas.Analytics.ScraperCalibration.latest_for_site(socket.assigns.site.id)
+
+        {:noreply,
+         socket
+         |> assign(:calibrating, false)
+         |> assign(:calibrations, calibrations)
+         |> put_flash(
+           :error,
+           "Calibration job ended without a result — likely a worker timeout or crash. Check /admin/ingest or try again."
+         )}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
   @impl true
   def handle_event("switch_tab", %{"tab" => "webhook_log"}, socket) do
     log = Spectabas.Webhooks.ScraperWebhook.list_deliveries(socket.assigns.site.id)
@@ -107,6 +137,8 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
         _ -> false
       end
 
+    if has_pending_job, do: Process.send_after(self(), :check_calibration_state, 30_000)
+
     {:noreply,
      socket
      |> assign(:tab, "calibration")
@@ -123,6 +155,7 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
     |> Spectabas.Workers.ScraperCalibrationWorker.new()
     |> Oban.insert()
 
+    Process.send_after(self(), :check_calibration_state, 30_000)
     {:noreply, assign(socket, :calibrating, true)}
   end
 

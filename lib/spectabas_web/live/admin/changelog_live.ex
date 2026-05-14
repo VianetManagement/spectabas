@@ -65,6 +65,15 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.43", "2026-05-14T23:00:00Z",
+       [
+         %{
+           title:
+             "Scraper calibration: 4-layer defense against the hang (CH timeout + worker rescue + UI auto-recovery + telemetry)",
+           description:
+             "v6.10.42's worker-timeout bump wasn't enough on its own. Real fix is defense in depth so any failure mode surfaces in the UI within 30 seconds.\n\n**Layer 1 — CH baseline query timeout.** The 14 baseline queries in `gather_baseline/1` were using the default 30s `receive_timeout`. Busy sites' 30-day quantile + uniqIf + countDistinctIf queries can take 60-90s each. Bumped to 120s per query. Adds up to ~28min in absolute worst-case, but realistic budget is ~3min total.\n\n**Layer 2 — worker exception rescue.** `Workers.ScraperCalibrationWorker.perform/1` now wraps the `ScraperCalibration.run/1` call in `try/rescue`. If anything inside raises (Req transport error, JSON decode failure on AI response, Repo.insert/2 hitting a constraint, etc.), the rescue broadcasts `:calibration_done` with an error message BEFORE re-raising for Oban's failure tracking. Previously a raise inside `run/1` would crash the worker without the LiveView ever knowing.\n\n**Layer 3 — UI auto-recovery.** `ScrapersLive` now schedules a 30-second `:check_calibration_state` tick whenever it enters the calibrating state (either via Run AI Calibration click, or via switching to the Calibration tab with a job already running). The tick checks `calibration_job_running?/1`. If the job has dropped out of `available/executing/scheduled` and we haven't received a PubSub broadcast, the LiveView force-clears the `calibrating` flag, refreshes the calibrations list, and shows a 'Calibration job ended without a result' flash. UI can no longer hang regardless of what happens server-side.\n\n**Layer 4 — telemetry.** Worker now logs start, end, and elapsed_ms for every run (success, error, exception). Search the logs for `[ScraperCalibration]` to see what's actually slow next time.\n\nRecovery for any currently-stuck page: reload. The check kicks in within 30s on the new mount and clears the flag."
+         }
+       ]},
       {"v6.10.42", "2026-05-14T22:30:00Z",
        [
          %{

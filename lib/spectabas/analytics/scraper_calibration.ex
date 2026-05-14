@@ -336,20 +336,25 @@ defmodule Spectabas.Analytics.ScraperCalibration do
         nil
       end
 
-    with {:ok, [stats]} <- ClickHouse.query(stats_sql),
-         {:ok, [network]} <- ClickHouse.query(network_sql),
-         {:ok, [referrer]} <- ClickHouse.query(referrer_sql),
-         {:ok, devices} <- ClickHouse.query(device_sql),
-         {:ok, asns} <- ClickHouse.query(asn_sql),
-         {:ok, session_rows} <- ClickHouse.query(session_sql),
-         {:ok, [rotation]} <- ClickHouse.query(rotation_sql),
-         {:ok, [flagged]} <- ClickHouse.query(flagged_sql),
-         {:ok, bounces} <- ClickHouse.query(bounce_sql),
-         {:ok, vpns} <- ClickHouse.query(vpn_sql),
-         {:ok, resolutions} <- ClickHouse.query(resolution_sql),
-         {:ok, timing_rows} <- ClickHouse.query(timing_sql),
-         {:ok, chrome_versions} <- ClickHouse.query(chrome_sql),
-         {:ok, crawl_rows} <- if(crawl_sql, do: ClickHouse.query(crawl_sql), else: {:ok, []}) do
+    # Heavy calibration queries scan 30 days of data with quantile + uniqIf +
+    # countDistinctIf — busy sites can take 60-90s each. Default 30s
+    # receive_timeout in ClickHouse.query/1 isn't enough; bump to 120s.
+    q = &ClickHouse.query(&1, receive_timeout: 120_000)
+
+    with {:ok, [stats]} <- q.(stats_sql),
+         {:ok, [network]} <- q.(network_sql),
+         {:ok, [referrer]} <- q.(referrer_sql),
+         {:ok, devices} <- q.(device_sql),
+         {:ok, asns} <- q.(asn_sql),
+         {:ok, session_rows} <- q.(session_sql),
+         {:ok, [rotation]} <- q.(rotation_sql),
+         {:ok, [flagged]} <- q.(flagged_sql),
+         {:ok, bounces} <- q.(bounce_sql),
+         {:ok, vpns} <- q.(vpn_sql),
+         {:ok, resolutions} <- q.(resolution_sql),
+         {:ok, timing_rows} <- q.(timing_sql),
+         {:ok, chrome_versions} <- q.(chrome_sql),
+         {:ok, crawl_rows} <- if(crawl_sql, do: q.(crawl_sql), else: {:ok, []}) do
       timing = List.first(timing_rows) || %{}
       crawl = List.first(crawl_rows) || %{}
       # session query may return [] if no duration events exist (HAVING dur > 0 filters all)
