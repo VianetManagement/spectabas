@@ -108,6 +108,13 @@ defmodule Spectabas.ClickHouse do
         -- ALTER TABLE ... MATERIALIZED clauses below.
         element_text String MATERIALIZED JSONExtractString(properties, '_text'),
         element_id String MATERIALIZED JSONExtractString(properties, '_id'),
+        -- Browser language from navigator.language (e.g. "en-US", "fr-FR")
+        -- and page language from <html lang> on the page the event fired on
+        -- (e.g. "en", "es"). Both extracted at INSERT time from properties.
+        -- LowCardinality because the cardinality is naturally tiny (~50-200
+        -- unique values across all events).
+        browser_language LowCardinality(String) MATERIALIZED JSONExtractString(properties, '_lang'),
+        page_language LowCardinality(String) MATERIALIZED JSONExtractString(properties, '_plang'),
         is_bounce UInt8 DEFAULT 1,
         timestamp DateTime DEFAULT now(),
         sign Int8 DEFAULT 1
@@ -517,6 +524,16 @@ defmodule Spectabas.ClickHouse do
       "ALTER TABLE #{db}.events ADD COLUMN IF NOT EXISTS element_id String MATERIALIZED JSONExtractString(properties, '_id')",
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_element_text element_text TYPE bloom_filter GRANULARITY 4",
       "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_element_id element_id TYPE bloom_filter GRANULARITY 4",
+      # Browser + page language columns added v6.10.37. New INSERTs populate
+      # automatically from JSONExtractString(properties, '_lang'/'_plang');
+      # old rows show '' since the tracker didn't send these fields before
+      # v6.10.37. No backfill possible (we can't reconstruct historical
+      # browser language from existing data), so dashboards filter out
+      # empty values rather than counting them as "(unknown)".
+      "ALTER TABLE #{db}.events ADD COLUMN IF NOT EXISTS browser_language LowCardinality(String) MATERIALIZED JSONExtractString(properties, '_lang')",
+      "ALTER TABLE #{db}.events ADD COLUMN IF NOT EXISTS page_language LowCardinality(String) MATERIALIZED JSONExtractString(properties, '_plang')",
+      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_browser_language browser_language TYPE bloom_filter GRANULARITY 4",
+      "ALTER TABLE #{db}.events ADD INDEX IF NOT EXISTS idx_page_language page_language TYPE bloom_filter GRANULARITY 4",
       # Duration aggregate added v6.10.25 so top_pages_fast can return
       # avg_duration. Existing rollup rows have empty state until the next
       # DailyRollup tick re-writes them; for backfill, re-run the worker

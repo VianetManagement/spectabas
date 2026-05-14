@@ -5819,6 +5819,172 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  # ---- Language Analytics ----
+
+  @doc """
+  Top browser languages (visitor's OS/browser preference, e.g. "en-US",
+  "fr-FR"). Pulled from the materialized `browser_language` column on
+  `events`, populated by the tracker's `_lang` property from
+  `navigator.language`.
+  """
+  def top_browser_languages(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        browser_language AS language,
+        uniq(visitor_id) AS unique_visitors,
+        countIf(event_type = 'pageview') AS pageviews
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+        AND browser_language != ''
+      GROUP BY browser_language
+      ORDER BY unique_visitors DESC
+      LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
+  Top page languages — the language declared by `<html lang="...">` on
+  the page the event fired on. Tells you which translated versions of
+  your site get the most traffic.
+  """
+  def top_page_languages(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        page_language AS language,
+        uniq(visitor_id) AS unique_visitors,
+        countIf(event_type = 'pageview') AS pageviews
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+        AND page_language != ''
+        AND event_type = 'pageview'
+      GROUP BY page_language
+      ORDER BY unique_visitors DESC
+      LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
+  Language-country crosstab. Highlights diaspora / expat / multilingual
+  segments — visitors browsing in language X from country Y. The top
+  rows are usually the dominant pair (English speakers in US), but the
+  unexpected pairs (Spanish in Germany, Arabic in France) are where
+  the localization or content-strategy insights live.
+  """
+  def language_country_crosstab(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        browser_language AS language,
+        ip_country AS country,
+        uniq(visitor_id) AS unique_visitors,
+        countIf(event_type = 'pageview') AS pageviews
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+        AND browser_language != ''
+        AND ip_country != ''
+      GROUP BY browser_language, ip_country
+      ORDER BY unique_visitors DESC
+      LIMIT 200
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
+  Language mismatches — visitor pageviews where the browser's primary
+  language differs from the page's `<html lang>` primary language. The
+  primary-language comparison uses just the subtag before the hyphen
+  (so "en-US" reading "en-GB" content is NOT a mismatch, but "en-US"
+  reading "fr" content IS). Useful for finding visitors who reach
+  your translated pages in their non-native language — strong signal
+  that the language picker is buried or that the auto-detect is wrong.
+  """
+  def language_mismatches(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        browser_language,
+        page_language,
+        uniq(visitor_id) AS unique_visitors,
+        countIf(event_type = 'pageview') AS pageviews
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+        AND browser_language != ''
+        AND page_language != ''
+        AND splitByChar('-', lower(browser_language))[1] != splitByChar('-', lower(page_language))[1]
+        AND event_type = 'pageview'
+      GROUP BY browser_language, page_language
+      ORDER BY unique_visitors DESC
+      LIMIT 100
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
+  Language analytics summary card. Returns a single row with distinct
+  browser languages, distinct page languages, and the share of visitors
+  who hit a language mismatch (primary subtag differs).
+  """
+  def language_summary(%Site{} = site, %User{} = user, date_range) do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        uniqIf(browser_language, browser_language != '') AS distinct_browser_languages,
+        uniqIf(page_language, page_language != '') AS distinct_page_languages,
+        uniqIf(
+          visitor_id,
+          browser_language != ''
+            AND page_language != ''
+            AND splitByChar('-', lower(browser_language))[1] != splitByChar('-', lower(page_language))[1]
+        ) AS mismatch_visitors,
+        uniqIf(
+          visitor_id,
+          browser_language != '' AND page_language != ''
+        ) AS comparable_visitors
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
   # ---- Form Analytics ----
 
   @doc """

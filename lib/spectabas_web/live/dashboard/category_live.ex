@@ -167,6 +167,13 @@ defmodule SpectabasWeb.Dashboard.CategoryLive do
             "Browser, operating system, device type (desktop/mobile/tablet), and screen resolution breakdowns. Helps prioritize responsive design efforts."
         },
         %{
+          key: "languages",
+          path: "languages",
+          label: "Languages",
+          desc:
+            "Browser language (navigator.language) + page language (<html lang>), with country crosstab and mismatch detection. Surfaces diaspora segments and localization gaps."
+        },
+        %{
           key: "network",
           path: "network",
           label: "Network",

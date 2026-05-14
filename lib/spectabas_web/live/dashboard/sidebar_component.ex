@@ -219,6 +219,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
               active={@active == "devices"}
             />
             <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/languages"}
+              label="Languages"
+              active={@active == "languages"}
+            />
+            <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/network"}
               label="Network"
               active={@active == "network"}
@@ -591,6 +596,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
       {~p"/dashboard/sites/#{site_id}/geo", "Geography"},
       {~p"/dashboard/sites/#{site_id}/map", "Map"},
       {~p"/dashboard/sites/#{site_id}/devices", "Devices"},
+      {~p"/dashboard/sites/#{site_id}/languages", "Languages"},
       {~p"/dashboard/sites/#{site_id}/network", "Network"},
       {~p"/dashboard/sites/#{site_id}/bot-traffic", "Bots"},
       {~p"/dashboard/sites/#{site_id}/visitor-log", "Visitors"},
@@ -681,6 +687,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
     "geo" => "Audience",
     "map" => "Audience",
     "devices" => "Audience",
+    "languages" => "Audience",
     "network" => "Audience",
     "bot-traffic" => "Audience",
     "visitor-log" => "Audience",

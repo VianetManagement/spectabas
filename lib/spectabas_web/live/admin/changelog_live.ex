@@ -65,6 +65,15 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.37", "2026-05-14T19:30:00Z",
+       [
+         %{
+           title:
+             "Language tracking: navigator.language + <html lang> with country crosstab and mismatch detection",
+           description:
+             "New Audience page at `/dashboard/sites/:id/languages`. Two language signals on every event:\n\n**Browser language** — from `navigator.language` (e.g. `\"en-US\"`, `\"fr-FR\"`, `\"es\"`). What the visitor's OS/browser is configured for. Tells you which markets your visitors come from in a way IP geo can't — a French-speaker in Canada and an English-speaker in Spain are indistinguishable by country but obvious by language.\n\n**Page language** — from `<html lang=\"…\">` on the page that fired the event. What language your site served them. Sites without an `<html lang>` attr will see empty values; setting it is a one-line markup change that also helps screen readers and SEO.\n\n**Schema.** New `browser_language` + `page_language` LowCardinality(String) MATERIALIZED columns on the events table (extracted from `_lang` / `_plang` properties at INSERT time, populated automatically by the upgraded tracker's `sE` function). Bloom-filter indexes on both. Old events show empty values for these columns since the tracker didn't send them before this deploy — no backfill possible. `ensure_schema!` adds the columns + indexes idempotently on boot.\n\n**Analytics.** Five new functions: `top_browser_languages/3`, `top_page_languages/3`, `language_country_crosstab/3` (browser-lang × country pairs — surfaces diaspora / expat / multilingual cohorts), `language_mismatches/3` (visitor browsing in a language whose primary subtag differs from the page's `<html lang>` primary subtag — strong signal that someone reached your translated content in a non-native language and could benefit from a clearer language picker), and `language_summary/3` (distinct counts + mismatch percentage).\n\n**Dashboard.** Summary cards (distinct browser languages, distinct page languages, mismatch rate %), top-N tables side-by-side for browser vs page, language × country crosstab, and a mismatch table. The mismatch comparison uses just the primary subtag (so `en-US` reading `en-GB` content is NOT a mismatch, but `en-US` reading `fr` content IS).\n\nTracker payload grows ~30 bytes per event for the two language fields. 973 → 978 tests, all passing."
+         }
+       ]},
       {"v6.10.36", "2026-05-14T18:30:00Z",
        [
          %{
