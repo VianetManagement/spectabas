@@ -16,27 +16,46 @@ defmodule Spectabas.Analytics.Segment do
   alias Spectabas.ClickHouse
 
   @allowed_fields ~w(
-    ip_country ip_country_name ip_region_name ip_city ip_timezone
+    ip_country ip_country_name ip_continent_name ip_region_name ip_city ip_timezone
     ip_asn ip_org
+    ip_is_bot ip_is_datacenter ip_is_vpn
     browser os device_type
-    referrer_domain utm_source utm_medium utm_campaign
+    referrer_domain utm_source utm_medium utm_campaign utm_term utm_content
+    click_id_type
     url_path url_host
     event_type event_name
     visitor_intent
+    returning identified scraper_whitelisted
   )
+
+  # Fields that aren't direct columns on `events`. Filter translation has
+  # to emit a `visitor_id IN (subquery)` (CH-only) or a pre-resolved
+  # `visitor_id IN (uuid1, ...)` from a PG lookup. Callers pass `site_id`
+  # via `to_sql/2` opts; PG-resolved fields are pre-fanned by `Cohorts`
+  # before calling Analytics functions.
+  @virtual_fields ~w(returning identified scraper_whitelisted)
+  @pg_resolved_fields ~w(identified scraper_whitelisted)
 
   @doc """
   Convert a list of segment filters into a ClickHouse WHERE clause string.
   Returns an empty string if filters is nil or empty.
-  """
-  def to_sql(nil), do: ""
-  def to_sql([]), do: ""
 
-  def to_sql(filters) when is_list(filters) do
+  Accepts an optional `:site_id` opt for virtual fields (currently
+  `returning`) that need a site-scoped subquery. Filters on virtual
+  fields are dropped silently when no `site_id` is provided.
+  """
+  def to_sql(filters, opts \\ [])
+
+  def to_sql(nil, _opts), do: ""
+  def to_sql([], _opts), do: ""
+
+  def to_sql(filters, opts) when is_list(filters) do
+    site_id = Keyword.get(opts, :site_id)
+
     clauses =
       filters
       |> Enum.filter(&valid_filter?/1)
-      |> Enum.map(&filter_to_sql/1)
+      |> Enum.map(&filter_to_sql(&1, site_id))
       |> Enum.reject(&(&1 == ""))
 
     case clauses do
@@ -116,25 +135,70 @@ defmodule Spectabas.Analytics.Segment do
 
   defp valid_filter?(_), do: false
 
-  defp filter_to_sql(%{"field" => field, "op" => "is", "value" => value}) do
+  # Virtual fields branch first — these need site context. If `site_id`
+  # is nil the filter is dropped (returning "") rather than producing an
+  # un-scoped subquery that would scan ALL sites' events.
+  defp filter_to_sql(%{"field" => "returning", "op" => op, "value" => value}, site_id)
+       when not is_nil(site_id) do
+    truthy = value in ~w(yes true 1)
+    site_p = ClickHouse.param(site_id)
+
+    sub = """
+    visitor_id IN (
+      SELECT visitor_id FROM events
+      WHERE site_id = #{site_p}
+        AND event_type = 'pageview' AND ip_is_bot = 0
+      GROUP BY visitor_id
+      HAVING countDistinct(toDate(timestamp)) > 1
+    )
+    """
+
+    case {op, truthy} do
+      {"is", true} -> "AND #{sub}"
+      {"is", false} -> "AND NOT (#{sub})"
+      {"is_not", true} -> "AND NOT (#{sub})"
+      {"is_not", false} -> "AND #{sub}"
+      _ -> ""
+    end
+  end
+
+  defp filter_to_sql(%{"field" => "returning"}, _site_id), do: ""
+
+  # Direct CH-column filters — same shape as before, just thread site_id
+  # through for signature consistency (most clauses ignore it).
+  defp filter_to_sql(%{"field" => field, "op" => "is", "value" => value}, _site_id) do
     "AND #{field} = #{ClickHouse.param(value)}"
   end
 
-  defp filter_to_sql(%{"field" => field, "op" => "is_not", "value" => value}) do
+  defp filter_to_sql(%{"field" => field, "op" => "is_not", "value" => value}, _site_id) do
     "AND #{field} != #{ClickHouse.param(value)}"
   end
 
-  defp filter_to_sql(%{"field" => field, "op" => "contains", "value" => value}) do
+  defp filter_to_sql(%{"field" => field, "op" => "contains", "value" => value}, _site_id) do
     escaped = escape_like_wildcards(value)
     "AND #{field} LIKE #{ClickHouse.param("%#{escaped}%")}"
   end
 
-  defp filter_to_sql(%{"field" => field, "op" => "not_contains", "value" => value}) do
+  defp filter_to_sql(%{"field" => field, "op" => "not_contains", "value" => value}, _site_id) do
     escaped = escape_like_wildcards(value)
     "AND #{field} NOT LIKE #{ClickHouse.param("%#{escaped}%")}"
   end
 
-  defp filter_to_sql(_), do: ""
+  defp filter_to_sql(_, _site_id), do: ""
+
+  @doc false
+  def __virtual_fields__, do: @virtual_fields
+
+  @doc """
+  Whether a filter targets a field that needs Postgres pre-resolution.
+  `Spectabas.Cohorts` calls this to split filters into CH-direct vs
+  PG-resolved buckets before issuing metric queries.
+  """
+  def pg_resolved?(%{"field" => f}) when is_binary(f), do: f in @pg_resolved_fields
+  def pg_resolved?(_), do: false
+
+  @doc "List of fields requiring Postgres pre-resolution."
+  def pg_resolved_fields, do: @pg_resolved_fields
 
   defp escape_like_wildcards(value) do
     value

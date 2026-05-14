@@ -67,6 +67,12 @@ defmodule SpectabasWeb.Dashboard.CohortDetailLive do
               {f["field"]} {pretty_op(f["op"])} {f["value"]}
             </span>
           </div>
+          <div
+            :if={@metrics.truncated}
+            class="mt-3 inline-block px-3 py-1.5 rounded text-xs bg-amber-50 text-amber-900 border border-amber-200"
+          >
+            ⚠ Cohort matches more than 10,000 visitors in Postgres — results below are computed against the first 10,000 (sorted by visitor_id). Tighten the filters for an exact result.
+          </div>
         </div>
 
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -121,9 +127,6 @@ defmodule SpectabasWeb.Dashboard.CohortDetailLive do
           <div class="bg-white rounded-lg shadow overflow-hidden">
             <div class="px-5 py-3 border-b border-gray-100">
               <h2 class="text-sm font-semibold text-gray-700">Top sources</h2>
-              <p class="text-[10px] text-gray-400 mt-0.5">
-                Site-wide for the range — cohort-scoped sources are a follow-up.
-              </p>
             </div>
             <table class="min-w-full text-sm">
               <tbody class="divide-y divide-gray-100">
@@ -148,9 +151,9 @@ defmodule SpectabasWeb.Dashboard.CohortDetailLive do
           class="bg-white rounded-lg shadow overflow-hidden"
         >
           <div class="px-5 py-3 border-b border-gray-100">
-            <h2 class="text-sm font-semibold text-gray-700">Goals (site-wide for the range)</h2>
+            <h2 class="text-sm font-semibold text-gray-700">Goal conversion</h2>
             <p class="text-[10px] text-gray-400 mt-0.5">
-              Conversion rate is computed against site-wide visitors; cohort-scoped conversion is a follow-up.
+              Cohort-scoped — completers and rate count only visitors matching the cohort's filters.
             </p>
           </div>
           <table class="min-w-full text-sm">

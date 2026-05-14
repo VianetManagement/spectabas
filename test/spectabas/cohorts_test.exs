@@ -113,5 +113,57 @@ defmodule Spectabas.CohortsTest do
       assert sql =~ "ip_country"
       assert sql =~ "device_type"
     end
+
+    test "accepts new CH-direct fields added v6.10.34" do
+      site = build_site!()
+      user = build_user!()
+
+      for field <-
+            ~w(ip_is_bot ip_is_datacenter ip_is_vpn click_id_type utm_term utm_content ip_continent_name) do
+        {:ok, c} =
+          Cohorts.create(site.id, user.id, %{
+            "name" => "test_#{field}_#{System.unique_integer([:positive])}",
+            "filters" => [%{"field" => field, "op" => "is", "value" => "1"}]
+          })
+
+        assert Cohorts.to_sql(c) =~ field, "expected to_sql to include #{field}"
+      end
+    end
+  end
+
+  describe "Segment virtual fields" do
+    alias Spectabas.Analytics.Segment
+
+    test "returning expands to a visitor_id IN subquery scoped to site_id" do
+      filters = [%{"field" => "returning", "op" => "is", "value" => "yes"}]
+      sql = Segment.to_sql(filters, site_id: 42)
+
+      assert sql =~ "visitor_id IN"
+      assert sql =~ "countDistinct(toDate(timestamp)) > 1"
+      assert sql =~ "site_id = "
+    end
+
+    test "returning drops when no site_id is provided" do
+      filters = [%{"field" => "returning", "op" => "is", "value" => "yes"}]
+      assert Segment.to_sql(filters) == ""
+    end
+
+    test "returning is_not flips the predicate" do
+      filters = [%{"field" => "returning", "op" => "is_not", "value" => "yes"}]
+      sql = Segment.to_sql(filters, site_id: 42)
+      assert sql =~ "NOT ("
+    end
+
+    test "scraper_whitelisted and identified are flagged as pg_resolved" do
+      assert Segment.pg_resolved?(%{
+               "field" => "scraper_whitelisted",
+               "op" => "is",
+               "value" => "yes"
+             })
+
+      assert Segment.pg_resolved?(%{"field" => "identified", "op" => "is", "value" => "yes"})
+      refute Segment.pg_resolved?(%{"field" => "returning", "op" => "is", "value" => "yes"})
+      refute Segment.pg_resolved?(%{"field" => "ip_country", "op" => "is", "value" => "US"})
+    end
   end
 end

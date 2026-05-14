@@ -78,18 +78,35 @@ defmodule Spectabas.Cohorts do
       stats: %{visitors:, pageviews:, bounce_rate:, avg_duration:},
       top_pages: [...],
       top_sources: [...],
-      conversion_rate_by_goal: %{goal_id => %{name:, completers:, rate:}}
+      conversion_rate_by_goal: %{goal_id => %{name:, completers:, rate:}},
+      truncated: boolean — true if a PG-resolved field hit the cap
     }
 
-  All queries scope to the cohort's filters by passing them via the
-  existing `:segment` opt that Analytics functions already accept.
-  Range defaults to last 30 days.
+  Filters route through Analytics functions via two channels:
+  - CH-direct filters (everything in `Segment.@allowed_fields` minus
+    the PG-resolved set) go through the existing `:segment` opt
+  - PG-resolved filters (`scraper_whitelisted`, `identified`) are
+    pre-resolved here into a visitor_id list and passed through
+    `:cohort_visitor_ids`, which the Analytics `segment_sql/2` helper
+    appends as `AND visitor_id IN (...)`
+
+  Range defaults to last 30 days. Visitor-id IN list is capped at 10k —
+  beyond that the IN clause gets unwieldy. Hits the cap → returns
+  `truncated: true` for the UI to warn about.
   """
+  @visitor_id_cap 10_000
+
   def metrics(%Cohort{} = cohort, user, opts \\ []) do
     site = Spectabas.Sites.get_site!(cohort.site_id)
     period = Keyword.get(opts, :period, :month)
-    segment = Cohort.filters_list(cohort)
-    seg_opts = [segment: segment]
+    all_filters = Cohort.filters_list(cohort)
+
+    {pg_filters, ch_filters} =
+      Enum.split_with(all_filters, &Spectabas.Analytics.Segment.pg_resolved?/1)
+
+    {visitor_ids, truncated} = resolve_pg_filters(site, pg_filters)
+
+    seg_opts = build_seg_opts(ch_filters, visitor_ids)
 
     stats =
       case Spectabas.Analytics.overview_stats_fast(site, user, period, seg_opts) do
@@ -104,19 +121,13 @@ defmodule Spectabas.Cohorts do
       end
 
     top_sources =
-      case Spectabas.Analytics.top_sources(site, user, period) do
+      case Spectabas.Analytics.top_sources(site, user, period, seg_opts) do
         {:ok, rows} -> Enum.take(rows, 10)
         _ -> []
       end
 
-    # Goal conversion within the cohort: use goal_completions which
-    # returns per-goal counts. Apply the cohort segment by feeding
-    # session-restricted CH queries if/when we extend goal_completions
-    # to accept :segment — for v1 we report goal completions site-wide
-    # alongside the cohort-filtered top-of-funnel, and let the user
-    # infer the lift.
     conversion_rate_by_goal =
-      case Spectabas.Analytics.goal_completions(site, user, period) do
+      case Spectabas.Analytics.goal_completions(site, user, period, seg_opts) do
         {:ok, rows} ->
           Map.new(rows, fn row ->
             {row.goal_id,
@@ -131,9 +142,68 @@ defmodule Spectabas.Cohorts do
       stats: stats,
       top_pages: top_pages,
       top_sources: top_sources,
-      conversion_rate_by_goal: conversion_rate_by_goal
+      conversion_rate_by_goal: conversion_rate_by_goal,
+      truncated: truncated
     }
   end
+
+  defp build_seg_opts(ch_filters, nil), do: [segment: ch_filters]
+  defp build_seg_opts(ch_filters, ids), do: [segment: ch_filters, cohort_visitor_ids: ids]
+
+  # Resolves PG-derived filter rows (scraper_whitelisted / identified) to
+  # a visitor_id list. Returns `{nil, false}` if no PG filters fired
+  # (Analytics layer treats nil as "no constraint"). Returns
+  # `{ids_list, truncated?}` if PG filters fired.
+  defp resolve_pg_filters(_site, []), do: {nil, false}
+
+  defp resolve_pg_filters(site, pg_filters) do
+    import Ecto.Query
+
+    # Build a single PG query that ANDs all the PG-resolved predicates
+    # so the visitor must satisfy every one of them.
+    base = from(v in Spectabas.Visitors.Visitor, where: v.site_id == ^site.id)
+
+    query = Enum.reduce(pg_filters, base, &apply_pg_filter/2)
+
+    # Cap + 1 so we can detect "truncated" without a separate count.
+    ids =
+      query
+      |> select([v], v.id)
+      |> limit(^(@visitor_id_cap + 1))
+      |> Spectabas.Repo.all()
+      |> Enum.map(&to_string/1)
+
+    if length(ids) > @visitor_id_cap do
+      {Enum.take(ids, @visitor_id_cap), true}
+    else
+      {ids, false}
+    end
+  end
+
+  defp apply_pg_filter(%{"field" => "scraper_whitelisted", "op" => op, "value" => value}, q) do
+    truthy = value in ~w(yes true 1)
+    want = truthy_for_op(op, truthy)
+    import Ecto.Query
+    where(q, [v], v.scraper_whitelisted == ^want)
+  end
+
+  defp apply_pg_filter(%{"field" => "identified", "op" => op, "value" => value}, q) do
+    truthy = value in ~w(yes true 1)
+    want = truthy_for_op(op, truthy)
+    import Ecto.Query
+
+    if want do
+      where(q, [v], not is_nil(v.email) and v.email != "")
+    else
+      where(q, [v], is_nil(v.email) or v.email == "")
+    end
+  end
+
+  defp apply_pg_filter(_, q), do: q
+
+  defp truthy_for_op("is", t), do: t
+  defp truthy_for_op("is_not", t), do: not t
+  defp truthy_for_op(_, t), do: t
 
   # Accept either the unwrapped form (`%{"filters" => [...]}`) or a raw
   # filter list at the top level. Normalize to the wrapped storage shape.

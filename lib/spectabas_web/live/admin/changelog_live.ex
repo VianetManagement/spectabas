@@ -65,6 +65,15 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.34", "2026-05-14T16:30:00Z",
+       [
+         %{
+           title:
+             "Cohort filters: segment passthrough + richer field grammar (CH-direct, virtual, PG-resolved)",
+           description:
+             "Follow-up to v6.10.32. Cohort metrics now correctly scope `top_sources` + `goal_completions` to the cohort's filters (previously the UI surfaced these as 'site-wide / follow-up' caveats), and the Segment grammar grows from CH-direct columns only to three flavors of field so cohorts can express the things people actually want to slice on.\n\n**Phase A — segment passthrough.** `Spectabas.Analytics.top_sources/4` and `goal_completions/4` now take an `opts` keyword threaded into the WHERE clause via `segment_sql/2`. The 'follow-up: currently site-wide' notes in the cohort detail UI are gone — both surfaces are now cohort-scoped.\n\n**Phase B — CH-direct fields.** Added to `Segment.@allowed_fields`: `ip_continent_name`, `ip_is_bot`, `ip_is_datacenter`, `ip_is_vpn`, `click_id_type`, `utm_term`, `utm_content`. These are direct columns on `events` so they translate via the existing `field op value` path with zero extra cost.\n\n**Phase C — virtual fields (CH subquery).** `returning` is now a Segment field. Filter translation emits `visitor_id IN (SELECT visitor_id FROM events WHERE site_id = ? AND event_type = 'pageview' AND ip_is_bot = 0 GROUP BY visitor_id HAVING countDistinct(toDate(timestamp)) > 1)`. `to_sql/2` accepts a `:site_id` opt for these — without site context the virtual filter is silently dropped rather than emitting an un-scoped subquery that would scan every site's events.\n\n**Phase D — PG-resolved fields.** `scraper_whitelisted` and `identified` are flagged as `@pg_resolved_fields` in Segment. `Cohorts.metrics/3` splits the cohort's filter list via `Segment.pg_resolved?/1`, pre-resolves the PG-derived predicates to a visitor_id list against `Spectabas.Visitors.Visitor` (`scraper_whitelisted == true/false`, `email IS NOT NULL` for `identified`), and passes that list as `:cohort_visitor_ids` into the Analytics calls. `Analytics.segment_sql/2` appends `AND visitor_id IN (...)`. The IN list is capped at 10,000 — beyond that the detail view shows an amber warning ('Cohort matches more than 10,000 visitors in Postgres — tighten the filters for an exact result') so silent truncation can't mislead. Net data flow: cohort filters split into CH-direct + PG-resolved buckets → PG-resolved pre-resolved to a capped UUID list → both reunified in the events query as `WHERE <ch_filters> AND visitor_id IN (...)`.\n\nNew tests for the new fields, the returning subquery, the site_id requirement on virtual fields, and the `pg_resolved?` helper. 960 → 965 tests, all passing."
+         }
+       ]},
       {"v6.10.32", "2026-05-14T15:30:00Z",
        [
          %{

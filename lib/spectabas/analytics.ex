@@ -1041,8 +1041,11 @@ defmodule Spectabas.Analytics do
   Top traffic sources: referrer_domain with unique session counts.
   Uses raw events table with uniq(session_id) to avoid overcounting.
   """
-  def top_sources(%Site{} = site, %User{} = user, date_range) do
+  def top_sources(site, user, date_range, opts \\ [])
+
+  def top_sources(%Site{} = site, %User{} = user, date_range, opts) do
     date_range = ensure_date_range(date_range)
+    seg = segment_sql(opts, site)
 
     with :ok <- authorize(site, user) do
       excluded = self_referrer_domains(site)
@@ -1065,7 +1068,7 @@ defmodule Spectabas.Analytics do
           WHERE site_id = #{ClickHouse.param(site.id)}
             AND timestamp >= #{ClickHouse.param(format_datetime(nr.from))}
             AND timestamp <= #{ClickHouse.param(format_datetime(nr.to))}
-            AND referrer_domain != '' AND ip_is_bot = 0 #{exclude_clause}
+            AND referrer_domain != '' AND ip_is_bot = 0 #{exclude_clause} #{seg}
           GROUP BY referrer_domain ORDER BY pageviews DESC LIMIT 100
           """
         end,
@@ -3431,23 +3434,32 @@ defmodule Spectabas.Analytics do
   end
 
   @doc """
-  Goal completions per goal for a date range.
+  Goal completions per goal for a date range. Accepts an optional
+  `:segment` opt — list of filter maps in the
+  `Spectabas.Analytics.Segment` grammar — to restrict the counts to a
+  visitor cohort.
   """
-  def goal_completions(%Site{} = site, %User{} = user, date_range) do
+  def goal_completions(site, user, date_range, opts \\ [])
+
+  def goal_completions(%Site{} = site, %User{} = user, date_range, opts) do
     with :ok <- authorize(site, user) do
-      do_goal_completions(site, date_range)
+      do_goal_completions(site, date_range, opts)
     end
   end
 
-  defp do_goal_completions(%Site{} = site, date_range) do
+  defp do_goal_completions(%Site{} = site, date_range, opts \\ []) do
     date_range = ensure_date_range(date_range)
+    seg = segment_sql(opts, site)
 
     goals = Spectabas.Goals.list_goals(site)
 
     if goals == [] do
       {:ok, []}
     else
-      # Get total unique visitors for conversion rate calculation
+      # Get total unique visitors for conversion rate calculation.
+      # The segment clause restricts both numerator (per-goal completers)
+      # and denominator (total visitors) to the cohort so the rate is
+      # cohort-scoped.
       total_visitors =
         case ClickHouse.query(
                """
@@ -3457,6 +3469,7 @@ defmodule Spectabas.Analytics do
                    AND event_type = 'pageview' AND ip_is_bot = 0
                    AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
                    AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+                   #{seg}
                  SETTINGS max_execution_time = 180
                """,
                receive_timeout: 200_000
@@ -3481,6 +3494,7 @@ defmodule Spectabas.Analytics do
             AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
             AND ip_is_bot = 0
             AND #{condition}
+            #{seg}
           """
         end)
         |> Enum.join("\nUNION ALL\n")
@@ -5948,9 +5962,34 @@ defmodule Spectabas.Analytics do
 
   # --- Private helpers ---
 
-  defp segment_sql(opts) do
+  # `segment_sql/1` shape kept for back-compat (no site context, so
+  # virtual fields like `returning` won't fire). `segment_sql/2` accepts
+  # the site struct so virtual fields can interpolate `site_id` into
+  # their subqueries. Cohort-facing call sites should use the /2 form.
+  #
+  # Also honors `:cohort_visitor_ids` opt — a pre-resolved list of
+  # visitor IDs (from `Spectabas.Cohorts` Postgres lookups for fields
+  # like `scraper_whitelisted` / `identified` that don't live in CH).
+  # When present, an `AND visitor_id IN (...)` clause is appended.
+  defp segment_sql(opts), do: segment_sql(opts, nil)
+
+  defp segment_sql(opts, site) do
     segment = Keyword.get(opts, :segment, [])
-    Segment.to_sql(segment)
+    site_id = if site, do: site.id, else: Keyword.get(opts, :site_id)
+    seg_part = Segment.to_sql(segment, site_id: site_id)
+
+    case Keyword.get(opts, :cohort_visitor_ids) do
+      nil ->
+        seg_part
+
+      [] ->
+        # Empty list = "no visitor matches the PG filter" → force zero results.
+        seg_part <> "\n    AND visitor_id IN ('__no_match__')"
+
+      ids when is_list(ids) ->
+        ids_sql = Enum.map_join(ids, ", ", &ClickHouse.param/1)
+        seg_part <> "\n    AND visitor_id IN (#{ids_sql})"
+    end
   end
 
   # ---- Real User Monitoring ----
