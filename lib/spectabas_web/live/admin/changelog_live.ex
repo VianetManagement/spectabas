@@ -65,6 +65,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.39", "2026-05-14T21:00:00Z",
+       [
+         %{
+           title: "Languages page joins the hourly snapshot — instant load on default 30d",
+           description:
+             "The Languages page now reads from the hourly `dashboard_snapshots` JSONB store on its default 30d range, like Geography / Devices / etc. New `snapshot_languages` kind in `Workers.DashboardSnapshot` bundles `language_summary` + `top_browser_languages` + `top_page_languages` + `language_country_crosstab` + `language_mismatches` into a single PG row written at :35 UTC each hour. LanguagesLive reads via `DashboardSnapshots.fetch(site, \"languages\")` on 30d; 7d / 90d ranges fall back to live CH via the existing query path. Adds the standard 'Snapshot · last update X' label under the page title so users can see freshness. The five underlying queries together can take 5-30s on busy sites; the snapshot makes the default-range load effectively free (single PG row read)."
+         }
+       ]},
       {"v6.10.38", "2026-05-14T20:30:00Z",
        [
          %{

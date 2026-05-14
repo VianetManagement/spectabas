@@ -15,7 +15,7 @@ defmodule SpectabasWeb.Dashboard.LanguagesLive do
   """
   use SpectabasWeb, :live_view
 
-  alias Spectabas.{Accounts, Sites, Analytics}
+  alias Spectabas.{Accounts, Sites, Analytics, DashboardSnapshots}
   import SpectabasWeb.Dashboard.SidebarComponent
   import SpectabasWeb.Dashboard.DateHelpers
   import Spectabas.TypeHelpers
@@ -39,6 +39,7 @@ defmodule SpectabasWeb.Dashboard.LanguagesLive do
         |> assign(:page_languages, [])
         |> assign(:crosstab, [])
         |> assign(:mismatches, [])
+        |> assign(:snapshot_refreshed_at, nil)
         |> assign(:loading, true)
 
       if connected?(socket), do: send(self(), :load_data)
@@ -59,44 +60,67 @@ defmodule SpectabasWeb.Dashboard.LanguagesLive do
 
   defp load_data(socket) do
     %{site: site, user: user, date_range: range} = socket.assigns
-    period = range_to_period(range)
-
-    summary =
-      case Analytics.language_summary(site, user, period) do
-        {:ok, [row]} -> row
-        _ -> %{}
-      end
-
-    browser_languages =
-      case Analytics.top_browser_languages(site, user, period) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
-
-    page_languages =
-      case Analytics.top_page_languages(site, user, period) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
-
-    crosstab =
-      case Analytics.language_country_crosstab(site, user, period) do
-        {:ok, rows} -> Enum.take(rows, 50)
-        _ -> []
-      end
-
-    mismatches =
-      case Analytics.language_mismatches(site, user, period) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
+    {data, refreshed_at} = load_kind(site, user, range)
 
     socket
-    |> assign(:summary, summary)
-    |> assign(:browser_languages, browser_languages)
-    |> assign(:page_languages, page_languages)
-    |> assign(:crosstab, crosstab)
-    |> assign(:mismatches, mismatches)
+    |> assign(:summary, data.summary)
+    |> assign(:browser_languages, data.browser_languages)
+    |> assign(:page_languages, data.page_languages)
+    |> assign(:crosstab, data.crosstab)
+    |> assign(:mismatches, data.mismatches)
+    |> assign(:snapshot_refreshed_at, refreshed_at)
+  end
+
+  # Default 30d reads from the hourly languages snapshot (DashboardSnapshot
+  # worker fans out per-site at :35 UTC). 7d / 90d fall back to live CH.
+  defp load_kind(site, user, "30d") do
+    case DashboardSnapshots.fetch(site, "languages") do
+      {snap, refreshed_at} ->
+        {%{
+           summary: List.first(snap["summary"] || []) || %{},
+           browser_languages: snap["browser_languages"] || [],
+           page_languages: snap["page_languages"] || [],
+           crosstab: Enum.take(snap["crosstab"] || [], 50),
+           mismatches: snap["mismatches"] || []
+         }, refreshed_at}
+
+      nil ->
+        {live_load(site, user, "30d"), nil}
+    end
+  end
+
+  defp load_kind(site, user, range), do: {live_load(site, user, range), nil}
+
+  defp live_load(site, user, range) do
+    period = range_to_period(range)
+
+    %{
+      summary:
+        case Analytics.language_summary(site, user, period) do
+          {:ok, [row]} -> row
+          _ -> %{}
+        end,
+      browser_languages:
+        case Analytics.top_browser_languages(site, user, period) do
+          {:ok, rows} -> rows
+          _ -> []
+        end,
+      page_languages:
+        case Analytics.top_page_languages(site, user, period) do
+          {:ok, rows} -> rows
+          _ -> []
+        end,
+      crosstab:
+        case Analytics.language_country_crosstab(site, user, period) do
+          {:ok, rows} -> Enum.take(rows, 50)
+          _ -> []
+        end,
+      mismatches:
+        case Analytics.language_mismatches(site, user, period) do
+          {:ok, rows} -> rows
+          _ -> []
+        end
+    }
   end
 
   defp mismatch_pct(summary) do
@@ -122,6 +146,9 @@ defmodule SpectabasWeb.Dashboard.LanguagesLive do
             <h1 class="text-2xl font-bold text-gray-900 mt-2">Languages</h1>
             <p class="text-sm text-gray-500 mt-1">
               What language are your visitors browsing in (navigator.language) and what language did your site serve them (&lt;html lang&gt;)? The cross-tab against country reveals diaspora / expat / multilingual segments. Mismatches surface visitors stuck on a non-native version of your site.
+            </p>
+            <p :if={@snapshot_refreshed_at} class="text-xs text-gray-400 mt-1">
+              Snapshot · last update {DashboardSnapshots.refreshed_label(@snapshot_refreshed_at)}
             </p>
           </div>
           <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">

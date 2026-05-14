@@ -41,6 +41,7 @@ defmodule Spectabas.Workers.DashboardSnapshot do
   @default_entry_exit_window 7
   @default_geography_window 7
   @default_devices_window 7
+  @default_languages_window 30
   @default_campaigns_window 30
   @default_performance_window 7
   @default_search_keywords_window 30
@@ -178,6 +179,10 @@ defmodule Spectabas.Workers.DashboardSnapshot do
 
     snapshot_kind(site, "devices", @default_devices_window, fn ->
       snapshot_devices(site, user)
+    end)
+
+    snapshot_kind(site, "languages", @default_languages_window, fn ->
+      snapshot_languages(site, user)
     end)
 
     snapshot_kind(site, "campaigns", @default_campaigns_window, fn ->
@@ -452,6 +457,20 @@ defmodule Spectabas.Workers.DashboardSnapshot do
       "browsers" => list_or_empty(Analytics.top_browsers(site, user, :week)),
       "os" => list_or_empty(Analytics.top_os(site, user, :week)),
       "device_types" => list_or_empty(Analytics.top_device_types(site, user, :week))
+    }
+  end
+
+  # Languages — summary + top browser/page languages + crosstab + mismatches.
+  # Default window is :month (30d) matching LanguagesLive's default range.
+  # 7d / 90d ranges fall back to live CH via DashboardSnapshots.fetch/2 in
+  # the LiveView's load_data path.
+  defp snapshot_languages(site, user) do
+    %{
+      "summary" => list_or_empty(Analytics.language_summary(site, user, :month)),
+      "browser_languages" => list_or_empty(Analytics.top_browser_languages(site, user, :month)),
+      "page_languages" => list_or_empty(Analytics.top_page_languages(site, user, :month)),
+      "crosstab" => list_or_empty(Analytics.language_country_crosstab(site, user, :month)),
+      "mismatches" => list_or_empty(Analytics.language_mismatches(site, user, :month))
     }
   end
 
