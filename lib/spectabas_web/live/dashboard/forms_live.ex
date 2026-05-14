@@ -41,9 +41,6 @@ defmodule SpectabasWeb.Dashboard.FormsLive do
         |> assign(:date_range, "30d")
         |> assign(:summary, %{})
         |> assign(:forms, [])
-        |> assign(:selected_form_id, nil)
-        |> assign(:selected_form_name, nil)
-        |> assign(:field_dropoff, [])
         |> assign(:loading, true)
 
       if connected?(socket), do: send(self(), :load_data)
@@ -54,42 +51,7 @@ defmodule SpectabasWeb.Dashboard.FormsLive do
   @impl true
   def handle_event("change_range", %{"range" => range}, socket) do
     send(self(), :load_data)
-
-    {:noreply,
-     socket
-     |> assign(:date_range, range)
-     |> assign(:loading, true)
-     |> assign(:selected_form_id, nil)
-     |> assign(:field_dropoff, [])}
-  end
-
-  def handle_event(
-        "select_form",
-        %{"form_id" => form_id, "form_name" => form_name},
-        socket
-      ) do
-    %{site: site, user: user, date_range: range} = socket.assigns
-    period = range_to_period(range)
-
-    dropoff =
-      case Analytics.form_field_dropoff(site, user, form_id, period) do
-        {:ok, rows} -> rows
-        _ -> []
-      end
-
-    {:noreply,
-     socket
-     |> assign(:selected_form_id, form_id)
-     |> assign(:selected_form_name, form_name)
-     |> assign(:field_dropoff, dropoff)}
-  end
-
-  def handle_event("clear_form", _params, socket) do
-    {:noreply,
-     socket
-     |> assign(:selected_form_id, nil)
-     |> assign(:selected_form_name, nil)
-     |> assign(:field_dropoff, [])}
+    {:noreply, socket |> assign(:date_range, range) |> assign(:loading, true)}
   end
 
   @impl true
@@ -275,18 +237,16 @@ defmodule SpectabasWeb.Dashboard.FormsLive do
                 </tr>
                 <tr
                   :for={f <- @forms}
-                  phx-click="select_form"
-                  phx-value-form_id={f["form_id"]}
-                  phx-value-form_name={display_form_label(f)}
-                  class={[
-                    "cursor-pointer hover:bg-indigo-50",
-                    if(@selected_form_id == f["form_id"], do: "bg-indigo-50", else: "")
-                  ]}
+                  onclick={"window.location.href='/dashboard/sites/#{@site.id}/forms/#{URI.encode_www_form(f["form_id"] || "")}'"}
+                  class="cursor-pointer hover:bg-indigo-50"
                 >
                   <td class="px-6 py-3 text-sm">
-                    <div class="font-medium text-gray-900 truncate max-w-xs">
+                    <.link
+                      navigate={~p"/dashboard/sites/#{@site.id}/forms/#{f["form_id"]}"}
+                      class="font-medium text-gray-900 hover:text-indigo-700 truncate max-w-xs block"
+                    >
                       {display_form_label(f)}
-                    </div>
+                    </.link>
                     <div
                       :if={f["form_action"] && f["form_action"] != ""}
                       class="text-xs text-gray-500 font-mono truncate max-w-xs"
@@ -334,55 +294,9 @@ defmodule SpectabasWeb.Dashboard.FormsLive do
             = group of ≥2 inputs sharing an identifiable container with no wrapping &lt;form&gt; (common in React / Next.js apps). Submits are inferred from clicks on buttons whose text matches submit verbs (submit, send, sign up, continue, save, checkout, etc.), only counted if the user previously focused an input in the cluster. The "heuristic" count in the summary card above is just the cluster submits — keep an eye on it as a quality check.
           </p>
 
-          <div :if={@selected_form_id} class="bg-white rounded-lg shadow overflow-hidden">
-            <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-              <div>
-                <h2 class="text-sm font-semibold text-gray-700">
-                  Per-field drop-off: <span class="font-mono">{@selected_form_name}</span>
-                </h2>
-                <p class="text-[10px] text-gray-400 mt-0.5">
-                  Starts here = visitors whose first focus was this field. Abandons = visitors who left the form with this field as their last touch. The field with the most abandons is the funnel breakpoint.
-                </p>
-              </div>
-              <button
-                phx-click="clear_form"
-                class="text-xs text-gray-500 hover:text-gray-700"
-              >
-                Close ✕
-              </button>
-            </div>
-            <table class="min-w-full text-sm">
-              <thead class="bg-gray-50">
-                <tr>
-                  <th class="px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                    Field
-                  </th>
-                  <th class="px-5 py-2 text-right text-xs font-medium text-gray-500 uppercase">
-                    Starts here
-                  </th>
-                  <th class="px-5 py-2 text-right text-xs font-medium text-gray-500 uppercase">
-                    Abandons
-                  </th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100">
-                <tr :if={@field_dropoff == []}>
-                  <td colspan="3" class="px-5 py-3 text-center text-gray-400 text-xs">
-                    No field-level data for this form in this range.
-                  </td>
-                </tr>
-                <tr :for={r <- @field_dropoff}>
-                  <td class="px-5 py-2 font-mono text-xs">{r["field_name"]}</td>
-                  <td class="px-5 py-2 text-right tabular-nums text-xs">
-                    {format_number(to_num(r["starts_here"]))}
-                  </td>
-                  <td class="px-5 py-2 text-right tabular-nums text-xs text-amber-700">
-                    {format_number(to_num(r["abandons"]))}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <p :if={@forms != []} class="text-xs text-gray-400">
+            Click any form to open its detail page — funnel, per-field drop-off, time-to-submit, validation errors, breakdowns by device/country/language/source, recent activity, and more.
+          </p>
         <% end %>
       </div>
     </.dashboard_layout>

@@ -222,6 +222,7 @@ defmodule SpectabasWeb.Router do
       live "/sites/:site_id/outbound-links", Dashboard.OutboundLinksLive, :index
       live "/sites/:site_id/downloads", Dashboard.DownloadsLive, :index
       live "/sites/:site_id/forms", Dashboard.FormsLive, :index
+      live "/sites/:site_id/forms/:form_id", Dashboard.FormDetailLive, :show
       live "/sites/:site_id/events", Dashboard.EventsLive, :index
       live "/sites/:site_id/email-reports", Dashboard.EmailReportsLive, :index
       live "/sites/:site_id/exports", Dashboard.ExportLive, :index

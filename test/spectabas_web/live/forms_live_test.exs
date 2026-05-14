@@ -48,30 +48,11 @@ defmodule SpectabasWeb.Dashboard.FormsLiveTest do
       end
     end
 
-    test "select_form event opens per-field section without crashing", %{conn: conn, site: site} do
+    test "click hint references the detail page", %{conn: conn, site: site} do
       {:ok, view, _html} = live(conn, ~p"/dashboard/sites/#{site.id}/forms")
-
-      html =
-        render_click(view, "select_form", %{
-          "form_id" => "contact",
-          "form_name" => "Contact form"
-        })
-
-      assert html =~ "Per-field drop-off"
-      assert html =~ "Contact form"
-    end
-
-    test "clear_form event closes per-field section", %{conn: conn, site: site} do
-      {:ok, view, _html} = live(conn, ~p"/dashboard/sites/#{site.id}/forms")
-
-      render_click(view, "select_form", %{
-        "form_id" => "contact",
-        "form_name" => "Contact form"
-      })
-
-      html = render_click(view, "clear_form", %{})
-
-      refute html =~ "Per-field drop-off"
+      html = render(view)
+      # the inline drop-off section is gone; copy now points to the detail page
+      refute html =~ "phx-click=\"select_form\""
     end
   end
 end

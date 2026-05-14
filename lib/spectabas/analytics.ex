@@ -6129,6 +6129,421 @@ defmodule Spectabas.Analytics do
     end
   end
 
+  # ---- Form Detail Analytics (drives FormDetailLive) ----
+  #
+  # All queries here are scoped to a single `form_id`. Most use the
+  # custom-events filter on `_form_view` / `_form_start` / `_form_submit` /
+  # `_form_abandon`. Enrichment-field breakdowns (device, country,
+  # browser) use a per-visitor subquery + outer aggregation because the
+  # fast ingest path leaves those fields empty on custom events (see
+  # CLAUDE.md). `browser_language` is on every event so it can be
+  # grouped directly.
+
+  @doc """
+  Single-row KPI bundle for the form detail page header. Includes the
+  form's display name + action + kind (taken from any `_form_view`
+  event in the range so the labels stay current).
+  """
+  def form_detail_kpis(%Site{} = site, %User{} = user, form_id, date_range)
+      when is_binary(form_id) and form_id != "" do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        anyIf(JSONExtractString(properties, '_form_name'), event_name = '_form_view') AS form_name,
+        anyIf(JSONExtractString(properties, '_form_action'), event_name = '_form_view') AS form_action,
+        anyIf(JSONExtractString(properties, '_form_kind'), event_name = '_form_view') AS form_kind,
+        countIf(event_name = '_form_view') AS views,
+        countIf(event_name = '_form_start') AS starts,
+        countIf(event_name = '_form_submit') AS submits,
+        countIf(event_name = '_form_abandon') AS abandons,
+        countIf(event_name = '_form_validation_error') AS validation_errors,
+        uniqIf(visitor_id, event_name = '_form_view') AS viewers,
+        uniqIf(visitor_id, event_name = '_form_submit') AS submitters,
+        round(countIf(event_name = '_form_submit') / greatest(countIf(event_name = '_form_view'), 1) * 100, 1) AS submit_rate,
+        round(countIf(event_name = '_form_abandon') / greatest(countIf(event_name = '_form_start'), 1) * 100, 1) AS abandon_rate,
+        round(countIf(event_name = '_form_start') / greatest(countIf(event_name = '_form_view'), 1) * 100, 1) AS start_rate
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND event_type = 'custom'
+        AND event_name IN ('_form_view', '_form_start', '_form_submit', '_form_abandon', '_form_validation_error')
+        AND JSONExtractString(properties, '_form_id') = #{ClickHouse.param(form_id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
+  Daily timeseries of form events. Buckets by toDate(timestamp). One
+  row per day in the range, even if zero events that day (CH ARRAY JOIN
+  on date sequence keeps the chart from getting gappy).
+  """
+  def form_timeseries(%Site{} = site, %User{} = user, form_id, date_range)
+      when is_binary(form_id) and form_id != "" do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        toDate(timestamp) AS day,
+        countIf(event_name = '_form_view') AS views,
+        countIf(event_name = '_form_start') AS starts,
+        countIf(event_name = '_form_submit') AS submits,
+        countIf(event_name = '_form_abandon') AS abandons
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND event_type = 'custom'
+        AND event_name IN ('_form_view', '_form_start', '_form_submit', '_form_abandon')
+        AND JSONExtractString(properties, '_form_id') = #{ClickHouse.param(form_id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+      GROUP BY day
+      ORDER BY day ASC
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
+  Top URL paths where this form_id appears (form_view counted on each
+  pageview where the form was in the DOM). Reveals which landing pages
+  drive the most form starts + submits, useful when a single form lives
+  on multiple pages (signup form on /, /signup, /pricing, etc.).
+  """
+  def form_top_urls(%Site{} = site, %User{} = user, form_id, date_range)
+      when is_binary(form_id) and form_id != "" do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        url_path,
+        countIf(event_name = '_form_view') AS views,
+        countIf(event_name = '_form_start') AS starts,
+        countIf(event_name = '_form_submit') AS submits,
+        countIf(event_name = '_form_abandon') AS abandons,
+        round(countIf(event_name = '_form_submit') / greatest(countIf(event_name = '_form_view'), 1) * 100, 1) AS submit_rate
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND event_type = 'custom'
+        AND event_name IN ('_form_view', '_form_start', '_form_submit', '_form_abandon')
+        AND JSONExtractString(properties, '_form_id') = #{ClickHouse.param(form_id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+        AND url_path != ''
+      GROUP BY url_path
+      ORDER BY views DESC, submits DESC
+      LIMIT 20
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
+  Breakdown of this form's funnel by an enrichment dimension. For
+  fields populated on every event (`browser_language`) we group
+  directly. For enrichment fields that only exist on pageviews
+  (`device_type`, `ip_country`, `browser`, `utm_source`,
+  `referrer_domain`), we use a per-visitor subquery that picks the
+  field's value from any pageview the visitor made, then aggregates
+  the form events on the outside.
+
+  `dimension` is a string column name. Accepted values constrained at
+  the caller — direct interpolation into SQL since this comes from
+  the LiveView, not user input.
+  """
+  def form_breakdown(%Site{} = site, %User{} = user, form_id, dimension, date_range)
+      when is_binary(form_id) and form_id != "" and is_binary(dimension) do
+    date_range = ensure_date_range(date_range)
+    site_p = ClickHouse.param(site.id)
+    form_p = ClickHouse.param(form_id)
+    from_p = ClickHouse.param(format_datetime(date_range.from))
+    to_p = ClickHouse.param(format_datetime(date_range.to))
+
+    sql =
+      case dimension do
+        "browser_language" ->
+          """
+          SELECT
+            browser_language AS dimension_value,
+            countIf(event_name = '_form_view') AS views,
+            countIf(event_name = '_form_start') AS starts,
+            countIf(event_name = '_form_submit') AS submits,
+            countIf(event_name = '_form_abandon') AS abandons,
+            round(countIf(event_name = '_form_submit') / greatest(countIf(event_name = '_form_view'), 1) * 100, 1) AS submit_rate
+          FROM events
+          WHERE site_id = #{site_p}
+            AND event_type = 'custom'
+            AND event_name IN ('_form_view', '_form_start', '_form_submit', '_form_abandon')
+            AND JSONExtractString(properties, '_form_id') = #{form_p}
+            AND timestamp >= #{from_p} AND timestamp <= #{to_p}
+            AND ip_is_bot = 0
+            AND browser_language != ''
+          GROUP BY browser_language
+          ORDER BY views DESC
+          LIMIT 20
+          """
+
+        d when d in ~w(device_type ip_country browser utm_source referrer_domain os) ->
+          # Subquery pattern: enrichment fields are empty on custom events
+          # per CLAUDE.md, so look the dimension up from any pageview the
+          # visitor made in the same range, then re-aggregate form counts.
+          """
+          SELECT
+            dim AS dimension_value,
+            sum(views) AS views,
+            sum(starts) AS starts,
+            sum(submits) AS submits,
+            sum(abandons) AS abandons,
+            round(sum(submits) / greatest(sum(views), 1) * 100, 1) AS submit_rate
+          FROM (
+            SELECT
+              visitor_id,
+              anyIf(#{d}, event_type = 'pageview') AS dim,
+              countIf(event_name = '_form_view') AS views,
+              countIf(event_name = '_form_start') AS starts,
+              countIf(event_name = '_form_submit') AS submits,
+              countIf(event_name = '_form_abandon') AS abandons
+            FROM events
+            WHERE site_id = #{site_p}
+              AND timestamp >= #{from_p} AND timestamp <= #{to_p}
+              AND ip_is_bot = 0
+              AND (event_type = 'pageview'
+                OR (event_type = 'custom'
+                    AND event_name IN ('_form_view', '_form_start', '_form_submit', '_form_abandon')
+                    AND JSONExtractString(properties, '_form_id') = #{form_p}))
+            GROUP BY visitor_id
+            HAVING views + starts + submits + abandons > 0
+          )
+          WHERE dim != ''
+          GROUP BY dim
+          ORDER BY views DESC
+          LIMIT 20
+          """
+
+        _ ->
+          nil
+      end
+
+    cond do
+      sql == nil ->
+        {:error, :invalid_dimension}
+
+      true ->
+        with :ok <- authorize(site, user) do
+          ClickHouse.query(sql)
+        end
+    end
+  end
+
+  @doc """
+  Most recent submit / abandon events for this form. For populating a
+  "recent activity" feed — admins can click into the visitor profile
+  to see what they did before, during, after.
+  """
+  def form_recent_events(%Site{} = site, %User{} = user, form_id, date_range, opts \\ [])
+      when is_binary(form_id) and form_id != "" do
+    date_range = ensure_date_range(date_range)
+    limit = Keyword.get(opts, :limit, 50)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        timestamp,
+        event_name,
+        visitor_id,
+        url_path,
+        JSONExtractString(properties, '_last_field') AS last_field,
+        JSONExtractString(properties, '_first_field') AS first_field,
+        JSONExtractString(properties, '_submit_trigger') AS submit_trigger,
+        JSONExtractString(properties, '_t_to_submit') AS t_to_submit_ms,
+        JSONExtractString(properties, '_t_to_abandon') AS t_to_abandon_ms,
+        browser_language
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND event_type = 'custom'
+        AND event_name IN ('_form_submit', '_form_abandon')
+        AND JSONExtractString(properties, '_form_id') = #{ClickHouse.param(form_id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+      ORDER BY timestamp DESC
+      LIMIT #{limit}
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
+  For cluster forms (kind = "cluster"), splits submits by their trigger:
+  native browser submit event vs the button-text heuristic added in
+  v6.10.36. Helps audit how reliable the cluster submit count is for a
+  given form.
+  """
+  def form_submit_triggers(%Site{} = site, %User{} = user, form_id, date_range)
+      when is_binary(form_id) and form_id != "" do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        coalesce(nullIf(JSONExtractString(properties, '_submit_trigger'), ''), 'native') AS trigger,
+        count() AS submits
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND event_type = 'custom'
+        AND event_name = '_form_submit'
+        AND JSONExtractString(properties, '_form_id') = #{ClickHouse.param(form_id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+      GROUP BY trigger
+      ORDER BY submits DESC
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
+  Distribution of time-to-submit (ms from `_form_start` to
+  `_form_submit`) for this form. Returns quantiles + a count of
+  visitors who completed in < 2s (suspicious / likely bot) vs > 60s
+  (slow / friction). The `_t_to_submit` payload field is sent by the
+  tracker as of v6.10.38.
+  """
+  def form_time_to_submit_distribution(%Site{} = site, %User{} = user, form_id, date_range)
+      when is_binary(form_id) and form_id != "" do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        quantile(0.10)(t) AS p10_ms,
+        quantile(0.25)(t) AS p25_ms,
+        quantile(0.50)(t) AS p50_ms,
+        quantile(0.75)(t) AS p75_ms,
+        quantile(0.90)(t) AS p90_ms,
+        quantile(0.95)(t) AS p95_ms,
+        avg(t) AS avg_ms,
+        count() AS samples,
+        countIf(t < 2000) AS suspicious_fast,
+        countIf(t > 60000) AS slow_friction
+      FROM (
+        SELECT toInt64OrZero(JSONExtractString(properties, '_t_to_submit')) AS t
+        FROM events
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND event_type = 'custom'
+          AND event_name = '_form_submit'
+          AND JSONExtractString(properties, '_form_id') = #{ClickHouse.param(form_id)}
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+          AND ip_is_bot = 0
+      )
+      WHERE t > 0
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
+  Validation errors grouped by field. Fed by the `_form_validation_error`
+  event the tracker fires on every HTML5 `invalid` event. Sample
+  message is `any(validation_message)` so the dashboard can show a
+  representative example — usually all rows for the same field have
+  identical messages anyway.
+  """
+  def form_validation_errors(%Site{} = site, %User{} = user, form_id, date_range)
+      when is_binary(form_id) and form_id != "" do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      sql = """
+      SELECT
+        JSONExtractString(properties, '_field_name') AS field_name,
+        JSONExtractString(properties, '_field_type') AS field_type,
+        any(JSONExtractString(properties, '_validation_message')) AS sample_message,
+        count() AS errors,
+        uniq(visitor_id) AS affected_visitors
+      FROM events
+      WHERE site_id = #{ClickHouse.param(site.id)}
+        AND event_type = 'custom'
+        AND event_name = '_form_validation_error'
+        AND JSONExtractString(properties, '_form_id') = #{ClickHouse.param(form_id)}
+        AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+        AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+        AND ip_is_bot = 0
+        AND JSONExtractString(properties, '_field_name') != ''
+      GROUP BY field_name, field_type
+      ORDER BY errors DESC
+      LIMIT 50
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
+  @doc """
+  Per-field time spent. Aggregates the `_field_times` JSON blob sent on
+  every `_form_submit` and `_form_abandon` event. Returns average ms
+  per field across all submit + abandon events. Tells you which fields
+  visitors spend the most time on, even when they ultimately submit
+  successfully (e.g., "phone number takes 30s, everything else < 5s").
+  """
+  def form_field_times(%Site{} = site, %User{} = user, form_id, date_range)
+      when is_binary(form_id) and form_id != "" do
+    date_range = ensure_date_range(date_range)
+
+    with :ok <- authorize(site, user) do
+      # ARRAY JOIN over the (key, value) pairs extracted from the
+      # `_field_times` JSON blob on each submit/abandon event, then
+      # group by field name. `tupleElement(_, 2)` is the value side,
+      # which `toInt64OrZero` parses to ms.
+      sql = """
+      SELECT
+        field_name,
+        round(avg(ms), 0) AS avg_ms,
+        round(quantile(0.50)(ms), 0) AS p50_ms,
+        round(quantile(0.90)(ms), 0) AS p90_ms,
+        count() AS samples
+      FROM (
+        SELECT
+          tupleElement(kv, 1) AS field_name,
+          toInt64OrZero(tupleElement(kv, 2)) AS ms
+        FROM events
+        ARRAY JOIN JSONExtractKeysAndValues(JSONExtractString(properties, '_field_times'), 'String') AS kv
+        WHERE site_id = #{ClickHouse.param(site.id)}
+          AND event_type = 'custom'
+          AND event_name IN ('_form_submit', '_form_abandon')
+          AND JSONExtractString(properties, '_form_id') = #{ClickHouse.param(form_id)}
+          AND timestamp >= #{ClickHouse.param(format_datetime(date_range.from))}
+          AND timestamp <= #{ClickHouse.param(format_datetime(date_range.to))}
+          AND ip_is_bot = 0
+          AND JSONExtractString(properties, '_field_times') != ''
+          AND JSONExtractString(properties, '_field_times') != '{}'
+      )
+      WHERE ms > 0
+      GROUP BY field_name
+      HAVING samples >= 3
+      ORDER BY avg_ms DESC
+      LIMIT 30
+      """
+
+      ClickHouse.query(sql)
+    end
+  end
+
   # ---- Custom Events ----
 
   @doc "Custom events (excluding internal _ prefixed events), grouped by event name."

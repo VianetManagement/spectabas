@@ -102,4 +102,47 @@ defmodule Spectabas.Analytics.SegmentTest do
       end
     end
   end
+
+  describe "form virtual fields" do
+    test "form_submitted expands to a visitor_id IN subquery scoped to site_id + form_id" do
+      filters = [%{"field" => "form_submitted", "op" => "is", "value" => "contact"}]
+      sql = Segment.to_sql(filters, site_id: 42)
+
+      assert sql =~ "visitor_id IN"
+      assert sql =~ "_form_submit"
+      assert sql =~ "site_id = "
+      assert sql =~ "'contact'"
+      assert sql =~ "_form_id"
+    end
+
+    test "form_abandoned excludes submitters via NOT IN" do
+      filters = [%{"field" => "form_abandoned", "op" => "is", "value" => "signup"}]
+      sql = Segment.to_sql(filters, site_id: 42)
+
+      assert sql =~ "visitor_id IN"
+      assert sql =~ "NOT IN"
+      assert sql =~ "_form_start"
+      assert sql =~ "_form_submit"
+    end
+
+    test "form_submitted is_not flips with NOT" do
+      filters = [%{"field" => "form_submitted", "op" => "is_not", "value" => "contact"}]
+      sql = Segment.to_sql(filters, site_id: 42)
+      assert sql =~ "NOT ("
+    end
+
+    test "form virtual fields drop when no site_id provided" do
+      filters = [
+        %{"field" => "form_submitted", "op" => "is", "value" => "contact"},
+        %{"field" => "form_abandoned", "op" => "is", "value" => "signup"}
+      ]
+
+      assert Segment.to_sql(filters) == ""
+    end
+
+    test "form virtual fields drop when form_id is blank" do
+      filters = [%{"field" => "form_submitted", "op" => "is", "value" => ""}]
+      assert Segment.to_sql(filters, site_id: 42) == ""
+    end
+  end
 end

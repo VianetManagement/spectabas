@@ -11,22 +11,39 @@ defmodule SpectabasWeb.Dashboard.CohortsLive do
   import SpectabasWeb.Dashboard.SegmentComponent
 
   @impl true
-  def mount(%{"site_id" => site_id}, _session, socket) do
+  def mount(%{"site_id" => site_id} = params, _session, socket) do
     user = socket.assigns.current_scope.user
     site = Sites.get_site!(site_id)
 
     if !Accounts.can_access_site?(user, site) do
       {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
     else
+      # Optional prefill — used by deep-links from other pages
+      # (e.g. FormDetail's "Create cohort of abandoners" button).
+      prefill_field = params["prefill_field"]
+      prefill_value = params["prefill_value"]
+      prefill_name = params["prefill_name"]
+      prefill_op = params["prefill_op"] || "is"
+
+      prefill_segment =
+        if is_binary(prefill_field) and prefill_field != "" and is_binary(prefill_value) and
+             prefill_value != "" do
+          [%{"field" => prefill_field, "op" => prefill_op, "value" => prefill_value}]
+        else
+          []
+        end
+
+      show_new = prefill_segment != []
+
       {:ok,
        socket
        |> assign(:page_title, "Cohorts - #{site.name}")
        |> assign(:site, site)
        |> assign(:user, user)
        |> assign(:cohorts, Cohorts.list_for_user(site.id, user.id))
-       |> assign(:show_new_form, false)
-       |> assign(:new_segment, [])
-       |> assign(:new_name, "")
+       |> assign(:show_new_form, show_new)
+       |> assign(:new_segment, prefill_segment)
+       |> assign(:new_name, prefill_name || "")
        |> assign(:new_description, "")
        |> assign(:new_visibility, "private")
        |> assign(:compare_a, nil)

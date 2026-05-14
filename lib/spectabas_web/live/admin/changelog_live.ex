@@ -65,6 +65,15 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.38", "2026-05-14T20:30:00Z",
+       [
+         %{
+           title:
+             "Form detail page — funnel, breakdowns, validation errors, per-field times, cohort deep-link",
+           description:
+             "Every row in the Forms list is now a clickable deep-dive at `/dashboard/sites/:id/forms/:form_id` (form_id URL-encoded).\n\n**New tracker events.** `_form_validation_error` fires on every HTML5 `invalid` event with the field name + browser-provided message. `_form_submit` and `_form_abandon` now also carry `_t_to_submit` / `_t_to_abandon` (ms from form start) and `_field_times` (JSON blob of {field: total_ms_focused}), reconstructed from focusin/focusout deltas in tracker state. No new CH schema needed — everything flows through the existing JSON properties column.\n\n**New Analytics queries.** `form_detail_kpis/4`, `form_timeseries/4`, `form_top_urls/4`, `form_breakdown/5` (device / country / language / source — uses the per-visitor subquery + anyIf pattern for enrichment fields that are empty on custom events), `form_recent_events/5`, `form_submit_triggers/4`, `form_time_to_submit_distribution/4`, `form_validation_errors/4`, `form_field_times/4` (ARRAY JOINs the `_field_times` JSON blob via `JSONExtractKeysAndValues(..., 'String')`).\n\n**FormDetailLive sections.** Header (kind badge + back link + range + 'Create cohort of abandoners' deep-link). KPI cards with ↑/↓ % delta vs the prior equal-length period. Conversion funnel viz (Views → Starts → Submits as horizontal bars). Daily timeseries (Chart.js via the existing TimeseriesChart hook). Per-field drop-off + per-field time tables side-by-side. Top URLs hosting this form. Four breakdown panels (device, country, language, UTM source). Time-to-submit distribution (p10/p50/p90 + avg + suspicious-fast (<2s) + slow-friction (>60s) counts). Submit-trigger split (native vs button-text-heuristic for clusters). Validation errors with sample message. Recent 50 submits/abandons with linkable visitor IDs.\n\n**Segment virtual fields.** Two new fields in the Segment grammar — `form_submitted` and `form_abandoned`, value is the form_id. `form_submitted is X` matches visitors who fired a `_form_submit` for form X; `form_abandoned is X` matches visitors who fired `_form_start` for X but no `_form_submit`. Both emit `visitor_id IN (subquery)` clauses scoped to the cohort's site (handled via the existing `:site_id` opt on `Segment.to_sql/2`). The Form Detail page's 'Create cohort of abandoners' button deep-links to the cohort builder with `form_abandoned` + form_id prefilled. CohortsLive now reads `prefill_field` / `prefill_value` / `prefill_name` query params to support these deep-links.\n\n**Forms list page** — rows now navigate to the detail page on click; inline expansion section dropped. Tracker now 19KB.\n\n973 → 988 tests, all passing."
+         }
+       ]},
       {"v6.10.37", "2026-05-14T19:30:00Z",
        [
          %{

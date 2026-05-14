@@ -25,7 +25,9 @@ defmodule Spectabas.Analytics.Segment do
     url_path url_host
     event_type event_name
     visitor_intent
+    browser_language page_language
     returning identified scraper_whitelisted
+    form_submitted form_abandoned
   )
 
   # Fields that aren't direct columns on `events`. Filter translation has
@@ -33,7 +35,7 @@ defmodule Spectabas.Analytics.Segment do
   # `visitor_id IN (uuid1, ...)` from a PG lookup. Callers pass `site_id`
   # via `to_sql/2` opts; PG-resolved fields are pre-fanned by `Cohorts`
   # before calling Analytics functions.
-  @virtual_fields ~w(returning identified scraper_whitelisted)
+  @virtual_fields ~w(returning identified scraper_whitelisted form_submitted form_abandoned)
   @pg_resolved_fields ~w(identified scraper_whitelisted)
 
   @doc """
@@ -164,6 +166,60 @@ defmodule Spectabas.Analytics.Segment do
 
   defp filter_to_sql(%{"field" => "returning"}, _site_id), do: ""
 
+  # `form_submitted` / `form_abandoned` — value is the form_id. Emits
+  # visitor_id IN (submitters / abandoners of that form). "is" matches
+  # visitors who did the action at least once; "is_not" inverts. We
+  # build the subquery against the events table directly rather than
+  # PG-resolving to a list, since form_id can pin to many thousands
+  # of visitors on busy forms and the CH subquery is faster than
+  # serializing a 10k UUID IN clause.
+  defp filter_to_sql(
+         %{"field" => "form_submitted", "op" => op, "value" => form_id},
+         site_id
+       )
+       when not is_nil(site_id) and is_binary(form_id) and form_id != "" do
+    form_action_sql(site_id, form_id, "_form_submit", op)
+  end
+
+  defp filter_to_sql(%{"field" => "form_submitted"}, _site_id), do: ""
+
+  defp filter_to_sql(
+         %{"field" => "form_abandoned", "op" => op, "value" => form_id},
+         site_id
+       )
+       when not is_nil(site_id) and is_binary(form_id) and form_id != "" do
+    # "Abandoned" = fired _form_start for this form but no _form_submit.
+    # We need an extra AND NOT IN clause for the submitters.
+    site_p = ClickHouse.param(site_id)
+    form_p = ClickHouse.param(form_id)
+
+    sub = """
+    visitor_id IN (
+      SELECT visitor_id FROM events
+      WHERE site_id = #{site_p}
+        AND event_type = 'custom'
+        AND event_name = '_form_start'
+        AND JSONExtractString(properties, '_form_id') = #{form_p}
+        AND ip_is_bot = 0
+    ) AND visitor_id NOT IN (
+      SELECT visitor_id FROM events
+      WHERE site_id = #{site_p}
+        AND event_type = 'custom'
+        AND event_name = '_form_submit'
+        AND JSONExtractString(properties, '_form_id') = #{form_p}
+        AND ip_is_bot = 0
+    )
+    """
+
+    case op do
+      "is" -> "AND #{sub}"
+      "is_not" -> "AND NOT (#{sub})"
+      _ -> ""
+    end
+  end
+
+  defp filter_to_sql(%{"field" => "form_abandoned"}, _site_id), do: ""
+
   # Direct CH-column filters — same shape as before, just thread site_id
   # through for signature consistency (most clauses ignore it).
   defp filter_to_sql(%{"field" => field, "op" => "is", "value" => value}, _site_id) do
@@ -185,6 +241,29 @@ defmodule Spectabas.Analytics.Segment do
   end
 
   defp filter_to_sql(_, _site_id), do: ""
+
+  defp form_action_sql(site_id, form_id, event_name, op) do
+    site_p = ClickHouse.param(site_id)
+    form_p = ClickHouse.param(form_id)
+    ev_p = ClickHouse.param(event_name)
+
+    sub = """
+    visitor_id IN (
+      SELECT visitor_id FROM events
+      WHERE site_id = #{site_p}
+        AND event_type = 'custom'
+        AND event_name = #{ev_p}
+        AND JSONExtractString(properties, '_form_id') = #{form_p}
+        AND ip_is_bot = 0
+    )
+    """
+
+    case op do
+      "is" -> "AND #{sub}"
+      "is_not" -> "AND NOT (#{sub})"
+      _ -> ""
+    end
+  end
 
   @doc false
   def __virtual_fields__, do: @virtual_fields
