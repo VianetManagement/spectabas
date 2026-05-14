@@ -45,6 +45,9 @@ defmodule Spectabas.Analytics.Segment do
     end
   end
 
+  @doc "Plain list of field names allowed in filters. Used by Cohort validation."
+  def allowed_field_names, do: @allowed_fields
+
   @doc "List of fields available for segmentation."
   def available_fields do
     Enum.map(@allowed_fields, fn field ->

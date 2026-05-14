@@ -99,6 +99,12 @@ config :spectabas, Oban,
        # window; the tier-escalation gate prevents re-flagging visitors
        # already at their current tier.
        {"0 3 * * *", Spectabas.Workers.ScraperWebhookScan, args: %{"hours" => 168}},
+       # Daily at 04:00 UTC — turn the various detection systems'
+       # output (AnomalyCache, goal pace) into Insight rows that
+       # show up on the Dashboard overview "What's happening" card.
+       # Runs after DailyAnomalyDetection at 03:?? has refreshed
+       # the anomaly cache.
+       {"0 4 * * *", Spectabas.Workers.InsightsGenerator},
        # Weekly on Sunday at 04:00 UTC — discover new datacenter ASNs from traffic patterns
        {"0 4 * * 0", Spectabas.Workers.ASNDiscovery},
        # Hourly at :20 — snapshot top click elements per site into Postgres

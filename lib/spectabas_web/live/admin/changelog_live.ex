@@ -65,6 +65,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.32", "2026-05-14T15:30:00Z",
+       [
+         %{
+           title: "Insights stream + Cohorts (Phase 1 + 2 of the post-foundation feature push)",
+           description:
+             "Two new products on top of the existing data substrate.\n\n**Insights stream** turns the various detection systems into an actionable feed. New `Spectabas.Insights` context + `insights` + `insight_dismissals` tables. `Workers.InsightsGenerator` runs daily at 04:00 UTC and converts the AnomalyCache (17 anomaly types, refreshed nightly by DailyAnomalyDetection) into Insight rows — one row per anomaly, with the metric / current / previous / change_pct preserved as structured context and a stable dedupe key so repeated runs don't multiply rows. `Workers.InsightExplainer` fires async per anomaly insight, calls Anthropic Haiku via the platform `HELP_AI_API_KEY` (not per-site AI config — explanations are a Spectabas-provided feature, not customer-billed), and writes a 2-3 sentence plain-English explanation back to the `explanation` field. UI: compact 'What's happening' card on the Dashboard overview showing the top 5 active insights, with per-user dismiss; full feed at `/dashboard/sites/:id/insights-feed`. Goal-pace source is stubbed for v1 (returns [] to keep the generator clean); follow-up will lift goal_condition logic from `Analytics.goal_completions_system`.\n\n**Cohorts** — named, persisted segments with a comparison view. New `Spectabas.Cohorts` context + `Spectabas.Cohorts.Cohort` schema. Filter grammar matches `Spectabas.Analytics.Segment` exactly (`{field, op, value}` triples, ops `is/is_not/contains/not_contains`), so the cohort builder reuses the existing `SegmentComponent` and `Cohorts.to_sql/1` delegates straight to `Segment.to_sql/1` for ClickHouse translation. Visibility `private` (creator only) or `site` (whole team). UI at `/dashboard/sites/:id/cohorts` for list + builder, `/cohorts/:id` for single-cohort metrics (visitor count, pageviews, bounce, avg duration, top pages, top sources, goal conversion), and `/cohorts/compare?a=&b=` for two-cohort side-by-side. `Cohorts.metrics/3` reuses `overview_stats_fast` + `top_pages` + `top_sources` + `goal_completions` by passing the cohort's filters through the existing `:segment` opt. Cohort-scoped top_sources + cohort-scoped goal conversion are listed as follow-ups in the metric loader (currently site-wide for the range, the UI explains this).\n\n11 new tests, 949 → 960. No breaking changes elsewhere."
+         }
+       ]},
       {"v6.10.31", "2026-05-14T14:10:00Z",
        [
          %{
