@@ -239,6 +239,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
               active={@active == "cohort"}
             />
             <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/cohorts"}
+              label="Cohorts"
+              active={@active == "cohorts"}
+            />
+            <.nav_item
               to={~p"/dashboard/sites/#{@site.id}/churn-risk"}
               label="Churn Risk"
               active={@active == "churn-risk"}
