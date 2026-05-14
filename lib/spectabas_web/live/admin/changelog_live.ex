@@ -65,6 +65,15 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.31", "2026-05-14T14:10:00Z",
+       [
+         %{
+           title:
+             "Fix: search_keywords snapshot crashed on tuple in pages_zip (Jason can't encode tuples)",
+           description:
+             "v6.10.30's probe confirmed all 11 SearchKeywords queries succeed in under 1s — the worker crash was downstream. Root cause: `query_cannibalization` built `pages_zip` via `Enum.zip([pages, positions, page_impressions, page_clicks])`, which returns a list of 4-tuples. Tuples don't serialize to JSON/JSONB; Jason raises at `DashboardSnapshots.put/4`'s insert step. snapshot_kind's try/rescue caught the crash and logged it but didn't write, leaving the snapshot row stale at 2026-05-13 18:35:55 (its last successful write under v6.10.20's pre-FINAL behavior). Fix: switch `Enum.zip` → `Enum.zip_with(..., & &1)` so each row of pages_zip is a list, not a tuple. Updated the LiveView template line 876 to destructure `[page, pos, imps, clicks]` instead of `{page, pos, imps, clicks}`. Both live-CH and snapshot-read paths now produce the same shape. Next hourly worker run at :35 UTC will refresh search_keywords with real data."
+         }
+       ]},
       {"v6.10.30", "2026-05-14T13:50:00Z",
        [
          %{

@@ -376,13 +376,21 @@ defmodule Spectabas.SearchKeywords do
       {:ok, rows} ->
         Enum.map(rows, fn r ->
           Map.merge(r, %{
+            # zip_with so each row of pages_zip is a list, not a tuple.
+            # Tuples don't serialize to JSON/JSONB, which previously caused
+            # the search_keywords snapshot writer to crash silently on
+            # every hourly run (the snapshot row sat stale from Jason
+            # refusing to encode the tuple at insert time).
             "pages_zip" =>
-              Enum.zip([
-                ensure_list(r["pages"]),
-                ensure_list(r["positions"]),
-                ensure_list(r["page_impressions"]),
-                ensure_list(r["page_clicks"])
-              ])
+              Enum.zip_with(
+                [
+                  ensure_list(r["pages"]),
+                  ensure_list(r["positions"]),
+                  ensure_list(r["page_impressions"]),
+                  ensure_list(r["page_clicks"])
+                ],
+                & &1
+              )
           })
         end)
 

@@ -873,7 +873,7 @@ defmodule SpectabasWeb.Dashboard.SearchKeywordsLive do
                                 </tr>
                               </thead>
                               <tbody>
-                                <%= for {page, pos, imps, clicks} <- c["pages_zip"] do %>
+                                <%= for [page, pos, imps, clicks] <- c["pages_zip"] do %>
                                   <tr>
                                     <td class="py-0.5 text-indigo-700 truncate max-w-lg">
                                       {extract_path(page)}
