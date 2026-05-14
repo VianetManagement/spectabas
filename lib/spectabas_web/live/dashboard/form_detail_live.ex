@@ -49,6 +49,7 @@ defmodule SpectabasWeb.Dashboard.FormDetailLive do
         |> assign(:page_title, "Form: #{form_id} - #{site.name}")
         |> assign(:site, site)
         |> assign(:user, user)
+        |> assign(:can_write, Accounts.can_write?(user))
         |> assign(:form_id, form_id)
         |> assign(:date_range, "30d")
         |> assign(:kpis, %{})
@@ -328,6 +329,7 @@ defmodule SpectabasWeb.Dashboard.FormDetailLive do
                 </button>
               </nav>
               <.link
+                :if={@can_write}
                 navigate={
                   ~p"/dashboard/sites/#{@site.id}/cohorts?prefill_field=form_abandoned&prefill_value=#{@form_id}&prefill_name=#{"Abandoned: " <> display_form_label(@kpis, @form_id)}"
                 }

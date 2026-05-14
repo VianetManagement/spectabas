@@ -10,45 +10,77 @@ defmodule SpectabasWeb.Dashboard.CohortsLive do
   import SpectabasWeb.Dashboard.SidebarComponent
   import SpectabasWeb.Dashboard.SegmentComponent
 
+  # Write events viewers cannot trigger. Analysts + admins + superadmins
+  # + platform_admins all can create/delete cohorts — only the `viewer`
+  # role is read-only on cohort management.
+  @write_events ~w(create_cohort delete_cohort)
+
   @impl true
   def mount(%{"site_id" => site_id} = params, _session, socket) do
     user = socket.assigns.current_scope.user
     site = Sites.get_site!(site_id)
 
-    if !Accounts.can_access_site?(user, site) do
-      {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
-    else
-      # Optional prefill — used by deep-links from other pages
-      # (e.g. FormDetail's "Create cohort of abandoners" button).
-      prefill_field = params["prefill_field"]
-      prefill_value = params["prefill_value"]
-      prefill_name = params["prefill_name"]
-      prefill_op = params["prefill_op"] || "is"
+    cond do
+      !Accounts.can_access_site?(user, site) ->
+        {:ok, socket |> put_flash(:error, "Unauthorized") |> redirect(to: ~p"/")}
 
-      prefill_segment =
-        if is_binary(prefill_field) and prefill_field != "" and is_binary(prefill_value) and
-             prefill_value != "" do
-          [%{"field" => prefill_field, "op" => prefill_op, "value" => prefill_value}]
-        else
-          []
-        end
-
-      show_new = prefill_segment != []
-
-      {:ok,
-       socket
-       |> assign(:page_title, "Cohorts - #{site.name}")
-       |> assign(:site, site)
-       |> assign(:user, user)
-       |> assign(:cohorts, Cohorts.list_for_user(site.id, user.id))
-       |> assign(:show_new_form, show_new)
-       |> assign(:new_segment, prefill_segment)
-       |> assign(:new_name, prefill_name || "")
-       |> assign(:new_description, "")
-       |> assign(:new_visibility, "private")
-       |> assign(:compare_a, nil)
-       |> assign(:compare_b, nil)}
+      true ->
+        socket = maybe_attach_viewer_guard(socket, user)
+        mount_authorized(socket, site, user, params)
     end
+  end
+
+  defp maybe_attach_viewer_guard(socket, user) do
+    if Accounts.can_write?(user) do
+      socket
+    else
+      attach_hook(socket, :viewer_cohorts_guard, :handle_event, fn
+        event, _params, sock when event in @write_events ->
+          {:halt,
+           put_flash(
+             sock,
+             :error,
+             "Viewers have read-only access — ask an admin or analyst to manage cohorts."
+           )}
+
+        _event, _params, sock ->
+          {:cont, sock}
+      end)
+    end
+  end
+
+  defp mount_authorized(socket, site, user, params) do
+    # Optional prefill — used by deep-links from other pages
+    # (e.g. FormDetail's "Create cohort of abandoners" button).
+    prefill_field = params["prefill_field"]
+    prefill_value = params["prefill_value"]
+    prefill_name = params["prefill_name"]
+    prefill_op = params["prefill_op"] || "is"
+
+    prefill_segment =
+      if is_binary(prefill_field) and prefill_field != "" and is_binary(prefill_value) and
+           prefill_value != "" do
+        [%{"field" => prefill_field, "op" => prefill_op, "value" => prefill_value}]
+      else
+        []
+      end
+
+    show_new = prefill_segment != []
+
+    {:ok,
+     socket
+     |> assign(:page_title, "Cohorts - #{site.name}")
+     |> assign(:site, site)
+     |> assign(:user, user)
+     |> assign(:can_write, Accounts.can_write?(user))
+     |> assign(:cohorts, Cohorts.list_for_user(site.id, user.id))
+     |> assign(:show_new_form, show_new)
+     |> assign(:new_segment, prefill_segment)
+     |> assign(:new_name, prefill_name || "")
+     |> assign(:new_description, "")
+     |> assign(:new_visibility, "private")
+     |> assign(:compare_a, nil)
+     |> assign(:compare_b, nil)}
   end
 
   @impl true
@@ -203,12 +235,15 @@ defmodule SpectabasWeb.Dashboard.CohortsLive do
             </p>
           </div>
           <button
-            :if={!@show_new_form}
+            :if={!@show_new_form and @can_write}
             phx-click="show_new"
             class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700"
           >
             New cohort
           </button>
+          <p :if={!@can_write} class="text-xs text-gray-400">
+            Read-only — viewers can't create or delete cohorts.
+          </p>
         </div>
 
         <%!-- Create form --%>
@@ -362,6 +397,7 @@ defmodule SpectabasWeb.Dashboard.CohortsLive do
                 </td>
                 <td class="px-5 py-3 text-right">
                   <button
+                    :if={@can_write}
                     phx-click="delete_cohort"
                     phx-value-id={c.id}
                     data-confirm={"Delete cohort \"#{c.name}\"?"}

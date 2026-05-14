@@ -65,6 +65,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.46", "2026-05-15T00:30:00Z",
+       [
+         %{
+           title: "Permissions audit on recent pages — viewer write-guard on Cohorts",
+           description:
+             "Audited the five LiveViews added since v6.10.32 (Forms, Form Detail, Languages, Insights Feed, Cohorts) for proper analyst/viewer permission handling.\n\n**Forms / Form Detail / Languages / Insights Feed** — all pure read views, no write events. `can_access_site?/2` gates mount correctly. Analysts and viewers with site permission see the data; users without site permission redirect to `/`. No change needed.\n\n**Cohorts** — had a real gap: `create_cohort` and `delete_cohort` handlers had no `can_write?/1` check, so a viewer with site permission could create or delete cohorts via direct event push. Fixed by following the Goals pattern:\n\n1. Mount now attaches a `:viewer_cohorts_guard` hook on `:handle_event` for users where `can_write?` returns false. The hook halts events in `@write_events` (`create_cohort`, `delete_cohort`) with a flash explaining the read-only state. Non-write events (form-state updates, comparison picks, segment edits) still pass through so viewers can browse the builder UI without being able to persist.\n2. UI hides the **New cohort** button and shows a 'viewers can't create or delete cohorts' line in its place. Delete buttons on each row also hidden for viewers.\n3. `:can_write` assign threaded through socket so the template can branch cleanly.\n\nSame treatment on **Form Detail's 'Create cohort of abandoners' button** — hidden for viewers (no point linking somewhere they can't act).\n\nRole behavior after this deploy:\n- `platform_admin` / `superadmin` / `admin` / `analyst` — full cohort management, see all affordances\n- `viewer` — can view cohorts list + open detail / compare views, can't create / delete\n\n992 → 994 tests passing (2 new CohortsLive smoke tests)."
+         }
+       ]},
       {"v6.10.45", "2026-05-15T00:00:00Z",
        [
          %{
