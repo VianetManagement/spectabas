@@ -128,7 +128,33 @@ defmodule Spectabas.Analytics.ScraperDetector do
     {points, signals} = add_stale_browser_signal(points, signals, profile, w)
     {points, signals} = add_resolution_device_mismatch_signal(points, signals, profile, w)
 
+    # Context cap (v6.10.45) — applied AFTER additive accumulation, BEFORE
+    # the 100 ceiling. If `datacenter_asn` fired but `systematic_crawl`
+    # did NOT, cap the total at 50. Rationale from the Stage 2 label
+    # correlation report: the FP pattern
+    # `[datacenter_asn, ip_rotation, spoofed_mobile_ua, no_referrer]`
+    # additively scored 90 (→ "certain" tier → tarpit + data poisoning)
+    # but every whitelisted user matching this combo turned out to be a
+    # legitimate VPN / privacy-relay / corporate-proxy visitor with no
+    # crawl pattern. Systematic_crawl is the discriminator: a
+    # datacenter-IP visitor sweeping content paths IS a scraper; the
+    # same IP visitor reading one page from a referrer is not.
+    points = apply_datacenter_cap(points, signals)
+
     %{score: min(points, 100), signals: Enum.reverse(signals)}
+  end
+
+  @datacenter_solo_cap 50
+
+  defp apply_datacenter_cap(points, signals) do
+    has_datacenter = :datacenter_asn in signals
+    has_crawl = :systematic_crawl in signals
+
+    if has_datacenter and not has_crawl and points > @datacenter_solo_cap do
+      @datacenter_solo_cap
+    else
+      points
+    end
   end
 
   @doc """

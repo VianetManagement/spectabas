@@ -65,10 +65,20 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.45", "2026-05-15T00:00:00Z",
+       [
+         %{
+           title:
+             "Scraper detector: context cap — datacenter_asn alone ≤ 50 unless paired with systematic_crawl",
+           description:
+             "Direct response to v6.10.44's Stage 2 AI calibration finding. Every whitelisted false-positive on the surveyed site shared the same four-signal pattern: `[datacenter_asn, ip_rotation, spoofed_mobile_ua, no_referrer]`. Additively that's 40 + 20 + 20 + 10 = **90 points → 'certain' tier → full countermeasures (tarpit + data poisoning)**. The visitors were real users on VPNs / privacy relays / corporate proxies that happened to share an IP rotation pattern and no referrer — none were actually crawling.\n\n**Fix:** added a post-additive context cap in `ScraperDetector.score/2`. After all signals accumulate but BEFORE the 100 ceiling: if `:datacenter_asn` fired AND `:systematic_crawl` did NOT, cap the score at 50. The discriminator is the crawl signal — a datacenter-IP visitor sweeping content paths (>80% match to configured prefixes) IS a scraper; the same IP reading one page from a referrer is not.\n\nImpact: the canonical FP pattern now scores 50 (→ 'watching' tier, logged-only, no user-facing action) instead of 90. Real scrapers paired with systematic crawl still score above the cap normally.\n\nNo per-site config gate — this is a global model change. If a particular site has scrapers that don't trigger systematic_crawl (no configured content prefixes, opportunistic non-sequential scrapers), they'll only score up to 50 now. Tradeoff: FP reduction across the board at the cost of some bot escapes on sites without content prefixes. Worth revisiting if Stage 3 logistic regression suggests a different threshold.\n\n4 new tests cover the cap; one existing test updated (FP-pattern combo now scores 50 instead of 60). 988 → 992 tests."
+         }
+       ]},
       {"v6.10.44", "2026-05-14T23:30:00Z",
        [
          %{
-           title: "Scraper calibration: JSON encoding fix — `counts_by_source` tuples + false-positive Ecto structs",
+           title:
+             "Scraper calibration: JSON encoding fix — `counts_by_source` tuples + false-positive Ecto structs",
            description:
              "v6.10.43's exception rescue surfaced the real bug from v6.10.35: `ScraperLabels.counts_by_source/1` returns 3-tuples like `{\"scraper\", \"webhook_auto_flag\", 723}`, and tuples have no Jason.Encoder impl. The whole baseline is stored as JSONB in `scraper_calibrations.baseline`, so encoding fails the instant the AI calibration tries to persist the result. Same issue applied to `false_positives` / `false_negatives` — they were full Ecto structs without `@derive Jason.Encoder`. Calibration ran in v6.10.35-43 only when the site had zero high-confidence labels yet (counts_by_source = []).\n\n**Fix:** `counts_by_source/1` now returns `[%{\"label\" => _, \"source\" => _, \"count\" => _}, ...]` (list of maps, string keys for clean JSONB round-trip). `signal_correlation_report/1`'s false-positive / false-negative queries `SELECT` plain maps with the relevant fields instead of full Ecto structs. The admin `/admin/scraper-labels` template updated to read map keys. `format_label_sources/1` in calibration prompt updated for the new shape.\n\nCalibration runs cleanly now on sites with any non-zero label history. 988 tests still passing."
          }

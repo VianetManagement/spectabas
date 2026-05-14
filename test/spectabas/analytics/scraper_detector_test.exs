@@ -52,8 +52,10 @@ defmodule Spectabas.Analytics.ScraperDetectorTest do
 
       assert :datacenter_asn in result.signals
       assert :spoofed_mobile_ua in result.signals
-      # 40 + 20 = 60
-      assert result.score == 60
+      # Additive total: 40 (datacenter) + 20 (spoofed) = 60. The v6.10.45
+      # context cap drops this to 50 since systematic_crawl didn't fire —
+      # see the cap-rule describe block at the bottom of this file.
+      assert result.score == 50
     end
 
     test ":spoofed_mobile_ua does NOT fire when mobile UA comes from a residential ASN" do
@@ -436,6 +438,76 @@ defmodule Spectabas.Analytics.ScraperDetectorTest do
       assert ScraperDetector.score_watching() == 40
       assert ScraperDetector.score_suspicious() == 70
       assert ScraperDetector.score_certain() == 85
+    end
+  end
+
+  describe "context cap: datacenter_asn ≤ 50 unless paired with systematic_crawl (v6.10.45)" do
+    # The v6.10.35 Stage-2 label correlation report found every
+    # whitelisted false-positive shared the four-signal combo
+    # [datacenter_asn, ip_rotation, spoofed_mobile_ua, no_referrer]
+    # which additively scored 90 → "certain" tier. The cap drops these
+    # to 50 → "watching" so they don't get tarpit + data poisoning.
+
+    test "fp pattern with datacenter_asn but NO systematic_crawl caps at 50" do
+      result =
+        ScraperDetector.score(%{
+          asn: "AS16276 OVH SAS",
+          user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605",
+          visitor_ip_count: 5,
+          referrer: nil
+        })
+
+      # Without cap: 40 (datacenter) + 20 (spoofed_mobile_ua) + 20
+      # (ip_rotation) + 10 (no_referrer) = 90.
+      assert :datacenter_asn in result.signals
+      assert :spoofed_mobile_ua in result.signals
+      assert :ip_rotation in result.signals
+      assert :no_referrer in result.signals
+      refute :systematic_crawl in result.signals
+      assert result.score == 50, "expected cap at 50 (was #{result.score})"
+      assert ScraperDetector.verdict(result.score) == :watching
+    end
+
+    test "same pattern WITH systematic_crawl bypasses the cap" do
+      result =
+        ScraperDetector.score(%{
+          asn: "AS16276 OVH SAS",
+          user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605",
+          visitor_ip_count: 5,
+          referrer: nil,
+          page_paths: ["/listings/a", "/listings/b", "/listings/c", "/listings/d", "/listings/e"],
+          content_path_prefixes: ["/listings/"]
+        })
+
+      assert :datacenter_asn in result.signals
+      assert :systematic_crawl in result.signals
+      # 40 + 20 + 20 + 10 + 15 = 105 → min(100) = 100. No cap.
+      assert result.score == 100
+      assert ScraperDetector.verdict(result.score) == :certain
+    end
+
+    test "datacenter_asn alone below cap returns unchanged" do
+      # 40 (datacenter) + 10 (no_referrer) = 50, exactly at cap. Cap is
+      # `> @datacenter_solo_cap` so 50 passes through.
+      result = ScraperDetector.score(%{asn: "AS16276 OVH SAS", referrer: nil})
+      assert :datacenter_asn in result.signals
+      refute :systematic_crawl in result.signals
+      assert result.score == 50
+    end
+
+    test "no datacenter_asn → cap doesn't apply, additive scoring stands" do
+      # systematic_crawl on a residential ASN should still score normally.
+      result =
+        ScraperDetector.score(%{
+          asn: "AS7922 COMCAST-7922",
+          referrer: "google.com",
+          page_paths: ["/listings/a", "/listings/b", "/listings/c", "/listings/d", "/listings/e"],
+          content_path_prefixes: ["/listings/"]
+        })
+
+      refute :datacenter_asn in result.signals
+      assert :systematic_crawl in result.signals
+      assert result.score == 15
     end
   end
 end
