@@ -1,8 +1,13 @@
 # Use Microsoft's official Playwright image — Chromium + all OS deps
 # (libnss3, libatk1.0, libxss1, fonts, etc.) baked in. Pinned to the
-# Playwright version we declare in package.json so the runtime binary
-# matches the API surface. Bump both together when upgrading.
-FROM mcr.microsoft.com/playwright:v1.49.0-jammy
+# EXACT Playwright version declared in package.json so the runtime
+# binary matches the API surface.
+#
+# IMPORTANT: bump BOTH together when upgrading. The npm package and
+# Docker image must be the same major.minor.patch. Use a non-^/~
+# version in package.json (exact pin) to prevent npm from picking a
+# newer version than the base image ships.
+FROM mcr.microsoft.com/playwright:v1.60.0-jammy
 
 WORKDIR /app
 
