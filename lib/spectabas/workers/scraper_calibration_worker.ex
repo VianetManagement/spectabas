@@ -6,8 +6,13 @@ defmodule Spectabas.Workers.ScraperCalibrationWorker do
   alias Spectabas.Analytics.ScraperCalibration
   alias Spectabas.Sites
 
+  # 600s envelope = 14 serial CH baseline queries (~3 min worst case) +
+  # an Anthropic call with the v6.10.35 Stage-2 label-correlation prompt
+  # (30-60s response, longer if the AI elaborates per-signal reasoning) +
+  # safety margin. Matches AI.Completion @timeout (300_000) plus headroom
+  # for the CH pre-work.
   @impl Oban.Worker
-  def timeout(_job), do: :timer.seconds(60)
+  def timeout(_job), do: :timer.seconds(600)
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"site_id" => site_id}}) do

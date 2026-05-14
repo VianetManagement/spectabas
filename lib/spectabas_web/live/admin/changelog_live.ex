@@ -65,6 +65,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.42", "2026-05-14T22:30:00Z",
+       [
+         %{
+           title: "Fix: scraper AI calibration hangs after 60s — bumped worker timeout to 600s",
+           description:
+             "v6.10.35's Stage 2 enrichment made the calibration prompt bigger (the label correlation table adds ~1-2KB) and the AI's response longer (per-signal reasoning grounded in label data). End-to-end run on a busy site is now 60-180s: 14 serial CH baseline queries + an Anthropic Haiku call that does more reasoning. `Workers.ScraperCalibrationWorker.timeout/1` was still set to 60s, so Oban was killing the worker mid-Anthropic-call before the PubSub `:calibration_done` broadcast could fire. The LiveView never got the signal, so the UI sat in 'calibrating…' indefinitely.\n\nBumped the worker timeout to 600s (matches AI.Completion's 300s receive_timeout plus headroom for the CH pre-work). If your previous calibration attempt is stuck on the UI, **reload the page** — the Oban job was already killed; the LiveView's `calibration_job_running?` check will return false on remount and the UI will clear."
+         }
+       ]},
       {"v6.10.41", "2026-05-14T22:00:00Z",
        [
          %{
