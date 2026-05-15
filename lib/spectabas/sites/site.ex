@@ -64,6 +64,11 @@ defmodule Spectabas.Sites.Site do
     # Virtual — the plaintext API key submitted by the form. Encrypted
     # into `render_api_key_encrypted` on changeset save; never read back.
     field :render_api_key, :string, virtual: true
+    # Virtual — newline/comma-separated text of `render_service_ids`,
+    # round-tripped through `@form[:render_service_ids_text].value` so
+    # the textarea preserves user input across `phx-change` re-renders.
+    # Stripped from attrs by `Sites.parse_text_fields/1` on save.
+    field :render_service_ids_text, :string, virtual: true
 
     timestamps(type: :utc_datetime)
   end
@@ -106,7 +111,8 @@ defmodule Spectabas.Sites.Site do
       :logs_enabled,
       :render_api_key,
       :render_owner_id,
-      :render_service_ids
+      :render_service_ids,
+      :render_service_ids_text
     ])
     |> validate_required([:name, :domain])
     |> validate_length(:name, max: 255)

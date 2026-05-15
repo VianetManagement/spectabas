@@ -1219,6 +1219,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                     :if={!@site.render_api_key_encrypted}
                     type="password"
                     name="site[render_api_key]"
+                    value={@form[:render_api_key].value || ""}
                     placeholder="rnd_..."
                     autocomplete="off"
                     class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5 font-mono text-xs"
@@ -1235,7 +1236,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                   <input
                     type="text"
                     name="site[render_owner_id]"
-                    value={@site.render_owner_id}
+                    value={@form[:render_owner_id].value}
                     placeholder="tea-..."
                     class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5 font-mono text-xs"
                   />
@@ -1255,7 +1256,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                     rows="3"
                     placeholder="srv-abc123&#10;srv-def456"
                     class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5 font-mono text-xs"
-                  ><%= Enum.join(@site.render_service_ids || [], "\n") %></textarea>
+                  ><%= @form[:render_service_ids_text].value || Enum.join(@site.render_service_ids || [], "\n") %></textarea>
                   <p class="text-[10px] text-gray-400 mt-1">
                     One per line. Each Render service whose logs you want pulled into Spectabas. Found in the service's URL or settings page.
                   </p>
