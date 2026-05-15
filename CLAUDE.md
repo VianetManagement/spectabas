@@ -64,10 +64,10 @@ Push to `main` → auto-deploy on Render (~2-3 min Docker build).
 ### GeoIP Updates
 DB-IP + MaxMind + ipapi.is VPN refresh via Oban cron (1st/15th monthly, 06:00 UTC). All MMDB files synced to R2 after download. On boot, pulled from R2 to `/tmp/spectabas_geoip/` (ephemeral). Falls back to Docker-baked priv/ files. Trigger manual refresh: `/oban-admin?token=...&action=refresh_geoip`.
 
-## Dashboard (41 pages, 7 categories)
+## Dashboard (42 pages, 7 categories)
 
 - **Overview**: Dashboard, Insights (8 anomaly types + AI analysis), Journeys, Realtime
-- **Behavior**: Pages (device split, row evolution sparklines), Entry/Exit, Page Transitions, Site Search, Outbound Links, Downloads, Forms (auto-tracked `<form>` tags + input clusters for SPAs, per-field abandonment), Events (ARRAY JOIN property breakdown), Performance (RUM/CWV)
+- **Behavior**: Pages (device split, row evolution sparklines), Entry/Exit, Page Transitions, Site Search, Outbound Links, Downloads, Forms (auto-tracked `<form>` tags + input clusters for SPAs, per-field abandonment), Events (ARRAY JOIN property breakdown), Performance (RUM/CWV), Logs (server log ingest + error grouping)
 - **Acquisition**: Acquisition (channels + sources + UTM tabs), Campaigns, Search Keywords (GSC + Bing), SEO Audit (per-page real-browser crawl + 0-100 rule-based score, v6.10.47)
 - **Audience**: Geography, Visitor Map, Devices, Languages (browser + page lang with country crosstab), Network, Bot Traffic, Scrapers, Visitor Log, Cohort Retention, Churn Risk
 - **Conversions**: Goals (pageview, custom event, click element — each clickable for detail page), Click Elements (registry with naming, filtering, goal cross-refs), Funnels (with revenue + abandoned export), Ecommerce, Revenue Attribution (ROAS, click ID), Revenue Cohorts, Buyer Patterns, MRR & Subscriptions
@@ -219,3 +219,31 @@ Weighted-signal scoring (15 signals, additive with a 100 ceiling AND a v6.10.45 
 
 ### Server-Side Ad Conversion Tracking
 Full pipeline at `/dashboard/sites/:id/conversions`. `Spectabas.Conversions` context with `conversion_actions` (per-site config) + `conversions` (one row per detected event) Postgres tables. Three detectors run every 15 min via `Workers.ConversionDetector`: Stripe payments → purchase, URL pattern → pageview match, click element → button match. First-click resolver walks events backward in 90d window. `Workers.ConversionUploader` runs hourly, pushes to **Google Data Manager API** (`/v1/events:ingest`, requires `datamanager` OAuth scope on Google Ads connection — existing connections must reconnect) and **Microsoft Ads Bulk API**. Tracker captures gclid/**wbraid/gbraid**/msclkid into `_sab_click_id` sessionStorage. Quality gate via `max_scraper_score` (default 40) skips bot-scoring visitors so Smart Bidding doesn't learn bot patterns. Idempotent via `(site_id, conversion_action_id, dedup_key)` unique index. Full design in `docs/conversions.md`.
+
+### Server Logs Ingest (v6.10.53-56)
+"Logs as a dimension of analytics" — customers ship server logs from Render and cross-reference them with traffic / conversions / bot detection / ad spend. **Three ingest paths feed the same `Spectabas.Logs.IngestBuffer` → CH `server_logs` table**, but only ONE is the supported customer-facing path on Render's free tier:
+
+1. **PRIMARY: Render Logs API polling.** `Workers.RenderLogPoller` cron fires every minute, fans out to sites with `logs_enabled = true` + Render credentials. Per-site flow: `Logs.RenderPoller.poll_site/1` reads each `service_id` from `site.render_log_cursors` (high-water-mark JSONB), calls `Logs.RenderAPI.list_logs/3` (which uses `AdIntegrations.HTTP` for retry + `AdIntegrations.Vault` for API-key decryption), maps Render's response into the same row shape `parse_and_normalize/2` produces, pushes into the buffer, persists the new cursor via `Sites.update_render_cursors/2`. One service failing doesn't block others. Works on Render Hobby (free).
+2. **SECONDARY: HTTPS `POST /c/logs`.** `SpectabasWeb.LogsController` with `Authorization: Bearer <site.logs_token>`. Accepts array or `{logs: [...]}` envelope. For Vector / Fluent Bit / custom shippers. Not used by Render customers (see path 1).
+3. **DORMANT: TLS syslog listener.** `Spectabas.Logs.SyslogListener` env-gated on three vars (`SYSLOG_LISTEN_PORT` + `SYSLOG_TLS_CERT_FILE` + `SYSLOG_TLS_KEY_FILE`); not started on Render because Hobby plan doesn't expose inbound TCP. RFC 5424 parser + RFC 5425 octet-counted framing implemented and tested (`Spectabas.Logs.SyslogParser`) for the day we move off Hobby or someone runs their own deployment.
+
+**Schema — `server_logs` CH table**: `site_id, timestamp DateTime64(3), level LowCardinality, message, source, host, request_id, error_fingerprint, elixir_error_module, elixir_error_line, raw_payload`. PARTITION BY day, ORDER BY (site_id, timestamp), TTL `toDateTime(timestamp) + INTERVAL 30 DAY DELETE` (CH-side hard cap). Bloom indexes on `level` + `error_fingerprint`. Per-site retention clamped at query time via `Logs.Analytics.window_clause/2` reading `site.logs_retention_days` (1..30, default 14).
+
+**Schema — sites columns** (migrations 20260515000004 + 20260515000005):
+- `logs_token` (HTTPS path bearer), `logs_retention_days` (1..30), `logs_enabled` (master toggle)
+- `render_api_key_encrypted` (AES-256-GCM via `AdIntegrations.Vault`)
+- `render_owner_id` (`tea-...` or `usr-...`, validated)
+- `render_service_ids` (text[])
+- `render_log_cursors` (jsonb `{service_id => iso8601}`)
+- `render_api_key` (virtual — form input only, encrypted on changeset)
+- `render_service_ids_text` (virtual — newline-separated textarea, round-tripped through `@form` so user typing persists across `phx-change`)
+
+**Error fingerprinting** (`Spectabas.Logs.fingerprint_elixir_error/2`): lines matching `** (ErrorType)` or `[error]` prefixes get a SHA256 hash computed at ingest time. Normalizer strips UUIDs, IDs (3+ digit standalone numbers), timestamps, hex strings, PIDs — so the same error from different requests groups together. Module + line extracted from Elixir stack frames matching `(app_name 6.10.X) lib/path/file.ex:42: ...`.
+
+**Dashboard UI at `/dashboard/sites/:id/logs`** (under Behavior nav). `SpectabasWeb.Dashboard.LogsLive`. Time range tabs (1h / 24h / 7d / 30d, clamped to `logs_retention_days`), KPI strip, stacked-bar volume chart per level (`LogsChart` JS hook → Chart.js), filter bar (level / service / search with 350ms debounce), two tabs: Recent (paginated 100/page) + Error groups (collapsed by `error_fingerprint`, click to expand, shows up to 20 instances). Queries via `Spectabas.Logs.Analytics`.
+
+**Site Settings UI** (Content tab → Server logs): API key (password input → masked after save → Replace button), Workspace ID, Service IDs textarea, Retention input, Test Connection button (calls `Logs.RenderAPI.verify_credentials/2`). The three form fields all bind via `@form[:field].value` so user typing survives `phx-change="validate"` re-renders — DO NOT bind to `@site.X` for fields that need to round-trip through the form (lesson from v6.10.55→56 fix).
+
+**Diagnostic**: `/oban-admin?action=logs_diag&token=...` returns per-site row counts + buffer state. Use to verify ingest is flowing end-to-end after wiring up a new Render service.
+
+**Operator note**: Render API rate limit is ~3000 RPM per workspace. Polling cost = `N services × 1 req/min = N RPM`. 50 customer services = 50 RPM, well within limits.

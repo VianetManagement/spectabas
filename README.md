@@ -16,6 +16,10 @@ Privacy-first web analytics platform built with Elixir/Phoenix and ClickHouse.
 - **Outbound link & download tracking** — auto-tracked clicks and file downloads
 - **Custom events** — Spectabas.track() API for any user interaction
 - **Real User Monitoring** — Core Web Vitals (LCP, CLS, FID), page load timing, TTFB
+- **Form analytics** — auto-tracked `<form>` tags + SPA input clusters with per-field abandonment funnel
+- **Language tracking** — `navigator.language` + `<html lang>` with mismatch detection
+- **SEO audit** — real-browser (Playwright) per-page crawl with 0-100 scoring, configurable weekly crawl budget
+- **Server logs** — pull logs from your Render services via Render's REST API, search and filter, group errors by stack-trace fingerprint, cross-reference with traffic
 
 ### Conversions & Ecommerce
 - **Goals & funnels** — pageview and custom event goals, multi-step funnel visualization with drop-off export
@@ -63,13 +67,15 @@ Privacy-first web analytics platform built with Elixir/Phoenix and ClickHouse.
 
 ## Tech Stack
 
-- **Elixir 1.17 / Phoenix 1.8** — LiveView for real-time dashboards
+- **Elixir 1.18 / Phoenix 1.8** — LiveView for real-time dashboards
 - **ClickHouse** — columnar analytics database for fast aggregations
 - **PostgreSQL** — user accounts, sessions, site configuration
 - **Chart.js** — interactive charts (vendored, no CDN)
 - **Tailwind CSS 4** — utility-first styling
 - **tzdata** — timezone database for site-local date boundaries
 - **wax_** — WebAuthn/passkey 2FA support
+- **Floki** — HTML parsing for SEO audits (runtime dep)
+- **Playwright** — headless-browser SEO audits (sidecar Render service, `playwright-sidecar/`)
 - **Render** — Docker-based deployment (Ohio region)
 
 ## Quick Start
@@ -85,7 +91,7 @@ Visit [localhost:4000](http://localhost:4000).
 ## Tests
 
 ```bash
-mix test          # 676 tests, no ClickHouse needed
+mix test          # 1058 tests, no ClickHouse needed
 mix format        # code formatting
 mix compile --warnings-as-errors  # strict compilation
 ```
@@ -112,8 +118,12 @@ Push to `main` auto-deploys on Render via Docker.
 |----------|---------|
 | `MAXMIND_LICENSE_KEY` | GeoLite2 timezone/EU enrichment |
 | `RESEND_API_KEY` | Email delivery via Resend |
-| `RENDER_API_KEY` | Auto-register custom domains |
+| `RENDER_API_KEY` | Auto-register custom domains (NOT the same as the per-site Render Logs API key — that's stored encrypted on `sites.render_api_key_encrypted`) |
 | `UTILITY_TOKEN` | Health/diagnostic endpoint auth |
+| `PLAYWRIGHT_URL` | Sidecar service for SEO audits (own Render web service, see `playwright-sidecar/`) |
+| `HELP_AI_API_KEY` | Anthropic API key for the dashboard help chatbot + Insight explanations |
+| `R2_BUCKET` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_ENDPOINT` | Cloudflare R2 for GeoIP MMDB + data exports |
+| `SYSLOG_LISTEN_PORT` / `SYSLOG_TLS_CERT_FILE` / `SYSLOG_TLS_KEY_FILE` | All three required to start the (dormant) TLS syslog listener for `Spectabas.Logs.SyslogListener` — not used on Render Hobby (no inbound TCP) |
 
 ## Adding a Tracked Site
 
