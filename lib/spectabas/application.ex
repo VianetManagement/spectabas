@@ -216,9 +216,17 @@ defmodule Spectabas.Application do
         {Task.Supervisor, name: Spectabas.IngestFlushSupervisor},
         Spectabas.Events.IngestBuffer,
         Spectabas.Logs.IngestBuffer
-      ]
+      ] ++ syslog_children()
     else
       Logger.warning("ClickHouse not configured — analytics features disabled")
+      []
+    end
+  end
+
+  defp syslog_children do
+    if Spectabas.Logs.SyslogListener.enabled?() do
+      [Spectabas.Logs.SyslogListener]
+    else
       []
     end
   end

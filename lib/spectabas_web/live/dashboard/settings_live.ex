@@ -1128,10 +1128,10 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
             <div :if={@settings_tab == "content"} class="border-t border-gray-200 pt-6">
               <h3 class="text-base font-medium text-gray-900 mb-2">Server logs</h3>
               <p class="text-xs text-gray-500 mb-3">
-                Ship server logs from Render (or any source that can POST JSON) and cross-reference them with your traffic data on the <.link
+                Ship server logs from Render and cross-reference them with your traffic data on the <.link
                   navigate={~p"/dashboard/sites/#{@site.id}"}
                   class="text-indigo-600 underline"
-                >Dashboard</.link>. Logs are stored for the retention period below and auto-deleted after.
+                >Dashboard</.link>. Logs are stored for the retention period below and auto-deleted after. Render streams logs over <strong>TLS-secured syslog</strong>, not HTTPS — use the endpoint + token below in Render's Log Stream UI.
               </p>
 
               <div class="flex items-center gap-3 mb-3">
@@ -1156,16 +1156,21 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
               <div :if={@site.logs_enabled} class="space-y-3">
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-1">
-                    Ingest URL
+                    Log Endpoint
                   </label>
                   <code class="block px-3 py-2 bg-gray-100 rounded text-xs font-mono break-all">
-                    https://www.spectabas.com/c/logs
+                    logs.spectabas.com:6514
                   </code>
+                  <p class="text-[10px] text-gray-400 mt-1">
+                    TLS-secured syslog (RFC 5424). Paste this into Render's
+                    <strong>Log Endpoint</strong>
+                    field.
+                  </p>
                 </div>
 
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-1">
-                    Bearer token
+                    Token
                   </label>
                   <div class="flex items-center gap-2">
                     <code class="flex-1 px-3 py-2 bg-gray-100 rounded text-xs font-mono break-all">
@@ -1181,7 +1186,8 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                     </button>
                   </div>
                   <p class="text-[10px] text-gray-400 mt-1">
-                    Treat this like a password. Anyone with the token can write logs to your site.
+                    Paste this into Render's <strong>Token</strong>
+                    field. Treat it like a password — anyone with it can write logs to your site.
                   </p>
                 </div>
 
@@ -1213,24 +1219,18 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                       tab → <strong>Add Log Stream</strong>
                       (top-right).
                     </li>
-                    <li>Destination type: <strong>HTTP</strong></li>
                     <li>
-                      Endpoint:
-                      <code class="bg-blue-100 px-1 rounded">https://www.spectabas.com/c/logs</code>
+                      <strong>Log Endpoint:</strong>
+                      <code class="bg-blue-100 px-1 rounded">logs.spectabas.com:6514</code>
                     </li>
                     <li>
-                      Add header:
-                      <code class="bg-blue-100 px-1 rounded">
-                        Authorization: Bearer {@site.logs_token}
-                      </code>
+                      <strong>Token:</strong>
+                      <code class="bg-blue-100 px-1 rounded break-all">{@site.logs_token}</code>
                     </li>
                     <li>Save. Logs start flowing within a minute.</li>
                   </ol>
-                  <p class="mt-2">
-                    Or for direct testing:
-                    <code class="bg-blue-100 px-1 rounded break-all">
-                      {logs_curl_example(@site.logs_token)}
-                    </code>
+                  <p class="mt-2 text-[11px]">
+                    Render encrypts the connection with TLS and routes the token through the syslog message — no Authorization header needed.
                   </p>
                 </div>
               </div>
@@ -2261,15 +2261,4 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   end
 
   defp format_sync_ts(dt, _tz), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M UTC")
-
-  # Build the example curl command for the Logs section. Built as an
-  # Elixir string so the literal JSON body (with `{` and `}`) doesn't
-  # confuse the HEEx parser.
-  defp logs_curl_example(token) when is_binary(token) do
-    body = ~s([{"level":"info","message":"hello"}])
-
-    ~s(curl -X POST https://www.spectabas.com/c/logs -H "Authorization: Bearer #{token}" -H "Content-Type: application/json" -d '#{body}')
-  end
-
-  defp logs_curl_example(_), do: ""
 end

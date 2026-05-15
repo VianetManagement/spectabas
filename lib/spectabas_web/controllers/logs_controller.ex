@@ -1,13 +1,21 @@
 defmodule SpectabasWeb.LogsController do
   @moduledoc """
-  Server-log ingest endpoint. POST /c/logs with:
+  HTTP/JSON server-log ingest endpoint. POST /c/logs with:
 
       Authorization: Bearer <site.logs_token>
       Content-Type: application/json
 
+  > **Render users don't use this endpoint.** Render's Log Streams
+  > only support TLS-secured syslog (RFC 5424), not HTTPS. Render
+  > customers should configure Log Endpoint
+  > `logs.spectabas.com:6514` and let `Spectabas.Logs.SyslogListener`
+  > receive the stream. This HTTP endpoint exists for log shippers
+  > that can POST JSON directly (Vector, Fluent Bit with `http` sink,
+  > custom code) — not Render itself.
+
   Body shapes accepted (both common):
 
-      # 1. Render Log Streams format — array of entries
+      # 1. Array of entries
       [
         {"timestamp": "...", "level": "info", "message": "..."},
         ...
