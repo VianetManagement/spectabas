@@ -119,6 +119,7 @@ Routes: `/platform/*` (platform_admin), `/admin/*` (superadmin+), `/dashboard/*`
 - **OPTIMIZE DEDUPLICATE BY**: Must include ALL ORDER BY columns.
 - **quantileIf**: Returns `nan` on no matches — `parse_rows` sanitizes to `null`.
 - **Mutations**: Max 1000 pending; chunk IN clauses at 500 IPs.
+- **Adding a new CH table requires THREE coordinated edits**: (1) `ensure_schema!` CREATE block in `lib/spectabas/clickhouse.ex`, (2) the analytics / writer modules, AND (3) the `@allowed_tables` whitelist in `sanitize_table/1` (same file, ~line 800). #3 is a SQL-injection-prevention whitelist — tables not in it raise `ArgumentError: Unknown ClickHouse table: <name>` from inside `insert/2`. When that raise happens inside an async Task (e.g. `IngestBuffer.spawn_flush/1`, `Task.Supervisor.start_child`), the crash is silently swallowed — no log line, no failed-job indicator, no metric. Symptom: writes appear to succeed but the table stays empty. Cost me v6.10.53→58 to discover when adding `server_logs`. Don't repeat it.
 
 ### Query Rules
 - **ALL analytics queries MUST include `ip_is_bot = 0`** and filter to pageview events. Exceptions: network_stats (bot %), realtime, visitor detail, RUM.
