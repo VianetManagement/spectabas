@@ -797,7 +797,7 @@ defmodule Spectabas.ClickHouse do
     "'#{e}'"
   end
 
-  @allowed_tables ~w(events daily_stats daily_rollup daily_page_rollup daily_source_rollup daily_geo_rollup daily_device_rollup daily_campaign_rollup daily_event_rollup daily_session_facts visitor_attribution source_stats country_stats device_stats network_stats ecommerce_events subscription_events search_console imported_daily_stats imported_pages imported_sources imported_countries imported_devices ad_spend)
+  @allowed_tables ~w(events daily_stats daily_rollup daily_page_rollup daily_source_rollup daily_geo_rollup daily_device_rollup daily_campaign_rollup daily_event_rollup daily_session_facts visitor_attribution source_stats country_stats device_stats network_stats ecommerce_events subscription_events search_console imported_daily_stats imported_pages imported_sources imported_countries imported_devices ad_spend server_logs)
   defp sanitize_table(t) when t in @allowed_tables, do: t
   defp sanitize_table(t), do: raise(ArgumentError, "Unknown ClickHouse table: #{t}")
 
