@@ -5,7 +5,6 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
 
   import SpectabasWeb.Dashboard.SegmentComponent
   import SpectabasWeb.Dashboard.SidebarComponent
-  import SpectabasWeb.InsightCard
   import Spectabas.TypeHelpers
 
   alias Spectabas.{Accounts, Sites, Analytics, Segments}
@@ -67,7 +66,6 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
        |> assign(:deferred_loaded, false)
        |> assign(:deferred_pending, 0)
        |> assign(:anomaly_categories, %{})
-       |> assign(:insights, load_insights(site.id, user.id))
        |> load_critical_stats()
        |> then(fn s ->
          if connected?(s), do: send(self(), :load_deferred)
@@ -176,18 +174,6 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
       end
 
     {:noreply, socket}
-  end
-
-  def handle_event("dismiss_insight", %{"id" => id}, socket) do
-    {id_int, _} = Integer.parse(id)
-    Spectabas.Insights.dismiss(id_int, socket.assigns.user.id)
-
-    {:noreply,
-     assign(
-       socket,
-       :insights,
-       load_insights(socket.assigns.site.id, socket.assigns.user.id)
-     )}
   end
 
   def handle_event("toggle_date_picker", _params, socket) do
@@ -830,10 +816,6 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
     end
   end
 
-  defp load_insights(site_id, user_id) do
-    Spectabas.Insights.list_active_for_user(site_id, user_id, limit: 5)
-  end
-
   defp empty_overview do
     %{
       pageviews: 0,
@@ -944,32 +926,6 @@ defmodule SpectabasWeb.Dashboard.SiteLive do
           filter_options={@filter_options}
           segment_field={@segment_field}
         />
-
-        <%!-- "What's happening" insights — compact card showing the top
-             3 undismissed insights. Generated daily by InsightsGenerator
-             from anomalies + goal pace; AI explanations fill in async. --%>
-        <div
-          :if={@insights != []}
-          class="mb-6 bg-white rounded-lg shadow border border-gray-200 overflow-hidden"
-        >
-          <div class="px-4 py-2 border-b border-gray-100 flex items-center justify-between">
-            <h2 class="text-sm font-semibold text-gray-700">What's happening</h2>
-            <.link
-              navigate={~p"/dashboard/sites/#{@site.id}/insights-feed"}
-              class="text-xs text-indigo-600 hover:text-indigo-800"
-            >
-              View all →
-            </.link>
-          </div>
-          <div class="divide-y divide-gray-100">
-            <.insight_card
-              :for={i <- Enum.take(@insights, 3)}
-              insight={i}
-              compact={true}
-              dismiss_event="dismiss_insight"
-            />
-          </div>
-        </div>
 
         <%!-- Stat Cards with Comparison --%>
         <% period_label = preset_label(@preset) %>

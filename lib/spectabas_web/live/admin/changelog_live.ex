@@ -65,6 +65,14 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.50", "2026-05-15T09:30:00Z",
+       [
+         %{
+           title: "Move \"What's happening\" widget from main dashboard to /insights page",
+           description:
+             "User feedback: the streaming-insights card was cluttering the main dashboard overview. Consolidated it onto the existing Insights page (`/dashboard/sites/:id/insights`) so anything insights-related has one destination.\n\n**Removed from `SiteLive` (main dashboard):**\n- The \"What's happening\" card render block\n- The `:insights` assign + initial `load_insights/2` in mount\n- The `handle_event(\"dismiss_insight\", ...)` handler\n- The `load_insights/2` private helper\n- The `SpectabasWeb.InsightCard` import\n\n**Added to `InsightsLive` (`/insights`):**\n- A new \"What's happening\" section at the top of the page (above the existing Summary cards and AI Analysis section)\n- Shows up to 5 active insights (was 3 on dashboard) since this is now the dedicated destination\n- Per-user dismiss via the same `dismiss_insight` event the dashboard had\n- `Full feed →` link to `/insights-feed` for the longer view\n- Section is hidden when no insights exist (no empty-state clutter)\n\n**Untouched:**\n- `/insights-feed` (`InsightsFeedLive`) still works as the dedicated long-list view, linked from the Insights page\n- The `dashboard_snapshots` worker still generates insights nightly\n- Per-user dismissals still work the same way (insight_dismissals table)\n\nMain dashboard is now cleaner; Insights page is the single destination for the streaming feed + the weekly AI analysis. 1009 tests still passing."
+         }
+       ]},
       {"v6.10.49", "2026-05-15T02:00:00Z",
        [
          %{

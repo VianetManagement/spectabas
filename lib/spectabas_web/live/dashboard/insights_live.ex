@@ -7,6 +7,7 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
   alias Spectabas.Analytics.{AnomalyCache, AnomalyDetector}
   alias Spectabas.AI.{Config, InsightsCache}
   import SpectabasWeb.Dashboard.SidebarComponent
+  import SpectabasWeb.InsightCard
 
   @categories [
     {"Immediate Action", [:high, :medium], "Issues requiring attention this week"},
@@ -35,7 +36,7 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
 
       socket =
         socket
-        |> assign(:page_title, "Weekly Insights - #{site.name}")
+        |> assign(:page_title, "Insights - #{site.name}")
         |> assign(:site, site)
         |> assign(:user, user)
         |> assign(:anomalies, anomalies)
@@ -49,6 +50,7 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
         |> assign(:ai_generated_at, if(cached_ai, do: cached_ai.generated_at, else: nil))
         |> assign(:ai_loading, false)
         |> assign(:ai_error, nil)
+        |> assign(:insights_feed, load_insights_feed(site.id, user.id))
 
       # If the cache is empty (first deploy / new site), run a one-shot
       # detection so the user sees something on first visit. Subsequent
@@ -65,7 +67,23 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
     end
   end
 
+  defp load_insights_feed(site_id, user_id) do
+    Spectabas.Insights.list_active_for_user(site_id, user_id, limit: 10)
+  end
+
   @impl true
+  def handle_event("dismiss_insight", %{"id" => id}, socket) do
+    {id_int, _} = Integer.parse(id)
+    Spectabas.Insights.dismiss(id_int, socket.assigns.user.id)
+
+    {:noreply,
+     assign(
+       socket,
+       :insights_feed,
+       load_insights_feed(socket.assigns.site.id, socket.assigns.user.id)
+     )}
+  end
+
   def handle_event("generate_ai", _params, socket) do
     site = socket.assigns.site
     user = socket.assigns.user
@@ -149,6 +167,36 @@ defmodule SpectabasWeb.Dashboard.InsightsLive do
       live_visitors={0}
     >
       <div class="max-w-4xl mx-auto px-3 sm:px-6 lg:px-8 py-6">
+        <%!-- "What's happening" stream — daily insights generated from
+             anomaly detection + goal-pace + AI explanations. Per-user
+             dismissals. Moved here from the dashboard overview in
+             v6.10.50 to consolidate everything insights-related under
+             one route. --%>
+        <div :if={@insights_feed != []} class="mb-8">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-900">What's happening</h2>
+              <p class="text-xs text-gray-500">
+                Daily-generated stream of detected anomalies + goal-pace changes with AI explanations. Click ✕ to dismiss (per-user).
+              </p>
+            </div>
+            <.link
+              navigate={~p"/dashboard/sites/#{@site.id}/insights-feed"}
+              class="text-xs text-indigo-600 hover:text-indigo-800"
+            >
+              Full feed →
+            </.link>
+          </div>
+          <div class="space-y-2">
+            <.insight_card
+              :for={i <- Enum.take(@insights_feed, 5)}
+              insight={i}
+              compact={true}
+              dismiss_event="dismiss_insight"
+            />
+          </div>
+        </div>
+
         <%!-- Summary cards (show zeros while loading, then update) --%>
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <div class="bg-white rounded-lg shadow p-4 border-l-4 border-red-400">
