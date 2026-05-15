@@ -2598,6 +2598,42 @@ defmodule SpectabasWeb.HealthController do
               conn |> put_status(400) |> json(%{error: "site_id param required"})
           end
 
+        "logs_ch_test" ->
+          # Insert a single synthetic row directly through
+          # ClickHouse.insert/2 (bypassing the buffer) and return the
+          # raw CH response. Use to isolate whether the CH write path
+          # is broken vs. the buffer pipeline.
+          site_id = String.to_integer(params["site_id"] || "0")
+
+          row = %{
+            site_id: site_id,
+            timestamp: DateTime.utc_now(),
+            level: "info",
+            message: "logs_ch_test synthetic row #{System.unique_integer([:positive])}",
+            source: "diagnostic",
+            host: "",
+            request_id: "",
+            error_fingerprint: "",
+            elixir_error_module: "",
+            elixir_error_line: 0,
+            raw_payload: "{}"
+          }
+
+          before_count = log_count_for_site(site_id)
+          ch_result = Spectabas.ClickHouse.insert("server_logs", [row])
+          # CH eventual consistency — wait a beat before counting.
+          Process.sleep(1500)
+          after_count = log_count_for_site(site_id)
+
+          json(conn, %{
+            site_id: site_id,
+            ch_insert_result: inspect(ch_result),
+            row_jason_encoded: Jason.encode!(row),
+            ch_rows_before: before_count,
+            ch_rows_after: after_count,
+            rows_inserted: after_count - before_count
+          })
+
         "render_force_poll" ->
           # Runs Spectabas.Logs.RenderPoller.poll_site/1 synchronously
           # for one site and returns the result. Optional `reset=1` to
