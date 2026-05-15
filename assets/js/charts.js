@@ -115,6 +115,76 @@ export const TimeseriesChart = {
   },
 }
 
+// --- Stacked Bar Chart for log volume by level over time ---
+export const LogsChart = {
+  mounted() {
+    this.chart = null
+    const raw = this.el.dataset.chart
+    if (raw) {
+      try { this.setData(JSON.parse(raw)) } catch (e) { /* empty is fine */ }
+    }
+  },
+  setData(data) {
+    const canvas = this.el.querySelector("canvas")
+    if (!canvas) return
+
+    const datasets = [
+      { label: "Info",     data: data.info || [],     backgroundColor: "#d1d5db" },
+      { label: "Warning",  data: data.warning || [],  backgroundColor: "#f59e0b" },
+      { label: "Error",    data: data.error || [],    backgroundColor: "#ef4444" },
+      { label: "Critical", data: data.critical || [], backgroundColor: "#991b1b" },
+    ]
+
+    if (this.chart) {
+      this.chart.data.labels = data.labels
+      this.chart.data.datasets = datasets
+      this.chart.update()
+      return
+    }
+
+    this.chart = new Chart(canvas, {
+      type: "bar",
+      data: { labels: data.labels, datasets: datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 200 },
+        interaction: { intersect: false, mode: "index" },
+        scales: {
+          x: {
+            stacked: true,
+            grid: { display: false },
+            ticks: { maxTicksLimit: 12, color: "#9ca3af" },
+          },
+          y: {
+            stacked: true,
+            beginAtZero: true,
+            grid: { color: "#f3f4f6" },
+            ticks: { color: "#9ca3af", precision: 0 },
+          },
+        },
+        plugins: {
+          tooltip: {
+            backgroundColor: "#1f2937",
+            titleColor: "#f9fafb",
+            bodyColor: "#d1d5db",
+            padding: 10,
+            cornerRadius: 8,
+          },
+          legend: {
+            display: true,
+            position: "bottom",
+            labels: { boxWidth: 10, padding: 12, color: "#6b7280", font: { size: 11 } },
+          },
+        },
+      },
+    })
+  },
+  destroyed() {
+    if (this.chart) this.chart.destroy()
+  },
+}
+
 // --- Horizontal Bar Chart (Timezones) ---
 export const BarChart = {
   mounted() {

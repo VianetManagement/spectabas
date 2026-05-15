@@ -172,6 +172,11 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
               label="Performance"
               active={@active == "performance"}
             />
+            <.nav_item
+              to={~p"/dashboard/sites/#{@site.id}/logs"}
+              label="Logs"
+              active={@active == "logs"}
+            />
           </.nav_section>
 
           <.nav_section
@@ -595,6 +600,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
       {~p"/dashboard/sites/#{site_id}/forms", "Forms"},
       {~p"/dashboard/sites/#{site_id}/events", "Events"},
       {~p"/dashboard/sites/#{site_id}/performance", "Performance"},
+      {~p"/dashboard/sites/#{site_id}/logs", "Logs"},
       {~p"/dashboard/sites/#{site_id}/acquisition", "Acquisition"},
       {~p"/dashboard/sites/#{site_id}/search-keywords", "Search Keywords"},
       {~p"/dashboard/sites/#{site_id}/seo", "SEO Audit"},
@@ -682,6 +688,7 @@ defmodule SpectabasWeb.Dashboard.SidebarComponent do
     "forms" => "Behavior",
     "events" => "Behavior",
     "performance" => "Behavior",
+    "logs" => "Behavior",
     # Acquisition
     "acquisition" => "Acquisition",
     "search-keywords" => "Acquisition",
