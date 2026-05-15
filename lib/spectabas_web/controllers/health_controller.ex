@@ -2598,12 +2598,44 @@ defmodule SpectabasWeb.HealthController do
               conn |> put_status(400) |> json(%{error: "site_id param required"})
           end
 
+        "logs_diag" ->
+          # Sanity probe for the v6.10.53 server-log ingest pipeline.
+          # Returns per-site row counts + ingest rate + buffer state so
+          # we can quickly tell if logs are flowing without grepping
+          # through Render logs.
+          rate_sql = """
+          SELECT
+            site_id,
+            count() AS total_rows,
+            countIf(timestamp >= now() - INTERVAL 1 HOUR) AS rows_last_hour,
+            countIf(timestamp >= now() - INTERVAL 24 HOUR) AS rows_last_24h,
+            countIf(level IN ('error', 'critical') AND timestamp >= now() - INTERVAL 1 HOUR) AS errors_last_hour,
+            max(timestamp) AS most_recent
+          FROM server_logs
+          GROUP BY site_id
+          ORDER BY most_recent DESC
+          """
+
+          rate =
+            case Spectabas.ClickHouse.query(rate_sql) do
+              {:ok, rows} -> rows
+              _ -> []
+            end
+
+          json(conn, %{
+            per_site: rate,
+            buffer: %{
+              size: Spectabas.Logs.IngestBuffer.buffer_size(),
+              full: Spectabas.Logs.IngestBuffer.full?()
+            }
+          })
+
         _ ->
           conn
           |> put_status(400)
           |> json(%{
             error:
-              "unknown action. use: status, cancel_worker, cancel_all_executing, refresh_geoip, snapshot_status, trigger_snapshots, snapshot_site_status, list_sites"
+              "unknown action. use: status, cancel_worker, cancel_all_executing, refresh_geoip, snapshot_status, trigger_snapshots, snapshot_site_status, list_sites, logs_diag"
           })
       end
     end

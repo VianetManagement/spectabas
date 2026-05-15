@@ -79,6 +79,9 @@ defmodule SpectabasWeb.Router do
     post "/x", CollectController, :cross_domain
     post "/o", CollectController, :optout
     options "/e", CollectController, :options
+    # Server-log ingest (v6.10.53). Bearer-token auth via site.logs_token.
+    post "/logs", LogsController, :create
+    options "/logs", LogsController, :options
   end
 
   # Script serving

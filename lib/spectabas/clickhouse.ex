@@ -501,6 +501,36 @@ defmodule Spectabas.ClickHouse do
       ORDER BY (site_id, visitor_id)
       SETTINGS index_granularity = 8192
       """,
+      # Server logs (v6.10.53). Customer apps ship logs to /c/logs and
+      # we store them here for cross-reference with analytics events.
+      # TTL clause auto-deletes rows older than the site's retention
+      # window — we still record retention_days on the sites table for
+      # display purposes, but CH does the actual cleanup. Partition by
+      # day so old partitions drop cleanly. Bloom indexes on level and
+      # error_fingerprint speed up the "show me errors this hour"
+      # query path. raw_payload holds the original log line + any
+      # structured context — keep as a String so JSON shape can vary.
+      """
+      CREATE TABLE IF NOT EXISTS #{db}.server_logs (
+        site_id UInt64,
+        timestamp DateTime64(3) DEFAULT now64(),
+        level LowCardinality(String) DEFAULT 'info',
+        message String,
+        source LowCardinality(String) DEFAULT '',
+        host String DEFAULT '',
+        request_id String DEFAULT '',
+        error_fingerprint String DEFAULT '',
+        elixir_error_module String DEFAULT '',
+        elixir_error_line UInt32 DEFAULT 0,
+        raw_payload String DEFAULT '',
+        INDEX idx_level level TYPE bloom_filter GRANULARITY 4,
+        INDEX idx_fingerprint error_fingerprint TYPE bloom_filter GRANULARITY 4
+      ) ENGINE = MergeTree()
+      PARTITION BY toYYYYMMDD(timestamp)
+      ORDER BY (site_id, timestamp)
+      TTL toDateTime(timestamp) + INTERVAL 30 DAY DELETE
+      SETTINGS index_granularity = 8192
+      """,
       # Schema migrations — add columns that may not exist on older tables
       "ALTER TABLE #{db}.ecommerce_events ADD COLUMN IF NOT EXISTS refund_amount Decimal(12, 2) DEFAULT 0",
       "ALTER TABLE #{db}.ecommerce_events ADD COLUMN IF NOT EXISTS import_source LowCardinality(String) DEFAULT ''",

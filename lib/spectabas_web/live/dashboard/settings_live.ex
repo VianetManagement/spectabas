@@ -94,6 +94,24 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
     end
   end
 
+  def handle_event("regenerate_logs_token", _params, socket) do
+    token = Spectabas.Logs.generate_token()
+
+    case Sites.update_site(socket.assigns.site, %{"logs_token" => token}) do
+      {:ok, site} ->
+        {:noreply,
+         socket
+         |> put_flash(
+           :info,
+           "Logs token regenerated. Update your log shipper's Authorization header."
+         )
+         |> assign(:site, site)}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to regenerate token.")}
+    end
+  end
+
   def handle_event("save_ai_config", params, socket) do
     site = socket.assigns.site
     existing = Spectabas.AI.Config.get(site)
@@ -1104,6 +1122,112 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                   class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5 font-mono text-xs"
                   placeholder="/contact&#10;/checkout&#10;/signup"
                 ><%= Enum.join(@site.journey_conversion_pages || [], "\n") %></textarea>
+              </div>
+            </div>
+
+            <div :if={@settings_tab == "content"} class="border-t border-gray-200 pt-6">
+              <h3 class="text-base font-medium text-gray-900 mb-2">Server logs</h3>
+              <p class="text-xs text-gray-500 mb-3">
+                Ship server logs from Render (or any source that can POST JSON) and cross-reference them with your traffic data on the <.link
+                  navigate={~p"/dashboard/sites/#{@site.id}"}
+                  class="text-indigo-600 underline"
+                >Dashboard</.link>. Logs are stored for the retention period below and auto-deleted after.
+              </p>
+
+              <div class="flex items-center gap-3 mb-3">
+                <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    name="site[logs_enabled]"
+                    value="true"
+                    checked={@site.logs_enabled}
+                    class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <input type="hidden" name="site[logs_enabled]" value="false" />
+                  Enable log ingest for this site
+                </label>
+              </div>
+
+              <div :if={@site.logs_enabled} class="space-y-3">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">
+                    Ingest URL
+                  </label>
+                  <code class="block px-3 py-2 bg-gray-100 rounded text-xs font-mono break-all">
+                    https://www.spectabas.com/c/logs
+                  </code>
+                </div>
+
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">
+                    Bearer token
+                  </label>
+                  <div class="flex items-center gap-2">
+                    <code class="flex-1 px-3 py-2 bg-gray-100 rounded text-xs font-mono break-all">
+                      {if @site.logs_token, do: @site.logs_token, else: "(not generated)"}
+                    </code>
+                    <button
+                      type="button"
+                      phx-click="regenerate_logs_token"
+                      data-confirm="Regenerate the logs token? Any log shippers using the old token will break."
+                      class="px-3 py-2 text-xs font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded"
+                    >
+                      {if @site.logs_token, do: "Regenerate", else: "Generate"}
+                    </button>
+                  </div>
+                  <p class="text-[10px] text-gray-400 mt-1">
+                    Treat this like a password. Anyone with the token can write logs to your site.
+                  </p>
+                </div>
+
+                <div>
+                  <label class="block text-sm font-medium text-gray-700">
+                    Retention (days)
+                  </label>
+                  <input
+                    type="number"
+                    name="site[logs_retention_days]"
+                    value={@site.logs_retention_days}
+                    min="1"
+                    max="30"
+                    class="mt-1 block w-32 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
+                  />
+                  <p class="text-[10px] text-gray-400 mt-1">
+                    1-30 days. CH auto-deletes older log rows.
+                  </p>
+                </div>
+
+                <div
+                  :if={@site.logs_token}
+                  class="bg-blue-50 border border-blue-200 rounded p-3 text-xs text-blue-900"
+                >
+                  <p class="font-medium mb-2">Render setup:</p>
+                  <ol class="list-decimal list-inside space-y-1 ml-1">
+                    <li>
+                      Render dashboard → your service → <strong>Logs</strong>
+                      tab → <strong>Add Log Stream</strong>
+                      (top-right).
+                    </li>
+                    <li>Destination type: <strong>HTTP</strong></li>
+                    <li>
+                      Endpoint:
+                      <code class="bg-blue-100 px-1 rounded">https://www.spectabas.com/c/logs</code>
+                    </li>
+                    <li>
+                      Add header:
+                      <code class="bg-blue-100 px-1 rounded">
+                        Authorization: Bearer {@site.logs_token}
+                      </code>
+                    </li>
+                    <li>Save. Logs start flowing within a minute.</li>
+                  </ol>
+                  <p class="mt-2">
+                    Or for direct testing:
+                    <code class="bg-blue-100 px-1 rounded break-all">
+                      {logs_curl_example(@site.logs_token)}
+                    </code>
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -2132,4 +2256,15 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
   end
 
   defp format_sync_ts(dt, _tz), do: Calendar.strftime(dt, "%Y-%m-%d %H:%M UTC")
+
+  # Build the example curl command for the Logs section. Built as an
+  # Elixir string so the literal JSON body (with `{` and `}`) doesn't
+  # confuse the HEEx parser.
+  defp logs_curl_example(token) when is_binary(token) do
+    body = ~s([{"level":"info","message":"hello"}])
+
+    ~s(curl -X POST https://www.spectabas.com/c/logs -H "Authorization: Bearer #{token}" -H "Content-Type: application/json" -d '#{body}')
+  end
+
+  defp logs_curl_example(_), do: ""
 end

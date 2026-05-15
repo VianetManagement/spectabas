@@ -44,6 +44,14 @@ defmodule Spectabas.Sites.Site do
     # allow-rule on a specific string.
     field :seo_user_agent, :string
 
+    # Server log ingest (v6.10.53). Customers ship Render Log Streams
+    # (or other sources) to POST /c/logs with this token. Empty token
+    # = no ingest configured yet. Retention cap is 30 days in CH;
+    # this value clamps at query time.
+    field :logs_token, :string
+    field :logs_retention_days, :integer, default: 14
+    field :logs_enabled, :boolean, default: false
+
     timestamps(type: :utc_datetime)
   end
 
@@ -79,7 +87,10 @@ defmodule Spectabas.Sites.Site do
       :scraper_webhook_secret,
       :scraper_webhook_enabled,
       :seo_crawl_budget,
-      :seo_user_agent
+      :seo_user_agent,
+      :logs_token,
+      :logs_retention_days,
+      :logs_enabled
     ])
     |> validate_required([:name, :domain])
     |> validate_length(:name, max: 255)
@@ -91,6 +102,10 @@ defmodule Spectabas.Sites.Site do
       less_than_or_equal_to: 5000
     )
     |> validate_length(:seo_user_agent, max: 512)
+    |> validate_number(:logs_retention_days,
+      greater_than_or_equal_to: 1,
+      less_than_or_equal_to: 30
+    )
     |> validate_length(:currency, is: 3)
     |> validate_webhook_url()
     |> unique_constraint(:domain)
