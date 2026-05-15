@@ -65,6 +65,15 @@ defmodule SpectabasWeb.Admin.ChangelogLive do
 
   def entries do
     [
+      {"v6.10.51", "2026-05-15T10:00:00Z",
+       [
+         %{
+           title:
+             "Scrapers page UX cleanup post-cap-rule — default min_score 40, fix dropdown labels, add Capped badge",
+           description:
+             "Three small fixes to the `/scrapers` page that should have shipped alongside the v6.10.45 cap rule. The cap drops `[datacenter_asn, ip_rotation, spoofed_mobile_ua, no_referrer]` visitors from score 90 → 50 (moves them out of 'certain' tier into 'watching'). But the page's default filter was still `min_score: 60`, so capped visitors disappeared from the default view — making it look like newly-detected scrapers had dried up.\n\n**Default min_score 60 → 40.** Watching tier (40-69) is now where the canonical FP-pattern visitors live, so the default view should include them. Users who want a tighter view can switch to suspicious or certain in the dropdown.\n\n**Dropdown label fix.** Was `Score ≥ 60 (suspicious)` — but 60 is actually 'watching'; suspicious starts at 70. Now reads:\n- `Score ≥ 40 (watching)`\n- `Score ≥ 70 (suspicious)`\n- `Score ≥ 85 (certain)`\n\nMatches the tier labels in `ScraperDetector.verdict/1`.\n\n**Capped badge.** New blue 'Capped' badge appears next to the score column for rows where `datacenter_asn` fired but `systematic_crawl` did NOT, and the score is exactly 50. Hovering shows: 'Score was capped at 50 by the datacenter-asn-without-systematic-crawl rule (v6.10.45). Raw additive score would have been higher; the cap reduces FP on legitimate VPN / corporate-proxy visitors.' Makes the cap's effect visible at-a-glance so admins can see which visitors were affected.\n\nNot a behavior change — just makes the existing v6.10.45 behavior visible. 1009 tests still passing."
+         }
+       ]},
       {"v6.10.50", "2026-05-15T09:30:00Z",
        [
          %{

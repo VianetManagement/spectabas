@@ -29,7 +29,7 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
         |> assign(:site, site)
         |> assign(:user, user)
         |> assign(:date_range, "7d")
-        |> assign(:min_score, 60)
+        |> assign(:min_score, 40)
         |> assign(:modal_visitor, nil)
         |> assign(:modal_lifetime, nil)
         |> assign(:modal_24h, nil)
@@ -603,9 +603,9 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
                 name="min_score"
                 class="text-sm rounded-lg border-gray-300 py-1.5 pr-8"
               >
-                <option value="60" selected={@min_score == 60}>Score ≥ 60 (suspicious)</option>
+                <option value="40" selected={@min_score == 40}>Score ≥ 40 (watching)</option>
+                <option value="70" selected={@min_score == 70}>Score ≥ 70 (suspicious)</option>
                 <option value="85" selected={@min_score == 85}>Score ≥ 85 (certain)</option>
-                <option value="40" selected={@min_score == 40}>Score ≥ 40 (broader)</option>
               </select>
             </form>
             <nav class="flex gap-1 bg-gray-100 rounded-lg p-1">
@@ -886,12 +886,21 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
                     </div>
                   </td>
                   <td class="px-4 py-3">
-                    <span class={[
-                      "inline-flex items-center justify-center w-10 h-6 rounded text-xs font-bold",
-                      score_color(to_num(c["score"]))
-                    ]}>
-                      {c["score"]}
-                    </span>
+                    <div class="flex items-center gap-1.5">
+                      <span class={[
+                        "inline-flex items-center justify-center w-10 h-6 rounded text-xs font-bold",
+                        score_color(to_num(c["score"]))
+                      ]}>
+                        {c["score"]}
+                      </span>
+                      <span
+                        :if={capped?(c)}
+                        title="Score was capped at 50 by the datacenter-asn-without-systematic-crawl rule (v6.10.45). Raw additive score would have been higher; the cap reduces FP on legitimate VPN / corporate-proxy visitors. See settings → Scraper Detection if you want to disable."
+                        class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200"
+                      >
+                        Capped
+                      </span>
+                    </div>
                   </td>
                   <td class="px-4 py-3">
                     <div class="flex flex-wrap gap-1">
@@ -1596,6 +1605,27 @@ defmodule SpectabasWeb.Dashboard.ScrapersLive do
   defp signal_color(:no_referrer), do: "bg-gray-100 text-gray-700"
   defp signal_color(:suspicious_resolution), do: "bg-gray-100 text-gray-700"
   defp signal_color(_), do: "bg-gray-100 text-gray-700"
+
+  # Detect rows whose final score was clamped by the v6.10.45 cap rule:
+  # `datacenter_asn` fired AND `systematic_crawl` did NOT AND the score
+  # is exactly 50 (the cap). The raw additive score would have been
+  # higher (e.g. 90 for the canonical FP combo) — capped because the
+  # absence of systematic_crawl suggests the visitor isn't actually
+  # sweeping content, just happens to be on a datacenter IP.
+  defp capped?(%{"score" => score, "signals" => signals}) when is_list(signals) do
+    to_num(score) == 50 and signal_present?(signals, :datacenter_asn) and
+      not signal_present?(signals, :systematic_crawl)
+  end
+
+  defp capped?(_), do: false
+
+  # Signals come back as a list of atoms from ScraperDetector, but the
+  # CH adapter sometimes round-trips them as strings via JSON. Handle
+  # both so the badge doesn't silently fail to render.
+  defp signal_present?(signals, atom) do
+    str = Atom.to_string(atom)
+    Enum.any?(signals, fn s -> s == atom or s == str end)
+  end
 
   defp signal_label(:datacenter_asn), do: "Datacenter ASN"
   defp signal_label(:spoofed_mobile_ua), do: "Spoofed Mobile UA"
