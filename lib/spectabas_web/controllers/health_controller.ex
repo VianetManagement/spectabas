@@ -2598,6 +2598,66 @@ defmodule SpectabasWeb.HealthController do
               conn |> put_status(400) |> json(%{error: "site_id param required"})
           end
 
+        "render_logs_probe" ->
+          # Diagnostic for the Render Logs API ingest path. Test
+          # Connection only hits /v1/services — this calls /v1/logs
+          # for each configured service_id and dumps the raw response
+          # so we can see what Render is actually returning when no
+          # logs end up in CH. Pass `hours=N` to widen the window
+          # (default 1).
+          site_id = params["site_id"]
+          hours = String.to_integer(params["hours"] || "1")
+
+          case site_id && Spectabas.Repo.get(Spectabas.Sites.Site, site_id) do
+            nil ->
+              conn |> put_status(404) |> json(%{error: "site not found"})
+
+            %{render_service_ids: []} ->
+              json(conn, %{error: "no_service_ids_configured"})
+
+            site ->
+              start_time =
+                DateTime.utc_now()
+                |> DateTime.add(-hours * 3600, :second)
+                |> DateTime.to_iso8601()
+
+              per_service =
+                Enum.map(site.render_service_ids, fn sid ->
+                  case Spectabas.Logs.RenderAPI.list_logs(site, sid, start_time, limit: 5) do
+                    {:ok, %{logs: logs, next_start_time: next, has_more: more}} ->
+                      sample =
+                        case logs do
+                          [first | _] -> first
+                          _ -> nil
+                        end
+
+                      %{
+                        service_id: sid,
+                        ok: true,
+                        log_count: length(logs),
+                        has_more: more,
+                        next_start_time: next,
+                        sample: sample
+                      }
+
+                    {:error, reason} ->
+                      %{service_id: sid, ok: false, error: inspect(reason)}
+                  end
+                end)
+
+              json(conn, %{
+                site_id: site.id,
+                site_name: site.name,
+                owner_id: site.render_owner_id,
+                api_key_present: not is_nil(site.render_api_key_encrypted),
+                logs_enabled: site.logs_enabled,
+                cursors: site.render_log_cursors,
+                window_hours: hours,
+                start_time_used: start_time,
+                services: per_service
+              })
+          end
+
         "logs_diag" ->
           # Sanity probe for the v6.10.53 server-log ingest pipeline.
           # Returns per-site row counts + ingest rate + buffer state so
@@ -2635,7 +2695,7 @@ defmodule SpectabasWeb.HealthController do
           |> put_status(400)
           |> json(%{
             error:
-              "unknown action. use: status, cancel_worker, cancel_all_executing, refresh_geoip, snapshot_status, trigger_snapshots, snapshot_site_status, list_sites, logs_diag"
+              "unknown action. use: status, cancel_worker, cancel_all_executing, refresh_geoip, snapshot_status, trigger_snapshots, snapshot_site_status, list_sites, logs_diag, render_logs_probe"
           })
       end
     end
