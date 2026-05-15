@@ -1135,6 +1135,13 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
               </p>
 
               <div class="flex items-center gap-3 mb-3">
+                <%!-- The hidden "false" must come BEFORE the checkbox.
+                     Browsers serialize duplicate-named form fields in
+                     document order; the receiving Phoenix form parser
+                     keeps the LAST value. If hidden is after the
+                     checkbox, an ENABLED checkbox saves as false
+                     (the v6.10.53 bug). --%>
+                <input type="hidden" name="site[logs_enabled]" value="false" />
                 <label class="inline-flex items-center gap-2 text-sm text-gray-700">
                   <input
                     type="checkbox"
@@ -1142,9 +1149,7 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                     value="true"
                     checked={@site.logs_enabled}
                     class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <input type="hidden" name="site[logs_enabled]" value="false" />
-                  Enable log ingest for this site
+                  /> Enable log ingest for this site
                 </label>
               </div>
 
