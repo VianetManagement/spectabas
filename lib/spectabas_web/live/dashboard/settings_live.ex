@@ -112,6 +112,50 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
     end
   end
 
+  def handle_event("clear_render_api_key", _params, socket) do
+    case Sites.update_site(socket.assigns.site, %{"render_api_key_encrypted" => nil}) do
+      {:ok, site} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Render API key cleared. Paste a new key to reconnect.")
+         |> assign(:site, site)}
+
+      {:error, _} ->
+        {:noreply, put_flash(socket, :error, "Failed to clear key.")}
+    end
+  end
+
+  def handle_event("test_render_connection", _params, socket) do
+    site = socket.assigns.site
+
+    case Spectabas.AdIntegrations.Vault.decrypt(site.render_api_key_encrypted || "") do
+      key when is_binary(key) ->
+        case Spectabas.Logs.RenderAPI.verify_credentials(key, site.render_owner_id || "") do
+          :ok ->
+            {:noreply,
+             put_flash(socket, :info, "Render credentials look good — workspace is reachable.")}
+
+          {:error, :unauthorized} ->
+            {:noreply,
+             put_flash(socket, :error, "Render rejected the API key (401). Generate a new one.")}
+
+          {:error, :forbidden} ->
+            {:noreply,
+             put_flash(
+               socket,
+               :error,
+               "Workspace ID and API key don't match (403). Double-check both."
+             )}
+
+          {:error, reason} ->
+            {:noreply, put_flash(socket, :error, "Render check failed: #{inspect(reason)}")}
+        end
+
+      _ ->
+        {:noreply, put_flash(socket, :error, "No API key on file — save one first, then test.")}
+    end
+  end
+
   def handle_event("save_ai_config", params, socket) do
     site = socket.assigns.site
     existing = Spectabas.AI.Config.get(site)
@@ -1128,10 +1172,10 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
             <div :if={@settings_tab == "content"} class="border-t border-gray-200 pt-6">
               <h3 class="text-base font-medium text-gray-900 mb-2">Server logs</h3>
               <p class="text-xs text-gray-500 mb-3">
-                Ship server logs from Render and cross-reference them with your traffic data on the <.link
+                Pull server logs from Render and cross-reference them with your traffic data on the <.link
                   navigate={~p"/dashboard/sites/#{@site.id}"}
                   class="text-indigo-600 underline"
-                >Dashboard</.link>. Logs are stored for the retention period below and auto-deleted after. Render streams logs over <strong>TLS-secured syslog</strong>, not HTTPS — use the endpoint + token below in Render's Log Stream UI.
+                >Dashboard</.link>. Spectabas polls Render's REST Logs API every minute using the API key below — works on every Render plan including the free Hobby tier. Logs are stored for the retention period below and auto-deleted after.
               </p>
 
               <div class="flex items-center gap-3 mb-3">
@@ -1155,39 +1199,65 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
 
               <div :if={@site.logs_enabled} class="space-y-3">
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">
-                    Log Endpoint
+                  <label class="block text-sm font-medium text-gray-700">
+                    Render API key
                   </label>
-                  <code class="block px-3 py-2 bg-gray-100 rounded text-xs font-mono break-all">
-                    logs.spectabas.com:6514
-                  </code>
+                  <div :if={@site.render_api_key_encrypted} class="flex items-center gap-2 mt-1">
+                    <code class="flex-1 px-3 py-2 bg-gray-100 rounded text-xs font-mono">
+                      ••••••••••••••••••••••••••••••••
+                    </code>
+                    <button
+                      type="button"
+                      phx-click="clear_render_api_key"
+                      data-confirm="Clear the stored Render API key? You'll need to paste a new one."
+                      class="px-3 py-2 text-xs font-medium bg-gray-200 hover:bg-gray-300 text-gray-800 rounded"
+                    >
+                      Replace
+                    </button>
+                  </div>
+                  <input
+                    :if={!@site.render_api_key_encrypted}
+                    type="password"
+                    name="site[render_api_key]"
+                    placeholder="rnd_..."
+                    autocomplete="off"
+                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5 font-mono text-xs"
+                  />
                   <p class="text-[10px] text-gray-400 mt-1">
-                    TLS-secured syslog (RFC 5424). Paste this into Render's
-                    <strong>Log Endpoint</strong>
-                    field.
+                    Render Dashboard → Account Settings → API Keys → <strong>Create API Key</strong>. Render doesn't offer scoped keys — this key has full workspace access, so create one dedicated to Spectabas.
                   </p>
                 </div>
 
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">
-                    Token
+                  <label class="block text-sm font-medium text-gray-700">
+                    Workspace ID
                   </label>
-                  <div class="flex items-center gap-2">
-                    <code class="flex-1 px-3 py-2 bg-gray-100 rounded text-xs font-mono break-all">
-                      {if @site.logs_token, do: @site.logs_token, else: "(not generated)"}
-                    </code>
-                    <button
-                      type="button"
-                      phx-click="regenerate_logs_token"
-                      data-confirm="Regenerate the logs token? Any log shippers using the old token will break."
-                      class="px-3 py-2 text-xs font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded"
-                    >
-                      {if @site.logs_token, do: "Regenerate", else: "Generate"}
-                    </button>
-                  </div>
+                  <input
+                    type="text"
+                    name="site[render_owner_id]"
+                    value={@site.render_owner_id}
+                    placeholder="tea-..."
+                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5 font-mono text-xs"
+                  />
                   <p class="text-[10px] text-gray-400 mt-1">
-                    Paste this into Render's <strong>Token</strong>
-                    field. Treat it like a password — anyone with it can write logs to your site.
+                    Render Dashboard → Account Settings → General. Starts with <code>tea-</code>
+                    (team) or <code>usr-</code>
+                    (personal).
+                  </p>
+                </div>
+
+                <div>
+                  <label class="block text-sm font-medium text-gray-700">
+                    Service IDs
+                  </label>
+                  <textarea
+                    name="site[render_service_ids_text]"
+                    rows="3"
+                    placeholder="srv-abc123&#10;srv-def456"
+                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5 font-mono text-xs"
+                  ><%= Enum.join(@site.render_service_ids || [], "\n") %></textarea>
+                  <p class="text-[10px] text-gray-400 mt-1">
+                    One per line. Each Render service whose logs you want pulled into Spectabas. Found in the service's URL or settings page.
                   </p>
                 </div>
 
@@ -1204,34 +1274,44 @@ defmodule SpectabasWeb.Dashboard.SettingsLive do
                     class="mt-1 block w-32 rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-3 py-2.5"
                   />
                   <p class="text-[10px] text-gray-400 mt-1">
-                    1-30 days. CH auto-deletes older log rows.
+                    1-30 days. ClickHouse auto-deletes older log rows.
                   </p>
                 </div>
 
                 <div
-                  :if={@site.logs_token}
-                  class="bg-blue-50 border border-blue-200 rounded p-3 text-xs text-blue-900"
+                  :if={@site.render_api_key_encrypted && @site.render_owner_id}
+                  class="flex items-center gap-3"
                 >
-                  <p class="font-medium mb-2">Render setup:</p>
+                  <button
+                    type="button"
+                    phx-click="test_render_connection"
+                    class="px-3 py-2 text-xs font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded"
+                  >
+                    Test connection
+                  </button>
+                  <span class="text-[11px] text-gray-500">
+                    Verifies the API key + workspace ID against Render's API. Doesn't fetch any logs.
+                  </span>
+                </div>
+
+                <div class="bg-blue-50 border border-blue-200 rounded p-3 text-xs text-blue-900">
+                  <p class="font-medium mb-2">Setup steps:</p>
                   <ol class="list-decimal list-inside space-y-1 ml-1">
                     <li>
-                      Render dashboard → your service → <strong>Logs</strong>
-                      tab → <strong>Add Log Stream</strong>
-                      (top-right).
+                      Render Dashboard → Account Settings → API Keys → <strong>Create API Key</strong>. Copy it once (only shown on create). Paste above.
                     </li>
                     <li>
-                      <strong>Log Endpoint:</strong>
-                      <code class="bg-blue-100 px-1 rounded">logs.spectabas.com:6514</code>
+                      Render Dashboard → Account Settings → General → copy your
+                      <strong>Workspace ID</strong>
+                      (<code>tea-...</code>). Paste above.
                     </li>
                     <li>
-                      <strong>Token:</strong>
-                      <code class="bg-blue-100 px-1 rounded break-all">{@site.logs_token}</code>
+                      For each Render service whose logs you want ingested, copy its
+                      <strong>Service ID</strong>
+                      (<code>srv-...</code>) from the service settings or URL. List one per line above.
                     </li>
-                    <li>Save. Logs start flowing within a minute.</li>
+                    <li>Save. Logs start flowing within 1 minute.</li>
                   </ol>
-                  <p class="mt-2 text-[11px]">
-                    Render encrypts the connection with TLS and routes the token through the syslog message — no Authorization header needed.
-                  </p>
                 </div>
               </div>
             </div>

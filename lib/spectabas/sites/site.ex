@@ -44,13 +44,26 @@ defmodule Spectabas.Sites.Site do
     # allow-rule on a specific string.
     field :seo_user_agent, :string
 
-    # Server log ingest (v6.10.53). Customers ship Render Log Streams
-    # (or other sources) to POST /c/logs with this token. Empty token
-    # = no ingest configured yet. Retention cap is 30 days in CH;
-    # this value clamps at query time.
+    # Server log ingest (v6.10.53). `logs_token` is the per-site
+    # bearer for the legacy HTTPS endpoint (POST /c/logs); kept for
+    # non-Render shippers (Vector, Fluent Bit). Render customers use
+    # the API-polling path below instead.
     field :logs_token, :string
     field :logs_retention_days, :integer, default: 14
     field :logs_enabled, :boolean, default: false
+
+    # Render Logs API polling (v6.10.55). Customer provides a Render
+    # API key + workspace (owner) ID + a list of service IDs to ingest
+    # from. `render_log_cursors` is a JSONB map of
+    # `service_id => last_timestamp_iso8601` used as the high-water-
+    # mark on each poll so we don't re-ingest old lines.
+    field :render_api_key_encrypted, :binary
+    field :render_owner_id, :string
+    field :render_service_ids, {:array, :string}, default: []
+    field :render_log_cursors, :map, default: %{}
+    # Virtual — the plaintext API key submitted by the form. Encrypted
+    # into `render_api_key_encrypted` on changeset save; never read back.
+    field :render_api_key, :string, virtual: true
 
     timestamps(type: :utc_datetime)
   end
@@ -90,7 +103,10 @@ defmodule Spectabas.Sites.Site do
       :seo_user_agent,
       :logs_token,
       :logs_retention_days,
-      :logs_enabled
+      :logs_enabled,
+      :render_api_key,
+      :render_owner_id,
+      :render_service_ids
     ])
     |> validate_required([:name, :domain])
     |> validate_length(:name, max: 255)
@@ -108,8 +124,44 @@ defmodule Spectabas.Sites.Site do
     )
     |> validate_length(:currency, is: 3)
     |> validate_webhook_url()
+    |> validate_render_owner_id()
+    |> encrypt_render_api_key()
     |> unique_constraint(:domain)
     |> unique_constraint(:public_key)
+  end
+
+  defp validate_render_owner_id(changeset) do
+    case get_field(changeset, :render_owner_id) do
+      nil ->
+        changeset
+
+      "" ->
+        changeset
+
+      id ->
+        if String.starts_with?(id, "tea-") or String.starts_with?(id, "usr-") do
+          changeset
+        else
+          add_error(changeset, :render_owner_id, "must start with 'tea-' or 'usr-'")
+        end
+    end
+  end
+
+  defp encrypt_render_api_key(changeset) do
+    case get_change(changeset, :render_api_key) do
+      nil ->
+        changeset
+
+      "" ->
+        changeset
+
+      raw ->
+        put_change(
+          changeset,
+          :render_api_key_encrypted,
+          Spectabas.AdIntegrations.Vault.encrypt(raw)
+        )
+    end
   end
 
   defp validate_webhook_url(changeset) do

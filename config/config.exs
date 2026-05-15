@@ -115,7 +115,11 @@ config :spectabas, Oban,
        {"30 * * * *", Spectabas.Workers.FunnelStatsSnapshot},
        # Hourly at :35 — snapshot dashboard page data (outbound, downloads, events,
        # site search, bot traffic, acquisition, ecommerce) into Postgres
-       {"35 * * * *", Spectabas.Workers.DashboardSnapshot}
+       {"35 * * * *", Spectabas.Workers.DashboardSnapshot},
+       # Every minute — poll Render's Logs API for each site with
+       # logs_enabled + Render credentials. Worker fans out per-site,
+       # one bad site doesn't block the others.
+       {"* * * * *", Spectabas.Workers.RenderLogPoller}
      ]}
   ]
 

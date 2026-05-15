@@ -236,6 +236,17 @@ defmodule Spectabas.Sites do
   end
 
   @doc """
+  Update only the render_log_cursors JSONB on a site. Called by the
+  poller after a successful fetch so cursors persist without running
+  the full site changeset (no validation needed, no audit log noise).
+  """
+  def update_render_cursors(%Site{} = site, cursors) when is_map(cursors) do
+    site
+    |> Ecto.Changeset.change(render_log_cursors: cursors)
+    |> Repo.update()
+  end
+
+  @doc """
   Delete a site and remove it from the domain cache.
   """
   def delete_site(admin, %Site{} = site) do
@@ -304,13 +315,15 @@ defmodule Spectabas.Sites do
     |> maybe_parse_list("scraper_content_prefixes_text", "scraper_content_prefixes")
     |> maybe_parse_list("journey_conversion_pages_text", "journey_conversion_pages")
     |> maybe_parse_list("search_query_params_text", "search_query_params")
+    |> maybe_parse_list("render_service_ids_text", "render_service_ids")
     |> Map.drop([
       "cross_domain_sites_text",
       "ip_allowlist_text",
       "ip_blocklist_text",
       "scraper_content_prefixes_text",
       "journey_conversion_pages_text",
-      "search_query_params_text"
+      "search_query_params_text",
+      "render_service_ids_text"
     ])
   end
 
