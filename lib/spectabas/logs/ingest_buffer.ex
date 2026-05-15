@@ -132,12 +132,24 @@ defmodule Spectabas.Logs.IngestBuffer do
 
   defp spawn_flush(rows) do
     Task.Supervisor.start_child(Spectabas.IngestFlushSupervisor, fn ->
+      # ClickHouse.insert/2 returns :ok on success, {:error, _} on
+      # failure. v6.10.57 fix: previous version matched {:ok, _} and
+      # logged every successful insert as a failure (which is what
+      # made it impossible to tell if logs were actually landing in CH).
       case Logs.insert_batch(rows) do
+        :ok ->
+          :ok
+
         {:ok, _} ->
           :ok
 
+        {:error, reason} ->
+          Logger.warning(
+            "[LogsBuffer] CH insert failed: #{inspect(reason) |> String.slice(0, 300)} (#{length(rows)} rows)"
+          )
+
         other ->
-          Logger.warning("[LogsBuffer] insert failed: #{inspect(other)} (#{length(rows)} rows)")
+          Logger.warning("[LogsBuffer] unexpected insert result: #{inspect(other)}")
       end
     end)
   end

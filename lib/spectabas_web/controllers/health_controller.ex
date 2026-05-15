@@ -2598,6 +2598,48 @@ defmodule SpectabasWeb.HealthController do
               conn |> put_status(400) |> json(%{error: "site_id param required"})
           end
 
+        "render_force_poll" ->
+          # Runs Spectabas.Logs.RenderPoller.poll_site/1 synchronously
+          # for one site and returns the result. Optional `reset=1` to
+          # wipe cursors first so the next poll starts from now-60s.
+          site_id = params["site_id"]
+          reset = params["reset"] == "1"
+
+          case site_id && Spectabas.Repo.get(Spectabas.Sites.Site, site_id) do
+            nil ->
+              conn |> put_status(404) |> json(%{error: "site not found"})
+
+            site ->
+              site =
+                if reset do
+                  {:ok, s} = Spectabas.Sites.update_render_cursors(site, %{})
+                  s
+                else
+                  site
+                end
+
+              before_count = log_count_for_site(site.id)
+              result = Spectabas.Logs.RenderPoller.poll_site(site)
+              # Force a buffer flush so rows hit CH immediately.
+              Spectabas.Logs.IngestBuffer.flush()
+              # Give the async flush a moment to land.
+              Process.sleep(2000)
+              after_count = log_count_for_site(site.id)
+
+              reloaded = Spectabas.Repo.get(Spectabas.Sites.Site, site.id)
+
+              json(conn, %{
+                site_id: site.id,
+                reset_cursors: reset,
+                poll_result: inspect(result),
+                ch_rows_before: before_count,
+                ch_rows_after: after_count,
+                rows_inserted: after_count - before_count,
+                cursors_after: reloaded.render_log_cursors,
+                buffer_size_now: Spectabas.Logs.IngestBuffer.buffer_size()
+              })
+          end
+
         "render_logs_probe" ->
           # Diagnostic for the Render Logs API ingest path. Test
           # Connection only hits /v1/services — this calls /v1/logs
@@ -2703,6 +2745,22 @@ defmodule SpectabasWeb.HealthController do
 
   def oban_admin(conn, _params) do
     conn |> put_status(403) |> json(%{error: "forbidden"})
+  end
+
+  defp log_count_for_site(site_id) do
+    sql =
+      "SELECT count() AS c FROM server_logs WHERE site_id = #{Spectabas.ClickHouse.param(site_id)}"
+
+    case Spectabas.ClickHouse.query(sql) do
+      {:ok, [%{"c" => c}]} ->
+        case Integer.parse(to_string(c)) do
+          {n, _} -> n
+          _ -> 0
+        end
+
+      _ ->
+        0
+    end
   end
 
   defp snapshot_table_summary(table) do

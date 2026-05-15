@@ -9,10 +9,16 @@ defmodule Spectabas.Logs.RenderPoller do
 
   Each `(site, service_id)` pair has a high-water-mark stored in
   `sites.render_log_cursors` (JSONB map keyed by service ID). On each
-  poll we fetch logs from that cursor forward, and after a successful
-  pull update the cursor to the `nextStartTime` Render returned. If
-  there's no cursor yet (newly-configured site), we start from
-  `now() - 60s` so the first poll doesn't try to drain backlog.
+  poll we fetch logs from that cursor forward, then advance the
+  cursor to **the newest log timestamp in the response + 1µs**. If
+  the response is empty we leave the cursor alone and re-try the
+  same window next minute. If there's no cursor yet (newly-configured
+  site) we start from `now() - 60s`.
+
+  Render's response has a `nextStartTime` field, but it's for
+  **backward pagination within the same window** (fetch older logs),
+  not forward progression — using it as the cursor caused v6.10.55's
+  silent-stuck-cursor bug fixed in v6.10.57.
 
   ## When this runs
 
@@ -44,11 +50,20 @@ defmodule Spectabas.Logs.RenderPoller do
         start_time = Map.get(curs, service_id) || initial_start_time()
 
         case RenderAPI.list_logs(site, service_id, start_time) do
-          {:ok, %{logs: logs, next_start_time: next}} ->
+          {:ok, %{logs: logs}} ->
             rows = Enum.map(logs, &log_to_row(&1, site.id))
             push_rows(rows)
 
-            new_cursor = next || latest_timestamp(logs) || start_time
+            # Advance cursor to (newest log timestamp + 1µs) so the
+            # next poll skips logs we already ingested. If the batch
+            # was empty, leave the cursor alone — we'll retry the
+            # same window next minute.
+            new_cursor =
+              case latest_timestamp(logs) do
+                nil -> Map.get(curs, service_id) || start_time
+                ts -> bump_microsecond(ts)
+              end
+
             {Map.put(curs, service_id, new_cursor), total + length(logs)}
 
           {:error, reason} ->
@@ -139,5 +154,12 @@ defmodule Spectabas.Logs.RenderPoller do
     |> Enum.map(& &1["timestamp"])
     |> Enum.reject(&is_nil/1)
     |> Enum.max(fn -> nil end)
+  end
+
+  defp bump_microsecond(ts) when is_binary(ts) do
+    case DateTime.from_iso8601(ts) do
+      {:ok, dt, _} -> dt |> DateTime.add(1, :microsecond) |> DateTime.to_iso8601()
+      _ -> ts
+    end
   end
 end
