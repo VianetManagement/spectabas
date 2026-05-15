@@ -66,7 +66,13 @@ defmodule Spectabas.SEO.HeadlessClient do
            html: html,
            status_code: Map.get(b, "status_code", 200),
            response_time_ms: Map.get(b, "response_time_ms", elapsed),
-           final_url: Map.get(b, "final_url", url)
+           final_url: Map.get(b, "final_url", url),
+           # v6.10.52: performance field is %{nav, paint, lcp_ms,
+           # resources} as captured by the sidecar's page.evaluate.
+           # Older sidecars return nil here — `SEO.parse_and_score`
+           # treats missing perf data as "no data, skip the perf
+           # rules" rather than failing.
+           performance: Map.get(b, "performance")
          }}
 
       {:ok, %{status: s, body: b}} ->

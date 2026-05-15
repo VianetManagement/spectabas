@@ -42,6 +42,10 @@ defmodule Spectabas.SEO.PageAudit do
     field :issues, :map, default: %{}
     field :error, :string
 
+    # v6.10.52: richer audit payload — perf timing, heading tree,
+    # viewport, twitter card, lang, https, etc. See moduledoc.
+    field :extras, :map, default: %{}
+
     timestamps(type: :utc_datetime_usec)
   end
 
@@ -51,7 +55,7 @@ defmodule Spectabas.SEO.PageAudit do
     title meta_description h1 h1_count canonical
     og_title og_description og_image schema_types meta_robots
     word_count internal_link_count external_link_count image_count image_alt_count
-    score issues error
+    score issues error extras
   )a
 
   def changeset(audit, attrs) do

@@ -8,6 +8,7 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
   import SpectabasWeb.Dashboard.SidebarComponent
   import Spectabas.TypeHelpers
   import SpectabasWeb.Dashboard.DateHelpers
+  import SpectabasWeb.SEOAuditDetail
 
   @impl true
   def mount(%{"site_id" => site_id} = params, _session, socket) do
@@ -893,89 +894,14 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
             </div>
 
             <div :if={!is_nil(@seo_audit)} class="space-y-4">
-              <%!-- Score + summary --%>
-              <div class="flex items-center gap-4 flex-wrap">
-                <span class={[
-                  "inline-flex items-center justify-center px-4 py-2 rounded-lg text-2xl font-bold tabular-nums",
-                  seo_score_class(@seo_audit)
-                ]}>
-                  {seo_score_display(@seo_audit)}
-                </span>
-                <div class="flex-1 min-w-0">
-                  <p class="text-sm text-gray-700">{seo_summary_line(@seo_audit)}</p>
-                  <p class="text-xs text-gray-400 mt-0.5">
-                    Audited {format_audit_relative(@seo_audit.captured_at)}
-                    <span :if={@seo_audit.response_time_ms}>
-                      · response {format_audit_response(@seo_audit.response_time_ms)}
-                    </span>
-                  </p>
-                </div>
-              </div>
-
-              <%!-- Error panel (only when fetch failed) --%>
-              <div
-                :if={@seo_audit.error}
-                class="bg-rose-50 border border-rose-200 rounded p-3"
-              >
-                <p class="text-xs font-semibold text-rose-900 mb-1">Fetch error</p>
-                <p class="text-xs text-rose-800 font-mono break-all">{@seo_audit.error}</p>
-              </div>
-
-              <%!-- Issues list --%>
-              <div :if={seo_issues(@seo_audit) != []}>
-                <p class="text-xs font-semibold text-gray-700 mb-2">Issues to fix</p>
-                <ul class="space-y-1.5">
-                  <li
-                    :for={issue <- seo_issues(@seo_audit)}
-                    class={[
-                      "border-l-4 pl-3 py-1 text-xs",
-                      case issue["severity"] do
-                        "critical" -> "border-rose-500 bg-rose-50"
-                        "major" -> "border-amber-500 bg-amber-50"
-                        _ -> "border-gray-300 bg-gray-50"
-                      end
-                    ]}
-                  >
-                    <span class="font-semibold uppercase tracking-wide text-[10px] text-gray-500 mr-2">
-                      {issue["severity"]}
-                    </span>
-                    {issue["message"]}
-                  </li>
-                </ul>
-              </div>
-
-              <div
-                :if={seo_issues(@seo_audit) == [] and !@seo_audit.error}
-                class="text-xs text-emerald-700"
-              >
-                ✓ No issues detected.
-              </div>
-
-              <%!-- Page metadata at a glance --%>
-              <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs pt-3 border-t border-gray-100">
-                <div>
-                  <p class="text-gray-500">Title length</p>
-                  <p class="text-gray-900 tabular-nums">
-                    {if @seo_audit.title, do: String.length(@seo_audit.title), else: "—"}
-                  </p>
-                </div>
-                <div>
-                  <p class="text-gray-500">Meta length</p>
-                  <p class="text-gray-900 tabular-nums">
-                    {if @seo_audit.meta_description,
-                      do: String.length(@seo_audit.meta_description),
-                      else: "—"}
-                  </p>
-                </div>
-                <div>
-                  <p class="text-gray-500">Word count</p>
-                  <p class="text-gray-900 tabular-nums">{@seo_audit.word_count || "—"}</p>
-                </div>
-                <div>
-                  <p class="text-gray-500">Image alt coverage</p>
-                  <p class="text-gray-900 tabular-nums">{seo_alt_pct(@seo_audit)}</p>
-                </div>
-              </div>
+              <.audit_summary audit={@seo_audit} />
+              <.audit_error_panel audit={@seo_audit} />
+              <.audit_issues audit={@seo_audit} />
+              <.audit_performance audit={@seo_audit} />
+              <.audit_slowest_resources audit={@seo_audit} />
+              <.audit_resource_breakdown audit={@seo_audit} />
+              <.audit_headings audit={@seo_audit} />
+              <.audit_metadata audit={@seo_audit} />
             </div>
           </div>
         </div>
@@ -1197,78 +1123,4 @@ defmodule SpectabasWeb.Dashboard.TransitionsLive do
 
   defp format_hour(h) when h < 10, do: "0#{h}"
   defp format_hour(h), do: "#{h}"
-
-  # ---- SEO panel helpers ----
-
-  defp seo_score_class(%{error: e}) when is_binary(e) and e != "",
-    do: "bg-gray-200 text-gray-700"
-
-  defp seo_score_class(%{score: nil}), do: "bg-gray-100 text-gray-500"
-
-  defp seo_score_class(%{score: s}) when is_integer(s) do
-    cond do
-      s >= 80 -> "bg-emerald-100 text-emerald-800"
-      s >= 60 -> "bg-amber-100 text-amber-800"
-      true -> "bg-rose-100 text-rose-800"
-    end
-  end
-
-  defp seo_score_display(%{error: e}) when is_binary(e) and e != "", do: "Failed"
-  defp seo_score_display(%{score: nil}), do: "—"
-  defp seo_score_display(%{score: s}), do: to_string(s)
-
-  defp seo_issues(%{issues: %{"items" => items}}) when is_list(items), do: items
-  defp seo_issues(_), do: []
-
-  defp seo_summary_line(%{error: e}) when is_binary(e) and e != "" do
-    "Fetch failed — see error below."
-  end
-
-  defp seo_summary_line(audit) do
-    items = seo_issues(audit)
-
-    case items do
-      [] ->
-        "No SEO issues detected."
-
-      _ ->
-        breakdown = Enum.frequencies_by(items, &Map.get(&1, "severity"))
-        crit = Map.get(breakdown, "critical", 0)
-        major = Map.get(breakdown, "major", 0)
-        minor = Map.get(breakdown, "minor", 0)
-
-        parts =
-          [
-            crit > 0 && "#{crit} critical",
-            major > 0 && "#{major} major",
-            minor > 0 && "#{minor} minor"
-          ]
-          |> Enum.filter(&is_binary/1)
-
-        Enum.join(parts, ", ") <> " — fix these to improve your score."
-    end
-  end
-
-  defp format_audit_relative(nil), do: "—"
-
-  defp format_audit_relative(dt) do
-    diff = DateTime.diff(DateTime.utc_now(), dt, :second)
-
-    cond do
-      diff < 60 -> "just now"
-      diff < 3600 -> "#{div(diff, 60)}m ago"
-      diff < 86_400 -> "#{div(diff, 3600)}h ago"
-      true -> "#{div(diff, 86_400)}d ago"
-    end
-  end
-
-  defp format_audit_response(nil), do: "—"
-  defp format_audit_response(ms) when ms < 1000, do: "#{ms}ms"
-  defp format_audit_response(ms), do: "#{Float.round(ms / 1000, 1)}s"
-
-  defp seo_alt_pct(%{image_count: ic, image_alt_count: ac}) when is_integer(ic) and ic > 0 do
-    "#{round(ac / ic * 100)}% (#{ac}/#{ic})"
-  end
-
-  defp seo_alt_pct(_), do: "—"
 end

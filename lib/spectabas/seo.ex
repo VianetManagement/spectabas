@@ -226,6 +226,7 @@ defmodule Spectabas.SEO do
 
       %{html: html} = r ->
         parsed = parse_html(html, url)
+        extras = build_extras(html, url, parsed, Map.get(r, :performance))
 
         Map.merge(base, %{
           status_code: Map.get(r, :status_code, 200),
@@ -246,10 +247,83 @@ defmodule Spectabas.SEO do
           internal_link_count: parsed.internal_link_count,
           external_link_count: parsed.external_link_count,
           image_count: parsed.image_count,
-          image_alt_count: parsed.image_alt_count
+          image_alt_count: parsed.image_alt_count,
+          extras: extras
         })
         |> score()
     end
+  end
+
+  defp build_extras(html, url, _parsed, performance) do
+    doc =
+      case Floki.parse_document(html) do
+        {:ok, d} -> d
+        _ -> []
+      end
+
+    %{
+      "performance" => performance,
+      "headings" => extract_heading_hierarchy(doc),
+      "viewport_meta" => meta_content_str(doc, "viewport"),
+      "lang_attribute" => extract_lang_attr(doc),
+      "twitter_card" => extract_twitter_card(doc),
+      "https" => String.starts_with?(url, "https://"),
+      "html_size_bytes" => byte_size(html)
+    }
+  end
+
+  defp extract_heading_hierarchy(doc) do
+    %{
+      "h1" => doc |> Floki.find("h1") |> Enum.map(&Floki.text/1) |> Enum.map(&String.trim/1),
+      "h2" => doc |> Floki.find("h2") |> Enum.map(&Floki.text/1) |> Enum.map(&String.trim/1),
+      "h3" => doc |> Floki.find("h3") |> Enum.map(&Floki.text/1) |> Enum.map(&String.trim/1)
+    }
+  end
+
+  defp meta_content_str(doc, name) do
+    Floki.find(doc, "meta[name='#{name}']")
+    |> first_attr_or_empty("content")
+  end
+
+  defp first_attr_or_empty([], _key), do: ""
+
+  defp first_attr_or_empty([{_tag, attrs, _} | _], key) do
+    # CAREFUL: Enum.find_value treats "" as truthy, so a non-matching
+    # branch must return `nil`, not `""`. The fallback (3rd arg)
+    # supplies the "" only when no attr matched at all.
+    Enum.find_value(attrs, "", fn
+      {^key, v} -> v
+      _ -> nil
+    end)
+  end
+
+  defp first_attr_or_empty(_, _), do: ""
+
+  defp extract_lang_attr(doc) do
+    case Floki.find(doc, "html") do
+      [{_tag, attrs, _} | _] ->
+        Enum.find_value(attrs, "", fn
+          {"lang", v} -> v
+          _ -> nil
+        end) || ""
+
+      _ ->
+        ""
+    end
+  end
+
+  defp extract_twitter_card(doc) do
+    %{
+      "card" => meta_named(doc, "twitter:card"),
+      "title" => meta_named(doc, "twitter:title"),
+      "description" => meta_named(doc, "twitter:description"),
+      "image" => meta_named(doc, "twitter:image")
+    }
+  end
+
+  defp meta_named(doc, name) do
+    Floki.find(doc, "meta[name='#{name}']")
+    |> first_attr_or_empty("content")
   end
 
   @doc """
@@ -417,16 +491,50 @@ defmodule Spectabas.SEO do
         |> String.trim()
 
       case Jason.decode(raw) do
-        {:ok, data} -> data |> List.wrap() |> Enum.flat_map(&schema_type_of/1)
+        {:ok, data} -> walk_for_types(data)
         _ -> []
       end
     end)
     |> Enum.uniq()
   end
 
-  defp schema_type_of(%{"@type" => t}) when is_binary(t), do: [t]
-  defp schema_type_of(%{"@type" => list}) when is_list(list), do: list
-  defp schema_type_of(_), do: []
+  # Recursively walk a decoded JSON-LD blob and collect every @type
+  # value at any depth. Handles three common envelopes:
+  #
+  # 1. Bare entity: `{"@type": "Product"}`
+  # 2. Array root: `[{"@type": "Article"}, {"@type": "BreadcrumbList"}]`
+  # 3. @graph wrapper (Yoast/RankMath/Shopify/most modern CMSes):
+  #    `{"@context": "...", "@graph": [{"@type": "Product"}, ...]}`
+  # 4. Nested types in fields like `offers`, `aggregateRating`,
+  #    `mainEntityOfPage`, etc.
+  #
+  # Pre-v6.10.52 only checked top-level @type and missed every page
+  # using @graph or nested entities.
+  defp walk_for_types(data) when is_list(data) do
+    Enum.flat_map(data, &walk_for_types/1)
+  end
+
+  defp walk_for_types(data) when is_map(data) do
+    type_here =
+      case Map.get(data, "@type") do
+        t when is_binary(t) -> [t]
+        list when is_list(list) -> list
+        _ -> []
+      end
+
+    nested =
+      data
+      |> Map.values()
+      |> Enum.flat_map(fn
+        v when is_map(v) -> walk_for_types(v)
+        v when is_list(v) -> walk_for_types(v)
+        _ -> []
+      end)
+
+    type_here ++ nested
+  end
+
+  defp walk_for_types(_), do: []
 
   defp word_count(doc) do
     doc
@@ -454,9 +562,135 @@ defmodule Spectabas.SEO do
     {points, issues} = check_og_image(points, issues, attrs)
     {points, issues} = check_schema(points, issues, attrs)
     {points, issues} = check_title_eq_h1(points, issues, attrs)
+    {points, issues} = check_https(points, issues, attrs)
+    {points, issues} = check_viewport(points, issues, attrs)
+    {points, issues} = check_lang_attr(points, issues, attrs)
+    {points, issues} = check_lcp(points, issues, attrs)
+    {points, issues} = check_page_weight(points, issues, attrs)
+    {points, issues} = check_request_count(points, issues, attrs)
+    {points, issues} = check_heading_hierarchy(points, issues, attrs)
 
     Map.merge(attrs, %{score: max(points, 0), issues: %{"items" => Enum.reverse(issues)}})
   end
+
+  defp check_https(points, issues, %{extras: %{"https" => false}}),
+    do: critical(points, issues, "no_https", "Page is served over HTTP, not HTTPS")
+
+  defp check_https(points, issues, _), do: {points, issues}
+
+  defp check_viewport(points, issues, %{extras: %{"viewport_meta" => v}}) when v in [nil, ""],
+    do:
+      critical(
+        points,
+        issues,
+        "missing_viewport",
+        "Missing <meta name=\"viewport\"> — page won't be mobile-friendly"
+      )
+
+  defp check_viewport(points, issues, _), do: {points, issues}
+
+  defp check_lang_attr(points, issues, %{extras: %{"lang_attribute" => v}}) when v in [nil, ""],
+    do: minor(points, issues, "missing_lang", "Missing <html lang=\"…\"> attribute")
+
+  defp check_lang_attr(points, issues, _), do: {points, issues}
+
+  defp check_lcp(points, issues, %{extras: %{"performance" => %{"lcp_ms" => lcp}}})
+       when is_integer(lcp) and lcp > 4000,
+       do:
+         major(
+           points,
+           issues,
+           "poor_lcp",
+           "LCP is #{lcp}ms (poor; Google flags > 4000ms). Optimize largest image / hero render."
+         )
+
+  defp check_lcp(points, issues, %{extras: %{"performance" => %{"lcp_ms" => lcp}}})
+       when is_integer(lcp) and lcp > 2500,
+       do:
+         minor(
+           points,
+           issues,
+           "needs_improvement_lcp",
+           "LCP is #{lcp}ms (needs improvement; Google's good threshold is < 2500ms)"
+         )
+
+  defp check_lcp(points, issues, _), do: {points, issues}
+
+  defp check_page_weight(points, issues, %{
+         extras: %{"performance" => %{"resources" => resources}}
+       })
+       when is_list(resources) do
+    total = resources |> Enum.map(&Map.get(&1, "transfer_size", 0)) |> Enum.sum()
+
+    cond do
+      total > 5_000_000 ->
+        mb = Float.round(total / 1_048_576, 1)
+
+        major(
+          points,
+          issues,
+          "page_too_heavy",
+          "Page transfer is #{mb}MB (recommended < 3MB). Compress images, defer scripts, audit third-party tags."
+        )
+
+      total > 3_000_000 ->
+        mb = Float.round(total / 1_048_576, 1)
+
+        minor(
+          points,
+          issues,
+          "page_heavy",
+          "Page transfer is #{mb}MB (recommended < 3MB)."
+        )
+
+      true ->
+        {points, issues}
+    end
+  end
+
+  defp check_page_weight(points, issues, _), do: {points, issues}
+
+  defp check_request_count(points, issues, %{
+         extras: %{"performance" => %{"resources" => resources}}
+       })
+       when is_list(resources) do
+    n = length(resources)
+
+    cond do
+      n > 100 ->
+        minor(
+          points,
+          issues,
+          "many_requests",
+          "Page fires #{n} resource requests (recommended < 80). Bundle scripts, consolidate icons."
+        )
+
+      true ->
+        {points, issues}
+    end
+  end
+
+  defp check_request_count(points, issues, _), do: {points, issues}
+
+  defp check_heading_hierarchy(points, issues, %{
+         extras: %{"headings" => %{"h1" => h1s, "h2" => h2s, "h3" => h3s}}
+       })
+       when is_list(h1s) and is_list(h2s) and is_list(h3s) do
+    cond do
+      length(h1s) == 1 and length(h3s) > 0 and length(h2s) == 0 ->
+        minor(
+          points,
+          issues,
+          "heading_hierarchy_gap",
+          "Page has H1 and H3 headings but no H2 — skipped a level."
+        )
+
+      true ->
+        {points, issues}
+    end
+  end
+
+  defp check_heading_hierarchy(points, issues, _), do: {points, issues}
 
   defp critical(points, issues, code, message),
     do:

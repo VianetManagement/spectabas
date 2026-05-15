@@ -75,6 +75,59 @@ defmodule Spectabas.SEOTest do
       assert result.h1_count == 2
     end
 
+    test "extracts schema types from @graph wrapper (Yoast/RankMath/most CMS sites)" do
+      # The canonical "modern WordPress" JSON-LD pattern. Pre-v6.10.52
+      # parser only checked top-level @type and missed everything inside
+      # the @graph array. Real example shape from puppies.com listings.
+      html = """
+      <html><head>
+        <script type="application/ld+json">
+        {
+          "@context": "https://schema.org",
+          "@graph": [
+            {"@type": "Product", "name": "Spruce", "offers": {"@type": "Offer", "price": "1500"}},
+            {"@type": "BreadcrumbList", "itemListElement": []},
+            {"@type": "WebPage", "url": "https://example.com/listings/spruce"}
+          ]
+        }
+        </script>
+      </head><body></body></html>
+      """
+
+      result = SEO.parse_html(html, "https://example.com/listings/spruce")
+      assert "Product" in result.schema_types
+      assert "BreadcrumbList" in result.schema_types
+      assert "WebPage" in result.schema_types
+      assert "Offer" in result.schema_types
+    end
+
+    test "extracts schema types from a top-level array" do
+      html = """
+      <html><head>
+        <script type="application/ld+json">
+        [{"@type": "Article"}, {"@type": "Organization"}]
+        </script>
+      </head><body></body></html>
+      """
+
+      result = SEO.parse_html(html, "https://example.com/")
+      assert "Article" in result.schema_types
+      assert "Organization" in result.schema_types
+    end
+
+    test "extracts schema types from multiple <script> blocks" do
+      html = """
+      <html><head>
+        <script type="application/ld+json">{"@type": "Article"}</script>
+        <script type="application/ld+json">{"@type": "Organization"}</script>
+      </head><body></body></html>
+      """
+
+      result = SEO.parse_html(html, "https://example.com/")
+      assert "Article" in result.schema_types
+      assert "Organization" in result.schema_types
+    end
+
     test "handles missing fields gracefully" do
       html = "<html><body><p>just a paragraph</p></body></html>"
       result = SEO.parse_html(html, "https://example.com/")
@@ -91,8 +144,9 @@ defmodule Spectabas.SEOTest do
   describe "parse_and_score/3" do
     test "perfect-ish page scores high with no critical issues" do
       html = """
-      <html>
+      <html lang="en">
         <head>
+          <meta name="viewport" content="width=device-width, initial-scale=1">
           <title>A well-optimized page about SEO best practices and audits</title>
           <meta name="description" content="This is a meta description that is between 70 and 160 characters long for proper SEO formatting and search engine display.">
           <link rel="canonical" href="https://example.com/seo">
@@ -119,6 +173,86 @@ defmodule Spectabas.SEOTest do
       assert attrs.score >= 90
       items = attrs.issues["items"] || []
       refute Enum.any?(items, &(&1["severity"] == "critical"))
+    end
+
+    test "missing viewport meta is critical" do
+      html = """
+      <html lang="en">
+        <head>
+          <title>A page without a viewport tag for some reason</title>
+          <meta name="description" content="A description that fits the recommended range fine for the search results display purposes.">
+          <link rel="canonical" href="https://example.com/no-viewport">
+        </head>
+        <body><h1>Heading</h1><p>#{String.duplicate("word ", 200)}</p></body>
+      </html>
+      """
+
+      attrs =
+        SEO.parse_and_score(1, "https://example.com/no-viewport", %{
+          html: html,
+          status_code: 200,
+          response_time_ms: 500,
+          final_url: "https://example.com/no-viewport"
+        })
+
+      items = attrs.issues["items"]
+      assert Enum.any?(items, &(&1["code"] == "missing_viewport"))
+    end
+
+    test "non-HTTPS page is critical" do
+      html = """
+      <html lang="en">
+        <head>
+          <meta name="viewport" content="width=device-width">
+          <title>A page being served over HTTP for some weird reason</title>
+          <meta name="description" content="A description that fits the recommended range fine for the search results display purposes.">
+          <link rel="canonical" href="http://example.com/insecure">
+        </head>
+        <body><h1>Heading</h1><p>#{String.duplicate("word ", 200)}</p></body>
+      </html>
+      """
+
+      attrs =
+        SEO.parse_and_score(1, "http://example.com/insecure", %{
+          html: html,
+          status_code: 200,
+          response_time_ms: 500,
+          final_url: "http://example.com/insecure"
+        })
+
+      items = attrs.issues["items"]
+      assert Enum.any?(items, &(&1["code"] == "no_https"))
+    end
+
+    test "LCP > 4s is major, between 2.5s and 4s is minor" do
+      html = """
+      <html lang="en">
+        <head>
+          <meta name="viewport" content="width=device-width">
+          <title>Slow page with a properly-sized title and meta description</title>
+          <meta name="description" content="A description that fits the recommended range fine for the search results display purposes today.">
+          <link rel="canonical" href="https://example.com/slow-lcp">
+        </head>
+        <body><h1>Slow</h1><p>#{String.duplicate("word ", 200)}</p></body>
+      </html>
+      """
+
+      slow = %{
+        html: html,
+        status_code: 200,
+        response_time_ms: 500,
+        final_url: "https://example.com/slow-lcp",
+        performance: %{"lcp_ms" => 5200, "nav" => %{}, "paint" => %{}, "resources" => []}
+      }
+
+      attrs = SEO.parse_and_score(1, "https://example.com/slow-lcp", slow)
+      items = attrs.issues["items"]
+      assert Enum.any?(items, &(&1["code"] == "poor_lcp"))
+
+      ok = put_in(slow, [:performance, "lcp_ms"], 3200)
+      attrs2 = SEO.parse_and_score(1, "https://example.com/slow-lcp", ok)
+      items2 = attrs2.issues["items"]
+      assert Enum.any?(items2, &(&1["code"] == "needs_improvement_lcp"))
     end
 
     test "missing title is critical, missing meta is major" do

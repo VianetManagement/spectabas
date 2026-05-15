@@ -99,21 +99,14 @@ app.post('/audit', async (req, res) => {
     context = await b.newContext({
       userAgent: userAgent,
       viewport: { width: 1280, height: 1024 },
-      // Block heavy resources to keep audits fast — we only care about
-      // the HTML/DOM, not images/fonts. Saves a few seconds per audit.
       bypassCSP: true,
     });
 
-    // Route blocker: drop image/font/media requests. Stylesheets still
-    // load because they can carry display:none or visibility:hidden
-    // rules that change which content is rendered for SEO analysis.
-    await context.route('**/*', (route) => {
-      const type = route.request().resourceType();
-      if (type === 'image' || type === 'font' || type === 'media') {
-        return route.abort();
-      }
-      return route.continue();
-    });
+    // v6.10.52: dropped the image/font/media route blocker. We now
+    // want the full performance picture for the waterfall/diagnosis
+    // panel — blocking heavy resources would give a misleadingly fast
+    // load time. Adds ~3-5s per audit but the data is accurate to
+    // what real users see.
 
     page = await context.newPage();
     const response = await page.goto(url, {
@@ -129,6 +122,91 @@ app.post('/audit', async (req, res) => {
       // ignore — most pages don't reach true networkidle, that's fine
     }
 
+    // Capture LCP via PerformanceObserver. Browsers fire LCP candidates
+    // continuously; we settle 1s after the last candidate or 3s total.
+    const lcpMs = await page
+      .evaluate(() => {
+        return new Promise((resolve) => {
+          let lcp = 0;
+          let lastUpdate = performance.now();
+
+          try {
+            const obs = new PerformanceObserver((list) => {
+              for (const entry of list.getEntries()) {
+                if (entry.startTime > lcp) {
+                  lcp = entry.startTime;
+                  lastUpdate = performance.now();
+                }
+              }
+            });
+            obs.observe({ type: 'largest-contentful-paint', buffered: true });
+
+            const settle = setInterval(() => {
+              if (performance.now() - lastUpdate > 1000) {
+                clearInterval(settle);
+                obs.disconnect();
+                resolve(Math.round(lcp));
+              }
+            }, 200);
+
+            setTimeout(() => {
+              clearInterval(settle);
+              obs.disconnect();
+              resolve(Math.round(lcp));
+            }, 3000);
+          } catch (e) {
+            resolve(0);
+          }
+        });
+      })
+      .catch(() => 0);
+
+    // Single page.evaluate to pull nav + resource + paint timing in
+    // one round-trip. Each performance entry is small; total payload
+    // is usually < 50KB even for resource-heavy pages.
+    const perfData = await page
+      .evaluate(() => {
+        const nav = performance.getEntriesByType('navigation')[0];
+        const navTiming = nav
+          ? {
+              dns: Math.round(nav.domainLookupEnd - nav.domainLookupStart),
+              tcp: Math.round(nav.connectEnd - nav.connectStart),
+              tls:
+                nav.secureConnectionStart > 0
+                  ? Math.round(nav.connectEnd - nav.secureConnectionStart)
+                  : 0,
+              ttfb: Math.round(nav.responseStart - nav.requestStart),
+              download: Math.round(nav.responseEnd - nav.responseStart),
+              dom_interactive: Math.round(nav.domInteractive),
+              dom_content_loaded: Math.round(nav.domContentLoadedEventEnd),
+              load: Math.round(nav.loadEventEnd),
+              transfer_size: nav.transferSize || 0,
+              encoded_body_size: nav.encodedBodySize || 0,
+              decoded_body_size: nav.decodedBodySize || 0,
+              protocol: nav.nextHopProtocol || '',
+            }
+          : null;
+
+        const resources = performance.getEntriesByType('resource').map((r) => ({
+          url: r.name,
+          type: r.initiatorType,
+          duration_ms: Math.round(r.duration),
+          start_ms: Math.round(r.startTime),
+          transfer_size: r.transferSize || 0,
+          decoded_body_size: r.decodedBodySize || 0,
+          render_blocking: r.renderBlockingStatus === 'blocking',
+        }));
+
+        const paint = {};
+        for (const p of performance.getEntriesByType('paint')) {
+          if (p.name === 'first-paint') paint.fp = Math.round(p.startTime);
+          if (p.name === 'first-contentful-paint') paint.fcp = Math.round(p.startTime);
+        }
+
+        return { nav: navTiming, resources, paint };
+      })
+      .catch(() => ({ nav: null, resources: [], paint: {} }));
+
     const html = await page.content();
     const finalUrl = page.url();
     const statusCode = response ? response.status() : 0;
@@ -139,6 +217,12 @@ app.post('/audit', async (req, res) => {
       status_code: statusCode,
       final_url: finalUrl,
       response_time_ms: elapsed,
+      performance: {
+        nav: perfData.nav,
+        paint: perfData.paint,
+        lcp_ms: lcpMs,
+        resources: perfData.resources,
+      },
     });
   } catch (e) {
     const elapsed = Date.now() - started;

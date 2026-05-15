@@ -12,6 +12,7 @@ defmodule SpectabasWeb.Dashboard.SEOLive do
 
   alias Spectabas.{Accounts, Sites, SEO}
   import SpectabasWeb.Dashboard.SidebarComponent
+  import SpectabasWeb.SEOAuditDetail
 
   @write_events ~w(audit_url bulk_audit)
 
@@ -232,106 +233,20 @@ defmodule SpectabasWeb.Dashboard.SEOLive do
   # issue with severity, a plain-English message, and key metadata so
   # the user can act on it without leaving the page.
   defp render_audit_detail(audit) do
-    items = (audit.issues && audit.issues["items"]) || []
-    assigns = %{audit: audit, items: items}
+    assigns = %{audit: audit}
 
     ~H"""
-    <div class="space-y-3">
-      <div :if={@audit.error} class="bg-rose-50 border border-rose-200 rounded p-3">
-        <p class="text-xs font-semibold text-rose-900 mb-1">Fetch error</p>
-        <p class="text-xs text-rose-800 font-mono break-all">{@audit.error}</p>
-        <p class="text-xs text-rose-800 mt-2">
-          The headless browser couldn't fetch this URL. Common causes:
-          Cloudflare / WAF blocking the request, the URL returning a non-200 status, the page taking longer than the per-request timeout, or the Playwright sidecar service being unreachable. Check Site Settings → Content → SEO audit for the Cloudflare allow-rule recipe.
-        </p>
-      </div>
-
-      <div :if={@items != []}>
-        <p class="text-xs font-semibold text-gray-700 mb-2">Issues to fix</p>
-        <ul class="space-y-2">
-          <li
-            :for={issue <- @items}
-            class={[
-              "border-l-4 pl-3 py-1",
-              case issue["severity"] do
-                "critical" -> "border-rose-500 bg-rose-50"
-                "major" -> "border-amber-500 bg-amber-50"
-                _ -> "border-gray-300 bg-gray-50"
-              end
-            ]}
-          >
-            <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
-              {issue["severity"]}
-            </p>
-            <p class="text-xs text-gray-800">{issue["message"]}</p>
-          </li>
-        </ul>
-      </div>
-
-      <div :if={@items == [] and !@audit.error} class="text-xs text-emerald-700">
-        ✓ No issues detected on this page.
-      </div>
-
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs pt-3 border-t border-gray-200">
-        <div>
-          <p class="text-gray-500">Title length</p>
-          <p class="text-gray-900 tabular-nums">
-            {if @audit.title, do: String.length(@audit.title), else: "—"}
-          </p>
-        </div>
-        <div>
-          <p class="text-gray-500">Meta length</p>
-          <p class="text-gray-900 tabular-nums">
-            {if @audit.meta_description, do: String.length(@audit.meta_description), else: "—"}
-          </p>
-        </div>
-        <div>
-          <p class="text-gray-500">Word count</p>
-          <p class="text-gray-900 tabular-nums">{@audit.word_count || "—"}</p>
-        </div>
-        <div>
-          <p class="text-gray-500">Internal / External links</p>
-          <p class="text-gray-900 tabular-nums">
-            {@audit.internal_link_count || 0} / {@audit.external_link_count || 0}
-          </p>
-        </div>
-        <div>
-          <p class="text-gray-500">Image alt coverage</p>
-          <p class="text-gray-900 tabular-nums">
-            {alt_pct(@audit)}
-          </p>
-        </div>
-        <div>
-          <p class="text-gray-500">Status code</p>
-          <p class="text-gray-900 tabular-nums">{@audit.status_code || "—"}</p>
-        </div>
-        <div>
-          <p class="text-gray-500">Schema types</p>
-          <p class="text-gray-900 truncate">
-            {if @audit.schema_types && @audit.schema_types != [],
-              do: Enum.join(@audit.schema_types, ", "),
-              else: "—"}
-          </p>
-        </div>
-        <div>
-          <p class="text-gray-500">Canonical</p>
-          <p class="text-gray-900 font-mono truncate text-[11px]">
-            {@audit.canonical || "—"}
-          </p>
-        </div>
-      </div>
+    <div class="space-y-4">
+      <.audit_error_panel audit={@audit} />
+      <.audit_issues audit={@audit} />
+      <.audit_performance audit={@audit} />
+      <.audit_slowest_resources audit={@audit} />
+      <.audit_resource_breakdown audit={@audit} />
+      <.audit_headings audit={@audit} />
+      <.audit_metadata audit={@audit} />
     </div>
     """
   end
-
-  defp alt_pct(%{image_count: 0}), do: "—"
-  defp alt_pct(%{image_count: nil}), do: "—"
-
-  defp alt_pct(%{image_count: ic, image_alt_count: ac}) when is_integer(ic) and ic > 0 do
-    "#{round(ac / ic * 100)}% (#{ac} of #{ic})"
-  end
-
-  defp alt_pct(_), do: "—"
 
   @impl true
   def render(assigns) do
