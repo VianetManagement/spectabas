@@ -88,6 +88,8 @@ mix phx.server
 
 Visit [localhost:4000](http://localhost:4000).
 
+Bootstrapping a fresh Debian/Ubuntu box from scratch (system deps + asdf + Erlang/Elixir/Node + Postgres + clone)? Use [jeffsteinport/dev-bootstrap](https://github.com/jeffsteinport/dev-bootstrap).
+
 ## Tests
 
 ```bash
