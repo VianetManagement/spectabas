@@ -7,7 +7,7 @@
 #   2. Installs asdf + Erlang 27.2 + Elixir 1.18.2-otp-27 + Node 22.13.0
 #   3. Generates an SSH key (if absent), authenticates with GitHub,
 #      registers the key with your GitHub account
-#   4. Clones github.com:VianetManagement/spectabas → ~/Downloads/spectabas
+#   4. Clones github.com:VianetManagement/spectabas → ~/Claude/spectabas
 #   5. Installs Hex/Rebar, fetches mix deps
 #   6. Creates Postgres dev + test DBs (user "postgres", pass "postgres")
 #   7. Runs `mix ecto.setup` and `mix test` as a smoke check
@@ -27,7 +27,7 @@
 set -euo pipefail
 
 REPO_URL="${REPO_URL:-git@github.com:VianetManagement/spectabas.git}"
-WORK_DIR="${WORK_DIR:-${HOME}/Downloads/spectabas}"
+WORK_DIR="${WORK_DIR:-${HOME}/Claude/spectabas}"
 ASDF_DIR="${ASDF_DIR:-${HOME}/.asdf}"
 ASDF_VERSION="${ASDF_VERSION:-v0.14.1}"
 PG_USER="postgres"
@@ -163,7 +163,11 @@ sudo service postgresql start || sudo systemctl start postgresql
 if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_user WHERE usename = '$PG_USER'" | grep -q 1; then
   sudo -u postgres psql -c "CREATE USER $PG_USER WITH SUPERUSER PASSWORD '$PG_PASS';"
 else
-  echo "    user $PG_USER already exists"
+  # The `postgres` superuser is created by the apt package without a known
+  # password, so on a fresh box we land here and must ALTER to set one —
+  # otherwise `mix ecto.setup` fails with 28P01 invalid_password.
+  echo "    user $PG_USER already exists — ensuring password + SUPERUSER"
+  sudo -u postgres psql -c "ALTER USER $PG_USER WITH SUPERUSER PASSWORD '$PG_PASS';"
 fi
 
 for db in spectabas_dev spectabas_test; do
@@ -214,10 +218,11 @@ One-time manual steps to fully pick up where you left off:
 1. Copy your Claude memory from the source machine:
 
        rsync -av \\
-         <source_host>:/home/vianet/.claude/projects/-home-vianet-Downloads/memory/ \\
-         $HOME/.claude/projects/-home-vianet-Downloads/memory/
+         <source_host>:/home/<user>/.claude/projects/-home-<user>-Claude/memory/ \\
+         $HOME/.claude/projects/-home-$USER-Claude/memory/
 
-   (Create parent dirs first: \`mkdir -p $HOME/.claude/projects/-home-vianet-Downloads\`)
+   (Create parent dirs first: \`mkdir -p $HOME/.claude/projects/-home-$USER-Claude\`.
+    The path slug is your cwd with slashes replaced by hyphens.)
 
 2. (Optional) Local ClickHouse — only if you want to exercise analytics
    queries locally. The 1058-test suite passes without it. Easiest path:
